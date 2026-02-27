@@ -1,0 +1,8 @@
+- https://openverse.org/image/aa1a766d-55fa-40c4-8792-958957b62365?q=game+texture&p=9
+	- 3431264086_59fbfcd451_b.jpg
+- https://openverse.org/image/dc1a94ea-5439-496f-8925-4ade01a00064?q=colorful&p=6
+	- 5623619255_221d589225_b.jpg
+- https://github.com/intel/intel-one-mono
+	- IntelOneMono-Regular.ttf
+- Space Invaders pixel art sprites — generated via Claude chat, original pixel art designs inspired by Taito's Space Invaders (1978)
+	- resources/sprites/*.sprite

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Space Invaders</title>
+    <style>
+        * { margin: 0; padding: 0; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+        canvas { display: block; width: 100%; height: 100%; }
+    </style>
+<link rel="modulepreload" href="/winit-wgpu-4b3ccfdb452b614a.js" crossorigin="anonymous" integrity="sha384-JwPEhinnzi9DxnbsN3xvcsHFVDWlYuoDU2x6miWbfc35u5bReguvj7xgO6vps4j2"><link rel="preload" href="/winit-wgpu-4b3ccfdb452b614a_bg.wasm" crossorigin="anonymous" integrity="sha384-f6BWo7HHJ/3j9VkFOLXN167np0dhOLZjjNX0kT0zY4BDyeqazvib9zTLS3dIBHt5" as="fetch" type="application/wasm"></head>
+<body>
+    <canvas id="canvas"></canvas>
+    
+<script type="module">
+import init, * as bindings from '/winit-wgpu-4b3ccfdb452b614a.js';
+const wasm = await init({ module_or_path: '/winit-wgpu-4b3ccfdb452b614a_bg.wasm' });
+
+
+window.wasmBindings = bindings;
+
+
+dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+
+</script>
+</body>
+</html>
