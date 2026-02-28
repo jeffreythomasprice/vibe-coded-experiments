@@ -10,10 +10,6 @@
 
 - web ui should have a text editor
 
-- web ui should remember my column settings between refreshes
-	- which mount and which directory
-	- local storage?
-
 - web ui should let me download whole directories, zip first
 
 - make sure cli can recursively copy a directory to another location
@@ -25,3 +21,5 @@
 - progress bars
 	- operations in mount types should be trackable with progress amounts
 	- web ui and console cli should show a progress bar
+
+- themes, customize css colors

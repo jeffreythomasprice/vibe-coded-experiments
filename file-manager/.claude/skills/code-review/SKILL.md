@@ -57,11 +57,18 @@ Present your findings as a structured report:
 
 Be concise. Do not repeat back the diff contents verbatim. Do not suggest improvements outside the scope of what was changed.
 
-After presenting the report, if there are any issues, use the AskUserQuestion tool to present each issue as a checkbox option (multiSelect: true). Label each option with a short description of the issue (severity + file + brief problem). Ask: "Which issues would you like to add to TODO.md?"
+After presenting the report, if there are any issues, ask two questions using the AskUserQuestion tool in a single call:
 
-For each issue the user selects, append a new line to `TODO.md` in the following format:
-```
-- [code-review] <severity>: <file:line> — <brief description>
-```
+**Question 1** — `multiSelect: true`: Present each issue as a checkbox option. Label each option with a short description (severity + file + brief problem). Ask: "Which issues would you like to add to TODO.md?"
 
-Use the Edit tool to append the selected items to the end of `TODO.md`. Confirm to the user which items were added.
+**Question 2** — `multiSelect: true`: Present the same list of issues again as checkbox options with the same labels. Ask: "Which issues would you like to fix right now?"
+
+After the user responds:
+
+1. For each issue selected in Question 1, append a new line to `TODO.md` in the following format:
+   ```
+   - [code-review] <severity>: <file:line> — <brief description>
+   ```
+   Use the Edit tool to append the selected items to the end of `TODO.md`. Confirm to the user which items were added.
+
+2. For each issue selected in Question 2, use the EnterPlanMode tool to collaboratively plan and implement fixes. Handle them one at a time, in order of severity (errors first, then warnings, then suggestions).
