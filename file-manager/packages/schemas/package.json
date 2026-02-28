@@ -7,7 +7,7 @@
   },
   "scripts": {
     "generate": "bun run scripts/generate.ts",
-    "build": "bun run generate",
+    "build": "bun run generate && bun build src/index.ts --outfile dist/index.js --target bun",
     "test": "echo 'No tests yet'"
   },
   "dependencies": {

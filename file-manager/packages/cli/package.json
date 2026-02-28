@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "bin": {
-    "files": "src/index.ts"
+    "files": "dist/files"
   },
   "scripts": {
     "start": "bun run src/index.ts",
-    "build": "echo 'No build step for CLI in POC'",
-    "test": "echo 'No tests yet'"
+    "build": "bun build --compile src/index.ts --outfile dist/files --target bun",
+    "test": "bun test"
   },
   "dependencies": {
     "@file-manager/shared": "workspace:*",

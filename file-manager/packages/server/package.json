@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "start": "bun run src/index.ts",
+    "start": "bun dist/index.js",
     "dev": "bun --watch run src/index.ts",
-    "build": "echo 'No build step for server in POC'",
-    "test": "echo 'No tests yet'"
+    "build": "bun build src/index.ts --outfile dist/index.js --target bun",
+    "test": "bun test"
   },
   "dependencies": {
     "@fastify/sensible": "^5.6.0",

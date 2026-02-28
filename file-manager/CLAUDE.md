@@ -85,3 +85,31 @@ All packages extend `tsconfig.base.json` with strict mode plus `noUncheckedIndex
 ## Testing
 
 `bun test` (vitest-compatible API, no extra dependency). Test files co-located with source. Integration tests requiring external services are gated behind an env var and skipped in CI unless the service is available.
+
+### Existing test coverage
+
+| File | What it tests |
+|------|---------------|
+| `packages/server/src/provider-registry.test.ts` | `ProviderRegistry` mount/get/unmount/list — pure unit |
+| `packages/server/src/providers/local.test.ts` | `LocalProvider` path traversal, list, stat, read, write, delete, move — real temp dir |
+| `packages/server/src/routes/providers.test.ts` | `GET/POST/DELETE /api/v1/providers` — real listening server |
+| `packages/server/src/routes/files.test.ts` | `GET/POST/DELETE /api/v1/files/*` and `POST /api/v1/files/move` — real listening server |
+| `packages/cli/src/api/client.test.ts` | `parseUri` — pure unit |
+
+### Fastify + Bun: avoid `inject()`
+
+Fastify's `inject()` (via `light-my-request`) relies on `response._header`, an internal Node.js HTTP property that Bun does not expose. Use a real listening server instead:
+
+```ts
+const server = await createServer();
+const baseUrl = await server.listen({ port: 0, host: "127.0.0.1" });
+const res = await fetch(`${baseUrl}/api/v1/providers`);
+expect(res.status).toBe(200);
+await server.close();
+```
+
+## Post-Implementation
+
+We keep a `TODO.md`. After completing a task if it closely matches an entry in this file remove it. Ask about updating this if it's ambiguous, or if a task is only partially completed.
+
+When making bigger changes ask about updating `CLAUDE.md` or `README.md`.

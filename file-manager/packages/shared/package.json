@@ -6,7 +6,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "echo 'No build step for shared in POC'",
+    "build": "bun build src/index.ts --outfile dist/index.js --target bun",
     "test": "echo 'No tests yet'"
   },
   "dependencies": {
