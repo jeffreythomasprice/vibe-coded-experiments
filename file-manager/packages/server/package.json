@@ -1,0 +1,17 @@
+{
+  "name": "@file-manager/server",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts",
+    "build": "echo 'No build step for server in POC'",
+    "test": "echo 'No tests yet'"
+  },
+  "dependencies": {
+    "@fastify/sensible": "^5.6.0",
+    "@file-manager/shared": "workspace:*",
+    "chokidar": "^4.0.3",
+    "fastify": "^4.28.0"
+  }
+}

@@ -1,0 +1,6 @@
+[install]
+# Use default registry
+registry = "https://registry.npmjs.org"
+
+[install.cache]
+disable = false

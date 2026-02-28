@@ -1,0 +1,17 @@
+{
+  "name": "@file-manager/cli",
+  "version": "0.1.0",
+  "private": true,
+  "bin": {
+    "files": "src/index.ts"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "build": "echo 'No build step for CLI in POC'",
+    "test": "echo 'No tests yet'"
+  },
+  "dependencies": {
+    "@file-manager/shared": "workspace:*",
+    "commander": "^12.1.0"
+  }
+}
