@@ -129,4 +129,21 @@ fm cat docs:/notes.txt             # stream file to stdout
 fm cp docs:/a.txt docs:/backup/a.txt
 fm mv docs:/old.txt docs:/new.txt
 fm rm docs:/unwanted.txt
+fm mkdir docs:/new-folder
+
+# Upload a local file to a mount
+fm cp /local/path/file.txt docs:/file.txt
 ```
+
+## Testing
+
+```sh
+# Unit + route tests (no external services required)
+bun run test
+
+# CLI integration tests — exercises the full stack end-to-end:
+# CLI → HTTP client → Fastify routes → LocalProvider → filesystem
+INTEGRATION=1 bun test packages/server/src/cli-integration.test.ts
+```
+
+The integration tests start their own server on a random port and clean up after themselves; no running server is required.

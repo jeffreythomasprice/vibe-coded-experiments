@@ -190,4 +190,62 @@ describe("file routes", () => {
         });
         expect(res.status).toBe(404);
     });
+
+    test("POST /api/v1/files/copy copies a directory recursively (same-mount)", async () => {
+        // Create src/a.txt and src/sub/b.txt
+        await fs.mkdir(path.join(tmpDir, "src", "sub"), { recursive: true });
+        await Bun.write(path.join(tmpDir, "src", "a.txt"), "file a");
+        await Bun.write(path.join(tmpDir, "src", "sub", "b.txt"), "file b");
+
+        const res = await fetch(`${baseUrl}/api/v1/files/copy`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                src: `local://${mountId}/src`,
+                dest: `local://${mountId}/dest`,
+            }),
+        });
+        expect(res.status).toBe(200);
+
+        // Source still exists
+        expect((await fs.stat(path.join(tmpDir, "src", "a.txt"))).isFile()).toBe(true);
+
+        // Destination has both files
+        const destA = await fs.readFile(path.join(tmpDir, "dest", "a.txt"));
+        expect(destA.toString()).toBe("file a");
+        const destB = await fs.readFile(path.join(tmpDir, "dest", "sub", "b.txt"));
+        expect(destB.toString()).toBe("file b");
+    });
+
+    test("POST /api/v1/files/move moves a directory recursively cross-mount", async () => {
+        // Set up a second tmpDir + mount
+        const tmpDir2 = await fs.mkdtemp(path.join(os.tmpdir(), "files-test2-"));
+        const mountId2 = "test2";
+        await server.registry.mount(mountId2, "local", { rootDir: tmpDir2 }, new LocalProvider(tmpDir2));
+
+        try {
+            // Create dir/file.txt in first mount
+            await fs.mkdir(path.join(tmpDir, "dir"), { recursive: true });
+            await Bun.write(path.join(tmpDir, "dir", "file.txt"), "cross-mount content");
+
+            const res = await fetch(`${baseUrl}/api/v1/files/move`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    src: `local://${mountId}/dir`,
+                    dest: `local://${mountId2}/dir`,
+                }),
+            });
+            expect(res.status).toBe(200);
+
+            // Source is gone
+            await expect(fs.stat(path.join(tmpDir, "dir"))).rejects.toThrow();
+
+            // Destination has the file
+            const destFile = await fs.readFile(path.join(tmpDir2, "dir", "file.txt"));
+            expect(destFile.toString()).toBe("cross-mount content");
+        } finally {
+            await fs.rm(tmpDir2, { recursive: true, force: true });
+        }
+    });
 });

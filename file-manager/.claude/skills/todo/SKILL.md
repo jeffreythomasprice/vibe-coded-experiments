@@ -30,7 +30,11 @@ Use AskUserQuestion if there are multiple valid approaches or requirements need 
 
 Implement the approved plan. Stay within the agreed scope — do not add unrequested features or improvements.
 
-**Step 4: Cleanup**
+**Step 4: Code Review**
+
+Run the `code-review` skill to review the implementation before finalizing.
+
+**Step 5: Cleanup**
 
 After successful implementation:
 1. Remove the completed task line from TODO.md

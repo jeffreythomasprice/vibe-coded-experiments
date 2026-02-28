@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { parseUri, listFiles, statFile, readFile, writeFile, deleteFile, moveFile } from "../api/client.js";
+import { parseUri, listFiles, statFile, readFile, writeFile, deleteFile, moveFile, copyFile, mkdirFile } from "../api/client.js";
 
 export function registerFileCommands(program: Command): void {
     // files ls <uri>
@@ -74,14 +74,17 @@ export function registerFileCommands(program: Command): void {
     // files cp <src> <dest>
     program
         .command("cp <src> <dest>")
-        .description("Copy a file from src URI to dest URI")
+        .description("Copy a file or directory. src may be a local path or a URI; dest must be a URI.")
         .action(async (src: string, dest: string) => {
             try {
-                const srcParsed = parseUri(src);
-                const destParsed = parseUri(dest);
-
-                const stream = await readFile(srcParsed.mountId, srcParsed.path);
-                await writeFile(destParsed.mountId, destParsed.path, stream);
+                if (!src.includes("://")) {
+                    // Local file → remote URI upload
+                    const { mountId, path } = parseUri(dest);
+                    const file = Bun.file(src);
+                    await writeFile(mountId, path, file.stream());
+                } else {
+                    await copyFile(src, dest);
+                }
                 console.log(`Copied ${src} → ${dest}`);
             } catch (err) {
                 console.error("Error:", (err as Error).message);
@@ -97,6 +100,21 @@ export function registerFileCommands(program: Command): void {
             try {
                 await moveFile(src, dest);
                 console.log(`Moved ${src} → ${dest}`);
+            } catch (err) {
+                console.error("Error:", (err as Error).message);
+                process.exit(1);
+            }
+        });
+
+    // files mkdir <uri>
+    program
+        .command("mkdir <uri>")
+        .description("Create a directory")
+        .action(async (uri: string) => {
+            try {
+                const { mountId, path } = parseUri(uri);
+                await mkdirFile(mountId, path);
+                console.log(`Created ${uri}`);
             } catch (err) {
                 console.error("Error:", (err as Error).message);
                 process.exit(1);

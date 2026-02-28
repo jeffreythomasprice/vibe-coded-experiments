@@ -129,3 +129,15 @@ export async function moveFile(src: string, dest: string): Promise<void> {
         body: JSON.stringify({ src, dest }),
     });
 }
+
+export async function copyFile(src: string, dest: string): Promise<void> {
+    return request<void>("/api/v1/files/copy", {
+        method: "POST",
+        body: JSON.stringify({ src, dest }),
+    });
+}
+
+export async function mkdirFile(mountId: string, filePath: string): Promise<{ path: string }> {
+    const encodedPath = filePath.replace(/^\//, "");
+    return request<{ path: string }>(`/api/v1/files/${mountId}/${encodedPath}`, { method: "PUT" });
+}

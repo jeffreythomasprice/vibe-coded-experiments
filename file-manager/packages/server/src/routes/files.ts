@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { type MoveRequest, moveRequestSchema, srcDestRequestSchema } from "@file-manager/shared";
+import type { StorageProvider } from "@file-manager/shared";
 
 type SrcDestRequest = MoveRequest; // { src, dest } — body shape shared by move and copy routes
 
@@ -20,6 +21,25 @@ function parseFileUri(uri: string): { mountId: string; path: string } | null {
     const path = "/" + (match[2] ?? "");
     if (!mountId) return null;
     return { mountId, path };
+}
+
+async function copyRecursive(
+    srcProvider: StorageProvider,
+    srcPath: string,
+    destProvider: StorageProvider,
+    destPath: string,
+): Promise<void> {
+    const srcStat = await srcProvider.stat(srcPath);
+    if (srcStat.type === "directory") {
+        await destProvider.mkdir(destPath);
+        const entries = await srcProvider.list(srcPath);
+        for (const entry of entries) {
+            const destEntryPath = `${destPath}/${entry.name}`;
+            await copyRecursive(srcProvider, entry.path, destProvider, destEntryPath);
+        }
+    } else {
+        await destProvider.write(destPath, srcProvider.read(srcPath));
+    }
 }
 
 export const fileRoutes: FastifyPluginAsync = async (fastify) => {
@@ -173,9 +193,9 @@ export const fileRoutes: FastifyPluginAsync = async (fastify) => {
                 return reply.internalServerError((err as Error).message);
             }
         } else {
-            // Cross-mount — stream read → write → delete
+            // Cross-mount — recursive copy → delete source
             try {
-                await destMount.provider.write(destParsed.path, srcMount.provider.read(srcParsed.path));
+                await copyRecursive(srcMount.provider, srcParsed.path, destMount.provider, destParsed.path);
                 await srcMount.provider.delete(srcParsed.path);
             } catch (err) {
                 return reply.internalServerError((err as Error).message);
@@ -209,7 +229,7 @@ export const fileRoutes: FastifyPluginAsync = async (fastify) => {
         }
 
         try {
-            await destMount.provider.write(destParsed.path, srcMount.provider.read(srcParsed.path));
+            await copyRecursive(srcMount.provider, srcParsed.path, destMount.provider, destParsed.path);
         } catch (err) {
             return reply.internalServerError((err as Error).message);
         }
