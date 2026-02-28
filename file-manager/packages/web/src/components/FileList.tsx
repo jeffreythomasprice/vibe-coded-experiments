@@ -8,6 +8,7 @@ interface Props {
     parentPath: string | null;
     onNavigate: (path: string) => void;
     onDelete: (path: string) => void;
+    onRename?: (entry: FileEntry) => void;
     onContextMenu?: (e: React.MouseEvent, entry: FileEntry) => void;
     cutPath?: string | null;
 }
@@ -20,7 +21,7 @@ function formatSize(bytes: number): string {
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
-export function FileList({ mountId, entries, parentPath, onNavigate, onDelete, onContextMenu, cutPath }: Props) {
+export function FileList({ mountId, entries, parentPath, onNavigate, onDelete, onRename, onContextMenu, cutPath }: Props) {
     if (entries.length === 0 && !parentPath) {
         return <p className={styles.empty}>No files here.</p>;
     }
@@ -83,6 +84,13 @@ export function FileList({ mountId, entries, parentPath, onNavigate, onDelete, o
                                     &#8595;
                                 </button>
                             )}
+                            <button
+                                className={styles.actionBtn}
+                                title="Rename"
+                                onClick={() => onRename?.(entry)}
+                            >
+                                &#9998;
+                            </button>
                             <button
                                 className={`${styles.actionBtn} ${styles.deleteBtn}`}
                                 title="Delete"

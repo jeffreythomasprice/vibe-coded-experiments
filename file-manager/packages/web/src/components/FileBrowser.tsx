@@ -2,6 +2,7 @@ import { useId, useRef, useState, useCallback } from "react";
 import type { MountInfo, FileEntry } from "@file-manager/schemas";
 import { useFiles } from "../hooks/useFiles.js";
 import { useToast } from "../hooks/useToast.js";
+import { useModal } from "./Modal.js";
 import { FileList } from "./FileList.js";
 import styles from "./FileBrowser.module.css";
 
@@ -21,6 +22,7 @@ interface Props {
     onFileDrop?: (data: DraggedFile) => void;
     onFileContextMenu?: (e: React.MouseEvent, entry: FileEntry) => void;
     onEmptyContextMenu?: (e: React.MouseEvent) => void;
+    onRename?: (entry: FileEntry) => void;
     cutPath?: string | null;
 }
 
@@ -35,9 +37,10 @@ function buildBreadcrumbs(mountId: string, path: string): { label: string; path:
     return crumbs;
 }
 
-export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, refreshKey, onFileDrop, onFileContextMenu, onEmptyContextMenu, cutPath }: Props) {
+export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, refreshKey, onFileDrop, onFileContextMenu, onEmptyContextMenu, onRename, cutPath }: Props) {
     const { files, loading, error, upload, remove, mkdir } = useFiles(mountId, path, refreshKey);
     const { showError } = useToast();
+    const modal = useModal();
     const inputRef = useRef<HTMLInputElement>(null);
     const uploadInputId = useId();
     const [showMkdir, setShowMkdir] = useState(false);
@@ -163,6 +166,9 @@ export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, 
                                 onNavigate={onNavigate}
                                 onDelete={(filePath) => {
                                     void (async () => {
+                                        const name = filePath.split("/").pop() ?? filePath;
+                                        const ok = await modal.confirm(`Delete "${name}"?`, { confirmText: "Delete" });
+                                        if (!ok) return;
                                         try {
                                             await remove(filePath);
                                         } catch (err) {
@@ -170,6 +176,7 @@ export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, 
                                         }
                                     })();
                                 }}
+                                onRename={onRename}
                                 onContextMenu={onFileContextMenu}
                                 cutPath={cutPath ?? null}
                             />

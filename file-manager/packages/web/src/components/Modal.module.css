@@ -1,0 +1,94 @@
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.window {
+    background: #1010a0;
+    border: 2px solid #009898;
+    box-shadow: 6px 6px 0 #00000088;
+    min-width: 320px;
+    max-width: 480px;
+    font-family: monospace;
+}
+
+.titleBar {
+    background: #0c0c60;
+    color: #00d0d0;
+    padding: 4px 10px;
+    font-size: 13px;
+    font-weight: bold;
+    border-bottom: 1px solid #009898;
+    text-transform: uppercase;
+}
+
+.body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.message {
+    margin: 0;
+    color: #00d0d0;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.input {
+    padding: 3px 8px;
+    border: 1px solid #009898;
+    background: #0e0e72;
+    color: #e0e0e0;
+    font-family: inherit;
+    font-size: 14px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.input:focus {
+    outline: 1px solid #00d0d0;
+}
+
+.footer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 8px 16px 12px;
+    border-top: 1px solid #0c0c60;
+}
+
+.confirmBtn {
+    background: #009898;
+    color: #000;
+    border: 1px solid #ddd;
+    padding: 3px 16px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+}
+
+.confirmBtn:hover {
+    background: #00d0d0;
+}
+
+.cancelBtn {
+    background: #1010a0;
+    color: #00d0d0;
+    border: 1px solid #009898;
+    padding: 3px 12px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+}
+
+.cancelBtn:hover {
+    background: #009898;
+    color: #000;
+}

@@ -8,6 +8,7 @@ import type { MenuItem } from "./components/ContextMenu.js";
 import type { FileEntry } from "@file-manager/schemas";
 import { moveFile, copyFile, deleteFile, downloadFile } from "./api/client.js";
 import { useToast } from "./hooks/useToast.js";
+import { useModal } from "./components/Modal.js";
 import { usePersistentState } from "./hooks/usePersistentState.js";
 import styles from "./App.module.css";
 
@@ -35,6 +36,7 @@ interface ContextMenuState {
 export function App() {
     const mounts = useMounts();
     const { showError } = useToast();
+    const modal = useModal();
     const [activeTab, setActiveTab] = useState<Tab>("commander");
     const [left, setLeft] = usePersistentState<PaneState>("fm:pane:left", { mountId: null, path: "/" });
     const [right, setRight] = usePersistentState<PaneState>("fm:pane:right", { mountId: null, path: "/" });
@@ -54,6 +56,42 @@ export function App() {
         setLeftRefreshKey((k) => k + 1);
         setRightRefreshKey((k) => k + 1);
     }, []);
+
+    const handleRename = useCallback(
+        (pane: Pane, entry: FileEntry) => {
+            const paneState = pane === "left" ? left : right;
+            const { mountId } = paneState;
+            if (!mountId) return;
+
+            const mount = mounts.mounts.find((m) => m.mountId === mountId);
+            if (!mount) return;
+
+            void (async () => {
+                const newName = await modal.prompt("New name:", { defaultValue: entry.name });
+                if (newName === null || newName.trim() === "" || newName.trim() === entry.name) return;
+
+                const parentDir = entry.path.lastIndexOf("/") > 0
+                    ? entry.path.substring(0, entry.path.lastIndexOf("/"))
+                    : "";
+
+                const srcPath = entry.path.replace(/^\//, "");
+                const destPath = parentDir
+                    ? `${parentDir.replace(/^\//, "")}/${newName.trim()}`
+                    : newName.trim();
+
+                const srcUri = `${mount.scheme}://${mountId}/${srcPath}`;
+                const destUri = `${mount.scheme}://${mountId}/${destPath}`;
+
+                try {
+                    await moveFile(srcUri, destUri);
+                    refreshPane(pane);
+                } catch (err) {
+                    showError(`Rename failed: ${err instanceof Error ? err.message : String(err)}`);
+                }
+            })();
+        },
+        [left, right, mounts.mounts, modal, refreshPane, showError],
+    );
 
     const handleFileDrop = useCallback(
         (destSide: Pane) =>
@@ -114,9 +152,16 @@ export function App() {
             });
 
             items.push({
+                label: "Rename",
+                onClick: () => handleRename(pane, entry),
+            });
+
+            items.push({
                 label: "Delete",
                 onClick: () => {
                     void (async () => {
+                        const ok = await modal.confirm(`Delete "${entry.name}"?`, { confirmText: "Delete" });
+                        if (!ok) return;
                         try {
                             await deleteFile(mountId, entry.path);
                             refreshPane(pane);
@@ -129,7 +174,7 @@ export function App() {
 
             return items;
         },
-        [left, right, refreshPane],
+        [left, right, refreshPane, handleRename, modal, showError],
     );
 
     const buildEmptyContextMenu = useCallback(
@@ -229,6 +274,7 @@ export function App() {
                             onFileDrop={handleFileDrop("left")}
                             onFileContextMenu={(e, entry) => handleFileContextMenu("left", e, entry)}
                             onEmptyContextMenu={(e) => handleEmptyContextMenu("left", e)}
+                            onRename={(entry) => handleRename("left", entry)}
                             cutPath={clipboard?.operation === "cut" ? clipboard.path : null}
                         />
                     </div>
@@ -243,6 +289,7 @@ export function App() {
                             onFileDrop={handleFileDrop("right")}
                             onFileContextMenu={(e, entry) => handleFileContextMenu("right", e, entry)}
                             onEmptyContextMenu={(e) => handleEmptyContextMenu("right", e)}
+                            onRename={(entry) => handleRename("right", entry)}
                             cutPath={clipboard?.operation === "cut" ? clipboard.path : null}
                         />
                     </div>

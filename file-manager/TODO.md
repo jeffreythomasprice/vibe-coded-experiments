@@ -16,16 +16,14 @@
 	- web ui
 	- cli
 
-- web ui: rename
-	- action button with modal
-	- right click, also shows modal
-
 - progress bars
 	- operations in mount types should be trackable with progress amounts
 	- web ui and console cli should show a progress bar
 
 - web ui: themes, customize css colors
 
-- web ui: should be able to right click and make a directory
+- web ui: right click on the background of a column, new actions:
+	- upload a file
+	- make a directory
 
-- web ui: delete should have a confirm modal
+- web ui: after making any changes on one side should refresh both sides
