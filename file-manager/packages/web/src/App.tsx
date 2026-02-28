@@ -7,6 +7,7 @@ import { ContextMenu } from "./components/ContextMenu.js";
 import type { MenuItem } from "./components/ContextMenu.js";
 import type { FileEntry } from "@file-manager/schemas";
 import { moveFile, copyFile, deleteFile, downloadFile } from "./api/client.js";
+import { useToast } from "./hooks/useToast.js";
 import styles from "./App.module.css";
 
 type Tab = "commander" | "mounts";
@@ -32,6 +33,7 @@ interface ContextMenuState {
 
 export function App() {
     const mounts = useMounts();
+    const { showError } = useToast();
     const [activeTab, setActiveTab] = useState<Tab>("commander");
     const [left, setLeft] = useState<PaneState>({ mountId: null, path: "/" });
     const [right, setRight] = useState<PaneState>({ mountId: null, path: "/" });
@@ -78,7 +80,7 @@ export function App() {
                         await moveFile(srcUri, destUri);
                         refreshBoth();
                     } catch (err: unknown) {
-                        console.error("Move failed:", err);
+                        showError(`Move failed: ${err instanceof Error ? err.message : String(err)}`);
                     }
                 })();
             },
@@ -118,7 +120,7 @@ export function App() {
                             await deleteFile(mountId, entry.path);
                             refreshPane(pane);
                         } catch (err) {
-                            console.error("Delete failed:", err);
+                            showError(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
                         }
                     })();
                 },
@@ -165,7 +167,7 @@ export function App() {
                                 }
                                 refreshBoth();
                             } catch (err) {
-                                console.error("Paste failed:", err);
+                                showError(`Paste failed: ${err instanceof Error ? err.message : String(err)}`);
                             }
                         })();
                     },

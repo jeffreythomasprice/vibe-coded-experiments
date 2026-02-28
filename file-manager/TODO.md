@@ -14,10 +14,6 @@
 	- which mount and which directory
 	- local storage?
 
-- web ui error handling
-	- common toaster code
-	- no console.log or console.error, only toasters
-
 - web ui should let me download whole directories, zip first
 
 - make sure cli can recursively copy a directory to another location
@@ -26,4 +22,5 @@
 	- action button with modal
 	- right click, also shows modal
 
-
+- [code-review] suggestion: useToast.ts:18 — module-level mutable nextId leaks between tests
+- [code-review] suggestion: useToast.ts:26 — setTimeout not tracked for cancellation

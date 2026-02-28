@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { MountInfo } from "@file-manager/schemas";
 import type { UseMounts } from "../hooks/useMounts.js";
+import { useToast } from "../hooks/useToast.js";
 import styles from "./MountsTab.module.css";
 
 interface Props {
@@ -8,17 +9,16 @@ interface Props {
 }
 
 export function MountsTab({ mounts }: Props) {
+    const { showError } = useToast();
     const [showForm, setShowForm] = useState(false);
     const [mountId, setMountId] = useState("");
     const [rootDir, setRootDir] = useState("");
-    const [formError, setFormError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
     async function handleAdd(e: React.FormEvent) {
         e.preventDefault();
         if (!mountId.trim() || !rootDir.trim()) return;
         setSubmitting(true);
-        setFormError(null);
         const info: MountInfo = {
             mountId: mountId.trim(),
             scheme: "local",
@@ -30,7 +30,7 @@ export function MountsTab({ mounts }: Props) {
             setRootDir("");
             setShowForm(false);
         } catch (err) {
-            setFormError(err instanceof Error ? err.message : String(err));
+            showError(`Add mount failed: ${err instanceof Error ? err.message : String(err)}`);
         } finally {
             setSubmitting(false);
         }
@@ -70,7 +70,13 @@ export function MountsTab({ mounts }: Props) {
                                     <button
                                         className={styles.removeBtn}
                                         onClick={() => {
-                                            void mounts.remove(m.mountId);
+                                            void (async () => {
+                                                try {
+                                                    await mounts.remove(m.mountId);
+                                                } catch (err) {
+                                                    showError(`Remove mount failed: ${err instanceof Error ? err.message : String(err)}`);
+                                                }
+                                            })();
                                         }}
                                     >
                                         Remove
@@ -110,7 +116,6 @@ export function MountsTab({ mounts }: Props) {
                             required
                         />
                     </div>
-                    {formError && <p className={styles.error}>{formError}</p>}
                     <div className={styles.formActions}>
                         <button className={styles.addBtn} type="submit" disabled={submitting}>
                             {submitting ? "Adding…" : "Add"}
@@ -120,7 +125,6 @@ export function MountsTab({ mounts }: Props) {
                             className={styles.cancelBtn}
                             onClick={() => {
                                 setShowForm(false);
-                                setFormError(null);
                             }}
                         >
                             Cancel

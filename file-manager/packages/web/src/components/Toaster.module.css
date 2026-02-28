@@ -1,0 +1,36 @@
+.container {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 9999;
+    pointer-events: none;
+    /* toasts re-enable pointer-events individually */
+    align-items: center;
+}
+
+.toast {
+    padding: 16px 28px;
+    font-family: inherit;
+    font-size: 16px;
+    background: #0c0c60;
+    min-width: 320px;
+    max-width: 560px;
+    word-break: break-word;
+    text-align: center;
+    pointer-events: all;
+    cursor: pointer;
+}
+
+.error {
+    border: 2px solid #ff5050;
+    color: #ff5050;
+}
+
+.info {
+    border: 2px solid #00d0d0;
+    color: #00d0d0;
+}

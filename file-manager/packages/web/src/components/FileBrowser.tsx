@@ -1,6 +1,7 @@
 import { useId, useRef, useState, useCallback } from "react";
 import type { MountInfo, FileEntry } from "@file-manager/schemas";
 import { useFiles } from "../hooks/useFiles.js";
+import { useToast } from "../hooks/useToast.js";
 import { FileList } from "./FileList.js";
 import styles from "./FileBrowser.module.css";
 
@@ -36,11 +37,11 @@ function buildBreadcrumbs(mountId: string, path: string): { label: string; path:
 
 export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, refreshKey, onFileDrop, onFileContextMenu, onEmptyContextMenu, cutPath }: Props) {
     const { files, loading, error, upload, remove, mkdir } = useFiles(mountId, path, refreshKey);
+    const { showError } = useToast();
     const inputRef = useRef<HTMLInputElement>(null);
     const uploadInputId = useId();
     const [showMkdir, setShowMkdir] = useState(false);
     const [folderName, setFolderName] = useState("");
-    const [mkdirError, setMkdirError] = useState<string | null>(null);
     const [isDragOver, setIsDragOver] = useState(false);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -71,9 +72,15 @@ export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, 
     function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
         if (!file) return;
-        void upload(file).finally(() => {
-            if (inputRef.current) inputRef.current.value = "";
-        });
+        void (async () => {
+            try {
+                await upload(file);
+            } catch (err: unknown) {
+                showError(`Upload failed: ${err instanceof Error ? err.message : String(err)}`);
+            } finally {
+                if (inputRef.current) inputRef.current.value = "";
+            }
+        })();
     }
 
     async function handleMkdirSubmit(e: React.FormEvent) {
@@ -85,16 +92,14 @@ export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, 
             await mkdir(dirPath);
             setShowMkdir(false);
             setFolderName("");
-            setMkdirError(null);
         } catch (err) {
-            setMkdirError(err instanceof Error ? err.message : String(err));
+            showError(`Create folder failed: ${err instanceof Error ? err.message : String(err)}`);
         }
     }
 
     function handleMkdirCancel() {
         setShowMkdir(false);
         setFolderName("");
-        setMkdirError(null);
     }
 
     return (
@@ -157,7 +162,13 @@ export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, 
                                 parentPath={parentPath}
                                 onNavigate={onNavigate}
                                 onDelete={(filePath) => {
-                                    void remove(filePath);
+                                    void (async () => {
+                                        try {
+                                            await remove(filePath);
+                                        } catch (err) {
+                                            showError(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
+                                        }
+                                    })();
                                 }}
                                 onContextMenu={onFileContextMenu}
                                 cutPath={cutPath ?? null}
@@ -191,7 +202,6 @@ export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, 
                                 />
                                 <button type="submit" className={styles.mkdirSubmit}>Create</button>
                                 <button type="button" className={styles.mkdirCancel} onClick={handleMkdirCancel}>Cancel</button>
-                                {mkdirError && <span className={styles.mkdirError}>{mkdirError}</span>}
                             </form>
                         )}
                     </div>
