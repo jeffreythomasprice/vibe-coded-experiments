@@ -142,4 +142,52 @@ describe("file routes", () => {
         });
         expect(res.status).toBe(400);
     });
+
+    // ── POST /files/copy ──────────────────────────────────────────────────────
+
+    test("POST /api/v1/files/copy same-mount returns 200 with src and dest, source preserved", async () => {
+        await Bun.write(path.join(tmpDir, "original.txt"), "copy content");
+
+        const res = await fetch(`${baseUrl}/api/v1/files/copy`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                src: `local://${mountId}/original.txt`,
+                dest: `local://${mountId}/copy.txt`,
+            }),
+        });
+        expect(res.status).toBe(200);
+        const body = await res.json() as { src: string; dest: string };
+        expect(body.src).toBe(`local://${mountId}/original.txt`);
+        expect(body.dest).toBe(`local://${mountId}/copy.txt`);
+
+        // Source still exists (copy, not move)
+        const srcData = await fs.readFile(path.join(tmpDir, "original.txt"));
+        expect(srcData.toString()).toBe("copy content");
+
+        // Destination has same content
+        const destData = await fs.readFile(path.join(tmpDir, "copy.txt"));
+        expect(destData.toString()).toBe("copy content");
+    });
+
+    test("POST /api/v1/files/copy with invalid URI returns 400", async () => {
+        const res = await fetch(`${baseUrl}/api/v1/files/copy`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ src: "not-a-uri", dest: `local://${mountId}/dest.txt` }),
+        });
+        expect(res.status).toBe(400);
+    });
+
+    test("POST /api/v1/files/copy with unknown mount returns 404", async () => {
+        const res = await fetch(`${baseUrl}/api/v1/files/copy`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                src: `local://no-such-mount/file.txt`,
+                dest: `local://${mountId}/dest.txt`,
+            }),
+        });
+        expect(res.status).toBe(404);
+    });
 });

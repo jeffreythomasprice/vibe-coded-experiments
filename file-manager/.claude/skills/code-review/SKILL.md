@@ -56,3 +56,12 @@ Present your findings as a structured report:
 3. If no issues are found, say so clearly and briefly
 
 Be concise. Do not repeat back the diff contents verbatim. Do not suggest improvements outside the scope of what was changed.
+
+After presenting the report, if there are any issues, use the AskUserQuestion tool to present each issue as a checkbox option (multiSelect: true). Label each option with a short description of the issue (severity + file + brief problem). Ask: "Which issues would you like to add to TODO.md?"
+
+For each issue the user selects, append a new line to `TODO.md` in the following format:
+```
+- [code-review] <severity>: <file:line> — <brief description>
+```
+
+Use the Edit tool to append the selected items to the end of `TODO.md`. Confirm to the user which items were added.

@@ -94,3 +94,10 @@ export async function moveFile(src: string, dest: string): Promise<void> {
         body: JSON.stringify({ src, dest }),
     });
 }
+
+export async function copyFile(src: string, dest: string): Promise<void> {
+    await request<void>("/api/v1/files/copy", {
+        method: "POST",
+        body: JSON.stringify({ src, dest }),
+    });
+}

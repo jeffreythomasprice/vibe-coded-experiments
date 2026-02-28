@@ -8,6 +8,7 @@ export {
     mountInfoSchema,
     assertLocalProviderConfig,
     moveRequestSchema,
+    moveRequestSchema as srcDestRequestSchema,
     // fileStatSchema is the wire-format counterpart to FileStat below (timestamps as strings)
     fileStatSchema,
 } from "@file-manager/schemas";

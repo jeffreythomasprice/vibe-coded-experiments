@@ -1,5 +1,5 @@
 import { useId, useRef, useState, useCallback } from "react";
-import type { MountInfo } from "@file-manager/schemas";
+import type { MountInfo, FileEntry } from "@file-manager/schemas";
 import { useFiles } from "../hooks/useFiles.js";
 import { FileList } from "./FileList.js";
 import styles from "./FileBrowser.module.css";
@@ -18,6 +18,9 @@ interface Props {
     onNavigate: (path: string) => void;
     refreshKey?: number;
     onFileDrop?: (data: DraggedFile) => void;
+    onFileContextMenu?: (e: React.MouseEvent, entry: FileEntry) => void;
+    onEmptyContextMenu?: (e: React.MouseEvent) => void;
+    cutPath?: string | null;
 }
 
 function buildBreadcrumbs(mountId: string, path: string): { label: string; path: string }[] {
@@ -31,7 +34,7 @@ function buildBreadcrumbs(mountId: string, path: string): { label: string; path:
     return crumbs;
 }
 
-export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, refreshKey, onFileDrop }: Props) {
+export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, refreshKey, onFileDrop, onFileContextMenu, onEmptyContextMenu, cutPath }: Props) {
     const { files, loading, error, upload, remove, mkdir } = useFiles(mountId, path, refreshKey);
     const inputRef = useRef<HTMLInputElement>(null);
     const uploadInputId = useId();
@@ -142,6 +145,7 @@ export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, 
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
+                        onContextMenu={(e) => { e.preventDefault(); onEmptyContextMenu?.(e); }}
                     >
                         {loading && <p className={styles.status}>Loading…</p>}
                         {error && <p className={styles.error}>{error}</p>}
@@ -153,6 +157,8 @@ export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, 
                                 onDelete={(filePath) => {
                                     void remove(filePath);
                                 }}
+                                onContextMenu={onFileContextMenu}
+                                cutPath={cutPath ?? null}
                             />
                         )}
                     </div>

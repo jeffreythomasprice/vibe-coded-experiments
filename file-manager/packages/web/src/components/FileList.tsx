@@ -7,6 +7,8 @@ interface Props {
     entries: FileEntry[];
     onNavigate: (path: string) => void;
     onDelete: (path: string) => void;
+    onContextMenu?: (e: React.MouseEvent, entry: FileEntry) => void;
+    cutPath?: string | null;
 }
 
 function formatSize(bytes: number): string {
@@ -17,7 +19,7 @@ function formatSize(bytes: number): string {
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
-export function FileList({ mountId, entries, onNavigate, onDelete }: Props) {
+export function FileList({ mountId, entries, onNavigate, onDelete, onContextMenu, cutPath }: Props) {
     if (entries.length === 0) {
         return <p className={styles.empty}>No files here.</p>;
     }
@@ -35,8 +37,9 @@ export function FileList({ mountId, entries, onNavigate, onDelete }: Props) {
                 {entries.map((entry) => (
                     <tr
                         key={entry.path}
-                        className={styles.row}
+                        className={`${styles.row}${cutPath === entry.path ? ` ${styles.cut}` : ""}`}
                         draggable
+                        onContextMenu={(e) => { e.stopPropagation(); e.preventDefault(); onContextMenu?.(e, entry); }}
                         onDragStart={(e) => {
                             e.dataTransfer.setData(
                                 "application/json",

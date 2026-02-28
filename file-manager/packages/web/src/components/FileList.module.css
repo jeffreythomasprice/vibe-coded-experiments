@@ -101,6 +101,10 @@
     background: #fee2e2;
 }
 
+.cut {
+    opacity: 0.4;
+}
+
 .empty {
     color: #aaa;
     font-size: 14px;

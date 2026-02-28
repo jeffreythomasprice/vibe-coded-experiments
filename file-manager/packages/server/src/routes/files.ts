@@ -1,5 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
-import { type MoveRequest, moveRequestSchema } from "@file-manager/shared";
+import { type MoveRequest, moveRequestSchema, srcDestRequestSchema } from "@file-manager/shared";
+
+type SrcDestRequest = MoveRequest; // { src, dest } — body shape shared by move and copy routes
 
 interface FilesParams {
     mountId: string;
@@ -178,6 +180,38 @@ export const fileRoutes: FastifyPluginAsync = async (fastify) => {
             } catch (err) {
                 return reply.internalServerError((err as Error).message);
             }
+        }
+
+        return reply.send({ src, dest });
+    });
+
+    // POST /api/v1/files/copy
+    fastify.post<{ Body: SrcDestRequest }>("/files/copy", {
+        schema: { body: srcDestRequestSchema, response: { 200: srcDestRequestSchema } },
+    }, async (req, reply) => {
+        const { src, dest } = req.body;
+
+        const srcParsed = parseFileUri(src);
+        const destParsed = parseFileUri(dest);
+
+        if (!srcParsed || !destParsed) {
+            return reply.badRequest("Invalid URI format. Expected: <scheme>://<mountId>/<path>");
+        }
+
+        const srcMount = fastify.registry.get(srcParsed.mountId);
+        const destMount = fastify.registry.get(destParsed.mountId);
+
+        if (!srcMount) {
+            return reply.notFound(`Provider '${srcParsed.mountId}' not found`);
+        }
+        if (!destMount) {
+            return reply.notFound(`Provider '${destParsed.mountId}' not found`);
+        }
+
+        try {
+            await destMount.provider.write(destParsed.path, srcMount.provider.read(srcParsed.path));
+        } catch (err) {
+            return reply.internalServerError((err as Error).message);
         }
 
         return reply.send({ src, dest });
