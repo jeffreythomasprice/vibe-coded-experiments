@@ -8,6 +8,7 @@ import type { MenuItem } from "./components/ContextMenu.js";
 import type { FileEntry } from "@file-manager/schemas";
 import { moveFile, copyFile, deleteFile, downloadFile } from "./api/client.js";
 import { useToast } from "./hooks/useToast.js";
+import { usePersistentState } from "./hooks/usePersistentState.js";
 import styles from "./App.module.css";
 
 type Tab = "commander" | "mounts";
@@ -35,8 +36,8 @@ export function App() {
     const mounts = useMounts();
     const { showError } = useToast();
     const [activeTab, setActiveTab] = useState<Tab>("commander");
-    const [left, setLeft] = useState<PaneState>({ mountId: null, path: "/" });
-    const [right, setRight] = useState<PaneState>({ mountId: null, path: "/" });
+    const [left, setLeft] = usePersistentState<PaneState>("fm:pane:left", { mountId: null, path: "/" });
+    const [right, setRight] = usePersistentState<PaneState>("fm:pane:right", { mountId: null, path: "/" });
     const [leftRefreshKey, setLeftRefreshKey] = useState(0);
     const [rightRefreshKey, setRightRefreshKey] = useState(0);
     const [clipboard, setClipboard] = useState<ClipboardEntry | null>(null);
