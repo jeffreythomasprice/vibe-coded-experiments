@@ -10,8 +10,6 @@
 
 - web ui should have a text editor
 
-- give it a screenshot of an unrelated ui and make my css look like this
-
 - web ui should remember my column settings between refreshes
 	- which mount and which directory
 	- local storage?

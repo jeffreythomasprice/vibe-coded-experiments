@@ -1,12 +1,12 @@
 .menu {
     position: fixed;
-    background: #fff;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    background: #1010a0;
+    border: 2px solid #009898;
+    box-shadow: 4px 4px 0 #00000066;
     z-index: 1000;
     min-width: 160px;
-    padding: 4px 0;
+    padding: 0;
+    font-family: 'Courier New', Courier, monospace;
 }
 
 .list {
@@ -16,24 +16,29 @@
 }
 
 .item {
-    padding: 8px 16px;
+    padding: 4px 16px;
     font-size: 14px;
     cursor: pointer;
-    color: #222;
+    color: #00d0d0;
     user-select: none;
+    border-bottom: 1px solid #0c0c68;
+}
+
+.item:last-child {
+    border-bottom: none;
 }
 
 .item:hover {
-    background: #f0f4ff;
-    color: #2a5bd7;
+    background: #009898;
+    color: #000000;
 }
 
 .disabled {
-    color: #aaa;
+    color: #606080;
     cursor: default;
 }
 
 .disabled:hover {
     background: none;
-    color: #aaa;
+    color: #606080;
 }

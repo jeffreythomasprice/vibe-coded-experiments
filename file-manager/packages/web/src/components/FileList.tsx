@@ -5,6 +5,7 @@ import styles from "./FileList.module.css";
 interface Props {
     mountId: string;
     entries: FileEntry[];
+    parentPath: string | null;
     onNavigate: (path: string) => void;
     onDelete: (path: string) => void;
     onContextMenu?: (e: React.MouseEvent, entry: FileEntry) => void;
@@ -12,15 +13,15 @@ interface Props {
 }
 
 function formatSize(bytes: number): string {
-    if (bytes === 0) return "—";
+    if (bytes === 0) return "0 B";
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
-export function FileList({ mountId, entries, onNavigate, onDelete, onContextMenu, cutPath }: Props) {
-    if (entries.length === 0) {
+export function FileList({ mountId, entries, parentPath, onNavigate, onDelete, onContextMenu, cutPath }: Props) {
+    if (entries.length === 0 && !parentPath) {
         return <p className={styles.empty}>No files here.</p>;
     }
 
@@ -30,10 +31,20 @@ export function FileList({ mountId, entries, onNavigate, onDelete, onContextMenu
                 <tr>
                     <th className={styles.colName}>Name</th>
                     <th className={styles.colSize}>Size</th>
-                    <th className={styles.colActions}>Actions</th>
+                    <th className={styles.colActions}></th>
                 </tr>
             </thead>
             <tbody>
+                {parentPath !== null && (
+                    <tr className={`${styles.row} ${styles.upRow}`}>
+                        <td className={styles.cellName} colSpan={2}>
+                            <button className={styles.dirBtn} onClick={() => onNavigate(parentPath)}>
+                                ..
+                            </button>
+                        </td>
+                        <td className={styles.cellActions} />
+                    </tr>
+                )}
                 {entries.map((entry) => (
                     <tr
                         key={entry.path}
@@ -50,22 +61,17 @@ export function FileList({ mountId, entries, onNavigate, onDelete, onContextMenu
                     >
                         <td className={styles.cellName}>
                             {entry.type === "directory" ? (
-                                <button
-                                    className={styles.dirBtn}
-                                    onClick={() => onNavigate(entry.path)}
-                                >
-                                    <span className={styles.fileIcon}>&#128193;</span>
+                                <button className={styles.dirBtn} onClick={() => onNavigate(entry.path)}>
                                     {entry.name}
                                 </button>
                             ) : (
-                                <span className={styles.fileName}>
-                                    <span className={styles.fileIcon}>&#128196;</span>
-                                    {entry.name}
-                                </span>
+                                <span className={styles.fileName}>{entry.name}</span>
                             )}
                         </td>
                         <td className={styles.cellSize}>
-                            {entry.type === "directory" ? "—" : formatSize(entry.size)}
+                            {entry.type === "directory"
+                                ? <span className={styles.dirTag}>&lt;DIR&gt;</span>
+                                : formatSize(entry.size)}
                         </td>
                         <td className={styles.cellActions}>
                             {entry.type === "file" && (

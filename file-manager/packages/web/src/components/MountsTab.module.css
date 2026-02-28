@@ -1,36 +1,40 @@
 .container {
     max-width: 600px;
     margin: 0 auto;
-    padding: 32px 24px;
+    padding: 24px 16px;
 }
 
 .heading {
-    font-size: 18px;
-    font-weight: 600;
-    margin: 0 0 20px 0;
-    color: #222;
+    font-size: 16px;
+    font-weight: bold;
+    margin: 0 0 16px 0;
+    color: #d8d800;
+    font-family: inherit;
 }
 
 .table {
     width: 100%;
     border-collapse: collapse;
     font-size: 14px;
-    margin-bottom: 16px;
+    font-family: inherit;
+    margin-bottom: 12px;
+    border: 1px solid #009898;
 }
 
 .table th {
     text-align: left;
-    padding: 8px 12px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #888;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    border-bottom: 1px solid #e8e8e8;
+    padding: 3px 8px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #000000;
+    background: #009898;
+    border-bottom: 1px solid #dddddd;
+    text-transform: none;
+    letter-spacing: 0;
 }
 
 .row {
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid #0c0c68;
 }
 
 .row:last-child {
@@ -38,67 +42,69 @@
 }
 
 .row:hover {
-    background: #f8f8f8;
+    background: #1414b8;
 }
 
 .cell {
-    padding: 10px 12px;
+    padding: 3px 8px;
     vertical-align: middle;
-    color: #333;
+    color: #00d0d0;
+    font-family: inherit;
 }
 
 .emptyCell {
-    padding: 16px 12px;
-    color: #aaa;
+    padding: 8px;
+    color: #606080;
     font-size: 14px;
+    font-family: inherit;
 }
 
 .removeBtn {
     background: none;
-    border: 1px solid #ddd;
-    border-radius: 4px;
+    border: 1px solid #009898;
     cursor: pointer;
-    padding: 4px 10px;
+    padding: 1px 8px;
     font-size: 13px;
-    color: #555;
+    font-family: inherit;
+    color: #00d0d0;
 }
 
 .removeBtn:hover {
-    color: #c00;
-    border-color: #fca5a5;
-    background: #fee2e2;
+    color: #ee2222;
+    border-color: #ee2222;
+    background: none;
 }
 
 .newMountBtn {
     background: none;
-    border: 1px dashed #bbb;
-    border-radius: 6px;
-    padding: 8px 14px;
+    border: 1px dashed #009898;
+    padding: 3px 10px;
     cursor: pointer;
     font-size: 13px;
-    color: #555;
+    font-family: inherit;
+    color: #009898;
 }
 
 .newMountBtn:hover {
-    border-color: #888;
-    color: #222;
+    border-color: #00d0d0;
+    color: #00d0d0;
 }
 
 .form {
-    border: 1px solid #e8e8e8;
-    border-radius: 8px;
-    padding: 20px;
-    background: #fafafa;
+    border: 1px solid #009898;
+    padding: 16px;
+    background: #0c0c60;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
 }
 
 .formHeading {
     font-size: 14px;
-    font-weight: 600;
+    font-weight: bold;
     margin: 0;
-    color: #333;
+    color: #d8d800;
+    font-family: inherit;
 }
 
 .formRow {
@@ -108,23 +114,25 @@
 }
 
 .label {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
-    color: #666;
+    color: #009898;
+    font-family: inherit;
 }
 
 .input {
-    padding: 7px 10px;
-    border: 1px solid #ccc;
-    border-radius: 6px;
+    padding: 3px 8px;
+    border: 1px solid #009898;
+    font-family: inherit;
     font-size: 14px;
     width: 100%;
-    box-sizing: border-box;
+    background: #0e0e72;
+    color: #e0e0e0;
 }
 
 .input:focus {
-    outline: none;
-    border-color: #4a90e2;
+    outline: 1px solid #00d0d0;
+    border-color: #00d0d0;
 }
 
 .formActions {
@@ -133,41 +141,42 @@
 }
 
 .addBtn {
-    padding: 7px 18px;
-    background: #4a90e2;
-    color: #fff;
-    border: none;
-    border-radius: 6px;
+    padding: 3px 16px;
+    background: #009898;
+    color: #000000;
+    border: 1px solid #dddddd;
     cursor: pointer;
     font-size: 13px;
-    font-weight: 500;
+    font-family: inherit;
 }
 
 .addBtn:disabled {
-    opacity: 0.6;
+    opacity: 0.5;
     cursor: default;
 }
 
 .addBtn:hover:not(:disabled) {
-    background: #3a7bd5;
+    background: #00d0d0;
 }
 
 .cancelBtn {
-    padding: 7px 14px;
-    background: none;
-    border: 1px solid #ccc;
-    border-radius: 6px;
+    padding: 3px 12px;
+    background: #1010a0;
+    border: 1px solid #009898;
     cursor: pointer;
     font-size: 13px;
-    color: #555;
+    font-family: inherit;
+    color: #00d0d0;
 }
 
 .cancelBtn:hover {
-    background: #f0f0f0;
+    background: #009898;
+    color: #000000;
 }
 
 .error {
     font-size: 13px;
-    color: #c00;
+    color: #ff5050;
     margin: 0;
+    font-family: inherit;
 }

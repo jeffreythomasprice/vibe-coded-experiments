@@ -2,33 +2,35 @@
     width: 100%;
     border-collapse: collapse;
     font-size: 14px;
+    font-family: inherit;
 }
 
 .table th {
     text-align: left;
-    padding: 8px 12px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #888;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    border-bottom: 1px solid #e8e8e8;
+    padding: 2px 8px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #000000;
+    background: #009898;
+    border-bottom: 1px solid #dddddd;
+    text-transform: none;
+    letter-spacing: 0;
 }
 
 .colName {
-    width: 60%;
+    width: 58%;
 }
 
 .colSize {
-    width: 15%;
+    width: 18%;
 }
 
 .colActions {
-    width: 25%;
+    width: 24%;
 }
 
 .row {
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid #0c0c68;
 }
 
 .row:last-child {
@@ -36,19 +38,30 @@
 }
 
 .row:hover {
-    background: #f8f8f8;
+    background: #1414b8;
+}
+
+.upRow .dirBtn {
+    color: #d8d800;
+    letter-spacing: 0.05em;
 }
 
 .cellName,
 .cellSize,
 .cellActions {
-    padding: 8px 12px;
+    padding: 1px 8px;
     vertical-align: middle;
+}
+
+.cellSize {
+    text-align: right;
+    color: #a0c8c8;
+    font-size: 13px;
 }
 
 .cellActions {
     display: flex;
-    gap: 6px;
+    gap: 4px;
     align-items: center;
 }
 
@@ -57,48 +70,49 @@
     border: none;
     cursor: pointer;
     font-size: 14px;
-    color: #4a90e2;
+    font-family: inherit;
+    color: #e0e0e0;
     padding: 0;
     display: flex;
     align-items: center;
-    gap: 6px;
     text-align: left;
 }
 
 .dirBtn:hover {
-    text-decoration: underline;
+    color: #d8d800;
 }
 
 .fileName {
     display: flex;
     align-items: center;
-    gap: 6px;
-    color: #222;
+    color: #00d0d0;
 }
 
-.fileIcon {
-    flex-shrink: 0;
+.dirTag {
+    color: #009898;
+    font-size: 12px;
 }
 
 .actionBtn {
     background: none;
-    border: 1px solid #ddd;
-    border-radius: 4px;
+    border: 1px solid #009898;
     cursor: pointer;
-    padding: 2px 8px;
-    font-size: 14px;
-    color: #555;
+    padding: 0 6px;
+    font-size: 13px;
+    font-family: inherit;
+    color: #00d0d0;
     line-height: 1.4;
 }
 
 .actionBtn:hover {
-    background: #f0f0f0;
+    background: #009898;
+    color: #000000;
 }
 
 .deleteBtn:hover {
-    color: #c00;
-    border-color: #fca5a5;
-    background: #fee2e2;
+    color: #ee2222;
+    border-color: #ee2222;
+    background: none;
 }
 
 .cut {
@@ -106,8 +120,9 @@
 }
 
 .empty {
-    color: #aaa;
+    color: #009898;
     font-size: 14px;
-    padding: 16px 0;
+    font-family: inherit;
+    padding: 8px;
     margin: 0;
 }

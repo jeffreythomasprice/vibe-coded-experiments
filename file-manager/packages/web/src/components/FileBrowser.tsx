@@ -66,6 +66,7 @@ export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, 
     }, [onFileDrop]);
 
     const crumbs = mountId ? buildBreadcrumbs(mountId, path) : [];
+    const parentPath = (!mountId || path === "/") ? null : path.replace(/\/[^/]+$/, "") || "/";
 
     function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
@@ -153,6 +154,7 @@ export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, 
                             <FileList
                                 mountId={mountId}
                                 entries={files}
+                                parentPath={parentPath}
                                 onNavigate={onNavigate}
                                 onDelete={(filePath) => {
                                     void remove(filePath);
