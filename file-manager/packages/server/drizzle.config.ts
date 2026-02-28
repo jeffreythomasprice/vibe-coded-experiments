@@ -1,10 +1,13 @@
 import type { Config } from "drizzle-kit";
+import { loadConfig } from "./src/config.js";
+
+const config = await loadConfig();
 
 export default {
     schema: "./src/db/schema.ts",
     out: "./drizzle",
     dialect: "postgresql",
     dbCredentials: {
-        url: process.env["DATABASE_URL"] ?? "postgres://filemanager:filemanager@localhost:5432/filemanager",
+        url: config.database.url,
     },
 } satisfies Config;

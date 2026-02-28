@@ -1,6 +1,8 @@
 import type { FileEntry, FileStat } from "@file-manager/shared";
+import { loadConfig } from "../config.js";
 
-const BASE_URL = (process.env["FILE_MANAGER_API_URL"] ?? "http://localhost:8000").replace(/\/$/, "");
+const _cfg = loadConfig();
+const BASE_URL = (process.env["FILE_MANAGER_API_URL"] ?? _cfg.apiUrl ?? "http://localhost:8000").replace(/\/$/, "");
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const url = `${BASE_URL}${path}`;

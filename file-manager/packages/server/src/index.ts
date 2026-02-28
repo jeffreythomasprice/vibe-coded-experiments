@@ -1,18 +1,15 @@
 import { runMigrations } from "./db/migrate.js";
 import { createDb } from "./db/client.js";
 import { createServer } from "./server.js";
+import { loadConfig } from "./config.js";
 
 const port = parseInt(process.env["PORT"] ?? "8000", 10);
 const host = process.env["HOST"] ?? "0.0.0.0";
 
-const databaseUrl = process.env["DATABASE_URL"];
-if (!databaseUrl) {
-    console.error("DATABASE_URL required");
-    process.exit(1);
-}
+const config = await loadConfig();
 
-await runMigrations(databaseUrl);
-const db = createDb(databaseUrl);
+await runMigrations(config.database.url);
+const db = createDb(config.database.url);
 const server = await createServer({ db });
 
 try {

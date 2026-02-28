@@ -11,6 +11,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@file-manager/schemas": "workspace:*",
     "@file-manager/shared": "workspace:*",
     "commander": "^12.1.0"
   }

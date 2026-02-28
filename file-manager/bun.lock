@@ -18,9 +18,10 @@
       "name": "@file-manager/cli",
       "version": "0.1.0",
       "bin": {
-        "files": "src/index.ts",
+        "files": "dist/files",
       },
       "dependencies": {
+        "@file-manager/schemas": "workspace:*",
         "@file-manager/shared": "workspace:*",
         "commander": "^12.1.0",
       },
