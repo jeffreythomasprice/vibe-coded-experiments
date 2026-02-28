@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import sensible from "@fastify/sensible";
+import cors from "@fastify/cors";
 import { ProviderRegistry } from "./provider-registry.js";
 import { providerRoutes } from "./routes/providers.js";
 import { fileRoutes } from "./routes/files.js";
@@ -15,6 +16,7 @@ export async function createServer(options: CreateServerOptions = {}) {
     });
 
     await fastify.register(sensible);
+    await fastify.register(cors, { origin: true });
 
     // Accept raw binary uploads
     fastify.addContentTypeParser("application/octet-stream", { parseAs: "buffer" }, (_req, body, done) => {

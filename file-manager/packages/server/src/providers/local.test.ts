@@ -144,6 +144,21 @@ describe("LocalProvider", () => {
         await expect(fs.stat(path.join(tmpDir, "dir-to-delete"))).rejects.toThrow();
     });
 
+    // ── mkdir() ───────────────────────────────────────────────────────────────
+
+    test("mkdir() creates a nested directory", async () => {
+        await provider.mkdir("/a/b/c");
+
+        const stat = await provider.stat("/a/b/c");
+        expect(stat.type).toBe("directory");
+    });
+
+    test("mkdir() is idempotent — does not throw on existing directory", async () => {
+        await fs.mkdir(path.join(tmpDir, "existing"));
+
+        await expect(provider.mkdir("/existing")).resolves.toBeUndefined();
+    });
+
     // ── move() ────────────────────────────────────────────────────────────────
 
     test("move() renames a file within the same directory", async () => {

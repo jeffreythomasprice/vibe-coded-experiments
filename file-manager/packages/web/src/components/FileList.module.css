@@ -1,0 +1,109 @@
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid #e8e8e8;
+}
+
+.colName {
+    width: 60%;
+}
+
+.colSize {
+    width: 15%;
+}
+
+.colActions {
+    width: 25%;
+}
+
+.row {
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.row:last-child {
+    border-bottom: none;
+}
+
+.row:hover {
+    background: #f8f8f8;
+}
+
+.cellName,
+.cellSize,
+.cellActions {
+    padding: 8px 12px;
+    vertical-align: middle;
+}
+
+.cellActions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.dirBtn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    color: #4a90e2;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-align: left;
+}
+
+.dirBtn:hover {
+    text-decoration: underline;
+}
+
+.fileName {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #222;
+}
+
+.fileIcon {
+    flex-shrink: 0;
+}
+
+.actionBtn {
+    background: none;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 2px 8px;
+    font-size: 14px;
+    color: #555;
+    line-height: 1.4;
+}
+
+.actionBtn:hover {
+    background: #f0f0f0;
+}
+
+.deleteBtn:hover {
+    color: #c00;
+    border-color: #fca5a5;
+    background: #fee2e2;
+}
+
+.empty {
+    color: #aaa;
+    font-size: 14px;
+    padding: 16px 0;
+    margin: 0;
+}

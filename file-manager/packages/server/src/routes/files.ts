@@ -94,6 +94,31 @@ export const fileRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(201).send({ path: filePath });
     });
 
+    // PUT /api/v1/files/:mountId/*path — create directory
+    fastify.put<{ Params: FilesParams }>("/files/:mountId/*", {
+        schema: {
+            response: {
+                201: { type: "object", properties: { path: { type: "string" } }, required: ["path"], additionalProperties: false },
+            },
+        },
+    }, async (req, reply) => {
+        const { mountId } = req.params;
+        const filePath = "/" + (req.params["*"] ?? "");
+
+        const mount = fastify.registry.get(mountId);
+        if (!mount) {
+            return reply.notFound(`Provider '${mountId}' not found`);
+        }
+
+        try {
+            await mount.provider.mkdir(filePath);
+        } catch (err) {
+            return reply.internalServerError((err as Error).message);
+        }
+
+        return reply.code(201).send({ path: filePath });
+    });
+
     // DELETE /api/v1/files/:mountId/*path
     fastify.delete<{ Params: FilesParams }>("/files/:mountId/*", {
         schema: { response: { 204: { type: "null" } } },

@@ -25,15 +25,18 @@ The server requires a Postgres database. A `docker-compose.yml` is provided for 
 docker compose up -d
 
 # Run DB migrations (idempotent — safe to run on every startup)
-DATABASE_URL=postgres://filemanager:filemanager@localhost:5432/filemanager \
-  bun run --cwd packages/server db:migrate
+bun run --cwd packages/server db:migrate
 
 # Start the server
-DATABASE_URL=postgres://filemanager:filemanager@localhost:5432/filemanager \
-  bun run --cwd packages/server start
+bun run --cwd packages/server start
+
+# Start the server in watch mode (auto-restarts on file changes)
+bun run --cwd packages/server dev
 ```
 
 The server runs migrations automatically on startup (`src/index.ts`), so the manual `db:migrate` step above is only needed if you want to migrate without starting the server (e.g. in CI or before a deploy).
+
+Database connection settings come from `packages/server/config/<NODE_ENV>.ts` (defaults to `development`). Edit that file to change the connection URL.
 
 Default port: `8000`. Override with `PORT=<n>`.
 
@@ -71,6 +74,20 @@ SELECT scheme, COUNT(*) FROM provider_mounts GROUP BY scheme;
 
 -- Quit
 \q
+```
+
+## Web UI
+
+```sh
+bun run --cwd packages/web dev
+```
+
+Opens at `http://localhost:8001`. The dev server proxies `/api` requests to the server at `http://localhost:8000`, so start the server first.
+
+For a production build:
+
+```sh
+bun run --cwd packages/web build   # outputs to packages/web/dist/
 ```
 
 ## CLI

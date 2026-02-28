@@ -80,6 +80,25 @@ describe("file routes", () => {
         expect(data.toString()).toBe("new content");
     });
 
+    // ── PUT (mkdir) ───────────────────────────────────────────────────────────
+
+    test("PUT /api/v1/files/:mountId/newdir returns 201 with path", async () => {
+        const res = await fetch(`${baseUrl}/api/v1/files/${mountId}/newdir`, { method: "PUT" });
+        expect(res.status).toBe(201);
+        const body = await res.json() as { path: string };
+        expect(body.path).toBe("/newdir");
+
+        // Verify directory is visible in subsequent listing
+        const listRes = await fetch(`${baseUrl}/api/v1/files/${mountId}/`);
+        const entries = await listRes.json() as Array<{ name: string; type: string }>;
+        expect(entries.some((e) => e.name === "newdir" && e.type === "directory")).toBe(true);
+    });
+
+    test("PUT /api/v1/files/unknown/newdir returns 404", async () => {
+        const res = await fetch(`${baseUrl}/api/v1/files/unknown/newdir`, { method: "PUT" });
+        expect(res.status).toBe(404);
+    });
+
     // ── DELETE ────────────────────────────────────────────────────────────────
 
     test("DELETE /api/v1/files/:mountId/file.txt returns 204", async () => {

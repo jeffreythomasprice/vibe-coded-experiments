@@ -1,0 +1,200 @@
+.browser {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #e8e8e8;
+    background: #fff;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.mountSelect {
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 13px;
+    background: #fff;
+    cursor: pointer;
+    flex-shrink: 0;
+    color: #333;
+}
+
+.mountSelect:focus {
+    outline: none;
+    border-color: #4a90e2;
+}
+
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+}
+
+.breadcrumbItem {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.sep {
+    color: #bbb;
+    font-size: 14px;
+    margin: 0 2px;
+}
+
+.breadcrumbBtn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    color: #4a90e2;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.breadcrumbBtn:hover {
+    background: #e8f0fe;
+    text-decoration: underline;
+}
+
+.breadcrumbCurrent {
+    font-size: 14px;
+    font-weight: 500;
+    color: #222;
+    padding: 2px 4px;
+}
+
+.emptyPane {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #aaa;
+    font-size: 15px;
+}
+
+.content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 20px;
+}
+
+.status {
+    color: #aaa;
+    font-size: 14px;
+    margin: 0;
+}
+
+.error {
+    color: #c00;
+    font-size: 14px;
+    margin: 0;
+}
+
+.toolbar {
+    border-top: 1px solid #e8e8e8;
+    padding: 12px 20px;
+    flex-shrink: 0;
+    background: #fafafa;
+}
+
+.fileInput {
+    display: none;
+}
+
+.uploadLabel {
+    display: inline-block;
+    padding: 6px 14px;
+    background: #4a90e2;
+    color: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.uploadLabel:hover {
+    background: #3a7bd5;
+}
+
+.mkdirBtn {
+    display: inline-block;
+    padding: 6px 14px;
+    background: #fff;
+    color: #333;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    margin-left: 8px;
+}
+
+.mkdirBtn:hover {
+    background: #f0f0f0;
+}
+
+.mkdirForm {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+
+.mkdirInput {
+    padding: 5px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 13px;
+    width: 200px;
+}
+
+.mkdirInput:focus {
+    outline: none;
+    border-color: #4a90e2;
+}
+
+.mkdirSubmit {
+    padding: 5px 12px;
+    background: #4a90e2;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.mkdirSubmit:hover {
+    background: #3a7bd5;
+}
+
+.mkdirCancel {
+    padding: 5px 12px;
+    background: #fff;
+    color: #555;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.mkdirCancel:hover {
+    background: #f0f0f0;
+}
+
+.mkdirError {
+    color: #c00;
+    font-size: 13px;
+}

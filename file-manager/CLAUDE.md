@@ -15,6 +15,9 @@ bun run --cwd packages/schemas generate        # (re)generate types + validators
 bun run --cwd packages/server start            # start API server (default port 8000)
 bun run --cwd packages/server dev              # start with --watch
 
+bun run --cwd packages/web dev                 # start web UI (default port 8001, proxies /api → 8000)
+bun run --cwd packages/web build               # production build → packages/web/dist/
+
 bun run packages/cli/src/index.ts <command>    # run CLI directly
 alias fm="bun run packages/cli/src/index.ts"  # convenience alias
 
@@ -26,14 +29,15 @@ Environment variables: `PORT`, `HOST` for the server; `FILE_MANAGER_API_URL` for
 
 ## Architecture
 
-Bun monorepo with Turborepo. Four active packages:
+Bun monorepo with Turborepo. Five active packages:
 
 - **`@file-manager/schemas`** — JSON Schema source of truth + generated TypeScript types and AJV validators.
 - **`@file-manager/shared`** — pure type definitions, no runtime code. Every other package imports from here.
 - **`@file-manager/server`** — Fastify REST API. All business logic and provider implementations live here.
 - **`@file-manager/cli`** — Commander CLI. Thin HTTP client only; imports `shared` but never `server`.
+- **`@file-manager/web`** — Vite + React SPA. Thin HTTP client only; imports `schemas` directly for wire types.
 
-`web` and sync engine are designed (see `ARCHITECTURE.md`) but not yet implemented.
+Sync engine is designed (see `ARCHITECTURE.md`) but not yet implemented.
 
 ### Schema pipeline
 
@@ -69,6 +73,15 @@ All file addresses use `<scheme>://<mountId>/<path>` (e.g. `local://docs/reports
 
 - **Binary uploads**: `server.ts` registers an `application/octet-stream` content-type parser (`parseAs: 'buffer'`). Route handlers receive `req.body` as `Buffer`.
 - **DELETE with no body**: the fetch wrapper in `packages/cli/src/api/client.ts` only sets `Content-Type: application/json` when `options.body` is present. Sending the header on an empty-body DELETE causes Fastify to reject with 400.
+
+### Web package
+
+`packages/web` is a Vite + React SPA using vanilla CSS modules (no component library).
+
+- **Dev proxy**: `vite.config.ts` proxies `/api` → `http://localhost:8000`, so no CORS is needed in dev. `@fastify/cors` is registered on the server for production deployments.
+- **API client**: `src/api/client.ts` mirrors the CLI fetch wrapper pattern. Base URL is `import.meta.env.VITE_API_URL ?? ""` (empty = relative URLs through the proxy).
+- **Types**: imported from `@file-manager/schemas` (wire format). Never imports from `@file-manager/server` or `@file-manager/shared`.
+- **Styling**: each component has a co-located `.module.css` file. Global resets are in `App.module.css` using `:global(html)` etc.
 
 ### Path safety
 
@@ -113,3 +126,5 @@ await server.close();
 We keep a `TODO.md`. After completing a task if it closely matches an entry in this file remove it. Ask about updating this if it's ambiguous, or if a task is only partially completed.
 
 When making bigger changes ask about updating `CLAUDE.md` or `README.md`.
+
+Try to write code with as much logic as possible in ways that are easy to unit test. Write unit tests for those things as you go.

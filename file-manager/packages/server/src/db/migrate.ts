@@ -9,10 +9,7 @@ export async function runMigrations(connectionString: string): Promise<void> {
 }
 
 if (import.meta.main) {
-    const url = process.env["DATABASE_URL"];
-    if (!url) {
-        console.error("DATABASE_URL not set");
-        process.exit(1);
-    }
-    await runMigrations(url);
+    const { loadConfig } = await import("../config.js");
+    const config = await loadConfig();
+    await runMigrations(config.database.url);
 }

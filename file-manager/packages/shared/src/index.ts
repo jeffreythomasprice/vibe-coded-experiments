@@ -55,5 +55,6 @@ export interface StorageProvider {
     write(path: string, data: AsyncIterable<Buffer>): Promise<void>;
     delete(path: string): Promise<void>;
     move(src: string, dest: string): Promise<void>;
+    mkdir(path: string): Promise<void>;
     watch(path: string): AsyncIterable<ChangeEvent>;
 }

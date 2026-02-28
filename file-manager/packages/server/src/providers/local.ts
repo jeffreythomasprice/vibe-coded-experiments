@@ -105,6 +105,11 @@ export class LocalProvider implements StorageProvider {
         await fs.rename(absSrc, absDest);
     }
 
+    async mkdir(dirPath: string): Promise<void> {
+        const absPath = this.resolve(dirPath);
+        await fs.mkdir(absPath, { recursive: true });
+    }
+
     // eslint-disable-next-line @typescript-eslint/require-await
     async *watch(_filePath: string): AsyncIterable<ChangeEvent> {
         throw new Error("watch() not implemented in POC");
