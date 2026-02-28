@@ -1,13 +1,9 @@
 import type { FastifyPluginAsync } from "fastify";
+import { type MoveRequest, moveRequestSchema } from "@file-manager/shared";
 
 interface FilesParams {
     mountId: string;
     "*": string;
-}
-
-interface MoveBody {
-    src: string;
-    dest: string;
 }
 
 async function* bufferToAsyncIterable(buf: Buffer): AsyncIterable<Buffer> {
@@ -71,7 +67,13 @@ export const fileRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     // POST /api/v1/files/:mountId/*path — write file
-    fastify.post<{ Params: FilesParams; Body: Buffer }>("/files/:mountId/*", async (req, reply) => {
+    fastify.post<{ Params: FilesParams; Body: Buffer }>("/files/:mountId/*", {
+        schema: {
+            response: {
+                201: { type: "object", properties: { path: { type: "string" } }, required: ["path"], additionalProperties: false },
+            },
+        },
+    }, async (req, reply) => {
         const { mountId } = req.params;
         const filePath = "/" + (req.params["*"] ?? "");
 
@@ -93,7 +95,9 @@ export const fileRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     // DELETE /api/v1/files/:mountId/*path
-    fastify.delete<{ Params: FilesParams }>("/files/:mountId/*", async (req, reply) => {
+    fastify.delete<{ Params: FilesParams }>("/files/:mountId/*", {
+        schema: { response: { 204: { type: "null" } } },
+    }, async (req, reply) => {
         const { mountId } = req.params;
         const filePath = "/" + (req.params["*"] ?? "");
 
@@ -112,12 +116,10 @@ export const fileRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     // POST /api/v1/files/move
-    fastify.post<{ Body: MoveBody }>("/files/move", async (req, reply) => {
+    fastify.post<{ Body: MoveRequest }>("/files/move", {
+        schema: { body: moveRequestSchema, response: { 200: moveRequestSchema } },
+    }, async (req, reply) => {
         const { src, dest } = req.body;
-
-        if (!src || !dest) {
-            return reply.badRequest("src and dest are required");
-        }
 
         const srcParsed = parseFileUri(src);
         const destParsed = parseFileUri(dest);

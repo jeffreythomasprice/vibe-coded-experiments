@@ -6,6 +6,16 @@
 bun install
 ```
 
+## Code generation
+
+JSON Schema files in `packages/schemas/schemas/` are the source of truth for all data shapes. After editing a `.json` schema, regenerate the TypeScript types and validators:
+
+```sh
+bun run --cwd packages/schemas generate
+```
+
+Generated files (`src/generated/`) are committed so the package is importable without a build step.
+
 ## Start the server
 
 ```sh

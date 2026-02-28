@@ -8,5 +8,8 @@
   "scripts": {
     "build": "echo 'No build step for shared in POC'",
     "test": "echo 'No tests yet'"
+  },
+  "dependencies": {
+    "@file-manager/schemas": "workspace:*"
   }
 }

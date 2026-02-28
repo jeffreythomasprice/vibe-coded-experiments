@@ -1,31 +1,38 @@
+// ── Schemas: generated types, validators, and Fastify schema objects ──────────
+
+import type { FileEntry } from "@file-manager/schemas";
+export type { FileEntry };
+
+export type { MountInfo, MoveRequest, LocalProviderConfig } from "@file-manager/schemas";
+export {
+    mountInfoSchema,
+    assertLocalProviderConfig,
+    moveRequestSchema,
+    // fileStatSchema is the wire-format counterpart to FileStat below (timestamps as strings)
+    fileStatSchema,
+} from "@file-manager/schemas";
+
 // ── File entry types ──────────────────────────────────────────────────────────
 
-export type FileEntryType = "file" | "directory" | "symlink";
-
+/**
+ * Internal/provider representation of file metadata. Uses `Date` objects and is
+ * never serialized directly. For the wire format (ISO 8601 strings) used in
+ * Fastify response schemas, see `fileStatSchema` from `@file-manager/schemas`.
+ */
 export interface FileStat {
     name: string;
     path: string;
-    type: FileEntryType;
+    type: "file" | "directory" | "symlink";
     size: number;
     createdAt: Date;
     modifiedAt: Date;
     mimeType?: string;
 }
 
-export interface FileEntry {
-    name: string;
-    path: string;
-    type: FileEntryType;
-    size: number;
-    modifiedAt: Date;
-}
-
 // ── Change events ─────────────────────────────────────────────────────────────
 
-export type ChangeEventType = "create" | "modify" | "delete" | "rename";
-
 export interface ChangeEvent {
-    type: ChangeEventType;
+    type: "create" | "modify" | "delete" | "rename";
     path: string;
     oldPath?: string; // for rename
 }
@@ -49,16 +56,4 @@ export interface StorageProvider {
     delete(path: string): Promise<void>;
     move(src: string, dest: string): Promise<void>;
     watch(path: string): AsyncIterable<ChangeEvent>;
-}
-
-// ── Sync types (unused in POC, included for completeness) ────────────────────
-
-export type SyncDirection = "push" | "pull" | "bidirectional";
-
-export interface SyncRule {
-    id: string;
-    srcUri: string;
-    destUri: string;
-    direction: SyncDirection;
-    schedule?: string; // cron expression
 }

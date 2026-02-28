@@ -32,7 +32,7 @@ export class LocalProvider implements StorageProvider {
                 path: entryPath,
                 type: entry.isDirectory() ? "directory" : entry.isSymbolicLink() ? "symlink" : "file",
                 size: stat.size,
-                modifiedAt: stat.mtime,
+                modifiedAt: stat.mtime.toISOString(),
             };
 
             if (entry.isDirectory()) {

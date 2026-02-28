@@ -1,0 +1,19 @@
+{
+  "name": "@file-manager/schemas",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "generate": "bun run scripts/generate.ts",
+    "build": "bun run generate",
+    "test": "echo 'No tests yet'"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1"
+  },
+  "devDependencies": {
+    "json-schema-to-typescript": "^15.0.4"
+  }
+}

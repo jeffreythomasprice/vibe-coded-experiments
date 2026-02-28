@@ -1,16 +1,16 @@
 import type { FastifyPluginAsync } from "fastify";
-import type { ProviderScheme } from "@file-manager/shared";
+import {
+    type MountInfo,
+    mountInfoSchema,
+    assertLocalProviderConfig,
+} from "@file-manager/shared";
 import { LocalProvider } from "../providers/local.js";
-
-interface MountBody {
-    mountId: string;
-    scheme: ProviderScheme;
-    config: Record<string, string>;
-}
 
 export const providerRoutes: FastifyPluginAsync = async (fastify) => {
     // GET /api/v1/providers
-    fastify.get("/providers", async (_req, reply) => {
+    fastify.get("/providers", {
+        schema: { response: { 200: { type: "array", items: mountInfoSchema } } },
+    }, async (_req, reply) => {
         const mounts = fastify.registry.list().map(({ mountId, scheme, config }) => ({
             mountId,
             scheme,
@@ -20,20 +20,19 @@ export const providerRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     // POST /api/v1/providers
-    fastify.post<{ Body: MountBody }>("/providers", async (req, reply) => {
+    fastify.post<{ Body: MountInfo }>("/providers", {
+        schema: { body: mountInfoSchema, response: { 201: mountInfoSchema } },
+    }, async (req, reply) => {
         const { mountId, scheme, config } = req.body;
-
-        if (!mountId || !scheme || !config) {
-            return reply.badRequest("mountId, scheme, and config are required");
-        }
 
         let provider;
         if (scheme === "local") {
-            const rootDir = config["rootDir"];
-            if (!rootDir) {
-                return reply.badRequest("config.rootDir is required for local provider");
+            try {
+                assertLocalProviderConfig(config);
+            } catch (err) {
+                return reply.badRequest((err as Error).message);
             }
-            provider = new LocalProvider(rootDir);
+            provider = new LocalProvider(config.rootDir);
         } else {
             return reply.badRequest(`Unsupported scheme: ${scheme}`);
         }
@@ -48,7 +47,15 @@ export const providerRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     // DELETE /api/v1/providers/:mountId
-    fastify.delete<{ Params: { mountId: string } }>("/providers/:mountId", async (req, reply) => {
+    fastify.delete<{ Params: { mountId: string } }>("/providers/:mountId", {
+        schema: {
+            params: {
+                type: "object",
+                properties: { mountId: { type: "string" } },
+                required: ["mountId"],
+            },
+        },
+    }, async (req, reply) => {
         const { mountId } = req.params;
         const removed = fastify.registry.unmount(mountId);
         if (!removed) {

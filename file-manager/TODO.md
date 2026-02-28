@@ -8,9 +8,8 @@
 
 - `bun run build` should actually produce dist files or executables for everything
 
-- schemas should be stored in db
+- providers should be stored in db
 
-- put schemas on everything
-	- json schema first, generate typescript types
-	- API requests and responses
-	- schemas for providers when setting up a new provider
+- automate updates to CLAUDE.md and README.md
+
+- unit tests

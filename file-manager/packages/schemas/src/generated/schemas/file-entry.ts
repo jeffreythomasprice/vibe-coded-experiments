@@ -1,0 +1,45 @@
+// GENERATED FILE — DO NOT EDIT MANUALLY
+// Run `bun run --cwd packages/schemas generate` to regenerate
+
+export const fileEntrySchema = {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "FileEntry",
+  "title": "FileEntry",
+  "description": "A single entry in a file listing (JSON-serializable form)",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Filename or directory name (basename)"
+    },
+    "path": {
+      "type": "string",
+      "description": "Full path within the mount"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "file",
+        "directory",
+        "symlink"
+      ],
+      "description": "Entry type"
+    },
+    "size": {
+      "type": "number",
+      "description": "Size in bytes"
+    },
+    "modifiedAt": {
+      "type": "string",
+      "description": "Last-modified timestamp (ISO 8601)"
+    }
+  },
+  "required": [
+    "name",
+    "path",
+    "type",
+    "size",
+    "modifiedAt"
+  ],
+  "additionalProperties": false
+} as const;

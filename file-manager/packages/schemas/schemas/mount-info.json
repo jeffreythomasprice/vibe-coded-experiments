@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "MountInfo",
+  "title": "MountInfo",
+  "description": "Provider mount registration",
+  "type": "object",
+  "properties": {
+    "mountId": { "type": "string" },
+    "scheme":  { "type": "string", "enum": ["local", "s3", "gcs", "sftp", "smb"] },
+    "config":  { "type": "object", "additionalProperties": { "type": "string" } }
+  },
+  "required": ["mountId", "scheme", "config"],
+  "additionalProperties": false
+}
