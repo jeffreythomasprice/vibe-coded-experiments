@@ -1,8 +1,14 @@
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, useCallback } from "react";
 import type { MountInfo } from "@file-manager/schemas";
 import { useFiles } from "../hooks/useFiles.js";
 import { FileList } from "./FileList.js";
 import styles from "./FileBrowser.module.css";
+
+export interface DraggedFile {
+    mountId: string;
+    path: string;
+    name: string;
+}
 
 interface Props {
     mountId: string | null;
@@ -10,6 +16,8 @@ interface Props {
     mounts: MountInfo[];
     onMountChange: (mountId: string) => void;
     onNavigate: (path: string) => void;
+    refreshKey?: number;
+    onFileDrop?: (data: DraggedFile) => void;
 }
 
 function buildBreadcrumbs(mountId: string, path: string): { label: string; path: string }[] {
@@ -23,13 +31,36 @@ function buildBreadcrumbs(mountId: string, path: string): { label: string; path:
     return crumbs;
 }
 
-export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate }: Props) {
-    const { files, loading, error, upload, remove, mkdir } = useFiles(mountId, path);
+export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, refreshKey, onFileDrop }: Props) {
+    const { files, loading, error, upload, remove, mkdir } = useFiles(mountId, path, refreshKey);
     const inputRef = useRef<HTMLInputElement>(null);
     const uploadInputId = useId();
     const [showMkdir, setShowMkdir] = useState(false);
     const [folderName, setFolderName] = useState("");
     const [mkdirError, setMkdirError] = useState<string | null>(null);
+    const [isDragOver, setIsDragOver] = useState(false);
+
+    const handleDragOver = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragOver(true);
+    }, []);
+
+    const handleDragLeave = useCallback(() => {
+        setIsDragOver(false);
+    }, []);
+
+    const handleDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        const raw = e.dataTransfer.getData("application/json");
+        if (!raw || !onFileDrop) return;
+        try {
+            const data = JSON.parse(raw) as DraggedFile;
+            onFileDrop(data);
+        } catch {
+            // ignore malformed drag data
+        }
+    }, [onFileDrop]);
 
     const crumbs = mountId ? buildBreadcrumbs(mountId, path) : [];
 
@@ -106,7 +137,12 @@ export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate }
                 </div>
             ) : (
                 <>
-                    <div className={styles.content}>
+                    <div
+                        className={`${styles.content}${isDragOver ? ` ${styles.dropTarget}` : ""}`}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                    >
                         {loading && <p className={styles.status}>Loading…</p>}
                         {error && <p className={styles.error}>{error}</p>}
                         {!loading && !error && (

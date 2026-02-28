@@ -33,7 +33,18 @@ export function FileList({ mountId, entries, onNavigate, onDelete }: Props) {
             </thead>
             <tbody>
                 {entries.map((entry) => (
-                    <tr key={entry.path} className={styles.row}>
+                    <tr
+                        key={entry.path}
+                        className={styles.row}
+                        draggable
+                        onDragStart={(e) => {
+                            e.dataTransfer.setData(
+                                "application/json",
+                                JSON.stringify({ mountId, path: entry.path, name: entry.name }),
+                            );
+                            e.dataTransfer.effectAllowed = "move";
+                        }}
+                    >
                         <td className={styles.cellName}>
                             {entry.type === "directory" ? (
                                 <button

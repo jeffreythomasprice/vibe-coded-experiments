@@ -12,7 +12,7 @@ export interface UseFiles {
     refresh: () => void;
 }
 
-export function useFiles(mountId: string | null, path: string): UseFiles {
+export function useFiles(mountId: string | null, path: string, externalKey = 0): UseFiles {
     const [files, setFiles] = useState<FileEntry[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -44,7 +44,7 @@ export function useFiles(mountId: string | null, path: string): UseFiles {
         return () => {
             cancelled = true;
         };
-    }, [mountId, path, tick]);
+    }, [mountId, path, tick, externalKey]);
 
     const refresh = useCallback(() => setTick((t) => t + 1), []);
 

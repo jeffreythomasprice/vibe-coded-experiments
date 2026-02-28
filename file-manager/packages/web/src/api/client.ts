@@ -87,3 +87,10 @@ export async function makeDirectory(mountId: string, path: string): Promise<void
     const p = path.replace(/^\//, "");
     await request<{ path: string }>(`/api/v1/files/${mountId}/${p}`, { method: "PUT" });
 }
+
+export async function moveFile(src: string, dest: string): Promise<void> {
+    await request<void>("/api/v1/files/move", {
+        method: "POST",
+        body: JSON.stringify({ src, dest }),
+    });
+}
