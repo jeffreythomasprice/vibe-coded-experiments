@@ -15,7 +15,7 @@ describe("file routes", () => {
         tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "files-test-"));
         server = await createServer();
         // Manually mount a LocalProvider — avoids going through the HTTP layer
-        server.registry.mount(mountId, "local", { rootDir: tmpDir }, new LocalProvider(tmpDir));
+        await server.registry.mount(mountId, "local", { rootDir: tmpDir }, new LocalProvider(tmpDir));
         const address = await server.listen({ port: 0, host: "127.0.0.1" });
         baseUrl = address;
     });

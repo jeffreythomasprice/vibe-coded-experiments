@@ -18,11 +18,60 @@ Generated files (`src/generated/`) are committed so the package is importable wi
 
 ## Start the server
 
+The server requires a Postgres database. A `docker-compose.yml` is provided for local development.
+
 ```sh
-bun run --cwd packages/server start
+# Start Postgres
+docker compose up -d
+
+# Run DB migrations (idempotent — safe to run on every startup)
+DATABASE_URL=postgres://filemanager:filemanager@localhost:5432/filemanager \
+  bun run --cwd packages/server db:migrate
+
+# Start the server
+DATABASE_URL=postgres://filemanager:filemanager@localhost:5432/filemanager \
+  bun run --cwd packages/server start
 ```
 
+The server runs migrations automatically on startup (`src/index.ts`), so the manual `db:migrate` step above is only needed if you want to migrate without starting the server (e.g. in CI or before a deploy).
+
 Default port: `8000`. Override with `PORT=<n>`.
+
+### Stopping Postgres
+
+```sh
+docker compose down        # stop (data persists in the pgdata volume)
+docker compose down -v     # stop and delete all data
+```
+
+### Inspecting the database
+
+```sh
+# Open a psql shell inside the running container
+docker exec -it file-manager-postgres-1 psql -U filemanager -d filemanager
+```
+
+Useful psql commands once connected:
+
+```sql
+-- List all tables
+\dt
+
+-- Show schema for a table
+\d provider_mounts
+
+-- View all registered mounts
+SELECT * FROM provider_mounts;
+
+-- View mounts with pretty-printed config JSON
+SELECT mount_id, scheme, config, created_at FROM provider_mounts ORDER BY created_at;
+
+-- Count mounts by scheme
+SELECT scheme, COUNT(*) FROM provider_mounts GROUP BY scheme;
+
+-- Quit
+\q
+```
 
 ## CLI
 

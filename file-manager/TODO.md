@@ -6,4 +6,4 @@
 
 - sync
 
-- providers should be stored in db
+- environment configs, env vars? config files? secrets?

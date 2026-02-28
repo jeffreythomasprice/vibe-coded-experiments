@@ -6,12 +6,19 @@
     "start": "bun dist/index.js",
     "dev": "bun --watch run src/index.ts",
     "build": "bun build src/index.ts --outfile dist/index.js --target bun",
-    "test": "bun test"
+    "test": "bun test",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun src/db/migrate.ts"
   },
   "dependencies": {
     "@fastify/sensible": "^5.6.0",
     "@file-manager/shared": "workspace:*",
     "chokidar": "^4.0.3",
-    "fastify": "^4.28.0"
+    "drizzle-orm": "^0.39.3",
+    "fastify": "^4.28.0",
+    "postgres": "^3.4.5"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.30.4"
   }
 }

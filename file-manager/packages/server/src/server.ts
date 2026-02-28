@@ -3,8 +3,13 @@ import sensible from "@fastify/sensible";
 import { ProviderRegistry } from "./provider-registry.js";
 import { providerRoutes } from "./routes/providers.js";
 import { fileRoutes } from "./routes/files.js";
+import type { Db } from "./db/client.js";
 
-export async function createServer() {
+export interface CreateServerOptions {
+    db?: Db;
+}
+
+export async function createServer(options: CreateServerOptions = {}) {
     const fastify = Fastify({
         logger: true,
     });
@@ -17,6 +22,9 @@ export async function createServer() {
     });
 
     const registry = new ProviderRegistry();
+    if (options.db !== undefined) {
+        await registry.initialize(options.db);
+    }
 
     // Make registry available to routes via decoration
     fastify.decorate("registry", registry);

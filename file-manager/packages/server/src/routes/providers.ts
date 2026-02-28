@@ -1,10 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
-import {
-    type MountInfo,
-    mountInfoSchema,
-    assertLocalProviderConfig,
-} from "@file-manager/shared";
-import { LocalProvider } from "../providers/local.js";
+import { type MountInfo, mountInfoSchema } from "@file-manager/shared";
+import { createProvider } from "../providers/factory.js";
 
 export const providerRoutes: FastifyPluginAsync = async (fastify) => {
     // GET /api/v1/providers
@@ -26,19 +22,14 @@ export const providerRoutes: FastifyPluginAsync = async (fastify) => {
         const { mountId, scheme, config } = req.body;
 
         let provider;
-        if (scheme === "local") {
-            try {
-                assertLocalProviderConfig(config);
-            } catch (err) {
-                return reply.badRequest((err as Error).message);
-            }
-            provider = new LocalProvider(config.rootDir);
-        } else {
-            return reply.badRequest(`Unsupported scheme: ${scheme}`);
+        try {
+            provider = createProvider(scheme, config);
+        } catch (err) {
+            return reply.badRequest((err as Error).message);
         }
 
         try {
-            fastify.registry.mount(mountId, scheme, config, provider);
+            await fastify.registry.mount(mountId, scheme, config, provider);
         } catch (err) {
             return reply.conflict((err as Error).message);
         }
@@ -57,7 +48,7 @@ export const providerRoutes: FastifyPluginAsync = async (fastify) => {
         },
     }, async (req, reply) => {
         const { mountId } = req.params;
-        const removed = fastify.registry.unmount(mountId);
+        const removed = await fastify.registry.unmount(mountId);
         if (!removed) {
             return reply.notFound(`Provider '${mountId}' not found`);
         }
