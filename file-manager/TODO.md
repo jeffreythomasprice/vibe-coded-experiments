@@ -1,5 +1,3 @@
-- s3 mount type
-
 - google drive mount type
 
 - sync files automatically between mounts

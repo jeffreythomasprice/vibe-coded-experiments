@@ -3,10 +3,11 @@
 import type { FileEntry } from "@file-manager/schemas";
 export type { FileEntry };
 
-export type { MountInfo, MoveRequest, LocalProviderConfig, Operation } from "@file-manager/schemas";
+export type { MountInfo, MoveRequest, LocalProviderConfig, S3ProviderConfig, Operation } from "@file-manager/schemas";
 export {
     mountInfoSchema,
     assertLocalProviderConfig,
+    assertS3ProviderConfig,
     moveRequestSchema,
     moveRequestSchema as srcDestRequestSchema,
     // fileStatSchema is the wire-format counterpart to FileStat below (timestamps as strings)

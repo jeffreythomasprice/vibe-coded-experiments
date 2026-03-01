@@ -45,7 +45,7 @@ describe("providers routes", () => {
         const res = await fetch(`${baseUrl}/api/v1/providers`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mountId: "s3-mount", scheme: "s3", config: { bucket: "my-bucket" } }),
+            body: JSON.stringify({ mountId: "ftp-mount", scheme: "sftp", config: { host: "example.com" } }),
         });
         expect(res.status).toBe(400);
     });

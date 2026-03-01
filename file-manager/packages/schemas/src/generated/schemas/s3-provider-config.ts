@@ -1,0 +1,36 @@
+// GENERATED FILE — DO NOT EDIT MANUALLY
+// Run `bun run --cwd packages/schemas generate` to regenerate
+
+export const s3ProviderConfigSchema = {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "S3ProviderConfig",
+  "title": "S3ProviderConfig",
+  "description": "Configuration for the S3 storage provider",
+  "type": "object",
+  "properties": {
+    "bucket": {
+      "type": "string",
+      "description": "S3 bucket name"
+    },
+    "prefix": {
+      "type": "string",
+      "description": "Key prefix (virtual directory) within the bucket"
+    },
+    "region": {
+      "type": "string",
+      "description": "AWS region (e.g. us-east-1)"
+    },
+    "accessKeyId": {
+      "type": "string",
+      "description": "AWS access key ID (omit to use default credential chain)"
+    },
+    "secretAccessKey": {
+      "type": "string",
+      "description": "AWS secret access key (omit to use default credential chain)"
+    }
+  },
+  "required": [
+    "bucket"
+  ],
+  "additionalProperties": false
+} as const;
