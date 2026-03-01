@@ -63,7 +63,7 @@ No other code changes required. `LocalProvider` (`providers/local.ts`) is the re
 
 ### Provider URI scheme
 
-All file addresses use `<scheme>://<mountId>/<path>` (e.g. `local://docs/reports/q1.pdf`). A **mount** registers a `StorageProvider` instance under a user-chosen `mountId`. The server's `ProviderRegistry` maps `mountId → ProviderMount` at runtime (in-memory, not persisted).
+All file addresses use `<mountId>://<path>` (e.g. `docs://reports/q1.pdf`). A **mount** registers a `StorageProvider` instance under a user-chosen `mountId`. The server's `ProviderRegistry` maps `mountId → ProviderMount` at runtime (in-memory, not persisted).
 
 ### Streaming
 
@@ -71,7 +71,7 @@ All file addresses use `<scheme>://<mountId>/<path>` (e.g. `local://docs/reports
 
 ### Fastify gotchas
 
-- **Binary uploads**: `server.ts` registers an `application/octet-stream` content-type parser (`parseAs: 'buffer'`). Route handlers receive `req.body` as `Buffer`.
+- **Binary uploads**: `server.ts` registers an `application/octet-stream` content-type parser that passes the raw `Readable` stream through (not buffered). Route handlers receive `req.body` as a `Readable` stream (cast from the declared `Buffer` type via `req.body as unknown as Readable`).
 - **DELETE with no body**: the fetch wrapper in `packages/cli/src/api/client.ts` only sets `Content-Type: application/json` when `options.body` is present. Sending the header on an empty-body DELETE causes Fastify to reject with 400.
 
 ### Web package

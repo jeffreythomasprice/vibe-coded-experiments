@@ -1,5 +1,8 @@
 import * as fs from "node:fs/promises";
+import { createWriteStream } from "node:fs";
 import * as path from "node:path";
+import { pipeline } from "node:stream/promises";
+import { Readable } from "node:stream";
 import type { FileEntry, FileStat, ChangeEvent, StorageProvider } from "@file-manager/shared";
 
 export class LocalProvider implements StorageProvider {
@@ -86,11 +89,10 @@ export class LocalProvider implements StorageProvider {
         // Ensure parent directory exists
         await fs.mkdir(path.dirname(absPath), { recursive: true });
 
-        const chunks: Buffer[] = [];
-        for await (const chunk of data) {
-            chunks.push(chunk);
-        }
-        await Bun.write(absPath, Buffer.concat(chunks));
+        // Stream chunks to disk without buffering the entire file in memory
+        const source = Readable.from(data);
+        const dest = createWriteStream(absPath);
+        await pipeline(source, dest);
     }
 
     async delete(filePath: string): Promise<void> {
@@ -108,10 +110,5 @@ export class LocalProvider implements StorageProvider {
     async mkdir(dirPath: string): Promise<void> {
         const absPath = this.resolve(dirPath);
         await fs.mkdir(absPath, { recursive: true });
-    }
-
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async *watch(_filePath: string): AsyncIterable<ChangeEvent> {
-        throw new Error("watch() not implemented in POC");
     }
 }

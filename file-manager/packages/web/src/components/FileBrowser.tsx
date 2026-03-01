@@ -24,6 +24,7 @@ interface Props {
     onEmptyContextMenu?: (e: React.MouseEvent) => void;
     onRename?: (entry: FileEntry) => void;
     cutPath?: string | null;
+    onOperationStarted?: (operationId: string) => void;
 }
 
 function buildBreadcrumbs(mountId: string, path: string): { label: string; path: string }[] {
@@ -37,7 +38,7 @@ function buildBreadcrumbs(mountId: string, path: string): { label: string; path:
     return crumbs;
 }
 
-export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, refreshKey, onFileDrop, onFileContextMenu, onEmptyContextMenu, onRename, cutPath }: Props) {
+export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, refreshKey, onFileDrop, onFileContextMenu, onEmptyContextMenu, onRename, cutPath, onOperationStarted }: Props) {
     const { files, loading, error, upload, remove, mkdir } = useFiles(mountId, path, refreshKey);
     const { showError } = useToast();
     const modal = useModal();
@@ -77,7 +78,8 @@ export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, 
         if (!file) return;
         void (async () => {
             try {
-                await upload(file);
+                const operationId = await upload(file);
+                if (operationId) onOperationStarted?.(operationId);
             } catch (err: unknown) {
                 showError(`Upload failed: ${err instanceof Error ? err.message : String(err)}`);
             } finally {
@@ -170,7 +172,8 @@ export function FileBrowser({ mountId, path, mounts, onMountChange, onNavigate, 
                                         const ok = await modal.confirm(`Delete "${name}"?`, { confirmText: "Delete" });
                                         if (!ok) return;
                                         try {
-                                            await remove(filePath);
+                                            const operationId = await remove(filePath);
+                                            if (operationId) onOperationStarted?.(operationId);
                                         } catch (err) {
                                             showError(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
                                         }

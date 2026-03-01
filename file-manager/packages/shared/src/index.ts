@@ -3,7 +3,7 @@
 import type { FileEntry } from "@file-manager/schemas";
 export type { FileEntry };
 
-export type { MountInfo, MoveRequest, LocalProviderConfig } from "@file-manager/schemas";
+export type { MountInfo, MoveRequest, LocalProviderConfig, Operation } from "@file-manager/schemas";
 export {
     mountInfoSchema,
     assertLocalProviderConfig,
@@ -11,6 +11,7 @@ export {
     moveRequestSchema as srcDestRequestSchema,
     // fileStatSchema is the wire-format counterpart to FileStat below (timestamps as strings)
     fileStatSchema,
+    operationSchema,
 } from "@file-manager/schemas";
 
 // ── File entry types ──────────────────────────────────────────────────────────
@@ -57,5 +58,4 @@ export interface StorageProvider {
     delete(path: string): Promise<void>;
     move(src: string, dest: string): Promise<void>;
     mkdir(path: string): Promise<void>;
-    watch(path: string): AsyncIterable<ChangeEvent>;
 }

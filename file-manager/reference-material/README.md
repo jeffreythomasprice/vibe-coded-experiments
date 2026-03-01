@@ -1,0 +1,1 @@
+Stuff I fed to claude as part of prompts

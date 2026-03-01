@@ -1,4 +1,4 @@
-import type { FileEntry, FileStat } from "@file-manager/shared";
+import type { FileEntry, FileStat, Operation } from "@file-manager/shared";
 import { loadConfig } from "../config.js";
 
 const _cfg = loadConfig();
@@ -38,20 +38,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 // ── URI parsing ───────────────────────────────────────────────────────────────
 
 export interface ParsedUri {
-    scheme: string;
     mountId: string;
     path: string;
 }
 
 export function parseUri(uri: string): ParsedUri {
-    const match = uri.match(/^([a-z]+):\/\/([^/]+)\/?(.*)$/);
+    const match = uri.match(/^([a-zA-Z0-9_-]+):\/\/?(.*)$/);
     if (!match) {
-        throw new Error(`Invalid URI: ${uri}. Expected format: <scheme>://<mountId>/<path>`);
+        throw new Error(`Invalid URI: ${uri}. Expected format: <mountId>://<path>`);
     }
     return {
-        scheme: match[1] ?? "",
-        mountId: match[2] ?? "",
-        path: "/" + (match[3] ?? ""),
+        mountId: match[1] ?? "",
+        path: "/" + (match[2] ?? ""),
     };
 }
 
@@ -123,18 +121,93 @@ export async function deleteFile(mountId: string, filePath: string): Promise<voi
     return request<void>(`/api/v1/files/${mountId}/${encodedPath}`, { method: "DELETE" });
 }
 
-export async function moveFile(src: string, dest: string): Promise<void> {
-    return request<void>("/api/v1/files/move", {
+export interface MoveResponse {
+    src: string;
+    dest: string;
+    operationId?: string;
+}
+
+export interface CopyResponse {
+    src: string;
+    dest: string;
+    operationId: string;
+}
+
+export async function moveFile(src: string, dest: string): Promise<MoveResponse> {
+    return request<MoveResponse>("/api/v1/files/move", {
         method: "POST",
         body: JSON.stringify({ src, dest }),
     });
 }
 
-export async function copyFile(src: string, dest: string): Promise<void> {
-    return request<void>("/api/v1/files/copy", {
+export async function copyFile(src: string, dest: string): Promise<CopyResponse> {
+    return request<CopyResponse>("/api/v1/files/copy", {
         method: "POST",
         body: JSON.stringify({ src, dest }),
     });
+}
+
+// ── Operations API ───────────────────────────────────────────────────────────
+
+export async function getOperations(status?: string): Promise<Operation[]> {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+    return request<Operation[]>(`/api/v1/operations${qs}`);
+}
+
+export async function getOperation(id: string): Promise<Operation> {
+    return request<Operation>(`/api/v1/operations/${id}`);
+}
+
+export interface SSECallbacks {
+    onProgress?: (op: Operation) => void;
+    onCompleted?: (op: Operation) => void;
+    onFailed?: (op: Operation) => void;
+    onCreated?: (op: Operation) => void;
+}
+
+export function connectOperationSSE(callbacks: SSECallbacks): { abort: () => void } {
+    const controller = new AbortController();
+    const url = `${BASE_URL}/api/v1/operations/events`;
+
+    const run = async () => {
+        try {
+            const res = await fetch(url, { signal: controller.signal });
+            if (!res.ok || !res.body) return;
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop() ?? "";
+
+                let currentEvent = "";
+                for (const line of lines) {
+                    if (line.startsWith("event: ")) {
+                        currentEvent = line.slice(7);
+                    } else if (line.startsWith("data: ")) {
+                        const data = JSON.parse(line.slice(6)) as Operation;
+                        if (currentEvent === "progress") callbacks.onProgress?.(data);
+                        else if (currentEvent === "completed") callbacks.onCompleted?.(data);
+                        else if (currentEvent === "failed") callbacks.onFailed?.(data);
+                        else if (currentEvent === "created") callbacks.onCreated?.(data);
+                        currentEvent = "";
+                    }
+                }
+            }
+        } catch {
+            // AbortError or network error — expected on cleanup
+        }
+    };
+
+    void run();
+
+    return { abort: () => controller.abort() };
 }
 
 export async function mkdirFile(mountId: string, filePath: string): Promise<{ path: string }> {

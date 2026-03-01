@@ -48,8 +48,8 @@ export function registerProviderCommands(program: Command): void {
             "\nExample — mount /home/alice/documents as 'docs':\n" +
                 "  $ files providers mount docs --scheme local --config rootDir=/home/alice/documents\n" +
                 "\nThen access files with:\n" +
-                "  $ files ls docs:/\n" +
-                "  $ files cat docs:/report.pdf"
+                "  $ files ls docs://\n" +
+                "  $ files cat docs://report.pdf"
         )
         .action(async (mountId: string, options: { scheme: string; config?: string[] }) => {
             const config: Record<string, string> = {};

@@ -6,8 +6,8 @@ export interface UseFiles {
     files: FileEntry[];
     loading: boolean;
     error: string | null;
-    upload: (file: File) => Promise<void>;
-    remove: (path: string) => Promise<void>;
+    upload: (file: File) => Promise<string | undefined>;
+    remove: (path: string) => Promise<string | undefined>;
     mkdir: (dirPath: string) => Promise<void>;
     refresh: () => void;
 }
@@ -49,20 +49,22 @@ export function useFiles(mountId: string | null, path: string, externalKey = 0):
     const refresh = useCallback(() => setTick((t) => t + 1), []);
 
     const upload = useCallback(
-        async (file: File) => {
-            if (!mountId) return;
+        async (file: File): Promise<string | undefined> => {
+            if (!mountId) return undefined;
             const dest = path === "/" ? `/${file.name}` : `${path}/${file.name}`;
-            await uploadFile(mountId, dest, file);
+            const result = await uploadFile(mountId, dest, file);
             refresh();
+            return result.operationId;
         },
         [mountId, path, refresh],
     );
 
     const remove = useCallback(
-        async (filePath: string) => {
-            if (!mountId) return;
-            await deleteFile(mountId, filePath);
+        async (filePath: string): Promise<string | undefined> => {
+            if (!mountId) return undefined;
+            const result = await deleteFile(mountId, filePath);
             refresh();
+            return result.operationId;
         },
         [mountId, refresh],
     );

@@ -1,0 +1,19 @@
+.indicator {
+    position: fixed;
+    bottom: 12px;
+    right: 12px;
+    z-index: 1500;
+    background: #0c0c60;
+    color: #00d0d0;
+    border: 1px solid #009898;
+    padding: 4px 12px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    cursor: pointer;
+    box-shadow: 3px 3px 0 #00000088;
+}
+
+.indicator:hover {
+    background: #009898;
+    color: #000;
+}

@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { parseUri, listFiles, statFile, readFile, writeFile, deleteFile, moveFile, copyFile, mkdirFile } from "../api/client.js";
+import { trackOperation, trackUploadStream } from "../progress.js";
 
 export function registerFileCommands(program: Command): void {
     // files ls <uri>
@@ -81,9 +82,14 @@ export function registerFileCommands(program: Command): void {
                     // Local file → remote URI upload
                     const { mountId, path } = parseUri(dest);
                     const file = Bun.file(src);
-                    await writeFile(mountId, path, file.stream());
+                    const totalBytes = file.size;
+                    const stream = totalBytes > 0
+                        ? trackUploadStream(file.stream(), totalBytes)
+                        : file.stream();
+                    await writeFile(mountId, path, stream);
                 } else {
-                    await copyFile(src, dest);
+                    const result = await copyFile(src, dest);
+                    await trackOperation(result.operationId);
                 }
                 console.log(`Copied ${src} → ${dest}`);
             } catch (err) {
@@ -98,7 +104,10 @@ export function registerFileCommands(program: Command): void {
         .description("Move/rename a file")
         .action(async (src: string, dest: string) => {
             try {
-                await moveFile(src, dest);
+                const result = await moveFile(src, dest);
+                if (result.operationId) {
+                    await trackOperation(result.operationId);
+                }
                 console.log(`Moved ${src} → ${dest}`);
             } catch (err) {
                 console.error("Error:", (err as Error).message);

@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { registerProviderCommands } from "./commands/providers.js";
 import { registerFileCommands } from "./commands/files.js";
 import { registerConfigCommands } from "./commands/config.js";
+import { registerOperationCommands } from "./commands/operations.js";
 
 const program = new Command();
 
@@ -10,6 +11,7 @@ program.name("files").description("File manager CLI — manage files across loca
 
 registerProviderCommands(program);
 registerFileCommands(program);
+registerOperationCommands(program);
 registerConfigCommands(program);
 
 await program.parseAsync(process.argv);

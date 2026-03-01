@@ -1,0 +1,85 @@
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.window {
+    background: #1010a0;
+    border: 2px solid #009898;
+    box-shadow: 6px 6px 0 #00000088;
+    min-width: 400px;
+    max-width: 520px;
+    font-family: monospace;
+}
+
+.titleBar {
+    background: #0c0c60;
+    color: #00d0d0;
+    padding: 4px 10px;
+    font-size: 13px;
+    font-weight: bold;
+    border-bottom: 1px solid #009898;
+    text-transform: uppercase;
+}
+
+.body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.paths {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pathRow {
+    display: flex;
+    gap: 6px;
+    font-size: 12px;
+}
+
+.pathLabel {
+    color: #808080;
+    flex-shrink: 0;
+}
+
+.pathValue {
+    color: #c0c0c0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.error {
+    color: #ff6666;
+    font-size: 13px;
+}
+
+.footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 8px 16px 12px;
+    border-top: 1px solid #0c0c60;
+}
+
+.dismissBtn {
+    background: #009898;
+    color: #000;
+    border: 1px solid #ddd;
+    padding: 3px 16px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+}
+
+.dismissBtn:hover {
+    background: #00d0d0;
+}

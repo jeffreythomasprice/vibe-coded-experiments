@@ -1,18 +1,22 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useMounts } from "./hooks/useMounts.js";
 import { FileBrowser } from "./components/FileBrowser.js";
 import type { DraggedFile } from "./components/FileBrowser.js";
 import { MountsTab } from "./components/MountsTab.js";
+import { QueueTab } from "./components/QueueTab.js";
 import { ContextMenu } from "./components/ContextMenu.js";
 import type { MenuItem } from "./components/ContextMenu.js";
 import type { FileEntry } from "@file-manager/schemas";
-import { moveFile, copyFile, deleteFile, downloadFile } from "./api/client.js";
+import { moveFile, copyFile, deleteFile, downloadFile, buildFileUri } from "./api/client.js";
 import { useToast } from "./hooks/useToast.js";
 import { useModal } from "./components/Modal.js";
+import { useOperations } from "./hooks/useOperations.js";
+import { ProgressModal } from "./components/ProgressModal.js";
+import { StatusIndicator } from "./components/StatusIndicator.js";
 import { usePersistentState } from "./hooks/usePersistentState.js";
 import styles from "./App.module.css";
 
-type Tab = "commander" | "mounts";
+type Tab = "commander" | "mounts" | "queue";
 type Pane = "left" | "right";
 
 interface PaneState {
@@ -37,7 +41,9 @@ export function App() {
     const mounts = useMounts();
     const { showError } = useToast();
     const modal = useModal();
+    const { trackOperation, onOperationComplete } = useOperations();
     const [activeTab, setActiveTab] = useState<Tab>("commander");
+    const [progressOperationId, setProgressOperationId] = useState<string | null>(null);
     const [left, setLeft] = usePersistentState<PaneState>("fm:pane:left", { mountId: null, path: "/" });
     const [right, setRight] = usePersistentState<PaneState>("fm:pane:right", { mountId: null, path: "/" });
     const [leftRefreshKey, setLeftRefreshKey] = useState(0);
@@ -46,6 +52,18 @@ export function App() {
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
     const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+    useEffect(() => {
+        return onOperationComplete(() => {
+            setLeftRefreshKey((k) => k + 1);
+            setRightRefreshKey((k) => k + 1);
+        });
+    }, [onOperationComplete]);
+
+    const startOperation = useCallback((operationId: string) => {
+        trackOperation(operationId);
+        setProgressOperationId(operationId);
+    }, [trackOperation]);
 
     const refreshPane = useCallback((pane: Pane) => {
         if (pane === "left") setLeftRefreshKey((k) => k + 1);
@@ -63,9 +81,6 @@ export function App() {
             const { mountId } = paneState;
             if (!mountId) return;
 
-            const mount = mounts.mounts.find((m) => m.mountId === mountId);
-            if (!mount) return;
-
             void (async () => {
                 const newName = await modal.prompt("New name:", { defaultValue: entry.name });
                 if (newName === null || newName.trim() === "" || newName.trim() === entry.name) return;
@@ -79,18 +94,22 @@ export function App() {
                     ? `${parentDir.replace(/^\//, "")}/${newName.trim()}`
                     : newName.trim();
 
-                const srcUri = `${mount.scheme}://${mountId}/${srcPath}`;
-                const destUri = `${mount.scheme}://${mountId}/${destPath}`;
+                const srcUri = buildFileUri(mountId, srcPath);
+                const destUri = buildFileUri(mountId, destPath);
 
                 try {
-                    await moveFile(srcUri, destUri);
-                    refreshPane(pane);
+                    const result = await moveFile(srcUri, destUri);
+                    if (result.operationId) {
+                        startOperation(result.operationId);
+                    } else {
+                        refreshPane(pane);
+                    }
                 } catch (err) {
                     showError(`Rename failed: ${err instanceof Error ? err.message : String(err)}`);
                 }
             })();
         },
-        [left, right, mounts.mounts, modal, refreshPane, showError],
+        [left, right, mounts.mounts, modal, refreshPane, startOperation, showError],
     );
 
     const handleFileDrop = useCallback(
@@ -98,10 +117,6 @@ export function App() {
             (dragged: DraggedFile) => {
                 const dest = destSide === "left" ? left : right;
                 if (!dest.mountId) return;
-
-                const srcMount = mounts.mounts.find((m) => m.mountId === dragged.mountId);
-                const destMount = mounts.mounts.find((m) => m.mountId === dest.mountId);
-                if (!srcMount || !destMount) return;
 
                 // No-op: same mount and same directory
                 const srcDir = dragged.path.replace(/\/[^/]+$/, "") || "/";
@@ -111,19 +126,23 @@ export function App() {
                 const destDir = dest.path === "/" ? "" : dest.path.replace(/^\//, "");
                 const destPath = destDir ? `${destDir}/${dragged.name}` : dragged.name;
 
-                const srcUri = `${srcMount.scheme}://${dragged.mountId}/${srcPath}`;
-                const destUri = `${destMount.scheme}://${dest.mountId}/${destPath}`;
+                const srcUri = buildFileUri(dragged.mountId, srcPath);
+                const destUri = buildFileUri(dest.mountId!, destPath);
 
                 void (async () => {
                     try {
-                        await moveFile(srcUri, destUri);
-                        refreshBoth();
+                        const result = await moveFile(srcUri, destUri);
+                        if (result.operationId) {
+                            startOperation(result.operationId);
+                        } else {
+                            refreshBoth();
+                        }
                     } catch (err: unknown) {
                         showError(`Move failed: ${err instanceof Error ? err.message : String(err)}`);
                     }
                 })();
             },
-        [left, right, mounts.mounts, refreshBoth],
+        [left, right, mounts.mounts, refreshBoth, startOperation],
     );
 
     const buildFileContextMenu = useCallback(
@@ -163,8 +182,12 @@ export function App() {
                         const ok = await modal.confirm(`Delete "${entry.name}"?`, { confirmText: "Delete" });
                         if (!ok) return;
                         try {
-                            await deleteFile(mountId, entry.path);
-                            refreshPane(pane);
+                            const result = await deleteFile(mountId, entry.path);
+                            if (result.operationId) {
+                                startOperation(result.operationId);
+                            } else {
+                                refreshPane(pane);
+                            }
                         } catch (err) {
                             showError(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
                         }
@@ -174,7 +197,7 @@ export function App() {
 
             return items;
         },
-        [left, right, refreshPane, handleRename, modal, showError],
+        [left, right, refreshPane, handleRename, modal, startOperation, showError],
     );
 
     const buildEmptyContextMenu = useCallback(
@@ -185,33 +208,32 @@ export function App() {
             const { mountId, path } = paneState;
             if (!mountId) return [];
 
-            const destMount = mounts.mounts.find((m) => m.mountId === mountId);
-            if (!destMount) return [];
-
             return [
                 {
                     label: "Paste",
                     onClick: () => {
-                        const srcMount = mounts.mounts.find((m) => m.mountId === clipboard.mountId);
-                        if (!srcMount) return;
-
                         const srcPath = clipboard.path.replace(/^\//, "");
-                        const srcUri = `${srcMount.scheme}://${clipboard.mountId}/${srcPath}`;
+                        const srcUri = buildFileUri(clipboard.mountId, srcPath);
 
                         const destDir = path === "/" ? "" : path.replace(/^\//, "");
                         const destPath = destDir ? `${destDir}/${clipboard.name}` : clipboard.name;
-                        const destUri = `${destMount.scheme}://${mountId}/${destPath}`;
+                        const destUri = buildFileUri(mountId, destPath);
 
                         const op = clipboard.operation;
                         void (async () => {
                             try {
                                 if (op === "cut") {
-                                    await moveFile(srcUri, destUri);
+                                    const result = await moveFile(srcUri, destUri);
                                     setClipboard(null);
+                                    if (result.operationId) {
+                                        startOperation(result.operationId);
+                                    } else {
+                                        refreshBoth();
+                                    }
                                 } else {
-                                    await copyFile(srcUri, destUri);
+                                    const result = await copyFile(srcUri, destUri);
+                                    startOperation(result.operationId);
                                 }
-                                refreshBoth();
                             } catch (err) {
                                 showError(`Paste failed: ${err instanceof Error ? err.message : String(err)}`);
                             }
@@ -220,7 +242,7 @@ export function App() {
                 },
             ];
         },
-        [clipboard, left, right, mounts.mounts, refreshBoth],
+        [clipboard, left, right, mounts.mounts, refreshBoth, startOperation],
     );
 
     const handleFileContextMenu = useCallback(
@@ -259,6 +281,12 @@ export function App() {
                 >
                     Mounts
                 </button>
+                <button
+                    className={`${styles.tab} ${activeTab === "queue" ? styles.tabActive : ""}`}
+                    onClick={() => setActiveTab("queue")}
+                >
+                    Queue
+                </button>
             </div>
 
             {activeTab === "commander" ? (
@@ -276,6 +304,7 @@ export function App() {
                             onEmptyContextMenu={(e) => handleEmptyContextMenu("left", e)}
                             onRename={(entry) => handleRename("left", entry)}
                             cutPath={clipboard?.operation === "cut" ? clipboard.path : null}
+                            onOperationStarted={startOperation}
                         />
                     </div>
                     <div className={styles.paneRight}>
@@ -291,12 +320,17 @@ export function App() {
                             onEmptyContextMenu={(e) => handleEmptyContextMenu("right", e)}
                             onRename={(entry) => handleRename("right", entry)}
                             cutPath={clipboard?.operation === "cut" ? clipboard.path : null}
+                            onOperationStarted={startOperation}
                         />
                     </div>
                 </div>
-            ) : (
+            ) : activeTab === "mounts" ? (
                 <div className={styles.mountsTabWrapper}>
                     <MountsTab mounts={mounts} />
+                </div>
+            ) : (
+                <div className={styles.mountsTabWrapper}>
+                    <QueueTab />
                 </div>
             )}
 
@@ -309,7 +343,14 @@ export function App() {
                 />
             )}
 
+            {progressOperationId !== null && (
+                <ProgressModal
+                    operationId={progressOperationId}
+                    onDismiss={() => setProgressOperationId(null)}
+                />
+            )}
 
+            <StatusIndicator onClick={() => setActiveTab("queue")} />
         </div>
     );
 }

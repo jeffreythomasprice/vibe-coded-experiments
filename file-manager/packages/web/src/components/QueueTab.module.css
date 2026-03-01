@@ -1,0 +1,86 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+}
+
+.empty {
+    padding: 32px;
+    text-align: center;
+    color: #808080;
+    font-size: 14px;
+}
+
+.row {
+    background: #0c0c60;
+    border: 1px solid #009898;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.typeLabel {
+    font-size: 12px;
+    font-weight: bold;
+    color: #00d0d0;
+}
+
+.badge {
+    font-size: 11px;
+    padding: 1px 6px;
+    border: 1px solid #009898;
+    text-transform: uppercase;
+}
+
+.pending {
+    color: #808080;
+    border-color: #808080;
+}
+
+.in_progress {
+    color: #00d0d0;
+    border-color: #009898;
+}
+
+.completed {
+    color: #00cc66;
+    border-color: #00cc66;
+}
+
+.failed {
+    color: #ff6666;
+    border-color: #ff6666;
+}
+
+.paths {
+    display: flex;
+    gap: 6px;
+    font-size: 12px;
+    align-items: center;
+}
+
+.pathValue {
+    color: #c0c0c0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.arrow {
+    color: #808080;
+    flex-shrink: 0;
+}
+
+.error {
+    color: #ff6666;
+    font-size: 12px;
+}

@@ -1,4 +1,4 @@
-import type { FileEntry, MountInfo } from "@file-manager/schemas";
+import type { FileEntry, MountInfo, Operation } from "@file-manager/schemas";
 
 const BASE_URL = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "";
 
@@ -32,6 +32,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     return res.json() as Promise<T>;
 }
 
+export function buildFileUri(mountId: string, path: string): string {
+    return `${mountId}://${path}`;
+}
+
 // ── Mounts ────────────────────────────────────────────────────────────────────
 
 export async function getMounts(): Promise<MountInfo[]> {
@@ -56,7 +60,7 @@ export async function listFiles(mountId: string, path: string): Promise<FileEntr
     return request<FileEntry[]>(`/api/v1/files/${mountId}/${p}`);
 }
 
-export async function uploadFile(mountId: string, path: string, file: File): Promise<void> {
+export async function uploadFile(mountId: string, path: string, file: File): Promise<{ path: string; operationId: string }> {
     const p = path.replace(/^\//, "");
     const url = `${BASE_URL}/api/v1/files/${mountId}/${p}`;
     const res = await fetch(url, {
@@ -67,6 +71,7 @@ export async function uploadFile(mountId: string, path: string, file: File): Pro
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
     }
+    return res.json() as Promise<{ path: string; operationId: string }>;
 }
 
 export function downloadFile(mountId: string, path: string, filename: string): void {
@@ -78,9 +83,9 @@ export function downloadFile(mountId: string, path: string, filename: string): v
     a.click();
 }
 
-export async function deleteFile(mountId: string, path: string): Promise<void> {
+export async function deleteFile(mountId: string, path: string): Promise<{ operationId: string }> {
     const p = path.replace(/^\//, "");
-    return request<void>(`/api/v1/files/${mountId}/${p}`, { method: "DELETE" });
+    return request<{ operationId: string }>(`/api/v1/files/${mountId}/${p}`, { method: "DELETE" });
 }
 
 export async function makeDirectory(mountId: string, path: string): Promise<void> {
@@ -88,16 +93,56 @@ export async function makeDirectory(mountId: string, path: string): Promise<void
     await request<{ path: string }>(`/api/v1/files/${mountId}/${p}`, { method: "PUT" });
 }
 
-export async function moveFile(src: string, dest: string): Promise<void> {
-    await request<void>("/api/v1/files/move", {
+export async function moveFile(src: string, dest: string): Promise<{ src: string; dest: string; operationId?: string }> {
+    return request<{ src: string; dest: string; operationId?: string }>("/api/v1/files/move", {
         method: "POST",
         body: JSON.stringify({ src, dest }),
     });
 }
 
-export async function copyFile(src: string, dest: string): Promise<void> {
-    await request<void>("/api/v1/files/copy", {
+export async function copyFile(src: string, dest: string): Promise<{ src: string; dest: string; operationId: string }> {
+    return request<{ src: string; dest: string; operationId: string }>("/api/v1/files/copy", {
         method: "POST",
         body: JSON.stringify({ src, dest }),
     });
+}
+
+// ── Operations ───────────────────────────────────────────────────────────────
+
+export async function getOperations(status?: string): Promise<Operation[]> {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+    return request<Operation[]>(`/api/v1/operations${qs}`);
+}
+
+export interface OperationEventHandlers {
+    onCreated?: (op: Operation) => void;
+    onProgress?: (op: Operation) => void;
+    onCompleted?: (op: Operation) => void;
+    onFailed?: (op: Operation) => void;
+}
+
+export function connectOperationEvents(handlers: OperationEventHandlers): EventSource {
+    const url = `${BASE_URL}/api/v1/operations/events`;
+    const es = new EventSource(url);
+
+    const parse = (e: MessageEvent) => JSON.parse(e.data as string) as Operation;
+
+    if (handlers.onCreated) {
+        const h = handlers.onCreated;
+        es.addEventListener("created", (e) => h(parse(e)));
+    }
+    if (handlers.onProgress) {
+        const h = handlers.onProgress;
+        es.addEventListener("progress", (e) => h(parse(e)));
+    }
+    if (handlers.onCompleted) {
+        const h = handlers.onCompleted;
+        es.addEventListener("completed", (e) => h(parse(e)));
+    }
+    if (handlers.onFailed) {
+        const h = handlers.onFailed;
+        es.addEventListener("failed", (e) => h(parse(e)));
+    }
+
+    return es;
 }
