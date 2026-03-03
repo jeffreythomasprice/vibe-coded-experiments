@@ -1,0 +1,22 @@
+{
+  "name": "youtube-dl-summarizer",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "yt-summarize": "src/index.ts"
+  },
+  "scripts": {
+    "start": "bun src/index.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "commander": "^14.0.3"
+  }
+}
