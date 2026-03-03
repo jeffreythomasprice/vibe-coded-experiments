@@ -9,7 +9,11 @@ export const CACHE_FILES = {
   captions: "captions.vtt",
   audio: "audio.wav",
   transcript: "transcript.txt",
+  timestampedTranscript: "transcript-timestamped.txt",
   summary: "summary.md",
+  snapshotsDir: "snapshots",
+  summaryWithSnapshots: "summary-with-snapshots.md",
+  summaryPdf: "summary.pdf",
 } as const;
 
 /**

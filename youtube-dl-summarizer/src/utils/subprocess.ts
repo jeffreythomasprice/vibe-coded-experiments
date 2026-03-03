@@ -19,28 +19,40 @@ export interface RunResult {
 
 export async function run(
   command: string[],
-  opts?: { cwd?: string; stdin?: string },
+  opts?: { cwd?: string; stdin?: string; streamStderr?: boolean },
 ): Promise<RunResult> {
   const proc = Bun.spawn(command, {
     cwd: opts?.cwd,
     stdin: opts?.stdin ? new TextEncoder().encode(opts.stdin) : "ignore",
     stdout: "pipe",
-    stderr: "pipe",
+    stderr: opts?.streamStderr ? "pipe" : "pipe",
   });
 
-  const [stdout, stderr] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ]);
+  let stderrText: string;
+  if (opts?.streamStderr && proc.stderr) {
+    // Tee stderr to process.stderr while capturing it
+    const chunks: Uint8Array[] = [];
+    const reader = proc.stderr.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      process.stderr.write(value);
+    }
+    stderrText = new TextDecoder().decode(Buffer.concat(chunks));
+  } else {
+    stderrText = await new Response(proc.stderr).text();
+  }
 
+  const stdout = await new Response(proc.stdout).text();
   const exitCode = await proc.exited;
 
   if (exitCode !== 0) {
     const cmd = command.join(" ");
     throw new Error(
-      `Command failed (exit ${exitCode}): ${cmd}\n${stderr.trim()}`,
+      `Command failed (exit ${exitCode}): ${cmd}\n${stderrText.trim()}`,
     );
   }
 
-  return { stdout, stderr, exitCode };
+  return { stdout, stderr: stderrText, exitCode };
 }

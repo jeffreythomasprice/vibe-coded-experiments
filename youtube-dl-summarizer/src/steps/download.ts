@@ -11,22 +11,25 @@ export async function downloadVideo(
   verbose: boolean,
 ): Promise<void> {
   if (await cacheExists(cacheDir, CACHE_FILES.video)) {
-    if (verbose) console.error("[download] video already cached, skipping");
+    console.error("Downloading video... cached, skipping");
     return;
   }
 
   const bin = ensureBinary("yt-dlp", INSTALL_HINT);
-  if (verbose) console.error("[download] downloading video...");
+  console.error("Downloading video...");
 
-  await run([
-    bin,
-    "-f",
-    "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-    "-o",
-    join(cacheDir, CACHE_FILES.video),
-    "--no-playlist",
-    url,
-  ]);
+  await run(
+    [
+      bin,
+      "-f",
+      "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+      "-o",
+      join(cacheDir, CACHE_FILES.video),
+      "--no-playlist",
+      url,
+    ],
+    { streamStderr: true },
+  );
 }
 
 export async function downloadCaptions(
@@ -37,12 +40,12 @@ export async function downloadCaptions(
   // Check if we already have a .vtt file
   const existing = await findVttFile(cacheDir);
   if (existing) {
-    if (verbose) console.error("[download] captions already cached, skipping");
+    console.error("Downloading captions... cached, skipping");
     return existing;
   }
 
   const bin = ensureBinary("yt-dlp", INSTALL_HINT);
-  if (verbose) console.error("[download] attempting caption download...");
+  console.error("Downloading captions...");
 
   try {
     await run([

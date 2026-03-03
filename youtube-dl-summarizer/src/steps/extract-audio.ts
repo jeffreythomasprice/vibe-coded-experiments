@@ -7,12 +7,12 @@ export async function extractAudio(
   verbose: boolean,
 ): Promise<void> {
   if (await cacheExists(cacheDir, CACHE_FILES.audio)) {
-    if (verbose) console.error("[audio] already cached, skipping");
+    console.error("Extracting audio... cached, skipping");
     return;
   }
 
   const bin = ensureBinary("ffmpeg", "https://ffmpeg.org/download.html");
-  if (verbose) console.error("[audio] extracting audio from video...");
+  console.error("Extracting audio...");
 
   await run([
     bin,

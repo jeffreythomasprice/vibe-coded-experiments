@@ -30,7 +30,7 @@ export async function transcribe(
   verbose: boolean,
 ): Promise<void> {
   if (await cacheExists(cacheDir, CACHE_FILES.transcript)) {
-    if (verbose) console.error("[transcribe] already cached, skipping");
+    console.error("Transcribing... cached, skipping");
     return;
   }
 
@@ -43,7 +43,7 @@ export async function transcribe(
     );
   }
 
-  if (verbose) console.error("[transcribe] transcribing audio...");
+  console.error("Transcribing with whisper...");
 
   // whisper.cpp outputs transcript.txt when --output-file is set (appends .txt)
   const outputBase = join(cacheDir, "transcript");

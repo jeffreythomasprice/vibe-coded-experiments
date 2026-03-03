@@ -14,13 +14,20 @@ program
   .description("Summarize a YouTube video")
   .option("-p, --prompt <prompt>", "Custom summarization prompt")
   .option("-v, --verbose", "Show progress details on stderr")
-  .action(async (url: string, opts: { prompt?: string; verbose?: boolean }) => {
+  .option("--no-snapshots", "Disable video frame extraction")
+  .option("--no-pdf", "Skip PDF generation")
+  .action(async (url: string, opts: { prompt?: string; verbose?: boolean; snapshots?: boolean; pdf?: boolean }) => {
     try {
-      const summary = await runPipeline(url, {
+      const { summary, pdfPath } = await runPipeline(url, {
         prompt: opts.prompt,
         verbose: opts.verbose,
+        snapshots: opts.snapshots,
+        pdf: opts.pdf,
       });
       console.log(summary);
+      if (pdfPath) {
+        console.error(`PDF saved to: ${pdfPath}`);
+      }
     } catch (err) {
       console.error(
         `Error: ${err instanceof Error ? err.message : String(err)}`,
