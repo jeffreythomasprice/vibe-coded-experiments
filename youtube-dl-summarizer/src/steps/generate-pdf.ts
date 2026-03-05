@@ -1,7 +1,8 @@
 import { join } from "node:path";
+import { unlink } from "node:fs/promises";
 import { marked } from "marked";
-import puppeteer from "puppeteer";
 import { CACHE_FILES, cacheExists, cacheRead } from "../cache.ts";
+import { ensureBinary, run } from "../utils/subprocess.ts";
 
 /**
  * Generate a PDF from the markdown summary, embedding snapshot images as base64 data URIs.
@@ -18,6 +19,7 @@ export async function generatePdf(
   }
 
   console.error("Generating PDF...");
+  ensureBinary("wkhtmltopdf", "sudo apt install wkhtmltopdf");
 
   // Prefer enriched summary with snapshots, fall back to plain summary
   const hasEnriched = await cacheExists(cacheDir, CACHE_FILES.summaryWithSnapshots);
@@ -60,18 +62,24 @@ export async function generatePdf(
 <body>${htmlBody}</body>
 </html>`;
 
-  const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] });
+  // Write HTML to a temp file for wkhtmltopdf
+  const htmlPath = join(cacheDir, "summary.html");
+  await Bun.write(htmlPath, html);
+
   try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
-    const pdfBuffer = await page.pdf({
-      format: "A4",
-      margin: { top: "20mm", bottom: "20mm", left: "15mm", right: "15mm" },
-      printBackground: true,
-    });
-    await Bun.write(pdfPath, pdfBuffer);
+    await run([
+      "wkhtmltopdf",
+      "--page-size", "A4",
+      "--margin-top", "20mm",
+      "--margin-bottom", "20mm",
+      "--margin-left", "15mm",
+      "--margin-right", "15mm",
+      "--enable-local-file-access",
+      htmlPath,
+      pdfPath,
+    ]);
   } finally {
-    await browser.close();
+    await unlink(htmlPath).catch(() => {});
   }
 
   if (verbose) console.error(`[generate-pdf] wrote ${pdfPath}`);
