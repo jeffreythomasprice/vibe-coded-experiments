@@ -1,0 +1,3 @@
+main:
+    YIELD
+    JMP main

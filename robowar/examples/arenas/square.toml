@@ -1,0 +1,24 @@
+width = 600
+height = 600
+
+bodies = []
+
+[[spawn_points]]
+x = 100
+y = 100
+facing = 45
+
+[[spawn_points]]
+x = 500
+y = 100
+facing = 135
+
+[[spawn_points]]
+x = 500
+y = 500
+facing = 225
+
+[[spawn_points]]
+x = 100
+y = 500
+facing = 315

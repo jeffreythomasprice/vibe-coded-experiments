@@ -1,0 +1,8 @@
+name = "Patrol"
+program = "patrol.asm"
+
+[loadout]
+hp = 5
+speed = 5
+armor = 5
+gun_power = 5

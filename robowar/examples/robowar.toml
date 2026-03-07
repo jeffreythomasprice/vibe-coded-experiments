@@ -1,0 +1,25 @@
+arena = "arenas/square.toml"
+robots = ["robots/spinner.toml", "robots/patrol.toml"]
+max_ticks = 5000
+seed = 123
+
+# [groups]
+# movers = ["robots/patrol.toml"]
+# campers = ["robots/spinner.toml"]
+# all = ["robots/**/*.toml"]              # glob: matches all .toml files in the robots dir
+# nested = ["**/robots/*.toml"] # glob: recursive match
+# Then use in robots list: robots = ["@rushers", "@campers"]
+
+# [logging]
+# log_dir = "/tmp/robowar-logs"
+# file_logging = false
+
+[visualizer]
+# speed = 2.0
+
+[visualizer.keybindings]
+# pause = "Space"
+# speed_up = "Equal"
+# speed_down = "Minus"
+# restart = "R"
+# menu = "Escape"

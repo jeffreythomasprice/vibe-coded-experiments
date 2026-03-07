@@ -1,0 +1,38 @@
+width = 1200
+height = 400
+
+[[bodies]]
+type = "rectangle"
+x = 400
+y = 200
+width = 40
+height = 200
+rotation = 0
+
+[[bodies]]
+type = "rectangle"
+x = 800
+y = 200
+width = 40
+height = 200
+rotation = 0
+
+[[spawn_points]]
+x = 100
+y = 200
+facing = 0
+
+[[spawn_points]]
+x = 600
+y = 100
+facing = 180
+
+[[spawn_points]]
+x = 600
+y = 300
+facing = 0
+
+[[spawn_points]]
+x = 1100
+y = 200
+facing = 180

@@ -1,0 +1,8 @@
+name = "Wanderer"
+program = "wanderer.asm"
+
+[loadout]
+hp = 5
+speed = 6
+armor = 4
+gun_power = 5

@@ -1,0 +1,5 @@
+arena = "arenas/square.toml"
+robots = ["@all", "@all", "@all", "@all"]
+
+[groups]
+all = ["robots/**/*.toml"]
