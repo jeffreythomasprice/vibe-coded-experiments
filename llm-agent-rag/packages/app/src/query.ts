@@ -1,6 +1,7 @@
 import { createOllama } from "ollama-ai-provider-v2";
 import { generateText } from "ai";
 import type { ChunkResult, AskResponse } from "@rag/shared";
+import logger from "./logger.js";
 import { CHAT_MODEL, CONTEXT_WINDOW, OLLAMA_BASE_URL } from "./config.js";
 import { fetchContextChunks, searchChunks } from "./db.js";
 import { embedSingle } from "./embeddings.js";
@@ -99,8 +100,10 @@ export async function retrieve(
   topK: number = 5,
   tags?: Record<string, string>,
 ): Promise<ChunkResult[]> {
+  logger.debug({ query, topK, tags }, "retrieving chunks");
   const queryVec = await embedSingle(query);
   const results = await searchChunks(queryVec, topK, tags);
+  logger.debug({ results: results.length }, "chunks retrieved");
   return expandResultsWithContext(results, CONTEXT_WINDOW);
 }
 
@@ -124,6 +127,7 @@ export async function ask(
 
   const provider = createOllama({ baseURL: `${OLLAMA_BASE_URL}/api` });
 
+  logger.info({ query, sources: results.length }, "generating LLM answer");
   const { text } = await generateText({
     model: provider.languageModel(CHAT_MODEL),
     system:

@@ -1,6 +1,8 @@
 import chalk from "chalk";
 import path from "path";
 import type { IngestResult } from "@rag/shared";
+import logger from "./logger.js";
+import { print } from "./output.js";
 import { insertDocument, insertTags, insertChunks, closeSql } from "./db.js";
 import { extractText, chunkText } from "./text.js";
 import { embedTexts } from "./embeddings.js";
@@ -17,22 +19,26 @@ export async function ingestFile(
 
   tags = { filename, ...tags };
 
-  console.log(chalk.bold("Ingesting:"), filepath);
+  logger.info({ filepath, tags }, "ingesting file");
+  print(chalk.bold("Ingesting:"), filepath);
 
   // 1. Extract text
-  console.log("  Extracting text...");
+  print("  Extracting text...");
   const text = await extractText(filepath);
   if (!text.trim()) {
     throw new Error(`No text extracted from ${filepath}`);
   }
-  console.log(`  Extracted ${text.length.toLocaleString()} characters`);
+  logger.info({ filepath, characters: text.length }, "text extracted");
+  print(`  Extracted ${text.length.toLocaleString()} characters`);
 
   // 2. Chunk
   const chunks = await chunkText(text);
-  console.log(`  Split into ${chunks.length} chunks`);
+  logger.info({ filepath, chunks: chunks.length }, "text chunked");
+  print(`  Split into ${chunks.length} chunks`);
 
   // 3. Embed (in batches)
-  console.log("  Generating embeddings...");
+  logger.info({ filepath, chunks: chunks.length, batchSize: EMBED_BATCH_SIZE }, "generating embeddings");
+  print("  Generating embeddings...");
   const allEmbeddings: number[][] = [];
   for (let i = 0; i < chunks.length; i += EMBED_BATCH_SIZE) {
     const batch = chunks.slice(i, i + EMBED_BATCH_SIZE);
@@ -41,7 +47,8 @@ export async function ingestFile(
   }
 
   // 4. Store
-  console.log("  Storing in database...");
+  logger.info({ filepath, filename }, "storing in database");
+  print("  Storing in database...");
   const docId = await insertDocument(filename);
   await insertTags(docId, tags);
   await insertChunks(
@@ -60,7 +67,8 @@ export async function ingestFile(
     chunks: chunks.length,
     tags,
   };
-  console.log(
+  logger.info({ docId, filename, chunks: chunks.length }, "ingest complete");
+  print(
     chalk.green("  Done!"),
     `document_id=${docId}, ${chunks.length} chunks stored`,
   );

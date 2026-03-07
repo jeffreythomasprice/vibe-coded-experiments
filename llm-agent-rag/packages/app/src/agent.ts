@@ -1,6 +1,7 @@
 import { createOllama } from "ollama-ai-provider-v2";
 import { generateText, tool, stepCountIs } from "ai";
 import { z } from "zod";
+import logger from "./logger.js";
 import { CHAT_MODEL, OLLAMA_BASE_URL } from "./config.js";
 import { retrieve } from "./query.js";
 
@@ -22,6 +23,7 @@ const searchDocuments = tool({
       ),
   }),
   execute: async ({ query, top_k, tags }) => {
+    logger.debug({ query, top_k, tags }, "agent tool call: search_documents");
     const results = await retrieve(query, top_k, tags);
     return results;
   },
@@ -38,6 +40,7 @@ export async function agentChat(
       "before answering. You may call the tool multiple times with different " +
       "queries or tag filters. Cite source documents when possible.";
 
+  logger.info({ userMessage }, "agent chat started");
   const provider = createOllama({ baseURL: `${OLLAMA_BASE_URL}/api` });
 
   const { text } = await generateText({

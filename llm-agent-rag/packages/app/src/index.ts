@@ -4,12 +4,13 @@ import chalk from "chalk";
 import Table from "cli-table3";
 import { initConfig } from "./config.js";
 import { closeSql } from "./db.js";
+import { print, printError, setSilent } from "./output.js";
 
 function parseTags(tagStrings: string[]): Record<string, string> {
   const tags: Record<string, string> = {};
   for (const t of tagStrings) {
     if (!t.includes("=")) {
-      console.error(`Tag must be key=value, got: ${t}`);
+      printError(`Tag must be key=value, got: ${t}`);
       process.exit(1);
     }
     const [k, ...rest] = t.split("=");
@@ -38,7 +39,7 @@ program
     const { ingestFile } = await import("./ingest.js");
     const tags = parseTags(opts.tag ?? []);
     const result = await ingestFile(filepath, tags);
-    console.log(JSON.stringify(result, null, 2));
+    print(JSON.stringify(result, null, 2));
     await closeSql();
   });
 
@@ -77,7 +78,7 @@ program
 
       const files = await findFiles(directory);
       if (files.length === 0) {
-        console.log(
+        print(
           chalk.yellow(
             `No files matching ${[...exts].join(", ")} found in ${directory}`,
           ),
@@ -86,7 +87,7 @@ program
         return;
       }
 
-      console.log(`Found ${files.length} file(s) to ingest`);
+      print(`Found ${files.length} file(s) to ingest`);
       for (const f of files) {
         const perFileTags = { ...tags, filename: basename(f) };
         await ingestFile(f, perFileTags);
@@ -120,11 +121,11 @@ program
       } else {
         const { ask } = await import("./query.js");
         const result = await ask(query, topK, tagDict);
-        console.log(`\n${chalk.bold("Answer:")}\n${result.answer}\n`);
+        print(`\n${chalk.bold("Answer:")}\n${result.answer}\n`);
         if (result.sources.length > 0) {
-          console.log(chalk.dim("Sources:"));
+          print(chalk.dim("Sources:"));
           for (const s of result.sources) {
-            console.log(
+            print(
               `  - ${s.document} (chunk ${s.chunk_index}, similarity ${(s.similarity as number).toFixed(3)})`,
             );
           }
@@ -143,7 +144,7 @@ program
   .action(async (message: string) => {
     const { agentChat } = await import("./agent.js");
     const answer = await agentChat(message);
-    console.log(`\n${chalk.bold("Agent:")}\n${answer}`);
+    print(`\n${chalk.bold("Agent:")}\n${answer}`);
     await closeSql();
   });
 
@@ -157,7 +158,7 @@ program
     const docs = await listDocuments();
 
     if (docs.length === 0) {
-      console.log(chalk.yellow("No documents found."));
+      print(chalk.yellow("No documents found."));
       await close();
       return;
     }
@@ -171,7 +172,7 @@ program
         .join(", ");
       table.push([String(d.id), d.name, d.ingested_at, tagStr]);
     }
-    console.log(table.toString());
+    print(table.toString());
     await close();
   });
 
@@ -183,7 +184,7 @@ program
     const tagList = await listTags();
 
     if (tagList.length === 0) {
-      console.log(chalk.yellow("No tags found."));
+      print(chalk.yellow("No tags found."));
       await close();
       return;
     }
@@ -194,7 +195,7 @@ program
     for (const t of tagList) {
       table.push([t.key, t.value, String(t.doc_count)]);
     }
-    console.log(table.toString());
+    print(table.toString());
     await close();
   });
 
@@ -208,7 +209,7 @@ program
     const docs = await findDocumentsByTags(tagDict);
 
     if (docs.length === 0) {
-      console.log(chalk.yellow("No documents match the given tags."));
+      print(chalk.yellow("No documents match the given tags."));
       await close();
       return;
     }
@@ -219,7 +220,7 @@ program
     for (const d of docs) {
       table.push([String(d.id), d.name, d.ingested_at]);
     }
-    console.log(table.toString());
+    print(table.toString());
     await close();
   });
 
@@ -229,6 +230,7 @@ program
   .command("serve")
   .description("Start the HTTP API server")
   .action(async () => {
+    setSilent(true);
     const { startServer } = await import("./server.js");
     await startServer();
   });
@@ -253,7 +255,7 @@ function printResultsTable(
       excerpt + "...",
     ]);
   }
-  console.log(table.toString());
+  print(table.toString());
 }
 
 program.parse();

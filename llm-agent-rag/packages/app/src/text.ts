@@ -1,8 +1,10 @@
 import pdf from "pdf-parse";
 import { MDocument } from "@mastra/rag";
+import logger from "./logger.js";
 import { CHUNK_SIZE, CHUNK_OVERLAP } from "./config.js";
 
 export async function extractText(filepath: string): Promise<string> {
+  logger.debug({ filepath }, "extracting text");
   const ext = filepath.split(".").pop()?.toLowerCase();
   if (ext === "pdf") {
     return extractPdf(filepath);

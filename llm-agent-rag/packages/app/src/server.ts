@@ -8,6 +8,7 @@ import { join, extname, basename } from "path";
 import { stat } from "fs/promises";
 import { tmpdir } from "os";
 import type { IngestRequest, QueryRequest, AgentRequest, FindDocumentsRequest } from "@rag/shared";
+import logger from "./logger.js";
 
 import { ingestFile } from "./ingest.js";
 import { retrieve, ask } from "./query.js";
@@ -28,7 +29,18 @@ app.use(async (ctx, next) => {
     const status = (err as { status?: number }).status ?? 500;
     ctx.status = status;
     ctx.body = { error: message };
+    logger.error({ err, method: ctx.method, path: ctx.path, status }, "request error");
   }
+});
+
+// Request logging middleware
+app.use(async (ctx, next) => {
+  const start = Date.now();
+  const reqId = crypto.randomUUID();
+  ctx.state.reqId = reqId;
+  await next();
+  const duration = Date.now() - start;
+  logger.info({ reqId, method: ctx.method, path: ctx.path, status: ctx.status, duration }, "request completed");
 });
 
 app.use(cors());
@@ -202,8 +214,8 @@ export async function startServer(): Promise<void> {
   const port = parseInt(Bun.env.PORT ?? "8001", 10);
   const host = Bun.env.BIND_ADDRESS ?? "127.0.0.1";
 
-  console.log(`Starting server on ${host}:${port}...`);
+  logger.info({ host, port }, "starting server");
   app.listen(port, host, () => {
-    console.log(`RAG API server started successfully on http://${host}:${port}`);
+    logger.info({ host, port }, "RAG API server started successfully");
   });
 }

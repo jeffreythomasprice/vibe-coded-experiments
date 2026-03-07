@@ -26,15 +26,20 @@ bun run packages/app/src/index.ts tags                                     # Lis
 bun run packages/app/src/index.ts find -t key=value                        # Find documents by tags
 bun run packages/app/src/index.ts serve                                    # Start HTTP API server
 
+# Frontend dev
+bun run --cwd packages/frontend dev                    # Vite dev server at http://localhost:8000
+bun run --cwd packages/frontend build                  # Production build → packages/frontend/dist/
+
 # Database access
 docker exec -it rag-postgres psql -U raguser -d ragdb
 ```
 
 ## Architecture
 
-Bun workspace monorepo with two packages:
-- `@rag/shared` (`packages/shared/`) — shared TypeScript interfaces (types-only, no runtime deps)
+Bun workspace monorepo with three packages:
 - `@rag/app` (`packages/app/`) — all backend code: CLI, HTTP server, RAG logic
+- `@rag/shared` (`packages/shared/`) — shared TypeScript interfaces and `RagClient` API client class
+- `@rag/frontend` (`packages/frontend/`) — React + Vite UI for documents, uploads, and querying
 
 Uses Vercel AI SDK with `ollama-ai-provider-v2` for LLM/embedding calls, and `@mastra/rag` for document chunking.
 
@@ -51,33 +56,37 @@ Uses Vercel AI SDK with `ollama-ai-provider-v2` for LLM/embedding calls, and `@m
 | `agent.ts` | Vercel AI SDK `generateText` with `tool()` and `stepCountIs(10)` for agentic tool-calling loop |
 | `index.ts` | Commander CLI with `ingest`, `ingest-dir`, `query`, `agent`, `documents`, `tags`, `find`, `serve` commands |
 | `server.ts` | Koa HTTP API server wrapping CLI functionality |
+| `logger.ts` | Pino logger, level controlled by `LOG_LEVEL` env var |
+| `output.ts` | CLI output formatting helpers |
+
+**Shared package** (`packages/shared/src/`):
+- `types.ts` — shared interfaces: `ChunkResult`, `Document`, `Tag`, `DocumentSummary`, `IngestResult`, `AskSource`, `AskResponse`, API request types
+- `client.ts` — `RagClient` class: typed fetch wrapper used by the frontend to call all API endpoints
 
 **HTTP API endpoints** (served by `server.ts` via `serve` command):
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/ingest` | Ingest a file or directory (body: `{ path, tags?, extensions? }`) |
+| POST | `/api/ingest/upload` | Upload and ingest a file (multipart `file` + optional `tags` JSON string) |
 | POST | `/api/query` | Raw vector search (body: `{ query, top_k?, tags? }`) |
 | POST | `/api/ask` | Vector search + LLM synthesis (body: `{ query, top_k?, tags? }`) |
 | POST | `/api/agent` | Agentic mode (body: `{ message, system_prompt? }`) |
 | GET | `/api/documents` | List all ingested documents |
+| DELETE | `/api/documents/:id` | Delete a document and all its chunks |
 | GET | `/api/tags` | List all tags |
 | POST | `/api/documents/find` | Find documents by tags (body: `{ tags }`) |
-
-| Module (packages/shared/src/) | Role |
-|--------|------|
-| `types.ts` | Shared interfaces: `ChunkResult`, `Document`, `Tag`, `DocumentSummary`, `IngestResult`, `AskSource`, `AskResponse`, API request types |
-| `index.ts` | Barrel export |
 
 **Key design details:**
 - `initConfig()` is called via Commander `preAction` hook before any command runs
 - Context window expansion (`CONTEXT_WINDOW` env var): query results are expanded with surrounding chunks from the same document, with overlapping ranges merged and deduplicated
 - Tag filtering uses AND logic via EXISTS subqueries in SQL
 - The agent uses Vercel AI SDK `tool()` with Zod schemas, routed through `ollama-ai-provider-v2` to Ollama
+- The frontend connects to the API server URL defined in `packages/frontend/.env` (`VITE_API_URL`, defaults to `http://127.0.0.1:8001`)
 
 ## Configuration
 
-All config via `.env` file (see `.env.template`). Required vars: `OLLAMA_BASE_URL`, `EMBED_PROVIDER`, `EMBED_MODEL`, `CHAT_MODEL`, `DB_DSN`, `CHUNK_SIZE`, `CHUNK_OVERLAP`, `CONTEXT_WINDOW`. Optional vars: `PORT` (default `8001`), `BIND_ADDRESS` (default `127.0.0.1`).
+All config via `.env` file (see `.env.template`). Required vars: `OLLAMA_BASE_URL`, `EMBED_PROVIDER`, `EMBED_MODEL`, `CHAT_MODEL`, `DB_DSN`, `CHUNK_SIZE`, `CHUNK_OVERLAP`, `CONTEXT_WINDOW`. Optional vars: `PORT` (default `8001`), `BIND_ADDRESS` (default `127.0.0.1`), `LOG_LEVEL` (default `info`).
 
 Model names use bare Ollama model IDs (e.g. `nomic-embed-text`, `glm-4.7-flash`) without provider prefixes.
 

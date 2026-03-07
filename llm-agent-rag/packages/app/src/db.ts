@@ -1,5 +1,6 @@
 import postgres from "postgres";
 import type { ChunkResult, Document, Tag, DocumentSummary } from "@rag/shared";
+import logger from "./logger.js";
 import { DB_DSN, EMBED_DIM, EMBED_PROVIDER, EMBED_MODEL } from "./config.js";
 
 export type { ChunkResult, Document, Tag, DocumentSummary };
@@ -40,6 +41,7 @@ export async function setCachedValue(key: string, value: string): Promise<void> 
 // -- Dynamic table creation --
 
 export async function ensureChunksTable(dim: number): Promise<void> {
+  logger.debug({ dim }, "ensuring chunks table exists");
   const s = getSql();
   const table = `chunks_${dim}`;
   await s.unsafe(`
@@ -64,6 +66,7 @@ export async function ensureChunksTable(dim: number): Promise<void> {
 // -- Ingest helpers --
 
 export async function insertDocument(name: string): Promise<number> {
+  logger.debug({ name }, "inserting document");
   const s = getSql();
   const [row] = await s`INSERT INTO documents (name) VALUES (${name}) RETURNING id`;
   return row.id as number;
@@ -90,6 +93,7 @@ export async function insertChunks(
 ): Promise<void> {
   const s = getSql();
   const table = chunksTable();
+  logger.debug({ documentId, chunks: chunks.length, table }, "inserting chunks");
   for (const chunk of chunks) {
     const vecStr = `[${chunk.embedding.join(",")}]`;
     await s.unsafe(
@@ -107,6 +111,7 @@ export async function searchChunks(
   topK: number = 5,
   tags?: Record<string, string>,
 ): Promise<ChunkResult[]> {
+  logger.debug({ topK, tags }, "searching chunks");
   const s = getSql();
   const table = chunksTable();
   const vecStr = `[${queryEmbedding.join(",")}]`;

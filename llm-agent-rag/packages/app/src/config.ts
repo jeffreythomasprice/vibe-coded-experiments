@@ -1,4 +1,6 @@
 import { env } from "bun";
+import logger from "./logger.js";
+import { print, printProgress } from "./output.js";
 
 const REQUIRED_ENV_VARS = [
   "OLLAMA_BASE_URL",
@@ -28,7 +30,7 @@ async function ensureOllamaModel(model: string): Promise<void> {
       signal: AbortSignal.timeout(10_000),
     });
     if (!resp.ok) {
-      console.warn(`Warning: could not check ollama models (HTTP ${resp.status})`);
+      logger.warn({ status: resp.status }, "could not check ollama models");
       return;
     }
     const data = (await resp.json()) as { models?: { name: string }[] };
@@ -43,11 +45,12 @@ async function ensureOllamaModel(model: string): Promise<void> {
     );
     if (found) return;
   } catch (err) {
-    console.warn(`Warning: could not check ollama models (${err})`);
+    logger.warn({ err }, "could not check ollama models");
     return;
   }
 
-  console.log(`Model '${ollamaName}' not found locally — pulling from ollama...`);
+  logger.info({ model: ollamaName }, "model not found locally, pulling from ollama");
+  print(`Model '${ollamaName}' not found locally — pulling from ollama...`);
   const resp = await fetch(`${OLLAMA_BASE_URL}/api/pull`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -55,7 +58,7 @@ async function ensureOllamaModel(model: string): Promise<void> {
   });
 
   if (!resp.ok || !resp.body) {
-    console.error(`Error: failed to pull model '${ollamaName}' (HTTP ${resp.status})`);
+    logger.fatal({ model: ollamaName, status: resp.status }, "failed to pull model");
     process.exit(1);
   }
 
@@ -80,12 +83,13 @@ async function ensureOllamaModel(model: string): Promise<void> {
       if (/pulling|verifying|writing/.test(status)) {
         if (data.total) {
           const pct = ((data.completed ?? 0) / data.total) * 100;
-          process.stdout.write(`\r  ${status}: ${pct.toFixed(0)}%`);
+          printProgress(`\r  ${status}: ${pct.toFixed(0)}%`);
         } else {
-          process.stdout.write(`\r  ${status}...`);
+          printProgress(`\r  ${status}...`);
         }
       } else if (status === "success") {
-        console.log(`\n  Model '${ollamaName}' pulled successfully.`);
+        logger.info({ model: ollamaName }, "model pulled successfully");
+        print(`\n  Model '${ollamaName}' pulled successfully.`);
       }
     }
   }
@@ -100,23 +104,22 @@ async function detectEmbedDim(): Promise<number> {
     return parseInt(cached, 10);
   }
 
-  console.log("  Detecting embedding dimension...");
+  logger.info("detecting embedding dimension");
+  print("  Detecting embedding dimension...");
   const { embedSingle } = await import("./embeddings.js");
   const vec = await embedSingle("dimension test");
   const dim = vec.length;
 
   await setCachedValue(cacheKey, String(dim));
-  console.log(`  Embedding dimension: ${dim} (cached)`);
+  logger.info({ dim }, "embedding dimension detected and cached");
+  print(`  Embedding dimension: ${dim} (cached)`);
   return dim;
 }
 
 export async function initConfig(): Promise<void> {
   const missing = REQUIRED_ENV_VARS.filter((v) => !env[v]);
   if (missing.length > 0) {
-    console.error(
-      `Error: missing required environment variables: ${missing.join(", ")}\n` +
-        "Set them in your .env file or environment before running.",
-    );
+    logger.fatal({ missing }, "missing required environment variables");
     process.exit(1);
   }
 
