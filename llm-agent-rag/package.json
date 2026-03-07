@@ -1,0 +1,21 @@
+{
+  "name": "llm-agent-rag",
+  "type": "module",
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/rag": "latest",
+    "ai": "latest",
+    "zod": "latest",
+    "postgres": "^3",
+    "commander": "^13",
+    "chalk": "^5",
+    "cli-table3": "^0.6",
+    "pdf-parse": "^1.1",
+    "ollama-ai-provider-v2": "latest"
+  },
+  "devDependencies": {
+    "@types/pdf-parse": "^1.1",
+    "typescript": "^5",
+    "@types/bun": "latest"
+  }
+}
