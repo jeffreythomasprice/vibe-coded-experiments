@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import path from "path";
+import type { IngestResult } from "@rag/shared";
 import { insertDocument, insertTags, insertChunks, closeSql } from "./db.js";
 import { extractText, chunkText } from "./text.js";
 import { embedTexts } from "./embeddings.js";
@@ -9,9 +10,10 @@ const EMBED_BATCH_SIZE = 32;
 export async function ingestFile(
   filepath: string,
   tags: Record<string, string> = {},
-): Promise<Record<string, unknown>> {
+  overrideName?: string,
+): Promise<IngestResult> {
   filepath = path.resolve(filepath);
-  const filename = path.basename(filepath);
+  const filename = overrideName ?? path.basename(filepath);
 
   tags = { filename, ...tags };
 
@@ -21,8 +23,7 @@ export async function ingestFile(
   console.log("  Extracting text...");
   const text = await extractText(filepath);
   if (!text.trim()) {
-    console.log(chalk.red("  No text extracted — skipping."));
-    return { error: "no text extracted" };
+    throw new Error(`No text extracted from ${filepath}`);
   }
   console.log(`  Extracted ${text.length.toLocaleString()} characters`);
 

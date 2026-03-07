@@ -2,6 +2,7 @@ import { env } from "bun";
 
 const REQUIRED_ENV_VARS = [
   "OLLAMA_BASE_URL",
+  "EMBED_PROVIDER",
   "EMBED_MODEL",
   "CHAT_MODEL",
   "DB_DSN",
@@ -11,12 +12,14 @@ const REQUIRED_ENV_VARS = [
 ] as const;
 
 export let OLLAMA_BASE_URL: string;
+export let EMBED_PROVIDER: string;
 export let EMBED_MODEL: string;
 export let CHAT_MODEL: string;
 export let DB_DSN: string;
 export let CHUNK_SIZE: number;
 export let CHUNK_OVERLAP: number;
 export let CONTEXT_WINDOW: number;
+export let EMBED_DIM: number;
 
 async function ensureOllamaModel(model: string): Promise<void> {
   let ollamaName: string;
@@ -88,6 +91,25 @@ async function ensureOllamaModel(model: string): Promise<void> {
   }
 }
 
+async function detectEmbedDim(): Promise<number> {
+  const { getCachedValue, setCachedValue } = await import("./db.js");
+  const cacheKey = `embed_dim:${EMBED_PROVIDER}:${EMBED_MODEL}`;
+
+  const cached = await getCachedValue(cacheKey);
+  if (cached) {
+    return parseInt(cached, 10);
+  }
+
+  console.log("  Detecting embedding dimension...");
+  const { embedSingle } = await import("./embeddings.js");
+  const vec = await embedSingle("dimension test");
+  const dim = vec.length;
+
+  await setCachedValue(cacheKey, String(dim));
+  console.log(`  Embedding dimension: ${dim} (cached)`);
+  return dim;
+}
+
 export async function initConfig(): Promise<void> {
   const missing = REQUIRED_ENV_VARS.filter((v) => !env[v]);
   if (missing.length > 0) {
@@ -99,6 +121,7 @@ export async function initConfig(): Promise<void> {
   }
 
   OLLAMA_BASE_URL = env.OLLAMA_BASE_URL!;
+  EMBED_PROVIDER = env.EMBED_PROVIDER!;
   EMBED_MODEL = env.EMBED_MODEL!;
   CHAT_MODEL = env.CHAT_MODEL!;
   DB_DSN = env.DB_DSN!;
@@ -108,4 +131,9 @@ export async function initConfig(): Promise<void> {
 
   await ensureOllamaModel(EMBED_MODEL);
   await ensureOllamaModel(CHAT_MODEL);
+
+  EMBED_DIM = await detectEmbedDim();
+
+  const { ensureChunksTable } = await import("./db.js");
+  await ensureChunksTable(EMBED_DIM);
 }

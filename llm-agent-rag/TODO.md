@@ -1,7 +1,11 @@
-new cli command: serve
-runs a web server
+support claude api
 
-react frontend
+conversational agent with history
 
-multiple possible embeddings tables, size of the vector column based on the embedding model name
-a new column with the embedding model name, then we pick a table and add a where clause to filter to the right embeddings for the current embedding model
+sessions api, frontend
+
+crud on tags on a document
+
+ctrl+enter should submit
+
+markdown runder in answer block

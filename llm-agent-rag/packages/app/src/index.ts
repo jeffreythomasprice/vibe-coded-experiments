@@ -223,6 +223,16 @@ program
     await close();
   });
 
+// -- Server --
+
+program
+  .command("serve")
+  .description("Start the HTTP API server")
+  .action(async () => {
+    const { startServer } = await import("./server.js");
+    await startServer();
+  });
+
 // -- Utilities --
 
 function printResultsTable(

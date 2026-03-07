@@ -1,5 +1,8 @@
 import postgres from "postgres";
-import { DB_DSN } from "./config.js";
+import type { ChunkResult, Document, Tag, DocumentSummary } from "@rag/shared";
+import { DB_DSN, EMBED_DIM, EMBED_PROVIDER, EMBED_MODEL } from "./config.js";
+
+export type { ChunkResult, Document, Tag, DocumentSummary };
 
 let sql: ReturnType<typeof postgres>;
 
@@ -12,6 +15,50 @@ function getSql() {
 
 export async function closeSql(): Promise<void> {
   if (sql) await sql.end();
+}
+
+function chunksTable(): string {
+  return `chunks_${EMBED_DIM}`;
+}
+
+// -- Cache helpers --
+
+export async function getCachedValue(key: string): Promise<string | null> {
+  const s = getSql();
+  const rows = await s`SELECT value FROM cache WHERE key = ${key}`;
+  return rows.length > 0 ? (rows[0].value as string) : null;
+}
+
+export async function setCachedValue(key: string, value: string): Promise<void> {
+  const s = getSql();
+  await s`
+    INSERT INTO cache (key, value) VALUES (${key}, ${value})
+    ON CONFLICT (key) DO UPDATE SET value = ${value}
+  `;
+}
+
+// -- Dynamic table creation --
+
+export async function ensureChunksTable(dim: number): Promise<void> {
+  const s = getSql();
+  const table = `chunks_${dim}`;
+  await s.unsafe(`
+    CREATE TABLE IF NOT EXISTS ${table} (
+        id              SERIAL PRIMARY KEY,
+        document_id     INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+        chunk_index     INTEGER NOT NULL,
+        content         TEXT NOT NULL,
+        embed_provider  TEXT NOT NULL,
+        embed_model     TEXT NOT NULL,
+        embedding       vector(${dim})
+    )
+  `);
+  await s.unsafe(`
+    CREATE INDEX IF NOT EXISTS idx_${table}_doc ON ${table} (document_id)
+  `);
+  await s.unsafe(`
+    CREATE INDEX IF NOT EXISTS idx_${table}_embedding ON ${table} USING hnsw (embedding vector_cosine_ops)
+  `);
 }
 
 // -- Ingest helpers --
@@ -42,25 +89,18 @@ export async function insertChunks(
   chunks: { chunkIndex: number; content: string; embedding: number[] }[],
 ): Promise<void> {
   const s = getSql();
+  const table = chunksTable();
   for (const chunk of chunks) {
     const vecStr = `[${chunk.embedding.join(",")}]`;
-    await s`
-      INSERT INTO chunks (document_id, chunk_index, content, embedding)
-      VALUES (${documentId}, ${chunk.chunkIndex}, ${chunk.content}, ${vecStr}::vector)
-    `;
+    await s.unsafe(
+      `INSERT INTO ${table} (document_id, chunk_index, content, embed_provider, embed_model, embedding)
+       VALUES ($1, $2, $3, $4, $5, $6::vector)`,
+      [documentId, chunk.chunkIndex, chunk.content, EMBED_PROVIDER, EMBED_MODEL, vecStr],
+    );
   }
 }
 
 // -- Query helpers --
-
-export interface ChunkResult {
-  chunk_id: number;
-  document_id: number;
-  chunk_index: number;
-  content: string;
-  similarity: number;
-  document_name: string;
-}
 
 export async function searchChunks(
   queryEmbedding: number[],
@@ -68,27 +108,37 @@ export async function searchChunks(
   tags?: Record<string, string>,
 ): Promise<ChunkResult[]> {
   const s = getSql();
+  const table = chunksTable();
   const vecStr = `[${queryEmbedding.join(",")}]`;
 
-  let tagFilter = s``;
+  let tagClauses = "";
+  const params: unknown[] = [vecStr, EMBED_PROVIDER, EMBED_MODEL, topK];
+  let paramIdx = 5;
+
   if (tags && Object.keys(tags).length > 0) {
-    const clauses = Object.entries(tags).map(
-      ([key, value]) =>
-        s`EXISTS (SELECT 1 FROM document_tags t WHERE t.document_id = c.document_id AND t.key = ${key} AND t.value = ${value})`,
-    );
-    tagFilter = s`WHERE ${clauses.reduce((a, b) => s`${a} AND ${b}`)}`;
+    const parts: string[] = [];
+    for (const [key, value] of Object.entries(tags)) {
+      parts.push(
+        `EXISTS (SELECT 1 FROM document_tags t WHERE t.document_id = c.document_id AND t.key = $${paramIdx} AND t.value = $${paramIdx + 1})`,
+      );
+      params.push(key, value);
+      paramIdx += 2;
+    }
+    tagClauses = "AND " + parts.join(" AND ");
   }
 
-  const rows = await s`
-    SELECT c.id, c.document_id, c.chunk_index, c.content,
-           1 - (c.embedding <=> ${vecStr}::vector) AS similarity,
-           d.name AS document_name
-    FROM chunks c
-    JOIN documents d ON d.id = c.document_id
-    ${tagFilter}
-    ORDER BY c.embedding <=> ${vecStr}::vector
-    LIMIT ${topK}
-  `;
+  const rows = await s.unsafe(
+    `SELECT c.id, c.document_id, c.chunk_index, c.content,
+            1 - (c.embedding <=> $1::vector) AS similarity,
+            d.name AS document_name
+     FROM ${table} c
+     JOIN documents d ON d.id = c.document_id
+     WHERE c.embed_provider = $2 AND c.embed_model = $3
+     ${tagClauses}
+     ORDER BY c.embedding <=> $1::vector
+     LIMIT $4`,
+    params,
+  );
 
   return rows.map((r) => ({
     chunk_id: r.id as number,
@@ -106,11 +156,14 @@ export async function fetchContextChunks(
   indexEnd: number,
 ): Promise<{ chunk_index: number; content: string }[]> {
   const s = getSql();
-  const rows = await s`
-    SELECT chunk_index, content FROM chunks
-    WHERE document_id = ${documentId} AND chunk_index BETWEEN ${indexStart} AND ${indexEnd}
-    ORDER BY chunk_index
-  `;
+  const table = chunksTable();
+  const rows = await s.unsafe(
+    `SELECT chunk_index, content FROM ${table}
+     WHERE document_id = $1 AND embed_provider = $2 AND embed_model = $3
+       AND chunk_index BETWEEN $4 AND $5
+     ORDER BY chunk_index`,
+    [documentId, EMBED_PROVIDER, EMBED_MODEL, indexStart, indexEnd],
+  );
   return rows.map((r) => ({
     chunk_index: r.chunk_index as number,
     content: r.content as string,
@@ -119,9 +172,7 @@ export async function fetchContextChunks(
 
 // -- Listing helpers --
 
-export async function listDocuments(): Promise<
-  { id: number; name: string; ingested_at: string; tags: Record<string, string> }[]
-> {
+export async function listDocuments(): Promise<Document[]> {
   const s = getSql();
   const rows = await s`
     SELECT d.id, d.name, d.ingested_at, dt.key, dt.value
@@ -130,10 +181,7 @@ export async function listDocuments(): Promise<
     ORDER BY d.id
   `;
 
-  const docs = new Map<
-    number,
-    { id: number; name: string; ingested_at: string; tags: Record<string, string> }
-  >();
+  const docs = new Map<number, Document>();
   for (const r of rows) {
     const docId = r.id as number;
     if (!docs.has(docId)) {
@@ -151,9 +199,7 @@ export async function listDocuments(): Promise<
   return Array.from(docs.values());
 }
 
-export async function listTags(): Promise<
-  { key: string; value: string; doc_count: number }[]
-> {
+export async function listTags(): Promise<Tag[]> {
   const s = getSql();
   const rows = await s`
     SELECT key, value, COUNT(*) AS doc_count
@@ -168,9 +214,15 @@ export async function listTags(): Promise<
   }));
 }
 
+export async function deleteDocument(id: number): Promise<boolean> {
+  const s = getSql();
+  const rows = await s`DELETE FROM documents WHERE id = ${id} RETURNING id`;
+  return rows.length > 0;
+}
+
 export async function findDocumentsByTags(
   tags: Record<string, string>,
-): Promise<{ id: number; name: string; ingested_at: string }[]> {
+): Promise<DocumentSummary[]> {
   const s = getSql();
   const clauses = Object.entries(tags).map(
     ([key, value]) =>

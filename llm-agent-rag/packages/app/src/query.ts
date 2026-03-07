@@ -1,11 +1,8 @@
 import { createOllama } from "ollama-ai-provider-v2";
 import { generateText } from "ai";
+import type { ChunkResult, AskResponse } from "@rag/shared";
 import { CHAT_MODEL, CONTEXT_WINDOW, OLLAMA_BASE_URL } from "./config.js";
-import {
-  fetchContextChunks,
-  searchChunks,
-  type ChunkResult,
-} from "./db.js";
+import { fetchContextChunks, searchChunks } from "./db.js";
 import { embedSingle } from "./embeddings.js";
 
 function expandResultsWithContext(
@@ -111,7 +108,7 @@ export async function ask(
   query: string,
   topK: number = 5,
   tags?: Record<string, string>,
-): Promise<{ answer: string; sources: Record<string, unknown>[] }> {
+): Promise<AskResponse> {
   const results = await retrieve(query, topK, tags);
 
   if (results.length === 0) {
