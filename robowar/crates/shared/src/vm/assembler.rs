@@ -1177,7 +1177,7 @@ loop:
     #[test]
     fn assemble_example_robots() {
         let workspace_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let examples = ["dumb", "spinner", "patrol", "wanderer"];
+        let examples = ["dumb", "spinner", "patrol", "wanderer", "orbiter"];
         for name in examples {
             let path = workspace_root.join(format!("examples/robots/{}.asm", name));
             let source = std::fs::read_to_string(&path)

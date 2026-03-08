@@ -1,0 +1,8 @@
+name = "Orbiter"
+program = "orbiter.asm"
+
+[loadout]
+hp = 5
+speed = 4
+armor = 4
+gun_power = 7
