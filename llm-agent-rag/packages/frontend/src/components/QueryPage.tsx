@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import type { ChunkResult, AskResponse, Tag, DocumentSummary } from "@rag/shared";
 import { api } from "../api";
+import Markdown from "react-markdown";
 import { TagFilter } from "./TagFilter";
 import { Spinner } from "./Spinner";
 import styles from "./QueryPage.module.css";
@@ -97,6 +98,12 @@ export function QueryPage() {
           placeholder={mode === "agent" ? "Enter a message..." : "Enter your query..."}
           rows={3}
           disabled={loading}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+              e.preventDefault();
+              handleSubmit(e);
+            }
+          }}
         />
 
         {mode !== "agent" && (
@@ -178,7 +185,7 @@ export function QueryPage() {
       {askResult && (
         <div className={styles.results}>
           <h3>Answer</h3>
-          <div className={styles.answer}>{askResult.answer}</div>
+          <div className={styles.answer}><Markdown>{askResult.answer}</Markdown></div>
           {askResult.sources.length > 0 && (
             <>
               <h4>Sources</h4>
@@ -201,7 +208,7 @@ export function QueryPage() {
       {agentAnswer !== null && (
         <div className={styles.results}>
           <h3>Answer</h3>
-          <div className={styles.answer}>{agentAnswer}</div>
+          <div className={styles.answer}><Markdown>{agentAnswer}</Markdown></div>
         </div>
       )}
     </div>

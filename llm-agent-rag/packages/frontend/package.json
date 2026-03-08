@@ -10,7 +10,8 @@
   "dependencies": {
     "@rag/shared": "workspace:*",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "react-markdown": "^10.1.0"
   },
   "devDependencies": {
     "@types/react": "^19",
