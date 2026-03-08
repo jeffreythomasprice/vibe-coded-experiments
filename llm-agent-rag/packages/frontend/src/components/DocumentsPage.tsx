@@ -18,13 +18,17 @@ export function DocumentsPage() {
   const [deleteDoc, setDeleteDoc] = useState<{ id: number; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const [d, t] = await Promise.all([api.listDocuments(), api.listTags()]);
       setDocs(d);
       setTags(t);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load documents");
     } finally {
       setLoading(false);
     }
@@ -62,6 +66,8 @@ export function DocumentsPage() {
       </div>
 
       <TagFilter tags={tags} selected={selectedTags} onChange={setSelectedTags} />
+
+      {error && <p className={styles.error}>{error}</p>}
 
       {loading ? (
         <div className={styles.spinnerWrap}><Spinner /></div>
