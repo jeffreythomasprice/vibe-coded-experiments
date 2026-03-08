@@ -146,6 +146,7 @@ export function QueryPage() {
               <tr>
                 <th>Document</th>
                 <th>Chunk</th>
+                <th>Pages</th>
                 <th>Similarity</th>
                 <th>Content</th>
               </tr>
@@ -155,6 +156,13 @@ export function QueryPage() {
                 <tr key={c.chunk_id}>
                   <td>{c.document_name}</td>
                   <td className={styles.center}>{c.chunk_index}</td>
+                  <td className={styles.center}>
+                    {c.page_start
+                      ? c.page_start === c.page_end
+                        ? `Page ${c.page_start}`
+                        : `Pages ${c.page_start}-${c.page_end}`
+                      : "\u2014"}
+                  </td>
                   <td className={styles.center}>{(c.similarity * 100).toFixed(1)}%</td>
                   <td className={styles.content}>
                     {c.content.length > 200 ? c.content.slice(0, 200) + "..." : c.content}
@@ -177,7 +185,9 @@ export function QueryPage() {
               <ul className={styles.sources}>
                 {askResult.sources.map((s, i) => (
                   <li key={i}>
-                    <strong>{s.document}</strong> (chunk {s.chunk_index}, {(s.similarity * 100).toFixed(1)}%)
+                    <strong>{s.document}</strong> (chunk {s.chunk_index}
+                    {s.page_start ? s.page_start === s.page_end ? `, page ${s.page_start}` : `, pages ${s.page_start}-${s.page_end}` : ""}
+                    , {(s.similarity * 100).toFixed(1)}%)
                     <p className={styles.excerpt}>{s.excerpt}</p>
                   </li>
                 ))}

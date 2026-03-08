@@ -8,7 +8,4 @@ ctrl+enter should submit, e.g. on query page
 
 markdown render in answer block
 
-json schemas
-
-when displaying search results we present the filename and a chunk index number
-instead of the chunk index we should show the page range that chunk came from
+when server isn't available frontend should show an error instead of an empty documents list

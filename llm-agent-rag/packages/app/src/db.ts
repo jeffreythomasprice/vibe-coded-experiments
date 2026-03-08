@@ -52,7 +52,9 @@ export async function ensureChunksTable(dim: number): Promise<void> {
         content         TEXT NOT NULL,
         embed_provider  TEXT NOT NULL,
         embed_model     TEXT NOT NULL,
-        embedding       vector(${dim})
+        embedding       vector(${dim}),
+        page_start      INTEGER,
+        page_end        INTEGER
     )
   `);
   await s.unsafe(`
@@ -95,7 +97,7 @@ export async function insertTags(
 
 export async function insertChunks(
   documentId: number,
-  chunks: { chunkIndex: number; content: string; embedding: number[] }[],
+  chunks: { chunkIndex: number; content: string; embedding: number[]; pageStart?: number | null; pageEnd?: number | null }[],
 ): Promise<void> {
   const s = getSql();
   const table = chunksTable();
@@ -103,9 +105,9 @@ export async function insertChunks(
   for (const chunk of chunks) {
     const vecStr = `[${chunk.embedding.join(",")}]`;
     await s.unsafe(
-      `INSERT INTO ${table} (document_id, chunk_index, content, embed_provider, embed_model, embedding)
-       VALUES ($1, $2, $3, $4, $5, $6::vector)`,
-      [documentId, chunk.chunkIndex, chunk.content, EMBED_PROVIDER, EMBED_MODEL, vecStr],
+      `INSERT INTO ${table} (document_id, chunk_index, content, embed_provider, embed_model, embedding, page_start, page_end)
+       VALUES ($1, $2, $3, $4, $5, $6::vector, $7, $8)`,
+      [documentId, chunk.chunkIndex, chunk.content, EMBED_PROVIDER, EMBED_MODEL, vecStr, chunk.pageStart ?? null, chunk.pageEnd ?? null],
     );
   }
 }
@@ -141,7 +143,8 @@ export async function searchChunks(
   const rows = await s.unsafe(
     `SELECT c.id, c.document_id, c.chunk_index, c.content,
             1 - (c.embedding <=> $1::vector) AS similarity,
-            d.name AS document_name
+            d.name AS document_name,
+            c.page_start, c.page_end
      FROM ${table} c
      JOIN documents d ON d.id = c.document_id
      WHERE c.embed_provider = $2 AND c.embed_model = $3
@@ -158,6 +161,8 @@ export async function searchChunks(
     content: r.content as string,
     similarity: parseFloat(r.similarity as string),
     document_name: r.document_name as string,
+    page_start: r.page_start != null ? (r.page_start as number) : null,
+    page_end: r.page_end != null ? (r.page_end as number) : null,
   }));
 }
 

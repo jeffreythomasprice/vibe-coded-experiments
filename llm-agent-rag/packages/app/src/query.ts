@@ -120,8 +120,14 @@ export async function ask(
 
   const contextBlock = results
     .map(
-      (r) =>
-        `[Source: ${r.document_name}, chunk ${r.chunk_index}, similarity ${r.similarity.toFixed(3)}]\n${r.content}`,
+      (r) => {
+        const pageInfo = r.page_start
+          ? r.page_start === r.page_end
+            ? `, page ${r.page_start}`
+            : `, pages ${r.page_start}-${r.page_end}`
+          : "";
+        return `[Source: ${r.document_name}, chunk ${r.chunk_index}${pageInfo}, similarity ${r.similarity.toFixed(3)}]\n${r.content}`;
+      },
     )
     .join("\n\n---\n\n");
 
@@ -147,6 +153,8 @@ export async function ask(
         r.content.length > 200
           ? r.content.slice(0, 200) + "..."
           : r.content,
+      page_start: r.page_start ?? null,
+      page_end: r.page_end ?? null,
     })),
   };
 }

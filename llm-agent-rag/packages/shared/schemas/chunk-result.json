@@ -9,6 +9,8 @@
     "chunk_index": { "type": "integer" },
     "content": { "type": "string" },
     "similarity": { "type": "number" },
-    "document_name": { "type": "string" }
+    "document_name": { "type": "string" },
+    "page_start": { "type": ["integer", "null"] },
+    "page_end": { "type": ["integer", "null"] }
   }
 }
