@@ -11,13 +11,13 @@ const EMBED_BATCH_SIZE = 32;
 
 export async function ingestFile(
   filepath: string,
-  tags: Record<string, string> = {},
+  tags: string[] = [],
   overrideName?: string,
 ): Promise<IngestResult> {
   filepath = path.resolve(filepath);
   const filename = overrideName ?? path.basename(filepath);
 
-  tags = { filename, ...tags };
+  tags = [`filename=${filename}`, ...tags];
 
   logger.info({ filepath, tags }, "ingesting file");
   print(chalk.bold("Ingesting:"), filepath);

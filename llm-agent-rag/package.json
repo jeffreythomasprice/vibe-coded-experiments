@@ -1,5 +1,13 @@
 {
   "name": "llm-agent-rag",
   "private": true,
-  "workspaces": ["packages/*"]
+  "workspaces": ["packages/*"],
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "scripts": {
+    "dev:server": "bun --watch run packages/app/src/index.ts serve",
+    "dev:frontend": "bun run --cwd packages/frontend dev",
+    "typecheck": "tsc -p packages/shared/tsconfig.json --noEmit && tsc -p packages/app/tsconfig.json && tsc -p packages/frontend/tsconfig.json"
+  }
 }

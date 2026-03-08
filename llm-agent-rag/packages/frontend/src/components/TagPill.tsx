@@ -1,20 +1,19 @@
 import styles from "./TagPill.module.css";
 
 interface TagPillProps {
-  tagKey: string;
-  tagValue: string;
+  tag: string;
   onRemove?: () => void;
   onClick?: () => void;
   active?: boolean;
 }
 
-export function TagPill({ tagKey, tagValue, onRemove, onClick, active }: TagPillProps) {
+export function TagPill({ tag, onRemove, onClick, active }: TagPillProps) {
   return (
     <span
       className={`${styles.pill} ${active ? styles.active : ""} ${onClick ? styles.clickable : ""}`}
       onClick={onClick}
     >
-      {tagKey}={tagValue}
+      {tag}
       {onRemove && (
         <button
           className={styles.remove}

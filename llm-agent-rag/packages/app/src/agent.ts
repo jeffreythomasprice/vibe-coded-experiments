@@ -16,10 +16,10 @@ const searchDocuments = tool({
       .default(5)
       .describe("Number of results to return (default 5)."),
     tags: z
-      .record(z.string(), z.string())
+      .array(z.string())
       .optional()
       .describe(
-        'Optional key=value tag filters. Example: {"project": "alpha", "filename": "report.pdf"}',
+        'Optional tag filters. Example: ["project=alpha", "filename=report.pdf"]',
       ),
   }),
   execute: async ({ query, top_k, tags }) => {

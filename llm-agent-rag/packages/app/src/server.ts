@@ -13,7 +13,7 @@ import logger from "./logger.js";
 import { ingestFile } from "./ingest.js";
 import { retrieve, ask } from "./query.js";
 import { agentChat } from "./agent.js";
-import { listDocuments, listTags, findDocumentsByTags, deleteDocument } from "./db.js";
+import { listDocuments, listTags, searchTags, findDocumentsByTags, deleteDocument, deleteTag, insertTags } from "./db.js";
 
 const app = new Koa();
 const router = new Router();
@@ -65,7 +65,7 @@ router.post("/api/ingest", async (ctx) => {
       ctx.body = { error: "extensions cannot be specified when path is a file" };
       return;
     }
-    const result = await ingestFile(filePath, tags ?? {});
+    const result = await ingestFile(filePath, tags ?? []);
     ctx.body = result;
   } else if (stats.isDirectory()) {
     const exts = new Set(
@@ -91,8 +91,7 @@ router.post("/api/ingest", async (ctx) => {
     const files = await findFiles(filePath);
     const results = [];
     for (const f of files) {
-      const perFileTags = { ...(tags ?? {}), filename: basename(f) };
-      const result = await ingestFile(f, perFileTags);
+      const result = await ingestFile(f, tags ?? []);
       results.push(result);
     }
     ctx.body = { results };
@@ -116,7 +115,7 @@ router.post("/api/ingest/upload", upload.single("file"), async (ctx) => {
   await rename(file.path, renamedPath);
 
   try {
-    let tags: Record<string, string> = {};
+    let tags: string[] = [];
     if (ctx.request.body && typeof (ctx.request.body as Record<string, unknown>).tags === "string") {
       tags = JSON.parse((ctx.request.body as Record<string, string>).tags);
     }
@@ -177,12 +176,22 @@ router.get("/api/tags", async (ctx) => {
   ctx.body = tags;
 });
 
+router.get("/api/tags/search", async (ctx) => {
+  const q = (ctx.query.q as string) ?? "";
+  if (!q.trim()) {
+    ctx.body = [];
+    return;
+  }
+  const tags = await searchTags(q.trim());
+  ctx.body = tags;
+});
+
 router.post("/api/documents/find", async (ctx) => {
   const { tags } = ctx.request.body as FindDocumentsRequest;
 
-  if (!tags || Object.keys(tags).length === 0) {
+  if (!tags || !Array.isArray(tags) || tags.length === 0) {
     ctx.status = 400;
-    ctx.body = { error: "tags is required and must not be empty" };
+    ctx.body = { error: "tags is required and must be a non-empty array" };
     return;
   }
 
@@ -204,6 +213,35 @@ router.delete("/api/documents/:id", async (ctx) => {
     ctx.body = { error: "document not found" };
     return;
   }
+  ctx.body = { ok: true };
+});
+
+router.post("/api/documents/:id/tags", async (ctx) => {
+  const id = parseInt(ctx.params.id, 10);
+  if (isNaN(id)) {
+    ctx.status = 400;
+    ctx.body = { error: "invalid document id" };
+    return;
+  }
+  const { tag } = ctx.request.body as { tag?: string };
+  if (!tag || typeof tag !== "string") {
+    ctx.status = 400;
+    ctx.body = { error: "tag is a required string" };
+    return;
+  }
+  await insertTags(id, [tag]);
+  ctx.body = { ok: true };
+});
+
+router.delete("/api/documents/:id/tags/:tag", async (ctx) => {
+  const id = parseInt(ctx.params.id, 10);
+  if (isNaN(id)) {
+    ctx.status = 400;
+    ctx.body = { error: "invalid document id" };
+    return;
+  }
+
+  await deleteTag(id, decodeURIComponent(ctx.params.tag));
   ctx.body = { ok: true };
 });
 

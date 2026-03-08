@@ -98,7 +98,7 @@ function expandResultsWithContext(
 export async function retrieve(
   query: string,
   topK: number = 5,
-  tags?: Record<string, string>,
+  tags?: string[],
 ): Promise<ChunkResult[]> {
   logger.debug({ query, topK, tags }, "retrieving chunks");
   const queryVec = await embedSingle(query);
@@ -110,7 +110,7 @@ export async function retrieve(
 export async function ask(
   query: string,
   topK: number = 5,
-  tags?: Record<string, string>,
+  tags?: string[],
 ): Promise<AskResponse> {
   const results = await retrieve(query, topK, tags);
 

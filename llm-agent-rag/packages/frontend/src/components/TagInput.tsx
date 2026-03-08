@@ -4,11 +4,12 @@ import { api } from "../api";
 import styles from "./TagInput.module.css";
 
 interface TagInputProps {
-  onSelect: (key: string, value: string) => void;
+  onSelect: (tag: string) => void;
   placeholder?: string;
+  exclude?: Set<string>;
 }
 
-export function TagInput({ onSelect, placeholder = "Search or add tag..." }: TagInputProps) {
+export function TagInput({ onSelect, placeholder = "Search or add tag...", exclude }: TagInputProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Tag[]>([]);
   const [open, setOpen] = useState(false);
@@ -35,7 +36,8 @@ export function TagInput({ onSelect, placeholder = "Search or add tag..." }: Tag
       return;
     }
     timerRef.current = window.setTimeout(async () => {
-      const tags = await api.searchTags(value.trim());
+      let tags = await api.searchTags(value.trim());
+      if (exclude) tags = tags.filter((t) => !exclude.has(t.tag));
       setResults(tags);
       setHighlightIdx(-1);
       setOpen(true);
@@ -62,24 +64,17 @@ export function TagInput({ onSelect, placeholder = "Search or add tag..." }: Tag
       e.preventDefault();
       if (open && highlightIdx >= 0 && highlightIdx < results.length) {
         handleSelect(results[highlightIdx]);
-      } else if (query.includes("=")) {
-        const idx = query.indexOf("=");
-        const key = query.slice(0, idx).trim();
-        const value = query.slice(idx + 1).trim();
-        if (key && value) {
-          onSelect(key, value);
-          setQuery("");
-          setOpen(false);
-        }
-      } else if (open && results.length === 1) {
-        handleSelect(results[0]);
+      } else if (query.trim()) {
+        onSelect(query.trim());
+        setQuery("");
+        setOpen(false);
       }
       setHighlightIdx(-1);
     }
   }
 
   function handleSelect(tag: Tag) {
-    onSelect(tag.key, tag.value);
+    onSelect(tag.tag);
     setQuery("");
     setOpen(false);
   }
@@ -99,11 +94,11 @@ export function TagInput({ onSelect, placeholder = "Search or add tag..." }: Tag
         <ul className={styles.dropdown}>
           {results.map((t, i) => (
             <li
-              key={`${t.key}=${t.value}`}
+              key={t.tag}
               className={`${styles.item}${i === highlightIdx ? ` ${styles.highlighted}` : ""}`}
               onClick={() => handleSelect(t)}
             >
-              <span>{t.key}={t.value}</span>
+              <span>{t.tag}</span>
               <span className={styles.count}>{t.doc_count}</span>
             </li>
           ))}

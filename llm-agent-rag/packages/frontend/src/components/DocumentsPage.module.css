@@ -29,6 +29,12 @@
   font-size: 0.9rem;
 }
 
+.spinnerWrap {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 0;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -75,6 +81,25 @@
   border-radius: 999px;
   font-size: 0.75rem;
   color: #374151;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.tagsBtn {
+  padding: 0.25rem 0.625rem;
+  border: 1px solid #93c5fd;
+  border-radius: 4px;
+  background: #fff;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.tagsBtn:hover {
+  background: #eff6ff;
 }
 
 .deleteBtn {

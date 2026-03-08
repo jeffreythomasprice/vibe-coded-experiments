@@ -16,18 +16,22 @@ docker exec rag-ollama ollama pull glm-4.7-flash        # Pull chat model
 bun install                                             # Install dependencies
 
 # Usage (all commands via index.ts)
-bun run packages/app/src/index.ts ingest <file> -t key=value               # Ingest a single file
+bun run packages/app/src/index.ts ingest <file> -t "my-tag"                 # Ingest a single file
 bun run packages/app/src/index.ts ingest-dir <dir> --ext .pdf --ext .txt   # Ingest a directory
 bun run packages/app/src/index.ts query "question" --raw                   # Raw vector search (no LLM)
 bun run packages/app/src/index.ts query "question"                         # Vector search + LLM synthesis
 bun run packages/app/src/index.ts agent "question"                         # Agentic mode (LLM decides searches)
 bun run packages/app/src/index.ts documents                                # List ingested documents
 bun run packages/app/src/index.ts tags                                     # List all tags
-bun run packages/app/src/index.ts find -t key=value                        # Find documents by tags
+bun run packages/app/src/index.ts find -t "my-tag"                         # Find documents by tags
 bun run packages/app/src/index.ts serve                                    # Start HTTP API server
 
-# Frontend dev
-bun run --cwd packages/frontend dev                    # Vite dev server at http://localhost:8000
+# Development (root-level scripts)
+bun run dev:server                                     # Server in watch mode (auto-restarts on changes)
+bun run dev:frontend                                   # Vite dev server at http://localhost:8000
+bun run typecheck                                      # Typecheck all packages (shared, app, frontend)
+
+# Frontend
 bun run --cwd packages/frontend build                  # Production build → packages/frontend/dist/
 
 # Database access
@@ -60,7 +64,7 @@ Uses Vercel AI SDK with `ollama-ai-provider-v2` for LLM/embedding calls, and `@m
 | `output.ts` | CLI output formatting helpers |
 
 **Shared package** (`packages/shared/src/`):
-- `types.ts` — shared interfaces: `ChunkResult`, `Document`, `Tag`, `DocumentSummary`, `IngestResult`, `AskSource`, `AskResponse`, API request types
+- `types.ts` — shared interfaces: `ChunkResult`, `Document`, `Tag`, `DocumentSummary`, `IngestResult`, `AskSource`, `AskResponse`, API request types. Tags are plain strings (not key-value pairs).
 - `client.ts` — `RagClient` class: typed fetch wrapper used by the frontend to call all API endpoints
 
 **HTTP API endpoints** (served by `server.ts` via `serve` command):
@@ -96,4 +100,4 @@ The `docker-compose.yml` includes NVIDIA GPU passthrough for Ollama. If you get 
 
 ## Database schema
 
-Defined in `init.sql`, auto-applied by Docker on first run. Tables: `documents`, `document_tags` (key=value pairs), `cache` (key=value for caching e.g. embedding dimensions). Chunks are stored in dynamically created `chunks_{dim}` tables (e.g. `chunks_768`) with `embed_provider` and `embed_model` columns, created at startup based on the detected embedding dimension.
+Defined in `init.sql`, auto-applied by Docker on first run. Tables: `documents`, `document_tags` (plain string tags), `cache` (key=value for caching e.g. embedding dimensions). Chunks are stored in dynamically created `chunks_{dim}` tables (e.g. `chunks_768`) with `embed_provider` and `embed_model` columns, created at startup based on the detected embedding dimension.

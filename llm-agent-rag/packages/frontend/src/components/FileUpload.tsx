@@ -1,5 +1,8 @@
 import { useState, useRef } from "react";
 import { api } from "../api";
+import { TagInput } from "./TagInput";
+import { TagPill } from "./TagPill";
+import { Spinner } from "./Spinner";
 import styles from "./FileUpload.module.css";
 
 interface FileUploadProps {
@@ -7,29 +10,20 @@ interface FileUploadProps {
   onCancel: () => void;
 }
 
-interface TagRow {
-  key: string;
-  value: string;
-}
-
 export function FileUpload({ onSuccess, onCancel }: FileUploadProps) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [tagRows, setTagRows] = useState<TagRow[]>([]);
+  const [tagRows, setTagRows] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  function addTag() {
-    setTagRows([...tagRows, { key: "", value: "" }]);
+  function addTag(tag: string) {
+    const t = tag.trim();
+    if (!t || tagRows.includes(t)) return;
+    setTagRows([...tagRows, t]);
   }
 
-  function removeTag(i: number) {
-    setTagRows(tagRows.filter((_, idx) => idx !== i));
-  }
-
-  function updateTag(i: number, field: "key" | "value", val: string) {
-    const next = [...tagRows];
-    next[i] = { ...next[i], [field]: val };
-    setTagRows(next);
+  function removeTag(tag: string) {
+    setTagRows(tagRows.filter((t) => t !== tag));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -40,17 +34,10 @@ export function FileUpload({ onSuccess, onCancel }: FileUploadProps) {
       return;
     }
 
-    const tags: Record<string, string> = {};
-    for (const row of tagRows) {
-      if (row.key.trim()) {
-        tags[row.key.trim()] = row.value.trim();
-      }
-    }
-
     setLoading(true);
     setError("");
     try {
-      await api.uploadFile(file, tags);
+      await api.uploadFile(file, tagRows);
       onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -59,9 +46,12 @@ export function FileUpload({ onSuccess, onCancel }: FileUploadProps) {
     }
   }
 
+  const excludeSet = new Set(tagRows);
+
   return (
     <div className={styles.overlay}>
       <form className={styles.form} onSubmit={handleSubmit}>
+        {loading && <Spinner overlay />}
         <h3 className={styles.title}>Ingest File</h3>
 
         <label className={styles.label}>
@@ -76,34 +66,15 @@ export function FileUpload({ onSuccess, onCancel }: FileUploadProps) {
         </label>
 
         <div className={styles.tagsSection}>
-          <div className={styles.tagsHeader}>
-            <span className={styles.label}>Tags</span>
-            <button type="button" className={styles.addBtn} onClick={addTag} disabled={loading}>
-              + Add Tag
-            </button>
-          </div>
-          {tagRows.map((row, i) => (
-            <div key={i} className={styles.tagRow}>
-              <input
-                placeholder="key"
-                value={row.key}
-                onChange={(e) => updateTag(i, "key", e.target.value)}
-                className={styles.tagInput}
-                disabled={loading}
-              />
-              <span>=</span>
-              <input
-                placeholder="value"
-                value={row.value}
-                onChange={(e) => updateTag(i, "value", e.target.value)}
-                className={styles.tagInput}
-                disabled={loading}
-              />
-              <button type="button" className={styles.removeBtn} onClick={() => removeTag(i)} disabled={loading}>
-                x
-              </button>
+          <span className={styles.label}>Tags</span>
+          {tagRows.length > 0 && (
+            <div className={styles.tagPills}>
+              {tagRows.map((t) => (
+                <TagPill key={t} tag={t} onRemove={() => removeTag(t)} />
+              ))}
             </div>
-          ))}
+          )}
+          <TagInput onSelect={addTag} exclude={excludeSet} placeholder="Search or add tag..." />
         </div>
 
         {error && <p className={styles.error}>{error}</p>}

@@ -15,12 +15,11 @@ export interface Document {
   id: number;
   name: string;
   ingested_at: string;
-  tags: Record<string, string>;
+  tags: string[];
 }
 
 export interface Tag {
-  key: string;
-  value: string;
+  tag: string;
   doc_count: number;
 }
 
@@ -37,7 +36,7 @@ export interface IngestResult {
   filename: string;
   characters: number;
   chunks: number;
-  tags: Record<string, string>;
+  tags: string[];
 }
 
 // -- Query/Ask types --
@@ -58,14 +57,14 @@ export interface AskResponse {
 
 export interface IngestRequest {
   path?: string;
-  tags?: Record<string, string>;
+  tags?: string[];
   extensions?: string[];
 }
 
 export interface QueryRequest {
   query?: string;
   top_k?: number;
-  tags?: Record<string, string>;
+  tags?: string[];
 }
 
 export interface AgentRequest {
@@ -74,5 +73,5 @@ export interface AgentRequest {
 }
 
 export interface FindDocumentsRequest {
-  tags?: Record<string, string>;
+  tags?: string[];
 }

@@ -72,19 +72,25 @@ export async function insertDocument(name: string): Promise<number> {
   return row.id as number;
 }
 
+export async function deleteTag(
+  documentId: number,
+  tag: string,
+): Promise<void> {
+  const s = getSql();
+  await s`DELETE FROM document_tags WHERE document_id = ${documentId} AND tag = ${tag}`;
+}
+
 export async function insertTags(
   documentId: number,
-  tags: Record<string, string>,
+  tags: string[],
 ): Promise<void> {
-  const entries = Object.entries(tags);
-  if (entries.length === 0) return;
+  if (tags.length === 0) return;
   const s = getSql();
-  const values = entries.map(([key, value]) => ({
+  const values = tags.map((tag) => ({
     document_id: documentId,
-    key,
-    value,
+    tag,
   }));
-  await s`INSERT INTO document_tags ${s(values, "document_id", "key", "value")}`;
+  await s`INSERT INTO document_tags ${s(values, "document_id", "tag")} ON CONFLICT DO NOTHING`;
 }
 
 export async function insertChunks(
@@ -109,7 +115,7 @@ export async function insertChunks(
 export async function searchChunks(
   queryEmbedding: number[],
   topK: number = 5,
-  tags?: Record<string, string>,
+  tags?: string[],
 ): Promise<ChunkResult[]> {
   logger.debug({ topK, tags }, "searching chunks");
   const s = getSql();
@@ -117,17 +123,17 @@ export async function searchChunks(
   const vecStr = `[${queryEmbedding.join(",")}]`;
 
   let tagClauses = "";
-  const params: unknown[] = [vecStr, EMBED_PROVIDER, EMBED_MODEL, topK];
+  const params: (string | number)[] = [vecStr, EMBED_PROVIDER, EMBED_MODEL, topK];
   let paramIdx = 5;
 
-  if (tags && Object.keys(tags).length > 0) {
+  if (tags && tags.length > 0) {
     const parts: string[] = [];
-    for (const [key, value] of Object.entries(tags)) {
+    for (const tag of tags) {
       parts.push(
-        `EXISTS (SELECT 1 FROM document_tags t WHERE t.document_id = c.document_id AND t.key = $${paramIdx} AND t.value = $${paramIdx + 1})`,
+        `EXISTS (SELECT 1 FROM document_tags t WHERE t.document_id = c.document_id AND t.tag = $${paramIdx})`,
       );
-      params.push(key, value);
-      paramIdx += 2;
+      params.push(tag);
+      paramIdx += 1;
     }
     tagClauses = "AND " + parts.join(" AND ");
   }
@@ -180,10 +186,10 @@ export async function fetchContextChunks(
 export async function listDocuments(): Promise<Document[]> {
   const s = getSql();
   const rows = await s`
-    SELECT d.id, d.name, d.ingested_at, dt.key, dt.value
+    SELECT d.id, d.name, d.ingested_at, dt.tag
     FROM documents d
     LEFT JOIN document_tags dt ON dt.document_id = d.id
-    ORDER BY d.id
+    ORDER BY d.name, d.ingested_at
   `;
 
   const docs = new Map<number, Document>();
@@ -194,11 +200,11 @@ export async function listDocuments(): Promise<Document[]> {
         id: docId,
         name: r.name as string,
         ingested_at: String(r.ingested_at),
-        tags: {},
+        tags: [],
       });
     }
-    if (r.key != null) {
-      docs.get(docId)!.tags[r.key as string] = r.value as string;
+    if (r.tag != null) {
+      docs.get(docId)!.tags.push(r.tag as string);
     }
   }
   return Array.from(docs.values());
@@ -207,14 +213,29 @@ export async function listDocuments(): Promise<Document[]> {
 export async function listTags(): Promise<Tag[]> {
   const s = getSql();
   const rows = await s`
-    SELECT key, value, COUNT(*) AS doc_count
+    SELECT tag, COUNT(*) AS doc_count
     FROM document_tags
-    GROUP BY key, value
-    ORDER BY key, value
+    GROUP BY tag
+    ORDER BY tag
   `;
   return rows.map((r) => ({
-    key: r.key as string,
-    value: r.value as string,
+    tag: r.tag as string,
+    doc_count: Number(r.doc_count),
+  }));
+}
+
+export async function searchTags(query: string): Promise<Tag[]> {
+  const s = getSql();
+  const pattern = `%${query}%`;
+  const rows = await s`
+    SELECT tag, COUNT(*) AS doc_count
+    FROM document_tags
+    WHERE tag ILIKE ${pattern}
+    GROUP BY tag
+    ORDER BY tag
+  `;
+  return rows.map((r) => ({
+    tag: r.tag as string,
     doc_count: Number(r.doc_count),
   }));
 }
@@ -226,12 +247,12 @@ export async function deleteDocument(id: number): Promise<boolean> {
 }
 
 export async function findDocumentsByTags(
-  tags: Record<string, string>,
+  tags: string[],
 ): Promise<DocumentSummary[]> {
   const s = getSql();
-  const clauses = Object.entries(tags).map(
-    ([key, value]) =>
-      s`EXISTS (SELECT 1 FROM document_tags t WHERE t.document_id = d.id AND t.key = ${key} AND t.value = ${value})`,
+  const clauses = tags.map(
+    (tag) =>
+      s`EXISTS (SELECT 1 FROM document_tags t WHERE t.document_id = d.id AND t.tag = ${tag})`,
   );
   const where = clauses.reduce((a, b) => s`${a} AND ${b}`);
 
@@ -239,7 +260,7 @@ export async function findDocumentsByTags(
     SELECT d.id, d.name, d.ingested_at
     FROM documents d
     WHERE ${where}
-    ORDER BY d.name
+    ORDER BY d.name, d.ingested_at
   `;
   return rows.map((r) => ({
     id: r.id as number,

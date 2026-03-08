@@ -6,19 +6,9 @@ sessions api, frontend
 
 ctrl+enter should submit, e.g. on query page
 
-markdown runder in answer block
+markdown render in answer block
 
 json schemas
 
-tags should have optional values
-if we're doing tag CRUD and you type key=value then do it that way, if there's no = then it's a key-only tag
-
-
-
-
-was working on this, double check tags are working:
-
-crud on tags on a document
-
-query page should let me use tags to filter
-api to list all tags
+when displaying search results we present the filename and a chunk index number
+instead of the chunk index we should show the page range that chunk came from

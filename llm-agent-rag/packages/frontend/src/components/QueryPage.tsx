@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import type { ChunkResult, AskResponse, Tag } from "@rag/shared";
+import type { ChunkResult, AskResponse, Tag, DocumentSummary } from "@rag/shared";
 import { api } from "../api";
 import { TagFilter } from "./TagFilter";
+import { Spinner } from "./Spinner";
 import styles from "./QueryPage.module.css";
 
 type Mode = "search" | "ask" | "agent";
@@ -11,9 +12,10 @@ export function QueryPage() {
   const [query, setQuery] = useState("");
   const [topK, setTopK] = useState(5);
   const [tags, setTags] = useState<Tag[]>([]);
-  const [selectedTags, setSelectedTags] = useState<Record<string, string>>({});
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [matchingDocs, setMatchingDocs] = useState<DocumentSummary[]>([]);
 
   // Results
   const [chunks, setChunks] = useState<ChunkResult[] | null>(null);
@@ -23,6 +25,14 @@ export function QueryPage() {
   useEffect(() => {
     api.listTags().then(setTags);
   }, []);
+
+  useEffect(() => {
+    if (selectedTags.size === 0) {
+      setMatchingDocs([]);
+      return;
+    }
+    api.findDocuments([...selectedTags]).then(setMatchingDocs);
+  }, [selectedTags]);
 
   function clearResults() {
     setChunks(null);
@@ -39,7 +49,7 @@ export function QueryPage() {
     clearResults();
 
     try {
-      const tagFilter = Object.keys(selectedTags).length > 0 ? selectedTags : undefined;
+      const tagFilter = selectedTags.size > 0 ? [...selectedTags] : undefined;
 
       if (mode === "search") {
         const results = await api.query(query, topK, tagFilter);
@@ -59,7 +69,8 @@ export function QueryPage() {
   }
 
   return (
-    <div>
+    <div className={styles.container}>
+      {loading && <Spinner overlay />}
       <h2 className={styles.heading}>Query</h2>
 
       <div className={styles.modes}>
@@ -71,6 +82,7 @@ export function QueryPage() {
               value={m}
               checked={mode === m}
               onChange={() => { setMode(m); clearResults(); }}
+              disabled={loading}
             />
             {m.charAt(0).toUpperCase() + m.slice(1)}
           </label>
@@ -102,6 +114,19 @@ export function QueryPage() {
               />
             </label>
             <TagFilter tags={tags} selected={selectedTags} onChange={setSelectedTags} />
+          </div>
+        )}
+
+        {matchingDocs.length > 0 && (
+          <div className={styles.matchingDocs}>
+            <div className={styles.matchingDocsLabel}>
+              Searching {matchingDocs.length} document{matchingDocs.length !== 1 ? "s" : ""}:
+            </div>
+            <ul className={styles.matchingDocsList}>
+              {matchingDocs.map((d) => (
+                <li key={d.id}>{d.name}</li>
+              ))}
+            </ul>
           </div>
         )}
 

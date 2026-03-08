@@ -6,17 +6,8 @@ import { initConfig } from "./config.js";
 import { closeSql } from "./db.js";
 import { print, printError, setSilent } from "./output.js";
 
-function parseTags(tagStrings: string[]): Record<string, string> {
-  const tags: Record<string, string> = {};
-  for (const t of tagStrings) {
-    if (!t.includes("=")) {
-      printError(`Tag must be key=value, got: ${t}`);
-      process.exit(1);
-    }
-    const [k, ...rest] = t.split("=");
-    tags[k.trim()] = rest.join("=").trim();
-  }
-  return tags;
+function parseTags(tagStrings: string[]): string[] {
+  return tagStrings.map((t) => t.trim()).filter(Boolean);
 }
 
 const program = new Command();
@@ -34,7 +25,7 @@ program
   .command("ingest")
   .description("Ingest a file (txt or pdf) into the vector store")
   .argument("<filepath>", "Path to file")
-  .option("-t, --tag <tags...>", "Tag as key=value (repeatable)")
+  .option("-t, --tag <tags...>", "Tag string (repeatable)")
   .action(async (filepath: string, opts: { tag?: string[] }) => {
     const { ingestFile } = await import("./ingest.js");
     const tags = parseTags(opts.tag ?? []);
@@ -47,7 +38,7 @@ program
   .command("ingest-dir")
   .description("Ingest all matching files in a directory")
   .argument("<directory>", "Directory path")
-  .option("-t, --tag <tags...>", "Tag as key=value (repeatable)")
+  .option("-t, --tag <tags...>", "Tag string (repeatable)")
   .option("--ext <extensions...>", "File extensions to include", [".txt", ".pdf"])
   .action(
     async (
@@ -89,8 +80,7 @@ program
 
       print(`Found ${files.length} file(s) to ingest`);
       for (const f of files) {
-        const perFileTags = { ...tags, filename: basename(f) };
-        await ingestFile(f, perFileTags);
+        await ingestFile(f, tags);
       }
       await closeSql();
     },
@@ -102,7 +92,7 @@ program
   .command("query")
   .description("Query the vector store with natural language")
   .argument("<query>", "Search query")
-  .option("-t, --tag <tags...>", "Filter by tag key=value")
+  .option("-t, --tag <tags...>", "Filter by tag")
   .option("-k, --top-k <number>", "Number of results", "5")
   .option("--raw", "Return raw chunks without LLM synthesis")
   .action(
@@ -110,17 +100,17 @@ program
       query: string,
       opts: { tag?: string[]; topK: string; raw?: boolean },
     ) => {
-      const tagDict =
+      const tagList =
         opts.tag && opts.tag.length > 0 ? parseTags(opts.tag) : undefined;
       const topK = parseInt(opts.topK, 10);
 
       if (opts.raw) {
         const { retrieve } = await import("./query.js");
-        const results = await retrieve(query, topK, tagDict);
+        const results = await retrieve(query, topK, tagList);
         printResultsTable(results);
       } else {
         const { ask } = await import("./query.js");
-        const result = await ask(query, topK, tagDict);
+        const result = await ask(query, topK, tagList);
         print(`\n${chalk.bold("Answer:")}\n${result.answer}\n`);
         if (result.sources.length > 0) {
           print(chalk.dim("Sources:"));
@@ -167,10 +157,7 @@ program
       head: ["ID", "Name", "Ingested At", "Tags"],
     });
     for (const d of docs) {
-      const tagStr = Object.entries(d.tags)
-        .map(([k, v]) => `${k}=${v}`)
-        .join(", ");
-      table.push([String(d.id), d.name, d.ingested_at, tagStr]);
+      table.push([String(d.id), d.name, d.ingested_at, d.tags.join(", ")]);
     }
     print(table.toString());
     await close();
@@ -190,10 +177,10 @@ program
     }
 
     const table = new Table({
-      head: ["Key", "Value", "Documents"],
+      head: ["Tag", "Documents"],
     });
     for (const t of tagList) {
-      table.push([t.key, t.value, String(t.doc_count)]);
+      table.push([t.tag, String(t.doc_count)]);
     }
     print(table.toString());
     await close();
@@ -202,11 +189,11 @@ program
 program
   .command("find")
   .description("Find documents matching all given tags (AND logic)")
-  .requiredOption("-t, --tag <tags...>", "Filter by tag key=value (repeatable)")
+  .requiredOption("-t, --tag <tags...>", "Filter by tag (repeatable)")
   .action(async (opts: { tag: string[] }) => {
     const { findDocumentsByTags, closeSql: close } = await import("./db.js");
-    const tagDict = parseTags(opts.tag);
-    const docs = await findDocumentsByTags(tagDict);
+    const tags = parseTags(opts.tag);
+    const docs = await findDocumentsByTags(tags);
 
     if (docs.length === 0) {
       print(chalk.yellow("No documents match the given tags."));

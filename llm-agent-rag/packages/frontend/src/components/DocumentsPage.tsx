@@ -2,15 +2,22 @@ import { useState, useEffect, useCallback } from "react";
 import type { Document, Tag } from "@rag/shared";
 import { api } from "../api";
 import { TagFilter } from "./TagFilter";
+import { TagPill } from "./TagPill";
 import { FileUpload } from "./FileUpload";
+import { AddTagModal } from "./AddTagModal";
+import { ConfirmModal } from "./ConfirmModal";
+import { Spinner } from "./Spinner";
 import styles from "./DocumentsPage.module.css";
 
 export function DocumentsPage() {
   const [docs, setDocs] = useState<Document[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
-  const [selectedTags, setSelectedTags] = useState<Record<string, string>>({});
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [showUpload, setShowUpload] = useState(false);
+  const [editTagDocId, setEditTagDocId] = useState<number | null>(null);
+  const [deleteDoc, setDeleteDoc] = useState<{ id: number; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -27,19 +34,23 @@ export function DocumentsPage() {
     refresh();
   }, [refresh]);
 
-  async function handleDelete(id: number, name: string) {
-    if (!confirm(`Delete "${name}" and all its chunks?`)) return;
-    await api.deleteDocument(id);
-    setDocs((prev) => prev.filter((d) => d.id !== id));
-    // Refresh tags since counts may have changed
-    api.listTags().then(setTags);
+  async function handleDelete(id: number) {
+    setDeleting(true);
+    try {
+      await api.deleteDocument(id);
+      setDocs((prev) => prev.filter((d) => d.id !== id));
+      setDeleteDoc(null);
+      api.listTags().then(setTags);
+    } finally {
+      setDeleting(false);
+    }
   }
 
-  const filtered = docs.filter((doc) =>
-    Object.entries(selectedTags).every(
-      ([k, v]) => doc.tags[k] === v,
-    ),
-  );
+  const filtered = docs
+    .filter((doc) => [...selectedTags].every((t) => doc.tags.includes(t)))
+    .sort((a, b) => a.name.localeCompare(b.name) || new Date(a.ingested_at).getTime() - new Date(b.ingested_at).getTime());
+
+  const editTagDoc = editTagDocId !== null ? docs.find((d) => d.id === editTagDocId) : null;
 
   return (
     <div>
@@ -53,7 +64,7 @@ export function DocumentsPage() {
       <TagFilter tags={tags} selected={selectedTags} onChange={setSelectedTags} />
 
       {loading ? (
-        <p className={styles.info}>Loading...</p>
+        <div className={styles.spinnerWrap}><Spinner /></div>
       ) : filtered.length === 0 ? (
         <p className={styles.info}>No documents found.</p>
       ) : (
@@ -75,25 +86,70 @@ export function DocumentsPage() {
                 </td>
                 <td>
                   <div className={styles.tagList}>
-                    {Object.entries(doc.tags).map(([k, v]) => (
-                      <span key={k} className={styles.badge}>
-                        {k}={v}
-                      </span>
+                    {[...doc.tags].sort((a, b) => a.localeCompare(b)).map((t) => (
+                      <TagPill key={t} tag={t} />
                     ))}
                   </div>
                 </td>
                 <td>
-                  <button
-                    className={styles.deleteBtn}
-                    onClick={() => handleDelete(doc.id, doc.name)}
-                  >
-                    Delete
-                  </button>
+                  <div className={styles.actions}>
+                    <button
+                      className={styles.tagsBtn}
+                      onClick={() => setEditTagDocId(doc.id)}
+                    >
+                      Tags
+                    </button>
+                    <button
+                      className={styles.deleteBtn}
+                      onClick={() => setDeleteDoc({ id: doc.id, name: doc.name })}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      )}
+
+      {editTagDoc && (
+        <AddTagModal
+          tags={editTagDoc.tags}
+          onAddTag={async (tag) => {
+            await api.addTag(editTagDoc.id, tag);
+            setDocs((prev) =>
+              prev.map((d) =>
+                d.id === editTagDoc.id
+                  ? { ...d, tags: [...d.tags, tag] }
+                  : d,
+              ),
+            );
+            api.listTags().then(setTags);
+          }}
+          onDeleteTag={async (tag) => {
+            await api.deleteTag(editTagDoc.id, tag);
+            setDocs((prev) =>
+              prev.map((d) =>
+                d.id === editTagDoc.id
+                  ? { ...d, tags: d.tags.filter((t) => t !== tag) }
+                  : d,
+              ),
+            );
+            api.listTags().then(setTags);
+          }}
+          onClose={() => setEditTagDocId(null)}
+        />
+      )}
+
+      {deleteDoc && (
+        <ConfirmModal
+          title="Delete Document"
+          message={`Delete "${deleteDoc.name}" and all its chunks?`}
+          loading={deleting}
+          onConfirm={() => handleDelete(deleteDoc.id)}
+          onCancel={() => setDeleteDoc(null)}
+        />
       )}
 
       {showUpload && (
