@@ -1,0 +1,13 @@
+{
+  "$id": "agent-response.json",
+  "type": "object",
+  "required": ["conversation_id", "messages"],
+  "additionalProperties": false,
+  "properties": {
+    "conversation_id": { "type": "integer" },
+    "messages": {
+      "type": "array",
+      "items": { "$ref": "conversation-message.json" }
+    }
+  }
+}

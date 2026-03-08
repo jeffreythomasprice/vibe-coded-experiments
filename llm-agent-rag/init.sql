@@ -22,3 +22,21 @@ CREATE TABLE cache (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- Conversations table: agent chat conversations
+CREATE TABLE conversations (
+    id         SERIAL PRIMARY KEY,
+    title      TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE conversation_messages (
+    id              SERIAL PRIMARY KEY,
+    conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    role            TEXT NOT NULL,
+    content         TEXT NOT NULL,
+    tool_info       JSONB,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_conv_messages_conv ON conversation_messages (conversation_id, created_at);

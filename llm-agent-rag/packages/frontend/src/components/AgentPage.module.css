@@ -1,0 +1,258 @@
+.wrapper {
+  display: flex;
+  height: calc(100vh - 80px);
+  margin: -1.5rem -2rem -2rem;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  background: #f9fafb;
+}
+
+.sidebarHeader {
+  padding: 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.newChatBtn {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.newChatBtn:hover {
+  background: #f3f4f6;
+}
+
+.convList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.convItem {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: #374151;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+}
+
+.convItem:hover {
+  background: #e5e7eb;
+}
+
+.convItemActive {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.convTitle {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.convDelete {
+  opacity: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #9ca3af;
+  font-size: 0.9rem;
+  padding: 0 0.25rem;
+  line-height: 1;
+}
+
+.convItem:hover .convDelete {
+  opacity: 1;
+}
+
+.convDelete:hover {
+  color: #ef4444;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.emptyState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #9ca3af;
+  font-size: 0.95rem;
+}
+
+.msgUser {
+  align-self: flex-end;
+  max-width: 70%;
+  background: #2563eb;
+  color: #fff;
+  padding: 0.625rem 0.875rem;
+  border-radius: 12px 12px 2px 12px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.msgAssistant {
+  align-self: flex-start;
+  max-width: 80%;
+  background: #f3f4f6;
+  padding: 0.75rem 1rem;
+  border-radius: 12px 12px 12px 2px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.msgAssistant h1,
+.msgAssistant h2,
+.msgAssistant h3,
+.msgAssistant h4 {
+  margin: 0.75rem 0 0.375rem;
+  line-height: 1.3;
+}
+
+.msgAssistant h1:first-child,
+.msgAssistant h2:first-child,
+.msgAssistant h3:first-child,
+.msgAssistant h4:first-child {
+  margin-top: 0;
+}
+
+.msgAssistant p {
+  margin: 0 0 0.5rem;
+}
+
+.msgAssistant p:last-child {
+  margin-bottom: 0;
+}
+
+.msgAssistant ul,
+.msgAssistant ol {
+  margin: 0 0 0.5rem;
+  padding-left: 1.5rem;
+}
+
+.msgAssistant code {
+  background: #e5e7eb;
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  font-size: 0.85em;
+}
+
+.msgAssistant pre {
+  background: #1f2937;
+  color: #f9fafb;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0 0 0.5rem;
+}
+
+.msgAssistant pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+.msgTool {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 0.25rem 0.625rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.toolIcon {
+  font-size: 0.7rem;
+}
+
+.inputBar {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.input {
+  flex: 1;
+  padding: 0.625rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  resize: none;
+  min-height: 42px;
+  max-height: 120px;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.sendBtn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  align-self: flex-end;
+}
+
+.sendBtn:hover {
+  background: #1d4ed8;
+}
+
+.sendBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error {
+  color: #ef4444;
+  font-size: 0.85rem;
+  padding: 0 1.5rem 0.5rem;
+}

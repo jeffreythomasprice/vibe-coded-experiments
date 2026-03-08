@@ -1,15 +1,11 @@
 import { useState, useEffect } from "react";
-import type { ChunkResult, AskResponse, Tag, DocumentSummary } from "@rag/shared";
+import type { ChunkResult, Tag, DocumentSummary } from "@rag/shared";
 import { api } from "../api";
-import Markdown from "react-markdown";
 import { TagFilter } from "./TagFilter";
 import { Spinner } from "./Spinner";
 import styles from "./QueryPage.module.css";
 
-type Mode = "search" | "ask" | "agent";
-
 export function QueryPage() {
-  const [mode, setMode] = useState<Mode>("search");
   const [query, setQuery] = useState("");
   const [topK, setTopK] = useState(5);
   const [tags, setTags] = useState<Tag[]>([]);
@@ -17,11 +13,7 @@ export function QueryPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [matchingDocs, setMatchingDocs] = useState<DocumentSummary[]>([]);
-
-  // Results
   const [chunks, setChunks] = useState<ChunkResult[] | null>(null);
-  const [askResult, setAskResult] = useState<AskResponse | null>(null);
-  const [agentAnswer, setAgentAnswer] = useState<string | null>(null);
 
   useEffect(() => {
     api.listTags().then(setTags);
@@ -35,33 +27,18 @@ export function QueryPage() {
     api.findDocuments([...selectedTags]).then(setMatchingDocs);
   }, [selectedTags]);
 
-  function clearResults() {
-    setChunks(null);
-    setAskResult(null);
-    setAgentAnswer(null);
-    setError("");
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!query.trim()) return;
 
     setLoading(true);
-    clearResults();
+    setChunks(null);
+    setError("");
 
     try {
       const tagFilter = selectedTags.size > 0 ? [...selectedTags] : undefined;
-
-      if (mode === "search") {
-        const results = await api.query(query, topK, tagFilter);
-        setChunks(results);
-      } else if (mode === "ask") {
-        const result = await api.ask(query, topK, tagFilter);
-        setAskResult(result);
-      } else {
-        const result = await api.agent(query);
-        setAgentAnswer(result.answer);
-      }
+      const results = await api.query(query, topK, tagFilter);
+      setChunks(results);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -74,28 +51,12 @@ export function QueryPage() {
       {loading && <Spinner overlay />}
       <h2 className={styles.heading}>Query</h2>
 
-      <div className={styles.modes}>
-        {(["search", "ask", "agent"] as Mode[]).map((m) => (
-          <label key={m} className={styles.modeLabel}>
-            <input
-              type="radio"
-              name="mode"
-              value={m}
-              checked={mode === m}
-              onChange={() => { setMode(m); clearResults(); }}
-              disabled={loading}
-            />
-            {m.charAt(0).toUpperCase() + m.slice(1)}
-          </label>
-        ))}
-      </div>
-
       <form onSubmit={handleSubmit}>
         <textarea
           className={styles.textarea}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={mode === "agent" ? "Enter a message..." : "Enter your query..."}
+          placeholder="Enter your query..."
           rows={3}
           disabled={loading}
           onKeyDown={(e) => {
@@ -106,23 +67,21 @@ export function QueryPage() {
           }}
         />
 
-        {mode !== "agent" && (
-          <div className={styles.options}>
-            <label className={styles.topKLabel}>
-              Top K:
-              <input
-                type="number"
-                min={1}
-                max={50}
-                value={topK}
-                onChange={(e) => setTopK(parseInt(e.target.value) || 5)}
-                className={styles.topKInput}
-                disabled={loading}
-              />
-            </label>
-            <TagFilter tags={tags} selected={selectedTags} onChange={setSelectedTags} />
-          </div>
-        )}
+        <div className={styles.options}>
+          <label className={styles.topKLabel}>
+            Top K:
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={topK}
+              onChange={(e) => setTopK(parseInt(e.target.value) || 5)}
+              className={styles.topKInput}
+              disabled={loading}
+            />
+          </label>
+          <TagFilter tags={tags} selected={selectedTags} onChange={setSelectedTags} />
+        </div>
 
         {matchingDocs.length > 0 && (
           <div className={styles.matchingDocs}>
@@ -144,7 +103,6 @@ export function QueryPage() {
 
       {error && <p className={styles.error}>{error}</p>}
 
-      {/* Search results */}
       {chunks && (
         <div className={styles.results}>
           <h3>Results ({chunks.length} chunks)</h3>
@@ -178,37 +136,6 @@ export function QueryPage() {
               ))}
             </tbody>
           </table>
-        </div>
-      )}
-
-      {/* Ask results */}
-      {askResult && (
-        <div className={styles.results}>
-          <h3>Answer</h3>
-          <div className={styles.answer}><Markdown>{askResult.answer}</Markdown></div>
-          {askResult.sources.length > 0 && (
-            <>
-              <h4>Sources</h4>
-              <ul className={styles.sources}>
-                {askResult.sources.map((s, i) => (
-                  <li key={i}>
-                    <strong>{s.document}</strong> (chunk {s.chunk_index}
-                    {s.page_start ? s.page_start === s.page_end ? `, page ${s.page_start}` : `, pages ${s.page_start}-${s.page_end}` : ""}
-                    , {(s.similarity * 100).toFixed(1)}%)
-                    <p className={styles.excerpt}>{s.excerpt}</p>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Agent results */}
-      {agentAnswer !== null && (
-        <div className={styles.results}>
-          <h3>Answer</h3>
-          <div className={styles.answer}><Markdown>{agentAnswer}</Markdown></div>
         </div>
       )}
     </div>

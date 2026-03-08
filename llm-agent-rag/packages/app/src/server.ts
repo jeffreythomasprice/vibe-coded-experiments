@@ -19,9 +19,9 @@ import logger from "./logger.js";
 import { validateBody } from "./validate.js";
 
 import { ingestFile } from "./ingest.js";
-import { retrieve, ask } from "./query.js";
+import { retrieve } from "./query.js";
 import { agentChat } from "./agent.js";
-import { listDocuments, listTags, searchTags, findDocumentsByTags, deleteDocument, deleteTag, insertTags } from "./db.js";
+import { listDocuments, listTags, searchTags, findDocumentsByTags, deleteDocument, deleteTag, insertTags, listConversations, getConversation, getConversationMessages, deleteConversation } from "./db.js";
 
 const app = new Koa();
 const router = new Router();
@@ -136,18 +136,11 @@ router.post("/api/query", validateBody(validateQueryRequest), async (ctx) => {
   ctx.body = results;
 });
 
-router.post("/api/ask", validateBody(validateQueryRequest), async (ctx) => {
-  const { query, top_k, tags } = ctx.request.body as QueryRequest;
-
-  const result = await ask(query, top_k ?? 5, tags);
-  ctx.body = result;
-});
-
 router.post("/api/agent", validateBody(validateAgentRequest), async (ctx) => {
-  const { message, system_prompt } = ctx.request.body as AgentRequest;
+  const { message, conversation_id, system_prompt } = ctx.request.body as AgentRequest;
 
-  const answer = await agentChat(message, system_prompt);
-  ctx.body = { answer };
+  const result = await agentChat(message, conversation_id, system_prompt);
+  ctx.body = result;
 });
 
 router.get("/api/documents", async (ctx) => {
@@ -215,6 +208,44 @@ router.delete("/api/documents/:id/tags/:tag", async (ctx) => {
   }
 
   await deleteTag(id, decodeURIComponent(ctx.params.tag));
+  ctx.body = { ok: true };
+});
+
+router.get("/api/conversations", async (ctx) => {
+  const conversations = await listConversations();
+  ctx.body = conversations;
+});
+
+router.get("/api/conversations/:id", async (ctx) => {
+  const id = parseInt(ctx.params.id, 10);
+  if (isNaN(id)) {
+    ctx.status = 400;
+    ctx.body = { error: "invalid conversation id" };
+    return;
+  }
+  const conversation = await getConversation(id);
+  if (!conversation) {
+    ctx.status = 404;
+    ctx.body = { error: "conversation not found" };
+    return;
+  }
+  const messages = await getConversationMessages(id);
+  ctx.body = { ...conversation, messages };
+});
+
+router.delete("/api/conversations/:id", async (ctx) => {
+  const id = parseInt(ctx.params.id, 10);
+  if (isNaN(id)) {
+    ctx.status = 400;
+    ctx.body = { error: "invalid conversation id" };
+    return;
+  }
+  const deleted = await deleteConversation(id);
+  if (!deleted) {
+    ctx.status = 404;
+    ctx.body = { error: "conversation not found" };
+    return;
+  }
   ctx.body = { ok: true };
 });
 

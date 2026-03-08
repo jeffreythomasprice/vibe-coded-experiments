@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { DocumentsPage } from "./DocumentsPage";
 import { QueryPage } from "./QueryPage";
+import { AgentPage } from "./AgentPage";
 import styles from "./Layout.module.css";
 
-type Tab = "documents" | "query";
+type Tab = "documents" | "query" | "agent";
 
 export function Layout() {
   const [tab, setTab] = useState<Tab>("documents");
@@ -25,10 +26,18 @@ export function Layout() {
           >
             Query
           </button>
+          <button
+            className={`${styles.tab} ${tab === "agent" ? styles.active : ""}`}
+            onClick={() => setTab("agent")}
+          >
+            Agent
+          </button>
         </div>
       </nav>
       <main>
-        {tab === "documents" ? <DocumentsPage /> : <QueryPage />}
+        {tab === "documents" && <DocumentsPage />}
+        {tab === "query" && <QueryPage />}
+        {tab === "agent" && <AgentPage />}
       </main>
     </div>
   );

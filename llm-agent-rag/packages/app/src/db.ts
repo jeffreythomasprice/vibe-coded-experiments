@@ -1,9 +1,9 @@
 import postgres from "postgres";
-import type { ChunkResult, Document, Tag, DocumentSummary } from "@rag/shared";
+import type { ChunkResult, Document, Tag, DocumentSummary, ConversationMessage, Conversation } from "@rag/shared";
 import logger from "./logger.js";
 import { DB_DSN, EMBED_DIM, EMBED_PROVIDER, EMBED_MODEL } from "./config.js";
 
-export type { ChunkResult, Document, Tag, DocumentSummary };
+export type { ChunkResult, Document, Tag, DocumentSummary, ConversationMessage, Conversation };
 
 let sql: ReturnType<typeof postgres>;
 
@@ -248,6 +248,82 @@ export async function searchTags(query: string): Promise<Tag[]> {
 export async function deleteDocument(id: number): Promise<boolean> {
   const s = getSql();
   const rows = await s`DELETE FROM documents WHERE id = ${id} RETURNING id`;
+  return rows.length > 0;
+}
+
+// -- Conversation helpers --
+
+export async function createConversation(title: string | null): Promise<number> {
+  const s = getSql();
+  const [row] = await s`INSERT INTO conversations (title) VALUES (${title}) RETURNING id`;
+  return row.id as number;
+}
+
+export async function getConversation(id: number): Promise<Conversation | null> {
+  const s = getSql();
+  const rows = await s`SELECT id, title, created_at, updated_at FROM conversations WHERE id = ${id}`;
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  return { id: r.id as number, title: r.title as string | null, created_at: String(r.created_at), updated_at: String(r.updated_at) };
+}
+
+export async function getConversationMessages(conversationId: number): Promise<ConversationMessage[]> {
+  const s = getSql();
+  const rows = await s`
+    SELECT id, role, content, tool_info, created_at
+    FROM conversation_messages
+    WHERE conversation_id = ${conversationId}
+    ORDER BY created_at, id
+  `;
+  return rows.map((r) => ({
+    id: r.id as number,
+    role: r.role as string,
+    content: r.content as string,
+    tool_info: r.tool_info ?? undefined,
+    created_at: String(r.created_at),
+  }));
+}
+
+export async function insertConversationMessage(
+  conversationId: number,
+  role: string,
+  content: string,
+  toolInfo?: unknown,
+): Promise<ConversationMessage> {
+  const s = getSql();
+  const [row] = await s`
+    INSERT INTO conversation_messages (conversation_id, role, content, tool_info)
+    VALUES (${conversationId}, ${role}, ${content}, ${toolInfo ? s.json(toolInfo as never) : null})
+    RETURNING id, role, content, tool_info, created_at
+  `;
+  return {
+    id: row.id as number,
+    role: row.role as string,
+    content: row.content as string,
+    tool_info: row.tool_info ?? undefined,
+    created_at: String(row.created_at),
+  };
+}
+
+export async function updateConversationTimestamp(id: number): Promise<void> {
+  const s = getSql();
+  await s`UPDATE conversations SET updated_at = now() WHERE id = ${id}`;
+}
+
+export async function listConversations(): Promise<Conversation[]> {
+  const s = getSql();
+  const rows = await s`SELECT id, title, created_at, updated_at FROM conversations ORDER BY updated_at DESC`;
+  return rows.map((r) => ({
+    id: r.id as number,
+    title: r.title as string | null,
+    created_at: String(r.created_at),
+    updated_at: String(r.updated_at),
+  }));
+}
+
+export async function deleteConversation(id: number): Promise<boolean> {
+  const s = getSql();
+  const rows = await s`DELETE FROM conversations WHERE id = ${id} RETURNING id`;
   return rows.length > 0;
 }
 

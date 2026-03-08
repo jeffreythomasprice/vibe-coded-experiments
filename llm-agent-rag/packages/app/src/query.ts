@@ -1,8 +1,6 @@
-import { createOllama } from "ollama-ai-provider-v2";
-import { generateText } from "ai";
-import type { ChunkResult, AskResponse } from "@rag/shared";
+import type { ChunkResult } from "@rag/shared";
 import logger from "./logger.js";
-import { CHAT_MODEL, CONTEXT_WINDOW, OLLAMA_BASE_URL } from "./config.js";
+import { CONTEXT_WINDOW } from "./config.js";
 import { fetchContextChunks, searchChunks } from "./db.js";
 import { embedSingle } from "./embeddings.js";
 
@@ -105,56 +103,4 @@ export async function retrieve(
   const results = await searchChunks(queryVec, topK, tags);
   logger.debug({ results: results.length }, "chunks retrieved");
   return expandResultsWithContext(results, CONTEXT_WINDOW);
-}
-
-export async function ask(
-  query: string,
-  topK: number = 5,
-  tags?: string[],
-): Promise<AskResponse> {
-  const results = await retrieve(query, topK, tags);
-
-  if (results.length === 0) {
-    return { answer: "No relevant documents found.", sources: [] };
-  }
-
-  const contextBlock = results
-    .map(
-      (r) => {
-        const pageInfo = r.page_start
-          ? r.page_start === r.page_end
-            ? `, page ${r.page_start}`
-            : `, pages ${r.page_start}-${r.page_end}`
-          : "";
-        return `[Source: ${r.document_name}, chunk ${r.chunk_index}${pageInfo}, similarity ${r.similarity.toFixed(3)}]\n${r.content}`;
-      },
-    )
-    .join("\n\n---\n\n");
-
-  const provider = createOllama({ baseURL: `${OLLAMA_BASE_URL}/api` });
-
-  logger.info({ query, sources: results.length }, "generating LLM answer");
-  const { text } = await generateText({
-    model: provider.languageModel(CHAT_MODEL),
-    system:
-      "You are a helpful assistant. Answer the user's question using ONLY " +
-      "the provided context. If the context doesn't contain enough information, " +
-      "say so. Cite the source document names when possible.",
-    prompt: `Context:\n${contextBlock}\n\nQuestion: ${query}`,
-  });
-
-  return {
-    answer: text,
-    sources: results.map((r) => ({
-      document: r.document_name,
-      chunk_index: r.chunk_index,
-      similarity: r.similarity,
-      excerpt:
-        r.content.length > 200
-          ? r.content.slice(0, 200) + "..."
-          : r.content,
-      page_start: r.page_start ?? null,
-      page_end: r.page_end ?? null,
-    })),
-  };
 }

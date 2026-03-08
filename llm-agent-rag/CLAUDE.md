@@ -18,8 +18,7 @@ bun install                                             # Install dependencies
 # Usage (all commands via index.ts)
 bun run packages/app/src/index.ts ingest <file> -t "my-tag"                 # Ingest a single file
 bun run packages/app/src/index.ts ingest-dir <dir> --ext .pdf --ext .txt   # Ingest a directory
-bun run packages/app/src/index.ts query "question" --raw                   # Raw vector search (no LLM)
-bun run packages/app/src/index.ts query "question"                         # Vector search + LLM synthesis
+bun run packages/app/src/index.ts query "question"                         # Semantic vector search
 bun run packages/app/src/index.ts agent "question"                         # Agentic mode (LLM decides searches)
 bun run packages/app/src/index.ts documents                                # List ingested documents
 bun run packages/app/src/index.ts tags                                     # List all tags
@@ -56,7 +55,7 @@ Uses Vercel AI SDK with `ollama-ai-provider-v2` for LLM/embedding calls, and `@m
 | `embeddings.ts` | Vercel AI SDK `embedMany`/`embed` with `ollama-ai-provider-v2` for Ollama embedding calls |
 | `db.ts` | `postgres` (porsager): dynamic `chunks_{dim}` tables with provider/model columns, cache helpers, cosine similarity search, context window fetch |
 | `ingest.ts` | Pipeline: extract → chunk (Mastra MDocument) → embed (batched) → store |
-| `query.ts` | `retrieve()` (vector search + context expansion) and `ask()` (retrieve + LLM synthesis via `generateText`) |
+| `query.ts` | `retrieve()` (vector search + context expansion) |
 | `agent.ts` | Vercel AI SDK `generateText` with `tool()` and `stepCountIs(10)` for agentic tool-calling loop |
 | `index.ts` | Commander CLI with `ingest`, `ingest-dir`, `query`, `agent`, `documents`, `tags`, `find`, `serve` commands |
 | `server.ts` | Koa HTTP API server wrapping CLI functionality |
@@ -64,7 +63,7 @@ Uses Vercel AI SDK with `ollama-ai-provider-v2` for LLM/embedding calls, and `@m
 | `output.ts` | CLI output formatting helpers |
 
 **Shared package** (`packages/shared/src/`):
-- `types.ts` — shared interfaces: `ChunkResult`, `Document`, `Tag`, `DocumentSummary`, `IngestResult`, `AskSource`, `AskResponse`, API request types. Tags are plain strings (not key-value pairs).
+- `types.ts` — shared interfaces: `ChunkResult`, `Document`, `Tag`, `DocumentSummary`, `IngestResult`, API request types. Tags are plain strings (not key-value pairs).
 - `client.ts` — `RagClient` class: typed fetch wrapper used by the frontend to call all API endpoints
 
 **HTTP API endpoints** (served by `server.ts` via `serve` command):
@@ -73,8 +72,7 @@ Uses Vercel AI SDK with `ollama-ai-provider-v2` for LLM/embedding calls, and `@m
 |--------|----------|-------------|
 | POST | `/api/ingest` | Ingest a file or directory (body: `{ path, tags?, extensions? }`) |
 | POST | `/api/ingest/upload` | Upload and ingest a file (multipart `file` + optional `tags` JSON string) |
-| POST | `/api/query` | Raw vector search (body: `{ query, top_k?, tags? }`) |
-| POST | `/api/ask` | Vector search + LLM synthesis (body: `{ query, top_k?, tags? }`) |
+| POST | `/api/query` | Semantic vector search (body: `{ query, top_k?, tags? }`) |
 | POST | `/api/agent` | Agentic mode (body: `{ message, system_prompt? }`) |
 | GET | `/api/documents` | List all ingested documents |
 | DELETE | `/api/documents/:id` | Delete a document and all its chunks |

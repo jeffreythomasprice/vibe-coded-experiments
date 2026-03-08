@@ -4,7 +4,9 @@ import type {
   DocumentSummary,
   IngestResult,
   ChunkResult,
-  AskResponse,
+  AgentResponse,
+  Conversation,
+  ConversationMessage,
 } from "./generated/types.js";
 
 export class RagClient {
@@ -80,11 +82,25 @@ export class RagClient {
     return this.jsonPost<ChunkResult[]>("/api/query", { query, top_k: topK, tags });
   }
 
-  async ask(query: string, topK?: number, tags?: string[]): Promise<AskResponse> {
-    return this.jsonPost<AskResponse>("/api/ask", { query, top_k: topK, tags });
+  async agent(message: string, conversationId?: number | null, systemPrompt?: string): Promise<AgentResponse> {
+    return this.jsonPost<AgentResponse>("/api/agent", {
+      message,
+      conversation_id: conversationId ?? null,
+      system_prompt: systemPrompt,
+    });
   }
 
-  async agent(message: string, systemPrompt?: string): Promise<{ answer: string }> {
-    return this.jsonPost<{ answer: string }>("/api/agent", { message, system_prompt: systemPrompt });
+  async listConversations(): Promise<Conversation[]> {
+    return this.request<Conversation[]>("/api/conversations");
+  }
+
+  async getConversation(id: number): Promise<Conversation & { messages: ConversationMessage[] }> {
+    return this.request<Conversation & { messages: ConversationMessage[] }>(`/api/conversations/${id}`);
+  }
+
+  async deleteConversation(id: number): Promise<{ ok: boolean }> {
+    return this.request<{ ok: boolean }>(`/api/conversations/${id}`, {
+      method: "DELETE",
+    });
   }
 }

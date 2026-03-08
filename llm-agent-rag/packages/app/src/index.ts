@@ -90,37 +90,22 @@ program
 
 program
   .command("query")
-  .description("Query the vector store with natural language")
+  .description("Query the vector store with semantic search")
   .argument("<query>", "Search query")
   .option("-t, --tag <tags...>", "Filter by tag")
   .option("-k, --top-k <number>", "Number of results", "5")
-  .option("--raw", "Return raw chunks without LLM synthesis")
   .action(
     async (
       query: string,
-      opts: { tag?: string[]; topK: string; raw?: boolean },
+      opts: { tag?: string[]; topK: string },
     ) => {
       const tagList =
         opts.tag && opts.tag.length > 0 ? parseTags(opts.tag) : undefined;
       const topK = parseInt(opts.topK, 10);
 
-      if (opts.raw) {
-        const { retrieve } = await import("./query.js");
-        const results = await retrieve(query, topK, tagList);
-        printResultsTable(results);
-      } else {
-        const { ask } = await import("./query.js");
-        const result = await ask(query, topK, tagList);
-        print(`\n${chalk.bold("Answer:")}\n${result.answer}\n`);
-        if (result.sources.length > 0) {
-          print(chalk.dim("Sources:"));
-          for (const s of result.sources) {
-            print(
-              `  - ${s.document} (chunk ${s.chunk_index}, similarity ${(s.similarity as number).toFixed(3)})`,
-            );
-          }
-        }
-      }
+      const { retrieve } = await import("./query.js");
+      const results = await retrieve(query, topK, tagList);
+      printResultsTable(results);
       await closeSql();
     },
   );
@@ -133,8 +118,9 @@ program
   .argument("<message>", "Your question")
   .action(async (message: string) => {
     const { agentChat } = await import("./agent.js");
-    const answer = await agentChat(message);
-    print(`\n${chalk.bold("Agent:")}\n${answer}`);
+    const result = await agentChat(message);
+    const assistantMsg = result.messages.find((m) => m.role === "assistant");
+    print(`\n${chalk.bold("Agent:")}\n${assistantMsg?.content ?? "No response"}`);
     await closeSql();
   });
 
