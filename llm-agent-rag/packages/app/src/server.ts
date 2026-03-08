@@ -7,8 +7,16 @@ import { readdir, unlink, rename } from "fs/promises";
 import { join, extname, basename } from "path";
 import { stat } from "fs/promises";
 import { tmpdir } from "os";
-import type { IngestRequest, QueryRequest, AgentRequest, FindDocumentsRequest } from "@rag/shared";
+import type { IngestRequest, QueryRequest, AgentRequest, FindDocumentsRequest, AddTagRequest } from "@rag/shared";
+import {
+  validateIngestRequest,
+  validateQueryRequest,
+  validateAgentRequest,
+  validateFindDocumentsRequest,
+  validateAddTagRequest,
+} from "@rag/shared";
 import logger from "./logger.js";
+import { validateBody } from "./validate.js";
 
 import { ingestFile } from "./ingest.js";
 import { retrieve, ask } from "./query.js";
@@ -48,14 +56,8 @@ app.use(bodyParser());
 
 // --- Routes ---
 
-router.post("/api/ingest", async (ctx) => {
+router.post("/api/ingest", validateBody(validateIngestRequest), async (ctx) => {
   const { path: filePath, tags, extensions } = ctx.request.body as IngestRequest;
-
-  if (!filePath) {
-    ctx.status = 400;
-    ctx.body = { error: "path is required" };
-    return;
-  }
 
   const stats = await stat(filePath);
 
@@ -127,40 +129,22 @@ router.post("/api/ingest/upload", upload.single("file"), async (ctx) => {
   }
 });
 
-router.post("/api/query", async (ctx) => {
+router.post("/api/query", validateBody(validateQueryRequest), async (ctx) => {
   const { query, top_k, tags } = ctx.request.body as QueryRequest;
-
-  if (!query) {
-    ctx.status = 400;
-    ctx.body = { error: "query is required" };
-    return;
-  }
 
   const results = await retrieve(query, top_k ?? 5, tags);
   ctx.body = results;
 });
 
-router.post("/api/ask", async (ctx) => {
+router.post("/api/ask", validateBody(validateQueryRequest), async (ctx) => {
   const { query, top_k, tags } = ctx.request.body as QueryRequest;
-
-  if (!query) {
-    ctx.status = 400;
-    ctx.body = { error: "query is required" };
-    return;
-  }
 
   const result = await ask(query, top_k ?? 5, tags);
   ctx.body = result;
 });
 
-router.post("/api/agent", async (ctx) => {
+router.post("/api/agent", validateBody(validateAgentRequest), async (ctx) => {
   const { message, system_prompt } = ctx.request.body as AgentRequest;
-
-  if (!message) {
-    ctx.status = 400;
-    ctx.body = { error: "message is required" };
-    return;
-  }
 
   const answer = await agentChat(message, system_prompt);
   ctx.body = { answer };
@@ -186,14 +170,8 @@ router.get("/api/tags/search", async (ctx) => {
   ctx.body = tags;
 });
 
-router.post("/api/documents/find", async (ctx) => {
+router.post("/api/documents/find", validateBody(validateFindDocumentsRequest), async (ctx) => {
   const { tags } = ctx.request.body as FindDocumentsRequest;
-
-  if (!tags || !Array.isArray(tags) || tags.length === 0) {
-    ctx.status = 400;
-    ctx.body = { error: "tags is required and must be a non-empty array" };
-    return;
-  }
 
   const docs = await findDocumentsByTags(tags);
   ctx.body = docs;
@@ -216,19 +194,14 @@ router.delete("/api/documents/:id", async (ctx) => {
   ctx.body = { ok: true };
 });
 
-router.post("/api/documents/:id/tags", async (ctx) => {
+router.post("/api/documents/:id/tags", validateBody(validateAddTagRequest), async (ctx) => {
   const id = parseInt(ctx.params.id, 10);
   if (isNaN(id)) {
     ctx.status = 400;
     ctx.body = { error: "invalid document id" };
     return;
   }
-  const { tag } = ctx.request.body as { tag?: string };
-  if (!tag || typeof tag !== "string") {
-    ctx.status = 400;
-    ctx.body = { error: "tag is a required string" };
-    return;
-  }
+  const { tag } = ctx.request.body as AddTagRequest;
   await insertTags(id, [tag]);
   ctx.body = { ok: true };
 });

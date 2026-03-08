@@ -1,0 +1,17 @@
+{
+  "$id": "ingest-request.json",
+  "type": "object",
+  "required": ["path"],
+  "additionalProperties": false,
+  "properties": {
+    "path": { "type": "string" },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "extensions": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "$id": "ask-source.json",
+  "type": "object",
+  "required": ["document", "chunk_index", "similarity", "excerpt"],
+  "additionalProperties": false,
+  "properties": {
+    "document": { "type": "string" },
+    "chunk_index": { "type": "integer" },
+    "similarity": { "type": "number" },
+    "excerpt": { "type": "string" }
+  }
+}

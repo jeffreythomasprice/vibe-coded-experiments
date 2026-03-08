@@ -2,3 +2,4 @@
 node_modules/
 bun.lock
 packages/*/dist
+packages/shared/src/generated

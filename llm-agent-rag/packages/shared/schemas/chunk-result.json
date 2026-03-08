@@ -1,0 +1,14 @@
+{
+  "$id": "chunk-result.json",
+  "type": "object",
+  "required": ["chunk_id", "document_id", "chunk_index", "content", "similarity", "document_name"],
+  "additionalProperties": false,
+  "properties": {
+    "chunk_id": { "type": "integer" },
+    "document_id": { "type": "integer" },
+    "chunk_index": { "type": "integer" },
+    "content": { "type": "string" },
+    "similarity": { "type": "number" },
+    "document_name": { "type": "string" }
+  }
+}

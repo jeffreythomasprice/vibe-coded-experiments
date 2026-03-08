@@ -1,0 +1,9 @@
+{
+  "$id": "add-tag-request.json",
+  "type": "object",
+  "required": ["tag"],
+  "additionalProperties": false,
+  "properties": {
+    "tag": { "type": "string", "minLength": 1 }
+  }
+}

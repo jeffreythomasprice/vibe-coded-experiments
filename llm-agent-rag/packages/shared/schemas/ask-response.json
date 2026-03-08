@@ -1,0 +1,13 @@
+{
+  "$id": "ask-response.json",
+  "type": "object",
+  "required": ["answer", "sources"],
+  "additionalProperties": false,
+  "properties": {
+    "answer": { "type": "string" },
+    "sources": {
+      "type": "array",
+      "items": { "$ref": "ask-source.json" }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "$id": "ingest-result.json",
+  "type": "object",
+  "required": ["document_id", "filename", "characters", "chunks", "tags"],
+  "additionalProperties": false,
+  "properties": {
+    "document_id": { "type": "integer" },
+    "filename": { "type": "string" },
+    "characters": { "type": "integer" },
+    "chunks": { "type": "integer" },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

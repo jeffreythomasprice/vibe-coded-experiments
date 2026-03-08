@@ -6,8 +6,9 @@
     "typescript": "^5.9.3"
   },
   "scripts": {
+    "generate": "bun run --cwd packages/shared generate",
     "dev:server": "bun --watch run packages/app/src/index.ts serve",
     "dev:frontend": "bun run --cwd packages/frontend dev",
-    "typecheck": "tsc -p packages/shared/tsconfig.json --noEmit && tsc -p packages/app/tsconfig.json && tsc -p packages/frontend/tsconfig.json"
+    "typecheck": "bun run generate && tsc -p packages/shared/tsconfig.json --noEmit && tsc -p packages/app/tsconfig.json && tsc -p packages/frontend/tsconfig.json"
   }
 }

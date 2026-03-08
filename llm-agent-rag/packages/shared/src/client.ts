@@ -5,7 +5,7 @@ import type {
   IngestResult,
   ChunkResult,
   AskResponse,
-} from "./types.js";
+} from "./generated/types.js";
 
 export class RagClient {
   constructor(private baseUrl: string) {
