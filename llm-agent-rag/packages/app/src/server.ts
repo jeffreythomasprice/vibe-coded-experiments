@@ -21,7 +21,7 @@ import { validateBody } from "./validate.js";
 import { ingestFile } from "./ingest.js";
 import { retrieve } from "./query.js";
 import { agentChat } from "./agent.js";
-import { listDocuments, listTags, searchTags, findDocumentsByTags, deleteDocument, deleteTag, insertTags, listConversations, getConversation, getConversationMessages, deleteConversation } from "./db.js";
+import { listDocuments, listTags, searchTags, findDocumentsByTags, deleteDocument, deleteTag, insertTags, listConversations, getConversation, getConversationMessages, deleteConversation, renameConversation } from "./db.js";
 
 const app = new Koa();
 const router = new Router();
@@ -46,9 +46,14 @@ app.use(async (ctx, next) => {
   const start = Date.now();
   const reqId = crypto.randomUUID();
   ctx.state.reqId = reqId;
+  logger.info({ reqId, method: ctx.method, path: ctx.path, query: ctx.query, contentType: ctx.request.type }, "request received");
+  if (ctx.request.body && ctx.method !== "GET") {
+    logger.debug({ reqId, body: ctx.request.body }, "request body");
+  }
   await next();
   const duration = Date.now() - start;
   logger.info({ reqId, method: ctx.method, path: ctx.path, status: ctx.status, duration }, "request completed");
+  logger.debug({ reqId, responseBody: ctx.body }, "response body");
 });
 
 app.use(cors());
@@ -58,7 +63,9 @@ app.use(bodyParser());
 
 router.post("/api/ingest", validateBody(validateIngestRequest), async (ctx) => {
   const { path: filePath, tags, extensions } = ctx.request.body as IngestRequest;
+  const reqId = ctx.state.reqId;
 
+  logger.info({ reqId, filePath, tags, extensions }, "ingest request");
   const stats = await stat(filePath);
 
   if (stats.isFile()) {
@@ -104,7 +111,9 @@ router.post("/api/ingest", validateBody(validateIngestRequest), async (ctx) => {
 });
 
 router.post("/api/ingest/upload", upload.single("file"), async (ctx) => {
+  const reqId = ctx.state.reqId;
   const file = ctx.file;
+  logger.info({ reqId, originalname: file?.originalname, size: file?.size }, "upload ingest request");
   if (!file) {
     ctx.status = 400;
     ctx.body = { error: "file is required" };
@@ -131,15 +140,27 @@ router.post("/api/ingest/upload", upload.single("file"), async (ctx) => {
 
 router.post("/api/query", validateBody(validateQueryRequest), async (ctx) => {
   const { query, top_k, tags } = ctx.request.body as QueryRequest;
+  const reqId = ctx.state.reqId;
 
+  logger.info({ reqId, query, top_k, tags }, "query request");
   const results = await retrieve(query, top_k ?? 5, tags);
+  logger.info({ reqId, resultCount: results.length }, "query response");
+  logger.debug({ reqId, results }, "query response results");
+
   ctx.body = results;
 });
 
 router.post("/api/agent", validateBody(validateAgentRequest), async (ctx) => {
   const { message, conversation_id, system_prompt } = ctx.request.body as AgentRequest;
+  const reqId = ctx.state.reqId;
+
+  logger.info({ reqId, message, conversation_id, system_prompt: system_prompt?.slice(0, 200) }, "agent request");
 
   const result = await agentChat(message, conversation_id, system_prompt);
+
+  logger.info({ reqId, conversation_id: result.conversation_id, messageCount: result.messages.length }, "agent response");
+  logger.debug({ reqId, messages: result.messages }, "agent response messages");
+
   ctx.body = result;
 });
 
@@ -231,6 +252,28 @@ router.get("/api/conversations/:id", async (ctx) => {
   }
   const messages = await getConversationMessages(id);
   ctx.body = { ...conversation, messages };
+});
+
+router.patch("/api/conversations/:id", async (ctx) => {
+  const id = parseInt(ctx.params.id, 10);
+  if (isNaN(id)) {
+    ctx.status = 400;
+    ctx.body = { error: "invalid conversation id" };
+    return;
+  }
+  const { title } = ctx.request.body as { title?: string };
+  if (typeof title !== "string" || !title.trim()) {
+    ctx.status = 400;
+    ctx.body = { error: "title is required" };
+    return;
+  }
+  const updated = await renameConversation(id, title.trim());
+  if (!updated) {
+    ctx.status = 404;
+    ctx.body = { error: "conversation not found" };
+    return;
+  }
+  ctx.body = updated;
 });
 
 router.delete("/api/conversations/:id", async (ctx) => {

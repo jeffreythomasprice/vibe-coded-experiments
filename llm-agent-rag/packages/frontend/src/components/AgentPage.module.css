@@ -96,6 +96,117 @@
   min-width: 0;
 }
 
+.convHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.convHeaderTitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.renameBtn {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #9ca3af;
+  font-size: 0.9rem;
+  padding: 0.125rem 0.25rem;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.renameBtn:hover {
+  color: #2563eb;
+  background: #f3f4f6;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: #fff;
+  border-radius: 10px;
+  padding: 1.5rem;
+  width: 380px;
+  max-width: 90vw;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+}
+
+.modalTitle {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+}
+
+.modalInput {
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.modalInput:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.modalCancel {
+  padding: 0.4rem 0.875rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.modalCancel:hover {
+  background: #f3f4f6;
+}
+
+.modalSave {
+  padding: 0.4rem 0.875rem;
+  border: none;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.modalSave:hover {
+  background: #1d4ed8;
+}
+
+.modalSave:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .messages {
   flex: 1;
   overflow-y: auto;
@@ -185,6 +296,29 @@
   background: none;
   padding: 0;
   color: inherit;
+}
+
+.msgAssistant table {
+  border-collapse: collapse;
+  margin: 0 0 0.5rem;
+  width: 100%;
+  font-size: 0.85em;
+}
+
+.msgAssistant th,
+.msgAssistant td {
+  border: 1px solid #d1d5db;
+  padding: 0.375rem 0.625rem;
+  text-align: left;
+}
+
+.msgAssistant th {
+  background: #e5e7eb;
+  font-weight: 600;
+}
+
+.msgAssistant tr:nth-child(even) {
+  background: #f9fafb;
 }
 
 .msgTool {

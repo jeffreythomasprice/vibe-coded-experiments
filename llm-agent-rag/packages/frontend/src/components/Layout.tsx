@@ -1,43 +1,48 @@
-import { useState } from "react";
+import { NavLink, Routes, Route, Navigate } from "react-router";
 import { DocumentsPage } from "./DocumentsPage";
 import { QueryPage } from "./QueryPage";
 import { AgentPage } from "./AgentPage";
 import styles from "./Layout.module.css";
 
-type Tab = "documents" | "query" | "agent";
-
 export function Layout() {
-  const [tab, setTab] = useState<Tab>("documents");
-
   return (
     <div>
       <nav className={styles.nav}>
         <h1 className={styles.title}>RAG System</h1>
         <div className={styles.tabs}>
-          <button
-            className={`${styles.tab} ${tab === "documents" ? styles.active : ""}`}
-            onClick={() => setTab("documents")}
+          <NavLink
+            to="/documents"
+            className={({ isActive }) =>
+              `${styles.tab} ${isActive ? styles.active : ""}`
+            }
           >
             Documents
-          </button>
-          <button
-            className={`${styles.tab} ${tab === "query" ? styles.active : ""}`}
-            onClick={() => setTab("query")}
+          </NavLink>
+          <NavLink
+            to="/query"
+            className={({ isActive }) =>
+              `${styles.tab} ${isActive ? styles.active : ""}`
+            }
           >
             Query
-          </button>
-          <button
-            className={`${styles.tab} ${tab === "agent" ? styles.active : ""}`}
-            onClick={() => setTab("agent")}
+          </NavLink>
+          <NavLink
+            to="/agent"
+            className={({ isActive }) =>
+              `${styles.tab} ${isActive ? styles.active : ""}`
+            }
           >
             Agent
-          </button>
+          </NavLink>
         </div>
       </nav>
       <main>
-        {tab === "documents" && <DocumentsPage />}
-        {tab === "query" && <QueryPage />}
-        {tab === "agent" && <AgentPage />}
+        <Routes>
+          <Route path="/documents" element={<DocumentsPage />} />
+          <Route path="/query" element={<QueryPage />} />
+          <Route path="/agent" element={<AgentPage />} />
+          <Route path="*" element={<Navigate to="/documents" replace />} />
+        </Routes>
       </main>
     </div>
   );

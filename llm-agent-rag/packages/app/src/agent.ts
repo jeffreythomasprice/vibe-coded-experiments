@@ -30,8 +30,10 @@ const searchDocuments = tool({
       ),
   }),
   execute: async ({ query, top_k, tags }) => {
-    logger.debug({ query, top_k, tags }, "agent tool call: search_documents");
+    logger.info({ query, top_k, tags }, "agent tool call: search_documents");
     const results = await retrieve(query, top_k, tags);
+    logger.info({ resultCount: results.length }, "agent tool result: search_documents");
+    logger.debug({ results }, "agent tool result details: search_documents");
     return results;
   },
 });
@@ -46,17 +48,19 @@ export async function agentChat(
   userMessage: string,
   conversationId?: number | null,
   systemPrompt?: string,
-): Promise<{ conversationId: number; messages: ConversationMessage[] }> {
+): Promise<{ conversation_id: number; messages: ConversationMessage[] }> {
   const system = systemPrompt ?? DEFAULT_SYSTEM;
-  logger.info({ userMessage, conversationId }, "agent chat started");
+  logger.info({ userMessage, conversationId, systemPrompt: system }, "agent chat started");
 
   // Create or reuse conversation
   let convId: number;
   if (conversationId) {
     convId = conversationId;
+    logger.info({ convId }, "reusing existing conversation");
   } else {
     const title = userMessage.slice(0, 100);
     convId = await createConversation(title);
+    logger.info({ convId, title }, "created new conversation");
   }
 
   // Persist user message
@@ -65,6 +69,8 @@ export async function agentChat(
 
   // Load history and build LLM messages (only user + assistant for the LLM)
   const allDbMessages = await getConversationMessages(convId);
+  logger.info({ convId, historyCount: allDbMessages.length }, "loaded conversation history");
+
   const llmMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
   for (const m of allDbMessages) {
     if (m.role === "user" || m.role === "assistant") {
@@ -72,9 +78,12 @@ export async function agentChat(
     }
   }
 
+  logger.info({ llmMessageCount: llmMessages.length, model: CHAT_MODEL }, "sending messages to LLM");
+  logger.debug({ llmMessages }, "LLM input messages");
+
   const provider = createOllama({ baseURL: `${OLLAMA_BASE_URL}/api` });
 
-  const { text, steps } = await generateText({
+  const { text, steps, usage, finishReason } = await generateText({
     model: provider.languageModel(CHAT_MODEL),
     system,
     messages: llmMessages,
@@ -82,14 +91,29 @@ export async function agentChat(
     stopWhen: stepCountIs(10),
   });
 
+  logger.info(
+    { stepCount: steps.length, finishReason, textLength: text?.length ?? 0, usage },
+    "LLM generateText completed",
+  );
+
   // Extract tool calls/results from steps and persist them
-  for (const step of steps) {
+  for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
+    const step = steps[stepIdx];
     const toolCalls = step.toolCalls ?? [];
     const toolResults = step.toolResults ?? [];
+
+    logger.info(
+      { stepIdx, toolCallCount: toolCalls.length, hasText: !!step.text, finishReason: step.finishReason },
+      "processing agent step",
+    );
+    if (step.text) {
+      logger.debug({ stepIdx, text: step.text }, "step text output");
+    }
 
     for (let i = 0; i < toolCalls.length; i++) {
       const tc = toolCalls[i] as { toolName: string; input: unknown };
       const input = tc.input as Record<string, unknown> | undefined;
+      logger.info({ stepIdx, toolName: tc.toolName, input }, "persisting tool call");
       const toolCallMsg = await insertConversationMessage(
         convId,
         "tool_call",
@@ -101,18 +125,42 @@ export async function agentChat(
       // Match tool result if available
       const tr = toolResults[i] as { output: unknown } | undefined;
       if (tr) {
+        logger.info({ tr }, "TODO JEFF wut?");
         const output = tr.output;
-        const resultContent =
-          typeof output === "string"
-            ? output
-            : JSON.stringify(output);
         const resultCount = Array.isArray(output) ? output.length : undefined;
+        let content: string;
+        if (Array.isArray(output) && output.length > 0 && output[0]?.document_name) {
+          const lines = [`Found ${output.length} results`];
+          const sorted = [...output].sort((a, b) => {
+            const nameA = a.document_name ?? "Unknown";
+            const nameB = b.document_name ?? "Unknown";
+            if (nameA !== nameB) return nameA.localeCompare(nameB);
+            return (a.page_start ?? 0) - (b.page_start ?? 0);
+          });
+          for (const chunk of sorted) {
+            const name = chunk.document_name ?? "Unknown";
+            const pageStart = chunk.page_start ?? null;
+            const pageEnd = chunk.page_end ?? null;
+            if (pageStart != null) {
+              const range = pageEnd != null && pageEnd !== pageStart
+                ? `pp. ${pageStart}-${pageEnd}`
+                : `p. ${pageStart}`;
+              lines.push(`- ${name} ${range}`);
+            } else {
+              lines.push(`- ${name}`);
+            }
+          }
+          content = lines.join("\n");
+        } else if (resultCount !== undefined) {
+          content = `Found ${resultCount} results`;
+        } else {
+          const resultContent = typeof output === "string" ? output : JSON.stringify(output);
+          content = resultContent.slice(0, 200);
+        }
         const toolResultMsg = await insertConversationMessage(
           convId,
           "tool_result",
-          resultCount !== undefined
-            ? `Found ${resultCount} results`
-            : resultContent.slice(0, 200),
+          content,
           { name: tc.toolName, result_count: resultCount },
         );
         newMessages.push(toolResultMsg);
@@ -122,10 +170,13 @@ export async function agentChat(
 
   // Persist final assistant text
   const finalText = text || "Agent reached maximum iterations without a final answer.";
+  logger.info({ convId, finalTextLength: finalText.length }, "persisting final assistant message");
+  logger.debug({ finalText }, "final assistant text");
   const assistantMsg = await insertConversationMessage(convId, "assistant", finalText);
   newMessages.push(assistantMsg);
 
   await updateConversationTimestamp(convId);
 
-  return { conversationId: convId, messages: newMessages };
+  logger.info({ convId, newMessageCount: newMessages.length }, "agent chat completed");
+  return { conversation_id: convId, messages: newMessages };
 }

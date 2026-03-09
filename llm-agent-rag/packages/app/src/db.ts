@@ -321,6 +321,14 @@ export async function listConversations(): Promise<Conversation[]> {
   }));
 }
 
+export async function renameConversation(id: number, title: string): Promise<Conversation | null> {
+  const s = getSql();
+  const rows = await s`UPDATE conversations SET title = ${title}, updated_at = now() WHERE id = ${id} RETURNING id, title, created_at, updated_at`;
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  return { id: r.id as number, title: r.title as string | null, created_at: String(r.created_at), updated_at: String(r.updated_at) };
+}
+
 export async function deleteConversation(id: number): Promise<boolean> {
   const s = getSql();
   const rows = await s`DELETE FROM conversations WHERE id = ${id} RETURNING id`;

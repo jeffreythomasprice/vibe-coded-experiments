@@ -27,6 +27,7 @@
   color: #6b7280;
   border-bottom: 2px solid transparent;
   margin-bottom: -2px;
+  text-decoration: none;
 }
 
 .tab:hover {

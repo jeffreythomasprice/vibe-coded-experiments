@@ -98,6 +98,14 @@ export class RagClient {
     return this.request<Conversation & { messages: ConversationMessage[] }>(`/api/conversations/${id}`);
   }
 
+  async renameConversation(id: number, title: string): Promise<Conversation> {
+    return this.request<Conversation>(`/api/conversations/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    });
+  }
+
   async deleteConversation(id: number): Promise<{ ok: boolean }> {
     return this.request<{ ok: boolean }>(`/api/conversations/${id}`, {
       method: "DELETE",

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import type { Conversation, ConversationMessage } from "@rag/shared";
 import { api } from "../api";
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Spinner } from "./Spinner";
 import styles from "./AgentPage.module.css";
 
@@ -12,6 +13,8 @@ export function AgentPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -50,6 +53,26 @@ export function AgentPage() {
       if (conversationId === id) {
         handleNewChat();
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  const currentConversation = conversations.find((c) => c.id === conversationId);
+
+  function openRenameModal() {
+    setRenameValue(currentConversation?.title || "");
+    setRenameModalOpen(true);
+  }
+
+  async function handleRename() {
+    if (!conversationId || !renameValue.trim()) return;
+    try {
+      const updated = await api.renameConversation(conversationId, renameValue.trim());
+      setConversations((prev) =>
+        prev.map((c) => (c.id === updated.id ? { ...c, title: updated.title } : c))
+      );
+      setRenameModalOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -108,10 +131,10 @@ export function AgentPage() {
       const query = info.args.query ?? info.args.q;
       label = `Searching: ${query ?? JSON.stringify(info.args)}`;
     } else if (msg.role === "tool_result" && info?.result_count !== undefined) {
-      label = `Found ${info.result_count} results`;
+      label = msg.content;
     }
     return (
-      <div key={msg.id} className={styles.msgTool}>
+      <div key={msg.id} className={styles.msgTool} style={{ whiteSpace: "pre-line" }}>
         <span className={styles.toolIcon}>{msg.role === "tool_call" ? "\u{1F50D}" : "\u{1F4CB}"}</span>
         {label}
       </div>
@@ -146,6 +169,54 @@ export function AgentPage() {
       </aside>
 
       <div className={styles.main}>
+        {conversationId && currentConversation && (
+          <div className={styles.convHeader}>
+            <span className={styles.convHeaderTitle}>
+              {currentConversation.title || "Untitled"}
+            </span>
+            <button
+              className={styles.renameBtn}
+              onClick={openRenameModal}
+              title="Rename conversation"
+            >
+              &#9998;
+            </button>
+          </div>
+        )}
+
+        {renameModalOpen && (
+          <div className={styles.modalOverlay} onClick={() => setRenameModalOpen(false)}>
+            <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+              <h3 className={styles.modalTitle}>Rename Conversation</h3>
+              <input
+                className={styles.modalInput}
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleRename();
+                  if (e.key === "Escape") setRenameModalOpen(false);
+                }}
+                autoFocus
+              />
+              <div className={styles.modalActions}>
+                <button
+                  className={styles.modalCancel}
+                  onClick={() => setRenameModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className={styles.modalSave}
+                  onClick={handleRename}
+                  disabled={!renameValue.trim()}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className={styles.messages}>
           {messages.length === 0 && !loading && (
             <div className={styles.emptyState}>
@@ -163,7 +234,7 @@ export function AgentPage() {
             if (msg.role === "assistant") {
               return (
                 <div key={msg.id} className={styles.msgAssistant}>
-                  <Markdown>{msg.content}</Markdown>
+                  <Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown>
                 </div>
               );
             }
