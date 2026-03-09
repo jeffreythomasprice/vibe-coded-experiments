@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A fully local RAG (Retrieval-Augmented Generation) system: ingest PDFs/text files, chunk and embed them, store in PostgreSQL+pgvector, then query via semantic search with optional LLM synthesis or agentic tool-calling mode. All inference runs through Ollama locally.
+A fully local RAG (Retrieval-Augmented Generation) system: ingest PDFs/text files, chunk and embed them, store in PostgreSQL+pgvector, then query via semantic search with optional LLM synthesis or agentic tool-calling mode. LLM inference supports multiple providers (Ollama for local, Anthropic for cloud) via Vercel AI SDK.
 
 ## Commands
 
@@ -50,7 +50,8 @@ Uses Vercel AI SDK with `ollama-ai-provider-v2` for LLM/embedding calls, and `@m
 
 | Module (packages/app/src/) | Role |
 |--------|------|
-| `config.ts` | Reads `Bun.env`, validates required vars, auto-pulls missing Ollama models, detects and caches embedding dimension, creates dynamic chunks table |
+| `providers.ts` | Multi-provider router: `getChatModel()` and `getEmbeddingModel()` returning Vercel AI SDK model instances for ollama or anthropic |
+| `config.ts` | Reads `Bun.env`, validates required vars, conditionally auto-pulls Ollama models, detects and caches embedding dimension, creates dynamic chunks table |
 | `text.ts` | PDF extraction (`pdf-parse`) and text chunking via Mastra `MDocument` recursive strategy |
 | `embeddings.ts` | Vercel AI SDK `embedMany`/`embed` with `ollama-ai-provider-v2` for Ollama embedding calls |
 | `db.ts` | `postgres` (porsager): dynamic `chunks_{dim}` tables with provider/model columns, cache helpers, cosine similarity search, context window fetch |
@@ -88,9 +89,9 @@ Uses Vercel AI SDK with `ollama-ai-provider-v2` for LLM/embedding calls, and `@m
 
 ## Configuration
 
-All config via `.env` file (see `.env.template`). Required vars: `OLLAMA_BASE_URL`, `EMBED_PROVIDER`, `EMBED_MODEL`, `CHAT_MODEL`, `DB_DSN`, `CHUNK_SIZE`, `CHUNK_OVERLAP`, `CONTEXT_WINDOW`. Optional vars: `PORT` (default `8001`), `BIND_ADDRESS` (default `127.0.0.1`), `LOG_LEVEL` (default `info`).
+All config via `.env` file (see `.env.template`). Required vars: `EMBED_PROVIDER`, `EMBED_MODEL`, `CHAT_PROVIDER`, `CHAT_MODEL`, `DB_DSN`, `CHUNK_SIZE`, `CHUNK_OVERLAP`, `CONTEXT_WINDOW`. Conditionally required: `OLLAMA_BASE_URL` (when either provider is `ollama`), `ANTHROPIC_API_KEY` (when `CHAT_PROVIDER` is `anthropic`). Optional vars: `PORT` (default `8001`), `BIND_ADDRESS` (default `127.0.0.1`), `LOG_LEVEL` (default `info`).
 
-Model names use bare Ollama model IDs (e.g. `nomic-embed-text`, `glm-4.7-flash`) without provider prefixes.
+Supported providers: `ollama` (local), `anthropic` (cloud). Embeddings only support `ollama`. Chat supports both. Model names use bare provider model IDs (e.g. `nomic-embed-text`, `glm-4.7-flash`, `claude-sonnet-4-20250514`).
 
 ## GPU Support (NVIDIA)
 

@@ -1,9 +1,9 @@
-import { createOllama } from "ollama-ai-provider-v2";
 import { generateText, tool, stepCountIs } from "ai";
 import { z } from "zod";
 import type { ConversationMessage } from "@rag/shared";
 import logger from "./logger.js";
-import { CHAT_MODEL, OLLAMA_BASE_URL } from "./config.js";
+import { CHAT_MODEL, CHAT_PROVIDER } from "./config.js";
+import { getChatModel } from "./providers.js";
 import { retrieve } from "./query.js";
 import {
   createConversation,
@@ -78,13 +78,11 @@ export async function agentChat(
     }
   }
 
-  logger.info({ llmMessageCount: llmMessages.length, model: CHAT_MODEL }, "sending messages to LLM");
+  logger.info({ llmMessageCount: llmMessages.length, provider: CHAT_PROVIDER, model: CHAT_MODEL }, "sending messages to LLM");
   logger.debug({ llmMessages }, "LLM input messages");
 
-  const provider = createOllama({ baseURL: `${OLLAMA_BASE_URL}/api` });
-
   const { text, steps, usage, finishReason } = await generateText({
-    model: provider.languageModel(CHAT_MODEL),
+    model: getChatModel(),
     system,
     messages: llmMessages,
     tools: { search_documents: searchDocuments },
@@ -125,7 +123,6 @@ export async function agentChat(
       // Match tool result if available
       const tr = toolResults[i] as { output: unknown } | undefined;
       if (tr) {
-        logger.info({ tr }, "TODO JEFF wut?");
         const output = tr.output;
         const resultCount = Array.isArray(output) ? output.length : undefined;
         let content: string;

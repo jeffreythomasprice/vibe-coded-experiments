@@ -3,9 +3,9 @@ import logger from "./logger.js";
 import { print, printProgress } from "./output.js";
 
 const REQUIRED_ENV_VARS = [
-  "OLLAMA_BASE_URL",
   "EMBED_PROVIDER",
   "EMBED_MODEL",
+  "CHAT_PROVIDER",
   "CHAT_MODEL",
   "DB_DSN",
   "CHUNK_SIZE",
@@ -16,6 +16,7 @@ const REQUIRED_ENV_VARS = [
 export let OLLAMA_BASE_URL: string;
 export let EMBED_PROVIDER: string;
 export let EMBED_MODEL: string;
+export let CHAT_PROVIDER: string;
 export let CHAT_MODEL: string;
 export let DB_DSN: string;
 export let CHUNK_SIZE: number;
@@ -123,17 +124,26 @@ export async function initConfig(): Promise<void> {
     process.exit(1);
   }
 
-  OLLAMA_BASE_URL = env.OLLAMA_BASE_URL!;
   EMBED_PROVIDER = env.EMBED_PROVIDER!;
   EMBED_MODEL = env.EMBED_MODEL!;
+  CHAT_PROVIDER = env.CHAT_PROVIDER!;
   CHAT_MODEL = env.CHAT_MODEL!;
   DB_DSN = env.DB_DSN!;
   CHUNK_SIZE = parseInt(env.CHUNK_SIZE!, 10);
   CHUNK_OVERLAP = parseInt(env.CHUNK_OVERLAP!, 10);
   CONTEXT_WINDOW = parseInt(env.CONTEXT_WINDOW!, 10);
 
-  await ensureOllamaModel(EMBED_MODEL);
-  await ensureOllamaModel(CHAT_MODEL);
+  const needsOllama = EMBED_PROVIDER === "ollama" || CHAT_PROVIDER === "ollama";
+  if (needsOllama) {
+    if (!env.OLLAMA_BASE_URL) {
+      logger.fatal("OLLAMA_BASE_URL is required when using ollama as a provider");
+      process.exit(1);
+    }
+    OLLAMA_BASE_URL = env.OLLAMA_BASE_URL;
+  }
+
+  if (EMBED_PROVIDER === "ollama") await ensureOllamaModel(EMBED_MODEL);
+  if (CHAT_PROVIDER === "ollama") await ensureOllamaModel(CHAT_MODEL);
 
   EMBED_DIM = await detectEmbedDim();
 
