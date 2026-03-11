@@ -73,11 +73,12 @@ mod gradient {
 }
 
 use std::io::{Write, stdout};
+use std::time::Duration;
 
 use crossterm::{
     ExecutableCommand,
     cursor,
-    event::{self, Event, KeyEventKind},
+    event::{self, Event, KeyEventKind, MouseEventKind, EnableMouseCapture, DisableMouseCapture},
     terminal,
 };
 
@@ -85,9 +86,92 @@ struct CleanupGuard;
 
 impl Drop for CleanupGuard {
     fn drop(&mut self) {
+        let _ = stdout().execute(DisableMouseCapture);
         let _ = stdout().execute(cursor::Show);
         let _ = terminal::disable_raw_mode();
     }
+}
+
+fn draw_rect_outline(rgba: &mut [u8], img_w: usize, img_h: usize, cx: usize, cy: usize, size: usize) {
+    let half = size / 2;
+    let x0 = cx.saturating_sub(half);
+    let y0 = cy.saturating_sub(half);
+    let x1 = (cx + half).min(img_w.saturating_sub(1));
+    let y1 = (cy + half).min(img_h.saturating_sub(1));
+
+    let set_white = |rgba: &mut [u8], x: usize, y: usize| {
+        let off = (y * img_w + x) * 4;
+        rgba[off] = 255;
+        rgba[off + 1] = 255;
+        rgba[off + 2] = 255;
+        rgba[off + 3] = 255;
+    };
+
+    for x in x0..=x1 {
+        set_white(rgba, x, y0);
+        set_white(rgba, x, y1);
+    }
+    for y in y0..=y1 {
+        set_white(rgba, x0, y);
+        set_white(rgba, x1, y);
+    }
+}
+
+fn rect_bounds(cx: usize, cy: usize, img_w: usize, img_h: usize, size: usize) -> (usize, usize, usize, usize) {
+    let half = size / 2;
+    let x0 = cx.saturating_sub(half);
+    let y0 = cy.saturating_sub(half);
+    let x1 = (cx + half).min(img_w.saturating_sub(1));
+    let y1 = (cy + half).min(img_h.saturating_sub(1));
+    (x0, y0, x1, y1)
+}
+
+fn restore_region(pixels: &mut [u8], base: &[u8], img_w: usize, x0: usize, y0: usize, x1: usize, y1: usize) {
+    for y in y0..=y1 {
+        let row_start = (y * img_w + x0) * 4;
+        let row_end = (y * img_w + x1) * 4 + 4;
+        pixels[row_start..row_end].copy_from_slice(&base[row_start..row_end]);
+    }
+}
+
+const RECT_SIZE: usize = 25;
+
+fn render_frame(
+    out: &mut impl Write,
+    image: &mut SixelImage,
+    base_rgba: &[u8],
+    w: usize,
+    h: usize,
+    mouse_pos: Option<(usize, usize)>,
+    last_rect: &mut Option<(usize, usize, usize, usize)>,
+    skip_if_clean: bool,
+) -> anyhow::Result<()> {
+    if mouse_pos.is_none() && skip_if_clean {
+        let sixel_data = image.encode()?;
+        out.execute(cursor::MoveTo(0, 0))?;
+        out.write_all(sixel_data.as_bytes())?;
+        out.flush()?;
+        return Ok(());
+    }
+
+    if let Some((lx0, ly0, lx1, ly1)) = *last_rect {
+        restore_region(&mut image.pixels, base_rgba, w, lx0, ly0, lx1, ly1);
+        *last_rect = None;
+    } else if mouse_pos.is_some() {
+        image.pixels.copy_from_slice(base_rgba);
+    }
+
+    if let Some((mx, my)) = mouse_pos {
+        let bounds = rect_bounds(mx, my, w, h, RECT_SIZE);
+        draw_rect_outline(&mut image.pixels, w, h, mx, my, RECT_SIZE);
+        *last_rect = Some(bounds);
+    }
+
+    let sixel_data = image.encode()?;
+    out.execute(cursor::MoveTo(0, 0))?;
+    out.write_all(sixel_data.as_bytes())?;
+    out.flush()?;
+    Ok(())
 }
 
 fn main() -> anyhow::Result<()> {
@@ -102,6 +186,7 @@ fn main() -> anyhow::Result<()> {
 
     tracing::info!("starting terminal-sixel-graphics");
 
+    let (cols, rows) = terminal::size()?;
     let (pixel_width, pixel_height) = match terminal::window_size() {
         Ok(size) if size.width > 0 && size.height > 0 => {
             tracing::debug!(
@@ -112,7 +197,6 @@ fn main() -> anyhow::Result<()> {
             (size.width, size.height)
         }
         _ => {
-            let (cols, rows) = terminal::size()?;
             let fallback = (cols * 8, rows * 16);
             tracing::warn!(
                 cols,
@@ -125,40 +209,89 @@ fn main() -> anyhow::Result<()> {
         }
     };
 
+    let cell_width = pixel_width as f64 / cols as f64;
+    let cell_height = pixel_height as f64 / rows as f64;
+
     tracing::info!(pixel_width, pixel_height, "rendering gradient");
 
     let w = pixel_width as usize;
     let h = pixel_height as usize;
     let colors = gradient::generate_rainbow(256);
-    let mut rgba = vec![0u8; w * h * 4];
+    let mut base_rgba = vec![0u8; w * h * 4];
     gradient::linear_gradient(
-        &mut rgba,
+        &mut base_rgba,
         w,
         (0, 0, w, h),
         (0.0, 0.0),
         (w as f64, h as f64),
         &colors,
     );
-    let image = SixelImage::from_rgba(rgba, w, h);
-    let sixel_data = image.encode()?;
+
+    let mut image = SixelImage::from_rgba(vec![0u8; w * h * 4], w, h);
+    image.pixels.copy_from_slice(&base_rgba);
 
     terminal::enable_raw_mode()?;
     let _cleanup = CleanupGuard;
 
     let mut out = stdout();
     out.execute(cursor::Hide)?;
-    out.execute(cursor::MoveTo(0, 0))?;
-    write!(out, "{}", sixel_data)?;
-    out.flush()?;
+    out.execute(EnableMouseCapture)?;
 
-    tracing::info!("gradient rendered, waiting for keypress");
+    let mut last_rect: Option<(usize, usize, usize, usize)> = None;
+    render_frame(&mut out, &mut image, &base_rgba, w, h, None, &mut last_rect, true)?;
+
+    tracing::info!("gradient rendered, waiting for input");
+
+    let mut last_pixel_pos: Option<(usize, usize)> = None;
 
     loop {
-        if let Event::Key(key) = event::read()? {
-            if key.kind == KeyEventKind::Press {
+        match event::read()? {
+            Event::Key(key) if key.kind == KeyEventKind::Press => {
                 tracing::info!(?key, "key pressed, exiting");
                 break;
             }
+            Event::Mouse(mouse) => {
+                let (col, row) = match mouse.kind {
+                    MouseEventKind::Moved | MouseEventKind::Drag(_) => {
+                        (mouse.column, mouse.row)
+                    }
+                    _ => continue,
+                };
+
+                let mut px = (col as f64 * cell_width) as usize;
+                let mut py = (row as f64 * cell_height) as usize;
+
+                // Drain queued mouse events to avoid falling behind
+                while event::poll(Duration::ZERO)? {
+                    match event::read()? {
+                        Event::Key(key) if key.kind == KeyEventKind::Press => {
+                            tracing::info!(?key, "key pressed, exiting");
+                            return Ok(());
+                        }
+                        Event::Mouse(m) => match m.kind {
+                            MouseEventKind::Moved | MouseEventKind::Drag(_) => {
+                                px = (m.column as f64 * cell_width) as usize;
+                                py = (m.row as f64 * cell_height) as usize;
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                }
+
+                px = px.min(w.saturating_sub(1));
+                py = py.min(h.saturating_sub(1));
+                let pos = (px, py);
+
+                if last_pixel_pos == Some(pos) {
+                    continue;
+                }
+
+                tracing::debug!(px, py, "mouse position");
+                last_pixel_pos = Some(pos);
+                render_frame(&mut out, &mut image, &base_rgba, w, h, Some(pos), &mut last_rect, false)?;
+            }
+            _ => {}
         }
     }
 
