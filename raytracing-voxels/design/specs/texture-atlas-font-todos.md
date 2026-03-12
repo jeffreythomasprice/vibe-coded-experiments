@@ -1,0 +1,5 @@
+- [x] 5.1 TextureAtlas — packing and UV lookup
+- [x] 5.2 DrawList atlas helper
+- [x] 5.3 TextureAtlasFont — glyph rasterization
+- [x] 5.4 TextureAtlasFont — text geometry generation
+- [x] 5.5 Load Minecraft.otf font and render "Hello, World!"

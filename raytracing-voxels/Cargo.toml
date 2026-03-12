@@ -11,3 +11,4 @@ env_logger = "0.11"
 log = "0.4"
 bytemuck = { version = "1", features = ["derive"] }
 anyhow = "1.0.102"
+ab_glyph = "0.2"

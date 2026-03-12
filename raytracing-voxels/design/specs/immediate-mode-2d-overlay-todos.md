@@ -1,0 +1,8 @@
+- [x] 4.1 RGBA type and texture data structure
+- [x] 4.2 Overlay vertex type and batch buffer
+- [x] 4.3 Immediate-mode rect API
+- [x] 4.4 Overlay GPU renderer — pipeline and resources
+- [x] 4.5 Overlay GPU renderer — draw submission
+- [x] 4.6 Overlay shader
+- [x] 4.7 Split rendering into two passes
+- [x] 4.8 Procedural gradient texture and test rectangles

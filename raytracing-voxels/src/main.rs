@@ -1,6 +1,10 @@
 mod camera;
 mod chunk;
-mod renderer;
+mod overlay;
+mod overlay_renderer;
+mod texture_atlas;
+mod texture_atlas_font;
+mod voxel_renderer;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -9,7 +13,11 @@ use anyhow::{Context, Result};
 
 use camera::Camera;
 use chunk::{generate_test_chunk, Chunk};
-use renderer::Renderer;
+use overlay::{DrawList, Rgba};
+use texture_atlas_font::TextureAtlasFont;
+use voxel_renderer::Renderer;
+
+const MINECRAFT_FONT: &[u8] = include_bytes!("../resources/Minecraft.otf");
 use winit::application::ApplicationHandler;
 use winit::event::{DeviceEvent, DeviceId, ElementState, KeyEvent, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
@@ -38,6 +46,9 @@ struct App {
     input: InputState,
     last_frame: Instant,
     cursor_grabbed: bool,
+    font: Option<TextureAtlasFont>,
+    font_bind_group: Option<wgpu::BindGroup>,
+    draw_list: DrawList,
 }
 
 impl App {
@@ -50,6 +61,9 @@ impl App {
             input: InputState::default(),
             last_frame: Instant::now(),
             cursor_grabbed: false,
+            font: None,
+            font_bind_group: None,
+            draw_list: DrawList::new(),
         }
     }
 
@@ -84,6 +98,17 @@ impl App {
         );
         let renderer = Renderer::new(window.clone())?;
         renderer.upload_chunk(self.chunk.data());
+
+        let ascii_charset: String = (0x20u8..=0x7E).map(|b| b as char).collect();
+        let font = TextureAtlasFont::new(MINECRAFT_FONT, 32.0, &ascii_charset)
+            .context("failed to create font")?;
+        self.font_bind_group = Some(
+            renderer
+                .overlay()
+                .create_texture(renderer.device(), renderer.queue(), font.atlas().texture()),
+        );
+        self.font = Some(font);
+
         self.window = Some(window);
         self.renderer = Some(renderer);
         self.last_frame = Instant::now();
@@ -195,7 +220,34 @@ impl ApplicationHandler for App {
 
                 if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
                     let uniforms = self.camera.to_uniforms(renderer.aspect());
-                    renderer.render(&uniforms);
+
+                    if let Some((frame, view)) = renderer.begin_frame() {
+                        let mut encoder = renderer.create_encoder();
+                        renderer.render_voxels(&mut encoder, &view, &uniforms);
+
+                        self.draw_list.clear();
+                        if let Some(font) = &self.font {
+                            font.draw_text(
+                                &mut self.draw_list,
+                                "Hello, World!",
+                                50.0,
+                                50.0,
+                                Rgba::WHITE,
+                            );
+                        }
+
+                        if let Some(texture_bg) = &self.font_bind_group {
+                            renderer.render_overlay(
+                                &view,
+                                &mut encoder,
+                                &self.draw_list,
+                                texture_bg,
+                            );
+                        }
+
+                        renderer.submit(encoder);
+                        frame.present();
+                    }
                     window.request_redraw();
                 }
             }

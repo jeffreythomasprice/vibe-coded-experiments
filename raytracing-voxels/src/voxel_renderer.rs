@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 
 use crate::camera::CameraUniforms;
+use crate::overlay_renderer::OverlayRenderer;
 use winit::window::Window;
 
 pub struct Renderer {
@@ -15,6 +16,7 @@ pub struct Renderer {
     camera_bind_group: wgpu::BindGroup,
     chunk_buffer: wgpu::Buffer,
     chunk_bind_group: wgpu::BindGroup,
+    overlay_renderer: OverlayRenderer,
 }
 
 impl Renderer {
@@ -116,7 +118,7 @@ impl Renderer {
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("voxels.wgsl").into()),
         });
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -148,6 +150,9 @@ impl Renderer {
             cache: None,
         });
 
+        let mut overlay_renderer = OverlayRenderer::new(&device, &queue, format)?;
+        overlay_renderer.resize(&queue, config.width, config.height);
+
         Ok(Self {
             surface,
             device,
@@ -158,6 +163,7 @@ impl Renderer {
             camera_bind_group,
             chunk_buffer,
             chunk_bind_group,
+            overlay_renderer,
         })
     }
 
@@ -168,6 +174,7 @@ impl Renderer {
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&self.device, &self.config);
+        self.overlay_renderer.resize(&self.queue, width, height);
     }
 
     pub fn upload_chunk(&self, data: &[u8; 4096]) {
@@ -178,50 +185,83 @@ impl Renderer {
         self.config.width as f32 / self.config.height as f32
     }
 
-    pub fn render(&mut self, camera: &CameraUniforms) {
-        self.queue
-            .write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(camera));
-
+    pub fn begin_frame(&mut self) -> Option<(wgpu::SurfaceTexture, wgpu::TextureView)> {
         let frame = match self.surface.get_current_texture() {
             Ok(f) => f,
             Err(wgpu::SurfaceError::Lost) => {
                 self.surface.configure(&self.device, &self.config);
-                return;
+                return None;
             }
-            Err(_) => return,
+            Err(_) => return None,
         };
         let view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("render_pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: 1.0,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                ..Default::default()
-            });
-            pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &self.camera_bind_group, &[]);
-            pass.set_bind_group(1, &self.chunk_bind_group, &[]);
-            pass.draw(0..3, 0..1);
-        }
+        Some((frame, view))
+    }
+
+    pub fn render_voxels(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        camera: &CameraUniforms,
+    ) {
+        self.queue
+            .write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(camera));
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("voxel_render_pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 1.0,
+                    }),
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            ..Default::default()
+        });
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &self.camera_bind_group, &[]);
+        pass.set_bind_group(1, &self.chunk_bind_group, &[]);
+        pass.draw(0..3, 0..1);
+    }
+
+    pub fn create_encoder(&self) -> wgpu::CommandEncoder {
+        self.device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor::default())
+    }
+
+    pub fn submit(&self, encoder: wgpu::CommandEncoder) {
         self.queue.submit(std::iter::once(encoder.finish()));
-        frame.present();
+    }
+
+    pub fn device(&self) -> &wgpu::Device {
+        &self.device
+    }
+
+    pub fn queue(&self) -> &wgpu::Queue {
+        &self.queue
+    }
+
+    pub fn overlay(&self) -> &OverlayRenderer {
+        &self.overlay_renderer
+    }
+
+    pub fn render_overlay(
+        &mut self,
+        view: &wgpu::TextureView,
+        encoder: &mut wgpu::CommandEncoder,
+        draw_list: &crate::overlay::DrawList,
+        texture_bind_group: &wgpu::BindGroup,
+    ) {
+        self.overlay_renderer
+            .render(&self.device, &self.queue, view, encoder, draw_list, texture_bind_group);
     }
 }
