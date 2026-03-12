@@ -5,8 +5,8 @@ use crate::world::World;
 const EPSILON: f32 = 1e-4;
 
 pub const PLAYER_WIDTH: f32 = 0.6;
-pub const PLAYER_HEIGHT: f32 = 1.8;
-pub const EYE_HEIGHT: f32 = 1.62;
+pub const PLAYER_HEIGHT: f32 = 4.0;
+pub const EYE_HEIGHT: f32 = 3.6;
 pub const MOVE_SPEED: f32 = 7.5;
 pub const GRAVITY: f32 = 28.0;
 pub const MAX_FALL_SPEED: f32 = 50.0;
@@ -36,7 +36,7 @@ impl Player {
             feet_pos: eye_pos - Vec3::new(0.0, EYE_HEIGHT, 0.0),
             velocity: Vec3::ZERO,
             on_ground: false,
-            fly_mode: true,
+            fly_mode: false,
         }
     }
 
@@ -159,20 +159,9 @@ impl Player {
             self.feet_pos.z = new_feet_z;
         }
 
-        if was_on_ground && !self.on_ground && self.velocity.y <= 0.0 {
-            for i in 1..=(STEP_HEIGHT as i32) {
-                let test_y = self.feet_pos.y - i as f32;
-                if Self::aabb_collides(
-                    Vec3::new(self.feet_pos.x, test_y, self.feet_pos.z),
-                    world,
-                ) {
-                    self.feet_pos.y = test_y.floor() + 1.0;
-                    self.on_ground = true;
-                    self.velocity.y = 0.0;
-                    break;
-                }
-            }
-        }
+        // No step-down snap: let gravity pull the player smoothly off ledges
+        // instead of teleporting them down instantly.
+        let _ = was_on_ground;
     }
 
     fn try_step_up(
@@ -299,7 +288,7 @@ mod tests {
         let mut world = World::new();
         let eye = Vec3::new(0.0, 10.0, 0.0);
         let mut player = Player::new(eye);
-        assert!(player.fly_mode);
+        player.fly_mode = true;
 
         let input = InputState {
             forward: true,
@@ -317,6 +306,7 @@ mod tests {
     #[test]
     fn toggle_fly_mode_zeros_velocity() {
         let mut player = Player::new(Vec3::new(0.0, 10.0, 0.0));
+        player.fly_mode = true;
         player.velocity = Vec3::new(1.0, 2.0, 3.0);
         player.toggle_fly_mode();
         assert!(!player.fly_mode);
@@ -329,7 +319,7 @@ mod tests {
         let pos_before = player.feet_pos;
         player.toggle_fly_mode();
         player.toggle_fly_mode();
-        assert!(player.fly_mode);
+        assert!(!player.fly_mode);
         assert!(approx_eq(player.feet_pos, pos_before, 1e-6));
     }
 
@@ -443,7 +433,7 @@ mod tests {
 
     #[test]
     fn player_hitting_ceiling_stops() {
-        let world = make_floor_world(5);
+        let world = make_floor_world(10);
         let mut player = Player {
             feet_pos: Vec3::new(8.0, 2.0, 8.0),
             velocity: Vec3::new(0.0, 20.0, 0.0),
@@ -465,7 +455,7 @@ mod tests {
 
         assert!(hit_ceiling);
         assert!((player.velocity.y).abs() < 1e-6);
-        assert!(player.feet_pos.y <= 6.0 - PLAYER_HEIGHT + 0.01);
+        assert!(player.feet_pos.y <= 11.0 - PLAYER_HEIGHT + 0.01);
     }
 
     #[test]
@@ -557,7 +547,7 @@ mod tests {
     fn wall_slide_x_blocked_z_continues() {
         // Wall spans z=4..12 at x=10, player at x=9.5 moving +X and -Z
         let mut wall_voxels = Vec::new();
-        for y in 1..=3 {
+        for y in 1..=5 {
             for z in 4..=12 {
                 wall_voxels.push((10, y, z));
             }
@@ -598,7 +588,7 @@ mod tests {
     fn wall_slide_z_blocked_x_continues() {
         // Wall spans x=4..12 at z=6, player at z=6.5 moving +X and -Z
         let mut wall_voxels = Vec::new();
-        for y in 1..=3 {
+        for y in 1..=5 {
             for x in 4..=12 {
                 wall_voxels.push((x, y, 6));
             }
@@ -643,7 +633,7 @@ mod tests {
     #[test]
     fn corner_blocks_both_axes() {
         let mut wall_voxels = Vec::new();
-        for y in 1..=3 {
+        for y in 1..=5 {
             for z in 4..=12 {
                 wall_voxels.push((10, y, z));
             }
@@ -686,7 +676,7 @@ mod tests {
     #[test]
     fn walking_parallel_to_wall_no_interference() {
         let mut wall_voxels = Vec::new();
-        for y in 1..=3 {
+        for y in 1..=5 {
             for z in 4..=12 {
                 wall_voxels.push((10, y, z));
             }
@@ -827,7 +817,7 @@ mod tests {
         for z in 4..=12 {
             wall_voxels.push((10, 1, z));
         }
-        let ceiling_y = 1 + (PLAYER_HEIGHT as i32) + 1;
+        let ceiling_y = (PLAYER_HEIGHT.ceil() as i32) + 1;
         for x in 8..=12 {
             for z in 4..=12 {
                 wall_voxels.push((x, ceiling_y, z));
@@ -879,7 +869,7 @@ mod tests {
     }
 
     #[test]
-    fn step_down_one_voxel_ledge() {
+    fn one_voxel_ledge_enters_freefall_then_lands() {
         let world = make_ledge_world(4, 1);
         let mut player = Player {
             feet_pos: Vec3::new(9.5, 5.0, 8.0),
@@ -894,28 +884,28 @@ mod tests {
         let dt = 1.0 / 60.0;
         let yaw = 0.0;
 
-        for _ in 0..30 {
+        let mut went_airborne = false;
+        for _ in 0..60 {
             player.tick(dt, &input, yaw, &world);
+            if player.feet_pos.x > 10.0 && !player.on_ground {
+                went_airborne = true;
+            }
+            if went_airborne && player.on_ground {
+                break;
+            }
         }
 
-        assert!(
-            player.feet_pos.x > 10.0,
-            "player should have moved past ledge, x = {}",
-            player.feet_pos.x
-        );
-        assert!(
-            player.on_ground,
-            "player should have snapped down and be on ground"
-        );
+        assert!(went_airborne, "player should briefly go airborne off ledge");
+        assert!(player.on_ground, "player should land after falling");
         assert!(
             (player.feet_pos.y - 4.0).abs() < 0.1,
-            "player should have snapped to y=4.0, got {}",
+            "player should land at y=4.0, got {}",
             player.feet_pos.y
         );
     }
 
     #[test]
-    fn step_down_two_voxel_ledge_enters_freefall() {
+    fn two_voxel_ledge_enters_freefall() {
         let world = make_ledge_world(4, 2);
         let mut player = Player {
             feet_pos: Vec3::new(9.5, 5.0, 8.0),
@@ -942,35 +932,6 @@ mod tests {
         assert!(
             lost_ground,
             "player should enter free-fall over a 2-voxel drop"
-        );
-    }
-
-    #[test]
-    fn step_down_not_during_jump() {
-        let world = make_ledge_world(4, 1);
-        let mut player = Player {
-            feet_pos: Vec3::new(9.5, 5.0, 8.0),
-            velocity: Vec3::new(0.0, JUMP_VELOCITY, 0.0),
-            on_ground: false,
-            fly_mode: false,
-        };
-        let input = InputState {
-            right: true,
-            ..InputState::default()
-        };
-        let dt = 1.0 / 60.0;
-        let yaw = 0.0;
-
-        player.tick(dt, &input, yaw, &world);
-
-        assert!(
-            !player.on_ground,
-            "step-down should not activate during a jump"
-        );
-        assert!(
-            player.feet_pos.y > 5.0,
-            "player should be rising from jump, y = {}",
-            player.feet_pos.y
         );
     }
 }
