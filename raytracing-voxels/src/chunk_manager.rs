@@ -170,6 +170,8 @@ pub struct ChunkManager {
     cmd_tx: mpsc::UnboundedSender<ChunkCommand>,
     result_rx: mpsc::UnboundedReceiver<ChunkResult>,
     _worker: Option<std::thread::JoinHandle<()>>,
+    load_radius: i32,
+    max_loaded: usize,
 }
 
 impl ChunkManager {
@@ -197,6 +199,8 @@ impl ChunkManager {
             cmd_tx,
             result_rx,
             _worker: Some(worker),
+            load_radius,
+            max_loaded,
         }
     }
 
@@ -211,6 +215,19 @@ impl ChunkManager {
             }
             world.insert(result.pos, result.chunk);
         }
+    }
+
+    pub fn load_radius(&self) -> i32 {
+        self.load_radius
+    }
+
+    pub fn max_loaded(&self) -> usize {
+        self.max_loaded
+    }
+
+    pub fn desired_count(&self) -> usize {
+        let side = 2 * self.load_radius + 1;
+        (side * side * side) as usize
     }
 
     pub fn load_initial(&mut self, camera_pos: Vec3, world: &mut World) {

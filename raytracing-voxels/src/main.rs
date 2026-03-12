@@ -113,7 +113,6 @@ impl App {
             self.cursor_grabbed = false;
         }
     }
-
 }
 
 impl App {
@@ -133,13 +132,13 @@ impl App {
         renderer.upload_voxel_atlas(atlas.texture(), atlas.uv_map());
 
         let ascii_charset: String = (0x20u8..=0x7E).map(|b| b as char).collect();
-        let font = TextureAtlasFont::new(MINECRAFT_FONT, 32.0, &ascii_charset)
+        let font = TextureAtlasFont::new(MINECRAFT_FONT, 28.0, &ascii_charset)
             .context("failed to create font")?;
-        self.font_bind_group = Some(
-            renderer
-                .overlay()
-                .create_texture(renderer.device(), renderer.queue(), font.atlas().texture()),
-        );
+        self.font_bind_group = Some(renderer.overlay().create_texture(
+            renderer.device(),
+            renderer.queue(),
+            font.atlas().texture(),
+        ));
         self.font = Some(font);
 
         self.window = Some(window);
@@ -170,8 +169,10 @@ impl ApplicationHandler for App {
             return;
         }
         if let DeviceEvent::MouseMotion { delta: (dx, dy) } = event {
-            self.camera
-                .rotate(-dx as f32 * MOUSE_SENSITIVITY, -dy as f32 * MOUSE_SENSITIVITY);
+            self.camera.rotate(
+                -dx as f32 * MOUSE_SENSITIVITY,
+                -dy as f32 * MOUSE_SENSITIVITY,
+            );
         }
     }
 
@@ -277,12 +278,76 @@ impl ApplicationHandler for App {
 
                         self.draw_list.clear();
                         if let Some(font) = &self.font {
+                            let line_height = font.line_height();
+                            let mut y = 10.0;
+                            let color = Rgba::WHITE;
+
                             let fps_text = format!("FPS: {:.0}", self.fps_display);
+                            font.draw_text(&mut self.draw_list, &fps_text, 10.0, y, color);
+                            y += line_height;
+
+                            let chunk_count = self.world.chunk_count();
+                            let desired = self.chunk_manager.desired_count();
+                            let max_loaded = self.chunk_manager.max_loaded();
                             font.draw_text(
                                 &mut self.draw_list,
-                                &fps_text,
+                                &format!(
+                                    "Chunks: {} / {} (max {})",
+                                    chunk_count, desired, max_loaded
+                                ),
                                 10.0,
+                                y,
+                                Rgba::WHITE,
+                            );
+                            y += line_height;
+
+                            let cpu_chunk_bytes = chunk_count as u64 * 4096;
+                            font.draw_text(
+                                &mut self.draw_list,
+                                &format!("CPU: chunks {}", format_bytes(cpu_chunk_bytes)),
                                 10.0,
+                                y,
+                                Rgba::WHITE,
+                            );
+                            y += line_height;
+
+                            let gpu_stats = renderer.gpu_memory_stats();
+                            let gpu_chunk_total = gpu_stats.voxel_buffer_bytes
+                                + gpu_stats.chunk_info_bytes
+                                + gpu_stats.chunk_count_bytes;
+
+                            let font_atlas_bytes = self.font.as_ref().map_or(0u64, |f| {
+                                let tex = f.atlas().texture();
+                                tex.width() as u64 * tex.height() as u64 * 4
+                            });
+
+                            font.draw_text(
+                                &mut self.draw_list,
+                                &format!(
+                                    "GPU: chunks {} | atlas {} | font {}",
+                                    format_bytes(gpu_chunk_total),
+                                    format_bytes(gpu_stats.voxel_atlas_bytes),
+                                    format_bytes(font_atlas_bytes),
+                                ),
+                                10.0,
+                                y,
+                                Rgba::WHITE,
+                            );
+                            y += line_height;
+
+                            let cpu_font_bytes = font_atlas_bytes; // CPU copy of font atlas
+                            let total_cpu = cpu_chunk_bytes + cpu_font_bytes;
+                            let total_gpu =
+                                gpu_chunk_total + gpu_stats.voxel_atlas_bytes + font_atlas_bytes;
+                            font.draw_text(
+                                &mut self.draw_list,
+                                &format!(
+                                    "Total: CPU {} | GPU {}",
+                                    format_bytes(total_cpu),
+                                    format_bytes(total_gpu),
+                                ),
+                                10.0,
+                                y,
                                 Rgba::WHITE,
                             );
                         }
@@ -307,12 +372,22 @@ impl ApplicationHandler for App {
     }
 }
 
+fn format_bytes(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = 1024 * 1024;
+    if bytes >= MB {
+        format!("{:.1} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.0} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{} B", bytes)
+    }
+}
+
 fn main() -> Result<()> {
     env_logger::init();
     let event_loop = EventLoop::new().context("failed to create event loop")?;
     let mut app = App::new();
-    event_loop
-        .run_app(&mut app)
-        .context("event loop error")?;
+    event_loop.run_app(&mut app).context("event loop error")?;
     Ok(())
 }

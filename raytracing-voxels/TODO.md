@@ -1,6 +1,4 @@
-memory usage estimates
-
-get an actual vs desired updates per second from chunk manager
+very large amounts of chunks rendered show graphical glitches in rendering
 
 add and remove voxels
 

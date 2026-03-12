@@ -24,6 +24,14 @@ pub struct Renderer {
     overlay_renderer: OverlayRenderer,
     atlas_bind_group_layout: wgpu::BindGroupLayout,
     atlas_bind_group: Option<wgpu::BindGroup>,
+    voxel_atlas_bytes: u64,
+}
+
+pub struct GpuMemoryStats {
+    pub voxel_buffer_bytes: u64,
+    pub chunk_info_bytes: u64,
+    pub chunk_count_bytes: u64,
+    pub voxel_atlas_bytes: u64,
 }
 
 impl Renderer {
@@ -254,6 +262,7 @@ impl Renderer {
             overlay_renderer,
             atlas_bind_group_layout: atlas_bgl,
             atlas_bind_group: None,
+            voxel_atlas_bytes: 0,
         })
     }
 
@@ -390,6 +399,7 @@ impl Renderer {
         });
 
         self.atlas_bind_group = Some(bind_group);
+        self.voxel_atlas_bytes = (atlas_texture.width() as u64) * (atlas_texture.height() as u64) * 4;
     }
 
     pub fn aspect(&self) -> f32 {
@@ -466,6 +476,15 @@ impl Renderer {
 
     pub fn overlay(&self) -> &OverlayRenderer {
         &self.overlay_renderer
+    }
+
+    pub fn gpu_memory_stats(&self) -> GpuMemoryStats {
+        GpuMemoryStats {
+            voxel_buffer_bytes: self.voxel_mega_buffer.size(),
+            chunk_info_bytes: self.chunk_info_buffer.size(),
+            chunk_count_bytes: self.chunk_count_buffer.size(),
+            voxel_atlas_bytes: self.voxel_atlas_bytes,
+        }
     }
 
     pub fn render_overlay(
