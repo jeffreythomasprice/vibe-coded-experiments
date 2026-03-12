@@ -1,3 +1,8 @@
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result};
+use glam::IVec3;
+
 const SIZE: usize = 16;
 const VOLUME: usize = SIZE * SIZE * SIZE;
 
@@ -29,42 +34,31 @@ impl Chunk {
     pub fn data(&self) -> &[u8; VOLUME] {
         &self.voxels
     }
+
+    pub fn save_to_file(&self, path: &Path) -> Result<()> {
+        std::fs::write(path, self.voxels)
+            .with_context(|| format!("failed to write chunk to {}", path.display()))
+    }
+
+    pub fn load_from_file(path: &Path) -> Result<Chunk> {
+        let data = std::fs::read(path)
+            .with_context(|| format!("failed to read chunk from {}", path.display()))?;
+        let voxels: [u8; VOLUME] = data
+            .try_into()
+            .map_err(|v: Vec<u8>| {
+                anyhow::anyhow!(
+                    "chunk file {} has wrong size: expected {} bytes, got {}",
+                    path.display(),
+                    VOLUME,
+                    v.len()
+                )
+            })?;
+        Ok(Chunk { voxels })
+    }
 }
 
-pub fn generate_test_chunk() -> Chunk {
-    let mut chunk = Chunk::new();
-    for x in 0..SIZE {
-        for y in 0..SIZE {
-            for z in 0..SIZE {
-                let at_x_boundary = x == 0 || x == SIZE - 1;
-                let at_y_boundary = y == 0 || y == SIZE - 1;
-                let at_z_boundary = z == 0 || z == SIZE - 1;
-                let boundary_count =
-                    at_x_boundary as u8 + at_y_boundary as u8 + at_z_boundary as u8;
-                if boundary_count >= 2 {
-                    let id = if at_y_boundary && at_z_boundary {
-                        1 // edges along X axis
-                    } else if at_x_boundary && at_z_boundary {
-                        2 // edges along Y axis
-                    } else {
-                        3 // edges along Z axis
-                    };
-                    chunk.set(x, y, z, id);
-                }
-            }
-        }
-    }
-    // A few solid interior voxels with additional IDs
-    chunk.set(4, 4, 4, 3);
-    chunk.set(4, 4, 5, 3);
-    chunk.set(4, 5, 4, 3);
-    chunk.set(4, 5, 5, 3);
-    chunk.set(11, 11, 11, 4);
-    chunk.set(11, 11, 12, 4);
-    chunk.set(11, 12, 11, 4);
-    chunk.set(11, 12, 12, 4);
-
-    chunk
+pub fn chunk_file_path(dir: &Path, pos: IVec3) -> PathBuf {
+    dir.join(format!("chunk_{}_{}_{}", pos.x, pos.y, pos.z))
 }
 
 #[cfg(test)]
@@ -103,24 +97,51 @@ mod tests {
     }
 
     #[test]
-    fn test_chunk_has_solid_voxels() {
-        let chunk = generate_test_chunk();
-        assert!(chunk.data().iter().any(|&v| v != 0));
+    fn save_load_roundtrip() -> anyhow::Result<()> {
+        let dir = std::env::temp_dir().join("chunk_test_save_load_roundtrip");
+        std::fs::create_dir_all(&dir)?;
+        let path = dir.join("test_chunk");
+
+        let mut chunk = Chunk::new();
+        chunk.set(0, 0, 0, 1);
+        chunk.set(5, 10, 15, 42);
+        chunk.set(15, 15, 15, 255);
+        chunk.save_to_file(&path)?;
+
+        let loaded = Chunk::load_from_file(&path)?;
+        assert_eq!(chunk.data(), loaded.data());
+
+        std::fs::remove_dir_all(&dir)?;
+        Ok(())
     }
 
     #[test]
-    fn test_chunk_edges_are_solid() {
-        let chunk = generate_test_chunk();
-        // Corners should be solid (all 3 coords at boundary)
-        assert_ne!(chunk.get(0, 0, 0), 0);
-        assert_ne!(chunk.get(15, 15, 15), 0);
-        // Edges should be solid (2 coords at boundary)
-        assert_ne!(chunk.get(0, 0, 8), 0);
-        assert_ne!(chunk.get(0, 8, 0), 0);
-        assert_ne!(chunk.get(8, 0, 0), 0);
-        // Interior should be air
-        assert_eq!(chunk.get(8, 8, 8), 0);
-        // Face centers should be air (only 1 coord at boundary)
-        assert_eq!(chunk.get(0, 8, 8), 0);
+    fn load_wrong_size_returns_error() -> anyhow::Result<()> {
+        let dir = std::env::temp_dir().join("chunk_test_load_wrong_size");
+        std::fs::create_dir_all(&dir)?;
+        let path = dir.join("bad_chunk");
+
+        std::fs::write(&path, &[0u8; 100])?;
+        let result = Chunk::load_from_file(&path);
+        assert!(result.is_err());
+
+        std::fs::remove_dir_all(&dir)?;
+        Ok(())
     }
+
+    #[test]
+    fn chunk_file_path_format() {
+        use glam::IVec3;
+
+        let dir = Path::new("/world/chunks");
+        assert_eq!(
+            super::chunk_file_path(dir, IVec3::new(1, 2, 3)),
+            PathBuf::from("/world/chunks/chunk_1_2_3")
+        );
+        assert_eq!(
+            super::chunk_file_path(dir, IVec3::new(-5, 0, 10)),
+            PathBuf::from("/world/chunks/chunk_-5_0_10")
+        );
+    }
+
 }

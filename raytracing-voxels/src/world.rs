@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bytemuck::{Pod, Zeroable};
 use glam::{IVec3, Vec3};
@@ -24,6 +24,7 @@ pub struct RaycastHit {
 pub struct World {
     chunks: HashMap<IVec3, Chunk>,
     dirty: bool,
+    modified_chunks: HashSet<IVec3>,
 }
 
 impl World {
@@ -31,6 +32,7 @@ impl World {
         Self {
             chunks: HashMap::new(),
             dirty: false,
+            modified_chunks: HashSet::new(),
         }
     }
 
@@ -43,6 +45,7 @@ impl World {
         let removed = self.chunks.remove(pos);
         if removed.is_some() {
             self.dirty = true;
+            self.modified_chunks.remove(pos);
         }
         removed
     }
@@ -65,6 +68,18 @@ impl World {
 
     pub fn clear_dirty(&mut self) {
         self.dirty = false;
+    }
+
+    pub fn take_modified(&mut self) -> HashSet<IVec3> {
+        std::mem::take(&mut self.modified_chunks)
+    }
+
+    pub fn is_chunk_modified(&self, pos: &IVec3) -> bool {
+        self.modified_chunks.contains(pos)
+    }
+
+    pub fn mark_chunk_saved(&mut self, pos: &IVec3) {
+        self.modified_chunks.remove(pos);
     }
 
     pub fn get_mut(&mut self, pos: &IVec3) -> Option<&mut Chunk> {
@@ -90,6 +105,7 @@ impl World {
         if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
             chunk.set(local[0], local[1], local[2], value);
             self.dirty = true;
+            self.modified_chunks.insert(chunk_pos);
             true
         } else {
             false
@@ -239,13 +255,16 @@ impl World {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chunk::generate_test_chunk;
+    use crate::terrain::TerrainGenerator;
+
+    fn test_chunk() -> Chunk {
+        TerrainGenerator::new(0).generate_chunk(IVec3::ZERO)
+    }
 
     #[test]
     fn insert_and_get() {
         let mut world = World::new();
-        let chunk = generate_test_chunk();
-        world.insert(IVec3::ZERO, chunk);
+        world.insert(IVec3::ZERO, test_chunk());
         assert!(world.get(&IVec3::ZERO).is_some());
         assert!(world.get(&IVec3::X).is_none());
     }
@@ -253,7 +272,7 @@ mod tests {
     #[test]
     fn remove_returns_chunk_and_clears() {
         let mut world = World::new();
-        world.insert(IVec3::ZERO, generate_test_chunk());
+        world.insert(IVec3::ZERO, test_chunk());
         let removed = world.remove(&IVec3::ZERO);
         assert!(removed.is_some());
         assert!(world.get(&IVec3::ZERO).is_none());
@@ -262,9 +281,9 @@ mod tests {
     #[test]
     fn iter_yields_all() {
         let mut world = World::new();
-        world.insert(IVec3::ZERO, generate_test_chunk());
-        world.insert(IVec3::X, generate_test_chunk());
-        world.insert(IVec3::Y, generate_test_chunk());
+        world.insert(IVec3::ZERO, test_chunk());
+        world.insert(IVec3::X, test_chunk());
+        world.insert(IVec3::Y, test_chunk());
         assert_eq!(world.iter().count(), 3);
         assert_eq!(world.chunk_count(), 3);
     }
@@ -272,7 +291,7 @@ mod tests {
     #[test]
     fn pack_single_chunk() {
         let mut world = World::new();
-        world.insert(IVec3::ZERO, generate_test_chunk());
+        world.insert(IVec3::ZERO, test_chunk());
         let (voxel_data, infos) = world.pack_gpu_data();
         assert_eq!(voxel_data.len(), 4096);
         assert_eq!(infos.len(), 1);
@@ -283,8 +302,8 @@ mod tests {
     #[test]
     fn pack_two_chunks() {
         let mut world = World::new();
-        world.insert(IVec3::ZERO, generate_test_chunk());
-        world.insert(IVec3::X, generate_test_chunk());
+        world.insert(IVec3::ZERO, test_chunk());
+        world.insert(IVec3::X, test_chunk());
         let (voxel_data, infos) = world.pack_gpu_data();
         assert_eq!(voxel_data.len(), 8192);
         assert_eq!(infos.len(), 2);
@@ -301,14 +320,14 @@ mod tests {
     #[test]
     fn insert_sets_dirty() {
         let mut world = World::new();
-        world.insert(IVec3::ZERO, generate_test_chunk());
+        world.insert(IVec3::ZERO, test_chunk());
         assert!(world.is_dirty());
     }
 
     #[test]
     fn clear_dirty_resets() {
         let mut world = World::new();
-        world.insert(IVec3::ZERO, generate_test_chunk());
+        world.insert(IVec3::ZERO, test_chunk());
         world.clear_dirty();
         assert!(!world.is_dirty());
     }
@@ -316,7 +335,7 @@ mod tests {
     #[test]
     fn remove_sets_dirty() {
         let mut world = World::new();
-        world.insert(IVec3::ZERO, generate_test_chunk());
+        world.insert(IVec3::ZERO, test_chunk());
         world.clear_dirty();
         world.remove(&IVec3::ZERO);
         assert!(world.is_dirty());
@@ -408,6 +427,38 @@ mod tests {
             .expect("should hit");
         assert_eq!(hit.voxel_id, 4);
         assert_eq!(hit.normal, IVec3::ZERO);
+    }
+
+    #[test]
+    fn set_voxel_adds_to_modified() {
+        let mut world = World::new();
+        world.insert(IVec3::ZERO, Chunk::new());
+        world.set_voxel(IVec3::new(5, 5, 5), 3);
+        assert!(world.is_chunk_modified(&IVec3::ZERO));
+    }
+
+    #[test]
+    fn take_modified_returns_and_clears() {
+        let mut world = World::new();
+        world.insert(IVec3::ZERO, Chunk::new());
+        world.insert(IVec3::X, Chunk::new());
+        world.set_voxel(IVec3::new(5, 5, 5), 1);
+        world.set_voxel(IVec3::new(16, 0, 0), 2);
+        let modified = world.take_modified();
+        assert!(modified.contains(&IVec3::ZERO));
+        assert!(modified.contains(&IVec3::X));
+        assert!(!world.is_chunk_modified(&IVec3::ZERO));
+        assert!(!world.is_chunk_modified(&IVec3::X));
+    }
+
+    #[test]
+    fn remove_clears_from_modified() {
+        let mut world = World::new();
+        world.insert(IVec3::ZERO, Chunk::new());
+        world.set_voxel(IVec3::new(5, 5, 5), 3);
+        assert!(world.is_chunk_modified(&IVec3::ZERO));
+        world.remove(&IVec3::ZERO);
+        assert!(!world.is_chunk_modified(&IVec3::ZERO));
     }
 
     #[test]

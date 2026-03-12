@@ -1,0 +1,3 @@
+- [x] 1.1 Create `TerrainGenerator` struct with noise-based heightmap
+- [x] 1.2 Add seed to `Config` and wire `TerrainGenerator` into `ChunkManager`
+- [x] 1.3 Remove old `generate_test_chunk` and update tests

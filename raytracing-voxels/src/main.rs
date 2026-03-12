@@ -1,14 +1,17 @@
 mod camera;
 mod chunk;
 mod chunk_manager;
+mod config;
 mod overlay;
 mod overlay_renderer;
 mod texture_atlas;
 mod texture_atlas_font;
 mod voxel_renderer;
 mod voxel_textures;
+mod terrain;
 mod world;
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -17,6 +20,7 @@ use glam::{IVec3, Vec2, Vec3};
 
 use camera::Camera;
 use chunk_manager::ChunkManager;
+use config::Config;
 use overlay::{DrawList, Rgba, Texture};
 use texture_atlas_font::TextureAtlasFont;
 use voxel_renderer::Renderer;
@@ -67,28 +71,39 @@ struct App {
     crosshair_bind_group: Option<wgpu::BindGroup>,
     voxel_atlas_overlay_bind_group: Option<wgpu::BindGroup>,
     voxel_uv_map: [[f32; 4]; 256],
+    last_save: Instant,
+    storage_dir: PathBuf,
 }
 
 impl App {
-    fn new() -> Self {
+    fn new(storage_dir: PathBuf, seed: u32) -> Self {
         let mut world = World::new();
-        let mut chunk_manager = ChunkManager::new(7, 5000, 5.0);
+        let mut chunk_manager = ChunkManager::new(7, 5000, 5.0, storage_dir.clone(), seed);
 
-        let cam_pos = Vec3::new(24.0, 20.0, 40.0);
-        chunk_manager.load_initial(cam_pos, &mut world);
+        let camera = match Camera::load_from_file(&camera::camera_file_path(&storage_dir)) {
+            Ok(cam) => {
+                log::info!("loaded camera from {}", storage_dir.display());
+                cam
+            }
+            Err(_) => {
+                let cam_pos = Vec3::new(24.0, 64.0, 40.0);
+                let delta = Vec3::ZERO - cam_pos;
+                let horizontal_dist = Vec3::new(delta.x, 0.0, delta.z).length();
+                Camera::new(
+                    cam_pos,
+                    f32::atan2(-delta.x, -delta.z),
+                    f32::atan2(delta.y, horizontal_dist),
+                    60.0_f32.to_radians(),
+                )
+            }
+        };
 
-        let delta = Vec3::ZERO - cam_pos;
-        let horizontal_dist = Vec3::new(delta.x, 0.0, delta.z).length();
+        chunk_manager.load_initial(camera.position, &mut world);
 
         Self {
             window: None,
             renderer: None,
-            camera: Camera::new(
-                cam_pos,
-                f32::atan2(-delta.x, -delta.z),
-                f32::atan2(delta.y, horizontal_dist),
-                60.0_f32.to_radians(),
-            ),
+            camera,
             world,
             chunk_manager,
             input: InputState::default(),
@@ -106,6 +121,8 @@ impl App {
             crosshair_bind_group: None,
             voxel_atlas_overlay_bind_group: None,
             voxel_uv_map: [[0.0; 4]; 256],
+            last_save: Instant::now(),
+            storage_dir,
         }
     }
 
@@ -207,7 +224,14 @@ impl ApplicationHandler for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                let cam_path = camera::camera_file_path(&self.storage_dir);
+                if let Err(e) = self.camera.save_to_file(&cam_path) {
+                    log::error!("failed to save camera: {e:#}");
+                }
+                self.chunk_manager.save_all_modified(&mut self.world);
+                event_loop.exit();
+            }
             WindowEvent::MouseInput {
                 button: MouseButton::Left,
                 state: ElementState::Pressed,
@@ -328,6 +352,15 @@ impl ApplicationHandler for App {
 
                 self.chunk_manager.update_camera(self.camera.position);
                 self.chunk_manager.drain_results(&mut self.world);
+
+                if self.last_save.elapsed().as_secs_f32() >= 5.0 {
+                    self.chunk_manager.save_modified(&mut self.world);
+                    let cam_path = camera::camera_file_path(&self.storage_dir);
+                    if let Err(e) = self.camera.save_to_file(&cam_path) {
+                        log::error!("failed to save camera: {e:#}");
+                    }
+                    self.last_save = Instant::now();
+                }
 
                 if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
                     if self.world.is_dirty() {
@@ -546,8 +579,9 @@ fn format_bytes(bytes: u64) -> String {
 
 fn main() -> Result<()> {
     env_logger::init();
+    let config = Config::load()?;
     let event_loop = EventLoop::new().context("failed to create event loop")?;
-    let mut app = App::new();
+    let mut app = App::new(config.chunk_storage_dir, config.seed);
     event_loop.run_app(&mut app).context("event loop error")?;
     Ok(())
 }

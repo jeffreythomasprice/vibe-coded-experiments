@@ -1,3 +1,6 @@
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result};
 use bytemuck::{Pod, Zeroable};
 use glam::Vec3;
 
@@ -82,6 +85,41 @@ impl Camera {
         self.yaw += delta_yaw;
         self.pitch = (self.pitch + delta_pitch).clamp(-PITCH_LIMIT, PITCH_LIMIT);
     }
+
+    pub fn save_to_file(&self, path: &Path) -> Result<()> {
+        let data: [f32; 5] = [
+            self.position.x,
+            self.position.y,
+            self.position.z,
+            self.yaw,
+            self.pitch,
+        ];
+        std::fs::write(path, bytemuck::cast_slice::<f32, u8>(&data))
+            .with_context(|| format!("failed to write camera to {}", path.display()))
+    }
+
+    pub fn load_from_file(path: &Path) -> Result<Camera> {
+        let data = std::fs::read(path)
+            .with_context(|| format!("failed to read camera from {}", path.display()))?;
+        if data.len() != 20 {
+            anyhow::bail!(
+                "camera file {} has wrong size: expected 20 bytes, got {}",
+                path.display(),
+                data.len()
+            );
+        }
+        let floats: &[f32; 5] = bytemuck::from_bytes(&data);
+        Ok(Camera::new(
+            Vec3::new(floats[0], floats[1], floats[2]),
+            floats[3],
+            floats[4],
+            60.0_f32.to_radians(),
+        ))
+    }
+}
+
+pub fn camera_file_path(dir: &Path) -> PathBuf {
+    dir.join("camera")
 }
 
 impl Default for Camera {
@@ -157,5 +195,43 @@ mod tests {
         assert!(cam.pitch <= PITCH_LIMIT);
         cam.rotate(0.0, -200.0);
         assert!(cam.pitch >= -PITCH_LIMIT);
+    }
+
+    #[test]
+    fn save_load_roundtrip() -> anyhow::Result<()> {
+        let dir = std::env::temp_dir().join("camera_test_save_load_roundtrip");
+        std::fs::create_dir_all(&dir)?;
+        let path = camera_file_path(&dir);
+
+        let cam = Camera::new(Vec3::new(1.5, 2.5, 3.5), 0.7, -0.3, 60.0_f32.to_radians());
+        cam.save_to_file(&path)?;
+
+        let loaded = Camera::load_from_file(&path)?;
+        assert!((cam.position - loaded.position).length() < 1e-6);
+        assert!((cam.yaw - loaded.yaw).abs() < 1e-6);
+        assert!((cam.pitch - loaded.pitch).abs() < 1e-6);
+
+        std::fs::remove_dir_all(&dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn load_wrong_size_returns_error() -> anyhow::Result<()> {
+        let dir = std::env::temp_dir().join("camera_test_load_wrong_size");
+        std::fs::create_dir_all(&dir)?;
+        let path = camera_file_path(&dir);
+
+        std::fs::write(&path, &[0u8; 10])?;
+        let result = Camera::load_from_file(&path);
+        assert!(result.is_err());
+
+        std::fs::remove_dir_all(&dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn camera_file_path_format() {
+        let dir = Path::new("/world/data");
+        assert_eq!(camera_file_path(dir), PathBuf::from("/world/data/camera"));
     }
 }

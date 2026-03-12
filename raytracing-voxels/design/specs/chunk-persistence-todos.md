@@ -1,0 +1,7 @@
+- [x] 1. Add `toml` dependency and create config module
+- [x] 2. Add chunk serialization and deserialization
+- [x] 3. Track per-chunk modifications in World
+- [x] 4. Save modified chunks on eviction
+- [x] 5. Load chunks from disk before generating
+- [x] 6. Debounced periodic save of modified chunks
+- [x] 7. Save all modified chunks on shutdown

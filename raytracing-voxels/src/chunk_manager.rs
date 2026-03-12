@@ -1,10 +1,12 @@
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use glam::{IVec3, Vec3};
 use tokio::sync::mpsc;
 
-use crate::chunk::generate_test_chunk;
+use crate::chunk::{chunk_file_path, Chunk};
+use crate::terrain::TerrainGenerator;
 use crate::world::World;
 
 pub enum ChunkCommand {
@@ -83,13 +85,27 @@ fn compute_next_load(
     None
 }
 
+fn load_or_generate_chunk(storage_dir: &Path, pos: IVec3, generator: &TerrainGenerator) -> Chunk {
+    let path = chunk_file_path(storage_dir, pos);
+    if path.exists() {
+        match Chunk::load_from_file(&path) {
+            Ok(chunk) => return chunk,
+            Err(e) => log::warn!("failed to load chunk at {:?}: {:#}", pos, e),
+        }
+    }
+    generator.generate_chunk(pos)
+}
+
 async fn chunk_loader_task(
     load_radius: i32,
     max_loaded: usize,
     cycle_budget: Duration,
+    storage_dir: PathBuf,
+    seed: u32,
     mut cmd_rx: mpsc::UnboundedReceiver<ChunkCommand>,
     result_tx: mpsc::UnboundedSender<ChunkResult>,
 ) {
+    let generator = TerrainGenerator::new(seed);
     let mut camera_pos = Vec3::ZERO;
     let mut loaded_positions: HashSet<IVec3> = HashSet::new();
 
@@ -113,7 +129,7 @@ async fn chunk_loader_task(
             let action = compute_next_load(camera_chunk, &loaded_positions, &desired, max_loaded);
             match action {
                 Some(LoadAction::Load(pos)) => {
-                    let chunk = generate_test_chunk();
+                    let chunk = load_or_generate_chunk(&storage_dir, pos, &generator);
                     loaded_positions.insert(pos);
                     if result_tx
                         .send(ChunkResult {
@@ -128,7 +144,7 @@ async fn chunk_loader_task(
                     did_work = true;
                 }
                 Some(LoadAction::Swap { evict, load }) => {
-                    let chunk = generate_test_chunk();
+                    let chunk = load_or_generate_chunk(&storage_dir, load, &generator);
                     loaded_positions.remove(&evict);
                     loaded_positions.insert(load);
                     if result_tx
@@ -172,15 +188,23 @@ pub struct ChunkManager {
     _worker: Option<std::thread::JoinHandle<()>>,
     load_radius: i32,
     max_loaded: usize,
+    storage_dir: PathBuf,
 }
 
 impl ChunkManager {
-    pub fn new(load_radius: i32, max_loaded: usize, updates_per_second: f32) -> Self {
+    pub fn new(
+        load_radius: i32,
+        max_loaded: usize,
+        updates_per_second: f32,
+        storage_dir: PathBuf,
+        seed: u32,
+    ) -> Self {
         let cycle_budget = Duration::from_secs_f32(1.0 / updates_per_second);
 
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
         let (result_tx, result_rx) = mpsc::unbounded_channel();
 
+        let task_storage_dir = storage_dir.clone();
         let worker = std::thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_time()
@@ -190,6 +214,8 @@ impl ChunkManager {
                 load_radius,
                 max_loaded,
                 cycle_budget,
+                task_storage_dir,
+                seed,
                 cmd_rx,
                 result_tx,
             ));
@@ -201,6 +227,7 @@ impl ChunkManager {
             _worker: Some(worker),
             load_radius,
             max_loaded,
+            storage_dir,
         }
     }
 
@@ -210,8 +237,9 @@ impl ChunkManager {
 
     pub fn drain_results(&mut self, world: &mut World) {
         while let Ok(result) = self.result_rx.try_recv() {
-            if let Some(evict) = &result.evict {
-                world.remove(evict);
+            if let Some(evict_pos) = &result.evict {
+                self.save_before_evict(world, evict_pos);
+                world.remove(evict_pos);
             }
             world.insert(result.pos, result.chunk);
         }
@@ -230,6 +258,34 @@ impl ChunkManager {
         (side * side * side) as usize
     }
 
+    fn save_before_evict(&self, world: &mut World, evict_pos: &IVec3) {
+        if world.is_chunk_modified(evict_pos) {
+            if let Some(chunk) = world.get(evict_pos) {
+                let path = chunk_file_path(&self.storage_dir, *evict_pos);
+                if let Err(e) = chunk.save_to_file(&path) {
+                    log::warn!("failed to save chunk {:?} on eviction: {e:#}", evict_pos);
+                } else {
+                    world.mark_chunk_saved(evict_pos);
+                }
+            }
+        }
+    }
+
+    pub fn save_modified(&self, world: &mut World) {
+        for pos in world.take_modified() {
+            if let Some(chunk) = world.get(&pos) {
+                let path = chunk_file_path(&self.storage_dir, pos);
+                if let Err(e) = chunk.save_to_file(&path) {
+                    log::warn!("failed to save modified chunk {:?}: {e:#}", pos);
+                }
+            }
+        }
+    }
+
+    pub fn save_all_modified(&self, world: &mut World) {
+        self.save_modified(world);
+    }
+
     pub fn load_initial(&mut self, camera_pos: Vec3, world: &mut World) {
         self.update_camera(camera_pos);
 
@@ -239,8 +295,9 @@ impl ChunkManager {
         loop {
             match self.result_rx.try_recv() {
                 Ok(result) => {
-                    if let Some(evict) = &result.evict {
-                        world.remove(evict);
+                    if let Some(evict_pos) = &result.evict {
+                        self.save_before_evict(world, evict_pos);
+                        world.remove(evict_pos);
                     }
                     world.insert(result.pos, result.chunk);
                     last_recv = std::time::Instant::now();
@@ -375,7 +432,7 @@ mod tests {
 
     #[test]
     fn load_initial_fills_all_desired() {
-        let mut cm = ChunkManager::new(2, 125, 5.0);
+        let mut cm = ChunkManager::new(2, 125, 5.0, PathBuf::from("/nonexistent"), 12345);
         let mut world = World::new();
         cm.load_initial(Vec3::new(8.0, 8.0, 8.0), &mut world);
         assert_eq!(world.chunk_count(), 125);
@@ -383,7 +440,7 @@ mod tests {
 
     #[test]
     fn load_initial_respects_max_loaded() {
-        let mut cm = ChunkManager::new(2, 50, 5.0);
+        let mut cm = ChunkManager::new(2, 50, 5.0, PathBuf::from("/nonexistent"), 12345);
         let mut world = World::new();
         let cam = Vec3::new(8.0, 8.0, 8.0);
         cm.load_initial(cam, &mut world);
@@ -397,7 +454,7 @@ mod tests {
 
     #[test]
     fn drain_results_applies_chunks() {
-        let mut cm = ChunkManager::new(1, 27, 1000.0);
+        let mut cm = ChunkManager::new(1, 27, 1000.0, PathBuf::from("/nonexistent"), 12345);
         let mut world = World::new();
         cm.update_camera(Vec3::new(8.0, 8.0, 8.0));
         // Give the background task time to generate
@@ -408,7 +465,7 @@ mod tests {
 
     #[test]
     fn camera_move_swaps_chunks() {
-        let mut cm = ChunkManager::new(1, 27, 5.0);
+        let mut cm = ChunkManager::new(1, 27, 5.0, PathBuf::from("/nonexistent"), 12345);
         let mut world = World::new();
         let cam1 = Vec3::new(8.0, 8.0, 8.0);
         cm.load_initial(cam1, &mut world);
@@ -424,5 +481,16 @@ mod tests {
         for (&pos, _) in world.iter() {
             assert!(chebyshev_distance(new_camera_chunk, pos) <= 1);
         }
+    }
+
+    #[test]
+    fn load_or_generate_uses_terrain() {
+        let generator = TerrainGenerator::new(42);
+        let chunk = load_or_generate_chunk(Path::new("/nonexistent"), IVec3::ZERO, &generator);
+        // Terrain generator should produce solid voxels at y=0 (below surface)
+        assert!(chunk.data().iter().any(|&v| v != 0));
+        // Should not match the old wireframe pattern (edges-only)
+        // Interior ground-level voxels should be solid with terrain
+        assert_ne!(chunk.get(8, 0, 8), 0, "interior ground should be solid terrain");
     }
 }
