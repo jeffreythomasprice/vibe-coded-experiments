@@ -1,6 +1,4 @@
-very large amounts of chunks rendered show graphical glitches in rendering
-
-add and remove voxels
+physics, walk around, hit voxels, slide on edges, jump
 
 chunk manager should save unloaded chunks that have been modified to disk and load them back again first
 

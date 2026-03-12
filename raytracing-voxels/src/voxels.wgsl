@@ -89,9 +89,25 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let chunk_max = chunk_min + vec3<f32>(16.0, 16.0, 16.0);
         let t = ray_box(ro, rd, chunk_min, chunk_max);
 
-        if t.x <= t.y && t.y >= 0.0 && hit_count < 16u {
-            hits[hit_count] = ChunkHit(max(t.x, 0.0), ci);
-            hit_count = hit_count + 1u;
+        if t.x <= t.y && t.y >= 0.0 {
+            let entry_t = max(t.x, 0.0);
+            if hit_count < 16u {
+                hits[hit_count] = ChunkHit(entry_t, ci);
+                hit_count = hit_count + 1u;
+            } else {
+                // Array full: replace farthest hit if this one is closer
+                var max_idx: u32 = 0u;
+                var max_t: f32 = hits[0].entry_t;
+                for (var k: u32 = 1u; k < 16u; k = k + 1u) {
+                    if hits[k].entry_t > max_t {
+                        max_t = hits[k].entry_t;
+                        max_idx = k;
+                    }
+                }
+                if entry_t < max_t {
+                    hits[max_idx] = ChunkHit(entry_t, ci);
+                }
+            }
         }
     }
 

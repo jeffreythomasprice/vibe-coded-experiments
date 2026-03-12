@@ -13,14 +13,17 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
-use glam::Vec3;
+use glam::{IVec3, Vec2, Vec3};
 
 use camera::Camera;
 use chunk_manager::ChunkManager;
-use overlay::{DrawList, Rgba};
+use overlay::{DrawList, Rgba, Texture};
 use texture_atlas_font::TextureAtlasFont;
 use voxel_renderer::Renderer;
 use world::World;
+
+const VOXEL_TYPE_NAMES: &[&str] = &["", "stone", "dirt", "grass", "brick"];
+const VOXEL_KEY_TO_ID: [u8; 5] = [0, 3, 2, 1, 4];
 
 const MINECRAFT_FONT: &[u8] = include_bytes!("../resources/Minecraft.otf");
 use winit::application::ApplicationHandler;
@@ -55,15 +58,21 @@ struct App {
     font: Option<TextureAtlasFont>,
     font_bind_group: Option<wgpu::BindGroup>,
     draw_list: DrawList,
+    hud_draw_list: DrawList,
+    crosshair_draw_list: DrawList,
     frame_count: u32,
     fps_accum: f32,
     fps_display: f32,
+    active_voxel_type: u8,
+    crosshair_bind_group: Option<wgpu::BindGroup>,
+    voxel_atlas_overlay_bind_group: Option<wgpu::BindGroup>,
+    voxel_uv_map: [[f32; 4]; 256],
 }
 
 impl App {
     fn new() -> Self {
         let mut world = World::new();
-        let mut chunk_manager = ChunkManager::new(5, 500, 5.0);
+        let mut chunk_manager = ChunkManager::new(7, 5000, 5.0);
 
         let cam_pos = Vec3::new(24.0, 20.0, 40.0);
         chunk_manager.load_initial(cam_pos, &mut world);
@@ -88,9 +97,15 @@ impl App {
             font: None,
             font_bind_group: None,
             draw_list: DrawList::new(),
+            hud_draw_list: DrawList::new(),
+            crosshair_draw_list: DrawList::new(),
             frame_count: 0,
             fps_accum: 0.0,
             fps_display: 0.0,
+            active_voxel_type: VOXEL_KEY_TO_ID[1], // default: grass
+            crosshair_bind_group: None,
+            voxel_atlas_overlay_bind_group: None,
+            voxel_uv_map: [[0.0; 4]; 256],
         }
     }
 
@@ -130,6 +145,20 @@ impl App {
 
         let atlas = voxel_textures::build_voxel_atlas(42)?;
         renderer.upload_voxel_atlas(atlas.texture(), atlas.uv_map());
+        self.voxel_uv_map = *atlas.uv_map();
+
+        self.voxel_atlas_overlay_bind_group = Some(renderer.overlay().create_texture(
+            renderer.device(),
+            renderer.queue(),
+            atlas.texture(),
+        ));
+
+        let crosshair_tex = generate_crosshair_texture();
+        self.crosshair_bind_group = Some(renderer.overlay().create_texture(
+            renderer.device(),
+            renderer.queue(),
+            &crosshair_tex,
+        ));
 
         let ascii_charset: String = (0x20u8..=0x7E).map(|b| b as char).collect();
         let font = TextureAtlasFont::new(MINECRAFT_FONT, 28.0, &ascii_charset)
@@ -184,8 +213,41 @@ impl ApplicationHandler for App {
                 state: ElementState::Pressed,
                 ..
             } => {
-                if !self.cursor_grabbed {
+                if self.cursor_grabbed {
+                    if let Some(hit) =
+                        self.world
+                            .raycast(self.camera.position, self.camera.forward(), 50.0)
+                    {
+                        let hit_world = hit.chunk_pos * 16
+                            + IVec3::new(
+                                hit.local_pos[0] as i32,
+                                hit.local_pos[1] as i32,
+                                hit.local_pos[2] as i32,
+                            );
+                        let place_pos = hit_world + hit.normal;
+                        self.world.set_voxel(place_pos, self.active_voxel_type);
+                    }
+                } else {
                     self.grab_cursor();
+                }
+            }
+            WindowEvent::MouseInput {
+                button: MouseButton::Right,
+                state: ElementState::Pressed,
+                ..
+            } => {
+                if self.cursor_grabbed
+                    && let Some(hit) =
+                        self.world
+                            .raycast(self.camera.position, self.camera.forward(), 50.0)
+                {
+                    let hit_world = hit.chunk_pos * 16
+                        + IVec3::new(
+                            hit.local_pos[0] as i32,
+                            hit.local_pos[1] as i32,
+                            hit.local_pos[2] as i32,
+                        );
+                    self.world.set_voxel(hit_world, 0);
                 }
             }
             WindowEvent::KeyboardInput {
@@ -220,6 +282,10 @@ impl ApplicationHandler for App {
                     KeyCode::KeyD => self.input.right = pressed,
                     KeyCode::Space => self.input.up = pressed,
                     KeyCode::ShiftLeft => self.input.down = pressed,
+                    KeyCode::Digit1 if pressed => self.active_voxel_type = VOXEL_KEY_TO_ID[1],
+                    KeyCode::Digit2 if pressed => self.active_voxel_type = VOXEL_KEY_TO_ID[2],
+                    KeyCode::Digit3 if pressed => self.active_voxel_type = VOXEL_KEY_TO_ID[3],
+                    KeyCode::Digit4 if pressed => self.active_voxel_type = VOXEL_KEY_TO_ID[4],
                     _ => {}
                 }
             }
@@ -277,6 +343,9 @@ impl ApplicationHandler for App {
                         renderer.render_voxels(&mut encoder, &view, &uniforms);
 
                         self.draw_list.clear();
+                        let screen_width = renderer.screen_width();
+                        let screen_height = renderer.screen_height();
+
                         if let Some(font) = &self.font {
                             let line_height = font.line_height();
                             let mut y = 10.0;
@@ -320,14 +389,16 @@ impl ApplicationHandler for App {
                                 let tex = f.atlas().texture();
                                 tex.width() as u64 * tex.height() as u64 * 4
                             });
+                            let crosshair_bytes: u64 = 32 * 32 * 4;
 
                             font.draw_text(
                                 &mut self.draw_list,
                                 &format!(
-                                    "GPU: chunks {} | atlas {} | font {}",
+                                    "GPU: chunks {} | atlas {} | font {} | xhair {}",
                                     format_bytes(gpu_chunk_total),
                                     format_bytes(gpu_stats.voxel_atlas_bytes),
                                     format_bytes(font_atlas_bytes),
+                                    format_bytes(crosshair_bytes),
                                 ),
                                 10.0,
                                 y,
@@ -335,10 +406,12 @@ impl ApplicationHandler for App {
                             );
                             y += line_height;
 
-                            let cpu_font_bytes = font_atlas_bytes; // CPU copy of font atlas
+                            let cpu_font_bytes = font_atlas_bytes;
                             let total_cpu = cpu_chunk_bytes + cpu_font_bytes;
-                            let total_gpu =
-                                gpu_chunk_total + gpu_stats.voxel_atlas_bytes + font_atlas_bytes;
+                            let total_gpu = gpu_chunk_total
+                                + gpu_stats.voxel_atlas_bytes
+                                + font_atlas_bytes
+                                + crosshair_bytes;
                             font.draw_text(
                                 &mut self.draw_list,
                                 &format!(
@@ -350,6 +423,18 @@ impl ApplicationHandler for App {
                                 y,
                                 Rgba::WHITE,
                             );
+                            y += line_height;
+
+                            // Active voxel HUD
+                            let voxel_name = VOXEL_TYPE_NAMES[self.active_voxel_type as usize];
+                            font.draw_text(
+                                &mut self.draw_list,
+                                &format!("Active: {}", voxel_name),
+                                10.0,
+                                screen_height - line_height - 50.0,
+                                Rgba::WHITE,
+                            );
+                            let _ = y;
                         }
 
                         if let Some(texture_bg) = &self.font_bind_group {
@@ -358,6 +443,50 @@ impl ApplicationHandler for App {
                                 &mut encoder,
                                 &self.draw_list,
                                 texture_bg,
+                            );
+                        }
+
+                        // Crosshair overlay
+                        self.crosshair_draw_list.clear();
+                        self.crosshair_draw_list.rect(
+                            screen_width / 2.0 - 16.0,
+                            screen_height / 2.0 - 16.0,
+                            32.0,
+                            32.0,
+                            Vec2::ZERO,
+                            Vec2::ONE,
+                            Rgba::WHITE,
+                        );
+                        if let Some(crosshair_bg) = &self.crosshair_bind_group {
+                            renderer.render_overlay(
+                                &view,
+                                &mut encoder,
+                                &self.crosshair_draw_list,
+                                crosshair_bg,
+                            );
+                        }
+
+                        // Voxel preview HUD
+                        self.hud_draw_list.clear();
+                        let uv = self.voxel_uv_map[self.active_voxel_type as usize];
+                        if uv[2] > uv[0] {
+                            let preview_size = 48.0;
+                            self.hud_draw_list.rect(
+                                10.0,
+                                screen_height - preview_size - 10.0,
+                                preview_size,
+                                preview_size,
+                                Vec2::new(uv[0], uv[1]),
+                                Vec2::new(uv[2], uv[3]),
+                                Rgba::WHITE,
+                            );
+                        }
+                        if let Some(voxel_bg) = &self.voxel_atlas_overlay_bind_group {
+                            renderer.render_overlay(
+                                &view,
+                                &mut encoder,
+                                &self.hud_draw_list,
+                                voxel_bg,
                             );
                         }
 
@@ -370,6 +499,37 @@ impl ApplicationHandler for App {
             _ => {}
         }
     }
+}
+
+fn generate_crosshair_texture() -> Texture {
+    let size = 32u32;
+    let mut tex = Texture::new(size, size);
+    let center = size / 2;
+    let arm_length = 6u32;
+    let arm_half_width = 1u32;
+
+    for i in (center - arm_length)..=(center + arm_length) {
+        for w in 0..=(arm_half_width * 2) {
+            let offset = center - arm_half_width + w;
+            // Horizontal arm
+            tex.set_pixel(i, offset, Rgba::new(255, 255, 255, 153));
+            // Vertical arm
+            tex.set_pixel(offset, i, Rgba::new(255, 255, 255, 153));
+        }
+    }
+
+    // Center 2x2 brighter
+    for dy in 0..2u32 {
+        for dx in 0..2u32 {
+            tex.set_pixel(
+                center - 1 + dx,
+                center - 1 + dy,
+                Rgba::new(255, 255, 255, 230),
+            );
+        }
+    }
+
+    tex
 }
 
 fn format_bytes(bytes: u64) -> String {

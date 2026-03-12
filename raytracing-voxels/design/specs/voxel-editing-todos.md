@@ -1,0 +1,7 @@
+- [x] 1. CPU raycast through the world
+- [x] 2. World mutation by global position
+- [x] 3. Active voxel type selection and state
+- [x] 4. Crosshair overlay texture
+- [x] 5. Active voxel HUD display
+- [x] 6. Voxel placement (left click)
+- [x] 7. Voxel removal (right click)

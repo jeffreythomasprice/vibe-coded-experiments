@@ -406,6 +406,14 @@ impl Renderer {
         self.config.width as f32 / self.config.height as f32
     }
 
+    pub fn screen_width(&self) -> f32 {
+        self.config.width as f32
+    }
+
+    pub fn screen_height(&self) -> f32 {
+        self.config.height as f32
+    }
+
     pub fn begin_frame(&mut self) -> Option<(wgpu::SurfaceTexture, wgpu::TextureView)> {
         let frame = match self.surface.get_current_texture() {
             Ok(f) => f,
