@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use crate::camera::CameraUniforms;
 use crate::overlay::Texture;
 use crate::overlay_renderer::OverlayRenderer;
+use crate::world::GpuChunkInfo;
 use winit::window::Window;
 
 pub struct Renderer {
@@ -15,8 +16,11 @@ pub struct Renderer {
     pipeline: wgpu::RenderPipeline,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
-    chunk_buffer: wgpu::Buffer,
+    voxel_mega_buffer: wgpu::Buffer,
+    chunk_info_buffer: wgpu::Buffer,
+    chunk_count_buffer: wgpu::Buffer,
     chunk_bind_group: wgpu::BindGroup,
+    chunk_bgl: wgpu::BindGroupLayout,
     overlay_renderer: OverlayRenderer,
     atlas_bind_group_layout: wgpu::BindGroupLayout,
     atlas_bind_group: Option<wgpu::BindGroup>,
@@ -83,34 +87,80 @@ impl Renderer {
             }],
         });
 
-        let chunk_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("chunk_voxels"),
+        let voxel_mega_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("voxel_mega_buffer"),
             size: 4096,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
+        let chunk_info_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("chunk_info_buffer"),
+            size: std::mem::size_of::<GpuChunkInfo>() as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let chunk_count_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("chunk_count_buffer"),
+            size: 16, // u32 padded to 16 bytes for uniform alignment
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         let chunk_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("chunk_bgl"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
         });
 
         let chunk_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("chunk_bg"),
             layout: &chunk_bgl,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: chunk_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: voxel_mega_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: chunk_info_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: chunk_count_buffer.as_entire_binding(),
+                },
+            ],
         });
 
         let atlas_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -196,8 +246,11 @@ impl Renderer {
             pipeline,
             camera_buffer,
             camera_bind_group,
-            chunk_buffer,
+            voxel_mega_buffer,
+            chunk_info_buffer,
+            chunk_count_buffer,
             chunk_bind_group,
+            chunk_bgl,
             overlay_renderer,
             atlas_bind_group_layout: atlas_bgl,
             atlas_bind_group: None,
@@ -214,8 +267,50 @@ impl Renderer {
         self.overlay_renderer.resize(&self.queue, width, height);
     }
 
-    pub fn upload_chunk(&self, data: &[u8; 4096]) {
-        self.queue.write_buffer(&self.chunk_buffer, 0, data);
+    pub fn upload_world(&mut self, voxel_data: &[u8], chunk_infos: &[GpuChunkInfo], chunk_count: u32) {
+        let voxel_size = (voxel_data.len() as u64).max(4);
+        if self.voxel_mega_buffer.size() < voxel_size {
+            self.voxel_mega_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("voxel_mega_buffer"),
+                size: voxel_size,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+        }
+
+        let info_size = (std::mem::size_of_val(chunk_infos) as u64).max(16);
+        if self.chunk_info_buffer.size() < info_size {
+            self.chunk_info_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("chunk_info_buffer"),
+                size: info_size,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+        }
+
+        self.chunk_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("chunk_bg"),
+            layout: &self.chunk_bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.voxel_mega_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.chunk_info_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: self.chunk_count_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        self.queue.write_buffer(&self.voxel_mega_buffer, 0, voxel_data);
+        self.queue.write_buffer(&self.chunk_info_buffer, 0, bytemuck::cast_slice(chunk_infos));
+        let count_padded: [u32; 4] = [chunk_count, 0, 0, 0];
+        self.queue.write_buffer(&self.chunk_count_buffer, 0, bytemuck::cast_slice(&count_padded));
     }
 
     pub fn upload_voxel_atlas(&mut self, atlas_texture: &Texture, uv_map: &[[f32; 4]; 256]) {

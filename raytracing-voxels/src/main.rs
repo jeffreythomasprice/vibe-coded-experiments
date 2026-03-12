@@ -6,6 +6,7 @@ mod texture_atlas;
 mod texture_atlas_font;
 mod voxel_renderer;
 mod voxel_textures;
+mod world;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -13,10 +14,11 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 
 use camera::Camera;
-use chunk::{generate_test_chunk, Chunk};
+use chunk::generate_test_chunk;
 use overlay::{DrawList, Rgba};
 use texture_atlas_font::TextureAtlasFont;
 use voxel_renderer::Renderer;
+use world::World;
 
 const MINECRAFT_FONT: &[u8] = include_bytes!("../resources/Minecraft.otf");
 use winit::application::ApplicationHandler;
@@ -43,7 +45,7 @@ struct App {
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
     camera: Camera,
-    chunk: Chunk,
+    world: World,
     input: InputState,
     last_frame: Instant,
     cursor_grabbed: bool,
@@ -57,11 +59,28 @@ struct App {
 
 impl App {
     fn new() -> Self {
+        let mut world = World::new();
+        for x in -1..=1 {
+            for z in -1..=1 {
+                world.insert([x, 0, z], generate_test_chunk());
+            }
+        }
+
         Self {
             window: None,
             renderer: None,
-            camera: Camera::default(),
-            chunk: generate_test_chunk(),
+            camera: Camera::new([24.0, 20.0, 40.0], {
+                let dx: f32 = 0.0 - 24.0;
+                let dz: f32 = 0.0 - 40.0;
+                f32::atan2(-dx, -dz)
+            }, {
+                let dx: f32 = 0.0 - 24.0;
+                let dy: f32 = 0.0 - 20.0;
+                let dz: f32 = 0.0 - 40.0;
+                let h = (dx * dx + dz * dz).sqrt();
+                f32::atan2(dy, h)
+            }, 60.0_f32.to_radians()),
+            world,
             input: InputState::default(),
             last_frame: Instant::now(),
             cursor_grabbed: false,
@@ -104,7 +123,9 @@ impl App {
                 .context("failed to create window")?,
         );
         let mut renderer = Renderer::new(window.clone())?;
-        renderer.upload_chunk(self.chunk.data());
+        let (voxel_data, chunk_infos) = self.world.pack_gpu_data();
+        renderer.upload_world(&voxel_data, &chunk_infos, chunk_infos.len() as u32);
+        self.world.clear_dirty();
 
         let atlas = voxel_textures::build_voxel_atlas(42)?;
         renderer.upload_voxel_atlas(atlas.texture(), atlas.uv_map());
@@ -237,6 +258,12 @@ impl ApplicationHandler for App {
                 }
 
                 if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
+                    if self.world.is_dirty() {
+                        let (voxel_data, chunk_infos) = self.world.pack_gpu_data();
+                        renderer.upload_world(&voxel_data, &chunk_infos, chunk_infos.len() as u32);
+                        self.world.clear_dirty();
+                    }
+
                     let uniforms = self.camera.to_uniforms(renderer.aspect());
 
                     if let Some((frame, view)) = renderer.begin_frame() {

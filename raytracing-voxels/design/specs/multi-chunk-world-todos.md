@@ -1,0 +1,6 @@
+- [x] 1.1 Add `World` struct to manage multiple chunks
+- [x] 1.2 Define `GpuChunkInfo` struct and pack world data for GPU upload
+- [x] 1.3 Update renderer bind groups for multi-chunk buffers
+- [x] 1.4 Update the WGSL shader for multi-chunk raymarching
+- [x] 1.5 Wire up World in App and generate a multi-chunk test scene
+- [x] 1.6 Support dirty-tracking and incremental upload

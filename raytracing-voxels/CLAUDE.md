@@ -19,18 +19,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture
 
-Real-time voxel raytracer using wgpu + winit. Renders a 16x16x16 voxel chunk via GPU raymarching in a fullscreen-triangle fragment shader, with a 2D overlay system composited on top.
+Real-time voxel raytracer using wgpu + winit. Renders a multi-chunk world of 16³ voxel chunks via GPU raymarching in a fullscreen-triangle fragment shader, with procedurally generated textures and a 2D overlay system composited on top.
 
 ### Rendering pipeline
 
-1. **Voxel pass** (`voxel_renderer.rs` + `voxels.wgsl`): Draws a single fullscreen triangle. The fragment shader reads camera uniforms (bind group 0) and chunk voxel data as a storage buffer (bind group 1), then raymarches through the 16³ grid.
+1. **Voxel pass** (`voxel_renderer.rs` + `voxels.wgsl`): Draws a single fullscreen triangle. The fragment shader reads camera uniforms (bind group 0), voxel data + chunk info as storage buffers (bind group 1), and the voxel texture atlas + UV map (bind group 2), then raymarches through multiple 16³ chunks.
 2. **Overlay pass** (`overlay_renderer.rs` + `overlay.wgsl`): Immediate-mode 2D renderer drawn on top of the voxel pass (uses `LoadOp::Load`). Builds a `DrawList` of textured quads each frame, uploads vertex/index data, and draws with alpha blending. Screen-space coordinates are converted to NDC via a screen-size uniform.
 
 ### Key types
 
 - `Renderer` — owns the wgpu surface, device, queue, and both render pipelines. Coordinates frame lifecycle (`begin_frame` → render passes → `submit`).
 - `Camera` / `CameraUniforms` — FPS-style camera with yaw/pitch. `CameraUniforms` is a `Pod` struct matching the GPU uniform layout (with explicit padding).
-- `Chunk` — 16³ flat array of `u8` voxel IDs, uploaded to GPU as a 4096-byte storage buffer.
+- `Chunk` — 16³ flat array of `u8` voxel IDs (4096 bytes). Voxel ID 0 = air; IDs 1–4 map to texture tiles (stone, dirt, grass, brick).
+- `World` (`world.rs`) — `HashMap<[i32; 3], Chunk>` with dirty tracking. `pack_gpu_data()` serializes all chunks into a flat voxel buffer + `GpuChunkInfo` array for the shader.
+- `VoxelTextureAtlas` / `voxel_textures.rs` — procedurally generates tile textures (noise-based) and packs them into a texture atlas with a `uv_map: [[f32; 4]; 256]` lookup by voxel ID. Tile definitions live in `TILE_DEFS`.
 - `DrawList` / `OverlayVertex` / `Texture` / `Rgba` (`overlay.rs`) — immediate-mode 2D drawing primitives. `DrawList` accumulates quads as vertex/index data each frame.
 - `OverlayRenderer` (`overlay_renderer.rs`) — manages the overlay pipeline, dynamically grows vertex/index buffers, and handles texture bind group creation.
 - `TextureAtlas` / `TextureAtlasBuilder` (`texture_atlas.rs`) — packs multiple sub-images into a single `Texture` with named regions and UV-rect lookups.
@@ -38,7 +40,7 @@ Real-time voxel raytracer using wgpu + winit. Renders a 16x16x16 voxel chunk via
 
 ### App loop
 
-`main.rs` implements `winit::ApplicationHandler`. The `App` struct owns the renderer, camera, chunk, and input state. Input is processed in `window_event`, camera is updated each frame in `RedrawRequested`, then both render passes execute.
+`main.rs` implements `winit::ApplicationHandler`. The `App` struct owns the renderer, camera, world, and input state. Input is processed in `window_event`, camera is updated each frame in `RedrawRequested`, dirty world data is re-uploaded, then both render passes execute.
 
 ### Shaders
 

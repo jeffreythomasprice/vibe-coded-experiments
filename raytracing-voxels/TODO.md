@@ -1,5 +1,7 @@
+more interesting multiple chunk generation
+
 grass and dirt look especially bad
 
 add and remove voxels
 
-multiple chunks
+BVH = bounding volume hierarchy
