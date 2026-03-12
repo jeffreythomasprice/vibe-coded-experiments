@@ -1,0 +1,15 @@
+[Unit]
+Description=Discord bot with HTTP API
+
+[Service]
+Type=simple
+WorkingDirectory=/home/jeff/workspaces/personal/vibe-coded-experiments/discord-bot
+ExecStart=/home/jeff/workspaces/personal/vibe-coded-experiments/discord-bot/dist/discord-bot serve
+EnvironmentFile=/home/jeff/workspaces/personal/vibe-coded-experiments/discord-bot/.env
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Install]
+WantedBy=default.target

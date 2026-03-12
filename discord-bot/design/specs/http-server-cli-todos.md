@@ -1,0 +1,6 @@
+- [x] 1.1 Install dependencies and rename entry point
+- [x] 1.2 Add config schema and loader
+- [x] 1.3 Add message request schema
+- [x] 1.4 Add HTTP server to server.ts
+- [x] 1.5 Add CLI app
+- [x] 1.6 Update CLAUDE.md and README
