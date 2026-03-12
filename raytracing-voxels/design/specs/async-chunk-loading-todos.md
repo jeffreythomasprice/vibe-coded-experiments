@@ -1,0 +1,10 @@
+- [x] 1.1 Add tokio dependency
+- [x] 1.2 Refactor ChunkManager API to use `updates_per_second`
+- [x] 1.3 Implement time-budgeted `update` — load multiple chunks per cycle
+- [x] 1.4 Define chunk loading messages and channel types
+- [x] 1.5 Extract chunk loading logic into a pure function
+- [x] 1.6 Implement the background chunk loading task
+- [x] 1.7 Refactor ChunkManager into a handle for the background task
+- [x] 1.8 Refactor `load_initial` to block on background task
+- [x] 1.9 Integrate async ChunkManager into App
+- [x] 1.10 Update and clean up tests

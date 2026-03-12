@@ -30,8 +30,9 @@ Real-time voxel raytracer using wgpu + winit. Renders a multi-chunk world of 16�
 
 - `Renderer` — owns the wgpu surface, device, queue, and both render pipelines. Coordinates frame lifecycle (`begin_frame` → render passes → `submit`).
 - `Camera` / `CameraUniforms` — FPS-style camera with yaw/pitch. `CameraUniforms` is a `Pod` struct matching the GPU uniform layout (with explicit padding).
-- `Chunk` — 16³ flat array of `u8` voxel IDs (4096 bytes). Voxel ID 0 = air; IDs 1–4 map to texture tiles (stone, dirt, grass, brick).
+- `Chunk` (`chunk.rs`) — 16³ flat array of `u8` voxel IDs (4096 bytes). Voxel ID 0 = air; IDs 1–4 map to texture tiles (stone, dirt, grass, brick). `generate_test_chunk()` creates terrain with procedural placement.
 - `World` (`world.rs`) — `HashMap<[i32; 3], Chunk>` with dirty tracking. `pack_gpu_data()` serializes all chunks into a flat voxel buffer + `GpuChunkInfo` array for the shader.
+- `ChunkManager` (`chunk_manager.rs`) — async chunk loading/eviction system using tokio channels. Manages a sliding window of loaded chunks around the camera, with `ChunkCommand`/`ChunkResult` message passing between the main thread and a background task.
 - `VoxelTextureAtlas` / `voxel_textures.rs` — procedurally generates tile textures (noise-based) and packs them into a texture atlas with a `uv_map: [[f32; 4]; 256]` lookup by voxel ID. Tile definitions live in `TILE_DEFS`.
 - `DrawList` / `OverlayVertex` / `Texture` / `Rgba` (`overlay.rs`) — immediate-mode 2D drawing primitives. `DrawList` accumulates quads as vertex/index data each frame.
 - `OverlayRenderer` (`overlay_renderer.rs`) — manages the overlay pipeline, dynamically grows vertex/index buffers, and handles texture bind group creation.
@@ -45,3 +46,16 @@ Real-time voxel raytracer using wgpu + winit. Renders a multi-chunk world of 16�
 ### Shaders
 
 WGSL shaders are embedded at compile time via `include_str!`. Changes to `.wgsl` files require a rebuild.
+
+### Design specs
+
+Feature specs and their TODO checklists live in `design/specs/`. Each feature has a `<name>.md` (design doc) and `<name>-todos.md` (implementation checklist). These document the incremental development history of the project.
+
+### Key dependencies
+
+- `wgpu` + `winit` — GPU rendering and windowing
+- `glam` — vector/matrix math (`Vec3`, `IVec3`, etc.) with bytemuck support for GPU upload
+- `tokio` — async runtime for background chunk loading (rt, sync, time features)
+- `bytemuck` — zero-copy casting of structs to GPU buffer bytes
+- `ab_glyph` — font rasterization for the overlay text system
+- `noise` — procedural noise for terrain/texture generation

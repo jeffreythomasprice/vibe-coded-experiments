@@ -1,4 +1,5 @@
 use bytemuck::{Pod, Zeroable};
+use glam::Vec2;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable, Debug, PartialEq)]
@@ -29,6 +30,15 @@ impl Rgba {
 
     pub fn rgb(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b, a: 255 }
+    }
+
+    pub fn to_linear(self) -> [f32; 4] {
+        [
+            self.r as f32 / 255.0,
+            self.g as f32 / 255.0,
+            self.b as f32 / 255.0,
+            self.a as f32 / 255.0,
+        ]
     }
 }
 
@@ -158,16 +168,13 @@ impl DrawList {
         y: f32,
         w: f32,
         h: f32,
-        uv_min: [f32; 2],
-        uv_max: [f32; 2],
+        uv_min: Vec2,
+        uv_max: Vec2,
         color: Rgba,
     ) {
-        let c = [
-            color.r as f32 / 255.0,
-            color.g as f32 / 255.0,
-            color.b as f32 / 255.0,
-            color.a as f32 / 255.0,
-        ];
+        let c = color.to_linear();
+        let uv_min = uv_min.to_array();
+        let uv_max = uv_max.to_array();
 
         let base = self.vertices.len() as u32;
 
@@ -201,7 +208,7 @@ impl DrawList {
     }
 
     pub fn solid_rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: Rgba) {
-        self.rect(x, y, w, h, [0.0, 0.0], [1.0, 1.0], color);
+        self.rect(x, y, w, h, Vec2::ZERO, Vec2::ONE, color);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -211,8 +218,8 @@ impl DrawList {
         y: f32,
         w: f32,
         h: f32,
-        uv_min: [f32; 2],
-        uv_max: [f32; 2],
+        uv_min: Vec2,
+        uv_max: Vec2,
         color: Rgba,
     ) {
         self.rect(x, y, w, h, uv_min, uv_max, color);
@@ -327,8 +334,8 @@ mod tests {
             0.0,
             10.0,
             20.0,
-            [0.0, 0.0],
-            [1.0, 1.0],
+            Vec2::ZERO,
+            Vec2::ONE,
             Rgba::WHITE,
         );
         assert_eq!(dl.vertices.len(), 4);
@@ -380,8 +387,8 @@ mod tests {
             10.0,
             20.0,
             30.0,
-            [0.0, 0.0],
-            [1.0, 1.0],
+            Vec2::ZERO,
+            Vec2::ONE,
             Rgba::WHITE,
         );
         assert_eq!(dl.vertices[0].pos, [5.0, 10.0]);

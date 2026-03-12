@@ -1,0 +1,5 @@
+- [x] 1.1 Create `ChunkManager` struct with core fields
+- [x] 1.2 Implement desired chunk set computation
+- [x] 1.3 Implement the `update` method — load/unload logic
+- [x] 1.4 Integrate ChunkManager into App
+- [x] 1.5 Add bulk initial load

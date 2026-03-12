@@ -1,5 +1,6 @@
 mod camera;
 mod chunk;
+mod chunk_manager;
 mod overlay;
 mod overlay_renderer;
 mod texture_atlas;
@@ -12,9 +13,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
+use glam::Vec3;
 
 use camera::Camera;
-use chunk::generate_test_chunk;
+use chunk_manager::ChunkManager;
 use overlay::{DrawList, Rgba};
 use texture_atlas_font::TextureAtlasFont;
 use voxel_renderer::Renderer;
@@ -46,6 +48,7 @@ struct App {
     renderer: Option<Renderer>,
     camera: Camera,
     world: World,
+    chunk_manager: ChunkManager,
     input: InputState,
     last_frame: Instant,
     cursor_grabbed: bool,
@@ -60,27 +63,25 @@ struct App {
 impl App {
     fn new() -> Self {
         let mut world = World::new();
-        for x in -1..=1 {
-            for z in -1..=1 {
-                world.insert([x, 0, z], generate_test_chunk());
-            }
-        }
+        let mut chunk_manager = ChunkManager::new(5, 500, 5.0);
+
+        let cam_pos = Vec3::new(24.0, 20.0, 40.0);
+        chunk_manager.load_initial(cam_pos, &mut world);
+
+        let delta = Vec3::ZERO - cam_pos;
+        let horizontal_dist = Vec3::new(delta.x, 0.0, delta.z).length();
 
         Self {
             window: None,
             renderer: None,
-            camera: Camera::new([24.0, 20.0, 40.0], {
-                let dx: f32 = 0.0 - 24.0;
-                let dz: f32 = 0.0 - 40.0;
-                f32::atan2(-dx, -dz)
-            }, {
-                let dx: f32 = 0.0 - 24.0;
-                let dy: f32 = 0.0 - 20.0;
-                let dz: f32 = 0.0 - 40.0;
-                let h = (dx * dx + dz * dz).sqrt();
-                f32::atan2(dy, h)
-            }, 60.0_f32.to_radians()),
+            camera: Camera::new(
+                cam_pos,
+                f32::atan2(-delta.x, -delta.z),
+                f32::atan2(delta.y, horizontal_dist),
+                60.0_f32.to_radians(),
+            ),
             world,
+            chunk_manager,
             input: InputState::default(),
             last_frame: Instant::now(),
             cursor_grabbed: false,
@@ -257,6 +258,9 @@ impl ApplicationHandler for App {
                 if self.input.down {
                     self.camera.move_up(-move_dist);
                 }
+
+                self.chunk_manager.update_camera(self.camera.position);
+                self.chunk_manager.drain_results(&mut self.world);
 
                 if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
                     if self.world.is_dirty() {

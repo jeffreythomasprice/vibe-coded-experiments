@@ -606,7 +606,7 @@ pub fn build_voxel_atlas(seed: u32) -> Result<VoxelTextureAtlas> {
 
     for def in TILE_DEFS {
         if let Some((uv_min, uv_max)) = atlas.uv_rect(def.name) {
-            uv_map[def.id as usize] = [uv_min[0], uv_min[1], uv_max[0], uv_max[1]];
+            uv_map[def.id as usize] = [uv_min.x, uv_min.y, uv_max.x, uv_max.y];
         }
     }
 

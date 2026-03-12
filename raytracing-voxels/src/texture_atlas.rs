@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::{bail, Result};
+use glam::Vec2;
 
 use crate::overlay::Texture;
 
@@ -21,13 +22,16 @@ impl TextureAtlas {
         self.regions.get(name)
     }
 
-    pub fn uv_rect(&self, name: &str) -> Option<([f32; 2], [f32; 2])> {
+    pub fn uv_rect(&self, name: &str) -> Option<(Vec2, Vec2)> {
         let r = self.regions.get(name)?;
         let tw = self.texture.width() as f32;
         let th = self.texture.height() as f32;
         Some((
-            [r.x as f32 / tw, r.y as f32 / th],
-            [(r.x + r.width) as f32 / tw, (r.y + r.height) as f32 / th],
+            Vec2::new(r.x as f32 / tw, r.y as f32 / th),
+            Vec2::new(
+                (r.x + r.width) as f32 / tw,
+                (r.y + r.height) as f32 / th,
+            ),
         ))
     }
 
@@ -154,8 +158,8 @@ mod tests {
         builder.add("test", Texture::new(128, 128));
         let atlas = builder.build().unwrap();
         let (uv_min, uv_max) = atlas.uv_rect("test").unwrap();
-        assert_eq!(uv_min, [0.0, 0.0]);
-        assert_eq!(uv_max, [128.0 / 256.0, 128.0 / 256.0]);
+        assert_eq!(uv_min, Vec2::ZERO);
+        assert_eq!(uv_max, Vec2::splat(128.0 / 256.0));
     }
 
     #[test]

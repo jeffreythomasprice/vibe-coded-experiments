@@ -1,4 +1,5 @@
 use anyhow::Result;
+use glam::Vec2;
 use wgpu::util::DeviceExt;
 
 use crate::overlay;
@@ -167,7 +168,7 @@ impl OverlayRenderer {
 
         let screen_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("overlay_screen_uniform"),
-            size: std::mem::size_of::<[f32; 2]>() as u64,
+            size: std::mem::size_of::<Vec2>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -251,11 +252,11 @@ impl OverlayRenderer {
     }
 
     pub fn resize(&mut self, queue: &wgpu::Queue, width: u32, height: u32) {
-        let screen_size = [width as f32, height as f32];
+        let screen_size = Vec2::new(width as f32, height as f32);
         queue.write_buffer(
             &self.screen_uniform_buffer,
             0,
-            bytemuck::cast_slice(&screen_size),
+            bytemuck::bytes_of(&screen_size),
         );
     }
 
