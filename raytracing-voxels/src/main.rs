@@ -112,6 +112,7 @@ impl App {
             self.cursor_grabbed = false;
         }
     }
+
 }
 
 impl App {

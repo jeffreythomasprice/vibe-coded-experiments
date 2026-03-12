@@ -1,0 +1,7 @@
+- [x] 1.1 Extract grass parameters into `GrassParams` struct
+- [x] 1.2 Build the 8x8 preview texture atlas
+- [x] 1.3 Add preview mode toggle to `App`
+- [x] 1.4 Render the 8x8 grid in overlay pass
+- [x] 1.5 Add parameter labels to each grid cell
+- [x] 1.6 Parameterize dirt and stone generators
+- [x] 1.7 Cycle between texture types in preview mode

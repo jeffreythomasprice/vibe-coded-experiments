@@ -27,6 +27,7 @@ struct TileDef {
     generator: fn(u32) -> Texture,
 }
 
+#[cfg(test)]
 fn sample_fbm(
     x: f64,
     y: f64,
@@ -82,9 +83,10 @@ fn palette_select(palette: &[Rgba], t: f64) -> Rgba {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn sample_fbm_stretched(
+fn sample_fbm_tiling(
     x: f64,
     y: f64,
+    tile_size: f64,
     x_scale: f64,
     y_scale: f64,
     octaves: u32,
@@ -93,15 +95,26 @@ fn sample_fbm_stretched(
     persistence: f64,
     seed: u32,
 ) -> f64 {
-    sample_fbm(
-        x * x_scale,
-        y * y_scale,
-        octaves,
-        frequency,
-        lacunarity,
-        persistence,
-        seed,
-    )
+    let perlin = Perlin::new(seed);
+    let u = x / tile_size;
+    let v = y / tile_size;
+    let two_pi = std::f64::consts::TAU;
+    let rx = x_scale * frequency;
+    let ry = y_scale * frequency;
+
+    let mut value = 0.0;
+    let mut amplitude = 1.0;
+    let mut freq = 1.0;
+    for _ in 0..octaves {
+        let cx = (two_pi * u).cos() * rx * freq;
+        let sx = (two_pi * u).sin() * rx * freq;
+        let cy = (two_pi * v).cos() * ry * freq;
+        let sy = (two_pi * v).sin() * ry * freq;
+        value += amplitude * perlin.get([cx, sx, cy, sy]);
+        freq *= lacunarity;
+        amplitude *= persistence;
+    }
+    value
 }
 
 struct NoiseLayerConfig {
@@ -115,11 +128,10 @@ struct NoiseLayerConfig {
 }
 
 fn noise_layer(x: u32, y: u32, tile_size: u32, config: &NoiseLayerConfig) -> f64 {
-    let nx = x as f64 / tile_size as f64;
-    let ny = y as f64 / tile_size as f64;
-    let raw = sample_fbm_stretched(
-        nx,
-        ny,
+    let raw = sample_fbm_tiling(
+        x as f64,
+        y as f64,
+        tile_size as f64,
         config.x_scale,
         config.y_scale,
         config.octaves,
@@ -161,23 +173,49 @@ fn brighten(color: Rgba, amount: u8) -> Rgba {
     )
 }
 
-fn generate_grass(seed: u32) -> Texture {
+struct GrassParams {
+    palette: Vec<Rgba>,
+    cluster_frequency: f64,
+    cluster_octaves: u32,
+    detail_frequency: f64,
+    detail_octaves: u32,
+    cluster_weight: f64,
+    detail_weight: f64,
+    hash_jitter_range: f64,
+    posterize_levels: u32,
+    brightness_shift_range: i16,
+}
+
+impl Default for GrassParams {
+    fn default() -> Self {
+        Self {
+            palette: vec![
+                Rgba::rgb(30, 80, 20),
+                Rgba::rgb(45, 110, 30),
+                Rgba::rgb(55, 135, 35),
+                Rgba::rgb(70, 160, 45),
+                Rgba::rgb(85, 175, 50),
+                Rgba::rgb(100, 190, 55),
+            ],
+            cluster_frequency: 1.0,
+            cluster_octaves: 3,
+            detail_frequency: 12.0,
+            detail_octaves: 2,
+            cluster_weight: 0.65,
+            detail_weight: 0.25,
+            hash_jitter_range: 0.075,
+            posterize_levels: 6,
+            brightness_shift_range: 5,
+        }
+    }
+}
+
+fn generate_grass_parameterized(seed: u32, params: &GrassParams) -> Texture {
     let mut tex = Texture::new(TILE_SIZE, TILE_SIZE);
 
-    // Broad green palette — dark forest to bright lime
-    let palette = [
-        Rgba::rgb(30, 80, 20),   // deep shadow green
-        Rgba::rgb(45, 110, 30),  // dark green
-        Rgba::rgb(55, 135, 35),  // mid green
-        Rgba::rgb(70, 160, 45),  // standard green
-        Rgba::rgb(85, 175, 50),  // bright green
-        Rgba::rgb(100, 190, 55), // lime green
-    ];
-
-    // Low-frequency noise: broad clusters of similar shades
     let cluster_config = NoiseLayerConfig {
-        octaves: 3,
-        frequency: 3.0,
+        octaves: params.cluster_octaves,
+        frequency: params.cluster_frequency,
         lacunarity: 2.0,
         persistence: 0.5,
         x_scale: 1.0,
@@ -185,10 +223,9 @@ fn generate_grass(seed: u32) -> Texture {
         seed,
     };
 
-    // High-frequency noise: per-pixel grit
     let detail_config = NoiseLayerConfig {
-        octaves: 2,
-        frequency: 12.0,
+        octaves: params.detail_octaves,
+        frequency: params.detail_frequency,
         lacunarity: 2.0,
         persistence: 0.5,
         x_scale: 1.0,
@@ -198,24 +235,21 @@ fn generate_grass(seed: u32) -> Texture {
 
     for y in 0..TILE_SIZE {
         for x in 0..TILE_SIZE {
-            // Broad clustering gives spatial coherence
             let cluster = noise_layer(x, y, TILE_SIZE, &cluster_config);
-
-            // High-freq detail adds pixel-level variation
             let detail = noise_layer(x, y, TILE_SIZE, &detail_config);
 
-            // Per-pixel hash for extra randomness (cheap and uncorrelated)
             let h = pixel_hash(x, y, seed.wrapping_add(1000));
-            let hash_jitter = (h % 100) as f64 / 100.0 * 0.15 - 0.075; // [-0.075, +0.075]
+            let hash_jitter =
+                (h % 100) as f64 / 100.0 * params.hash_jitter_range * 2.0 - params.hash_jitter_range;
 
-            // Blend: mostly cluster, some detail, tiny hash jitter
-            let t = (cluster * 0.65 + detail * 0.25 + hash_jitter + 0.05).clamp(0.0, 1.0);
+            let t = (cluster * params.cluster_weight + detail * params.detail_weight + hash_jitter
+                + 0.05)
+                .clamp(0.0, 1.0);
 
-            // Posterize to palette size for that blocky pixel-art look
-            let color = palette_select(&palette, posterize(t, palette.len() as u32));
+            let color = palette_select(&params.palette, posterize(t, params.posterize_levels));
 
-            // Subtle per-pixel brightness shift so same-palette neighbors aren't identical
-            let brightness_shift = ((h >> 8) % 11) as i16 - 5; // [-5, +5]
+            let shift_range = params.brightness_shift_range as u32 * 2 + 1;
+            let brightness_shift = ((h >> 8) % shift_range) as i16 - params.brightness_shift_range;
             let color = Rgba::rgb(
                 (color.r as i16 + brightness_shift).clamp(0, 255) as u8,
                 (color.g as i16 + brightness_shift).clamp(0, 255) as u8,
@@ -229,30 +263,83 @@ fn generate_grass(seed: u32) -> Texture {
     tex
 }
 
-fn generate_dirt(seed: u32) -> Texture {
+fn generate_grass(seed: u32) -> Texture {
+    generate_grass_parameterized(seed, &GrassParams::default())
+}
+
+struct DirtParams {
+    base_palette: Vec<Rgba>,
+    reddish_color: Rgba,
+    base_frequency: f64,
+    base_octaves: u32,
+    hue_frequency: f64,
+    hue_octaves: u32,
+    grit_frequency: f64,
+    grit_octaves: u32,
+    crevice_frequency: f64,
+    crevice_octaves: u32,
+    pebble_count_min: u32,
+    pebble_count_range: u32,
+    pebble_darken: u8,
+    crevice_darken: u8,
+    hue_threshold: f64,
+}
+
+impl Default for DirtParams {
+    fn default() -> Self {
+        let mc_palette = vec![
+            Rgba::rgb(80, 60, 35),
+            Rgba::rgb(100, 75, 45),
+            Rgba::rgb(120, 90, 55),
+            Rgba::rgb(140, 105, 65),
+            Rgba::rgb(165, 125, 80),
+            Rgba::rgb(185, 145, 95),
+        ];
+        // p=8 f=6: 8 posterize levels sampled from the mc_palette
+        let posterize_levels = 8u32;
+        let base_palette: Vec<Rgba> = (0..posterize_levels)
+            .map(|i| {
+                let t = i as f64 / (posterize_levels - 1).max(1) as f64;
+                let idx = (t * (mc_palette.len() - 1) as f64).round() as usize;
+                mc_palette[idx.min(mc_palette.len() - 1)]
+            })
+            .collect();
+        Self {
+            base_palette,
+            reddish_color: Rgba::rgb(120, 90, 55),
+            base_frequency: 6.0,
+            base_octaves: 2,
+            hue_frequency: 3.0,
+            hue_octaves: 2,
+            grit_frequency: 10.0,
+            grit_octaves: 1,
+            crevice_frequency: 2.0,
+            crevice_octaves: 1,
+            pebble_count_min: 0,
+            pebble_count_range: 0,
+            pebble_darken: 0,
+            crevice_darken: 5,
+            hue_threshold: 1.1,
+        }
+    }
+}
+
+fn generate_dirt_parameterized(seed: u32, params: &DirtParams) -> Texture {
     let mut tex = Texture::new(TILE_SIZE, TILE_SIZE);
 
-    // 4-color dirt palette
-    let dark_soil = Rgba::rgb(60, 35, 20);
-    let mid_brown = Rgba::rgb(100, 65, 40);
-    let sandy_brown = Rgba::rgb(130, 95, 55);
-    let reddish_brown = Rgba::rgb(110, 55, 30);
-    let base_palette = [dark_soil, mid_brown, sandy_brown];
-
-    // Pre-compute pebble centers: 5-8 small circles with 2-3px radius
-    let num_pebbles = 5 + (pixel_hash(0, 0, seed) % 4) as usize; // 5-8
-    let mut pebbles = Vec::with_capacity(num_pebbles);
+    let num_pebbles =
+        params.pebble_count_min + (pixel_hash(0, 0, seed) % params.pebble_count_range.max(1));
+    let mut pebbles = Vec::with_capacity(num_pebbles as usize);
     for i in 0..num_pebbles {
-        let cx = pixel_hash(i as u32, 100, seed) % TILE_SIZE;
-        let cy = pixel_hash(i as u32, 200, seed) % TILE_SIZE;
-        let radius = 2 + (pixel_hash(i as u32, 300, seed) % 2); // 2-3
+        let cx = pixel_hash(i, 100, seed) % TILE_SIZE;
+        let cy = pixel_hash(i, 200, seed) % TILE_SIZE;
+        let radius = 2 + (pixel_hash(i, 300, seed) % 2);
         pebbles.push((cx, cy, radius));
     }
 
-    // Noise layer configs
     let base_config = NoiseLayerConfig {
-        octaves: 3,
-        frequency: 4.0,
+        octaves: params.base_octaves,
+        frequency: params.base_frequency,
         lacunarity: 2.0,
         persistence: 0.5,
         x_scale: 1.0,
@@ -261,8 +348,8 @@ fn generate_dirt(seed: u32) -> Texture {
     };
 
     let hue_config = NoiseLayerConfig {
-        octaves: 2,
-        frequency: 3.0,
+        octaves: params.hue_octaves,
+        frequency: params.hue_frequency,
         lacunarity: 2.0,
         persistence: 0.5,
         x_scale: 1.0,
@@ -271,8 +358,8 @@ fn generate_dirt(seed: u32) -> Texture {
     };
 
     let grit_config = NoiseLayerConfig {
-        octaves: 2,
-        frequency: 14.0,
+        octaves: params.grit_octaves,
+        frequency: params.grit_frequency,
         lacunarity: 2.0,
         persistence: 0.5,
         x_scale: 1.0,
@@ -281,8 +368,8 @@ fn generate_dirt(seed: u32) -> Texture {
     };
 
     let crevice_config = NoiseLayerConfig {
-        octaves: 1,
-        frequency: 2.0,
+        octaves: params.crevice_octaves,
+        frequency: params.crevice_frequency,
         lacunarity: 2.0,
         persistence: 0.5,
         x_scale: 1.0,
@@ -292,28 +379,24 @@ fn generate_dirt(seed: u32) -> Texture {
 
     for y in 0..TILE_SIZE {
         for x in 0..TILE_SIZE {
-            // Base layer: posterize to 3 levels, palette select from first 3 colors
             let base_val = noise_layer(x, y, TILE_SIZE, &base_config);
-            let posterized = posterize(base_val, 3);
-            let mut color = palette_select(&base_palette, posterized);
+            let posterized = posterize(base_val, params.base_palette.len() as u32);
+            let mut color = palette_select(&params.base_palette, posterized);
 
-            // Hue variation: hard threshold > 0.6 → swap to reddish-brown
             let hue_val = noise_layer(x, y, TILE_SIZE, &hue_config);
-            if hue_val > 0.6 {
-                color = reddish_brown;
+            if hue_val > params.hue_threshold {
+                color = params.reddish_color;
             }
 
-            // Pebble spots: darken by 25 within radius
             for &(cx, cy, radius) in &pebbles {
                 let dx = (x as i32 - cx as i32).unsigned_abs();
                 let dy = (y as i32 - cy as i32).unsigned_abs();
                 if dx * dx + dy * dy <= radius * radius {
-                    color = darken(color, 25);
+                    color = darken(color, params.pebble_darken);
                     break;
                 }
             }
 
-            // Grit layer: brighten/darken by small amounts (5-10)
             let grit_val = noise_layer(x, y, TILE_SIZE, &grit_config);
             if grit_val > 0.55 {
                 let amount = (((grit_val - 0.55) / 0.45) * 5.0) as u8 + 5;
@@ -323,10 +406,9 @@ fn generate_dirt(seed: u32) -> Texture {
                 color = darken(color, amount);
             }
 
-            // Crevice darkening: below 0.3 → darken by 20
             let crevice_val = noise_layer(x, y, TILE_SIZE, &crevice_config);
             if crevice_val < 0.3 {
-                color = darken(color, 20);
+                color = darken(color, params.crevice_darken);
             }
 
             tex.set_pixel(x, y, color);
@@ -335,12 +417,39 @@ fn generate_dirt(seed: u32) -> Texture {
     tex
 }
 
-fn generate_stone(seed: u32) -> Texture {
-    let mut tex = Texture::new(TILE_SIZE, TILE_SIZE);
-    let num_points = 20u32;
-    let mut points = Vec::with_capacity(num_points as usize);
+fn generate_dirt(seed: u32) -> Texture {
+    generate_dirt_parameterized(seed, &DirtParams::default())
+}
 
-    for i in 0..num_points {
+struct StoneParams {
+    num_points: u32,
+    edge_divisor: f64,
+    fbm_frequency: f64,
+    fbm_octaves: u32,
+    warm_shift_scale: f64,
+    base_gray_min: u8,
+    base_gray_range: f64,
+}
+
+impl Default for StoneParams {
+    fn default() -> Self {
+        Self {
+            num_points: 13,
+            edge_divisor: 0.3,
+            fbm_frequency: 6.0,
+            fbm_octaves: 2,
+            warm_shift_scale: 5.0,
+            base_gray_min: 100,
+            base_gray_range: 56.0,
+        }
+    }
+}
+
+fn generate_stone_parameterized(seed: u32, params: &StoneParams) -> Texture {
+    let mut tex = Texture::new(TILE_SIZE, TILE_SIZE);
+    let mut points = Vec::with_capacity(params.num_points as usize);
+
+    for i in 0..params.num_points {
         let h1 = pixel_hash(i, 0, seed);
         let h2 = pixel_hash(i, 1, seed);
         let px = (h1 % TILE_SIZE) as f64;
@@ -373,15 +482,24 @@ fn generate_stone(seed: u32) -> Texture {
                 }
             }
 
-            let edge = (d2 - d1) / (TILE_SIZE as f64 * 0.3);
+            let edge = (d2 - d1) / (TILE_SIZE as f64 * params.edge_divisor);
             let edge_clamped = edge.clamp(0.0, 1.0);
 
-            let nx = x as f64 / TILE_SIZE as f64;
-            let ny = y as f64 / TILE_SIZE as f64;
-            let variation = sample_fbm(nx, ny, 2, 3.0, 2.0, 0.5, seed.wrapping_add(500));
-            let warm_shift = (variation * 5.0) as i16;
+            let variation = sample_fbm_tiling(
+                x as f64,
+                y as f64,
+                TILE_SIZE as f64,
+                1.0,
+                1.0,
+                params.fbm_octaves,
+                params.fbm_frequency,
+                2.0,
+                0.5,
+                seed.wrapping_add(500),
+            );
+            let warm_shift = (variation * params.warm_shift_scale) as i16;
 
-            let base_gray = 100 + (edge_clamped * 56.0) as u8;
+            let base_gray = params.base_gray_min + (edge_clamped * params.base_gray_range) as u8;
             let r = (base_gray as i16 + warm_shift).clamp(0, 255) as u8;
             let g = base_gray;
             let b = (base_gray as i16 - warm_shift).clamp(0, 255) as u8;
@@ -390,6 +508,10 @@ fn generate_stone(seed: u32) -> Texture {
         }
     }
     tex
+}
+
+fn generate_stone(seed: u32) -> Texture {
+    generate_stone_parameterized(seed, &StoneParams::default())
 }
 
 fn generate_brick(seed: u32) -> Texture {
@@ -421,9 +543,18 @@ fn generate_brick(seed: u32) -> Texture {
                 let t = (brick_seed % 1000) as f64 / 1000.0;
                 let base_color = lerp_color(brick_dark, brick_light, t);
 
-                let nx = x as f64 / TILE_SIZE as f64;
-                let ny = y as f64 / TILE_SIZE as f64;
-                let detail = sample_fbm(nx, ny, 2, 8.0, 2.0, 0.5, seed.wrapping_add(200));
+                let detail = sample_fbm_tiling(
+                    x as f64,
+                    y as f64,
+                    TILE_SIZE as f64,
+                    1.0,
+                    1.0,
+                    2,
+                    8.0,
+                    2.0,
+                    0.5,
+                    seed.wrapping_add(200),
+                );
                 let shift = (detail * 10.0) as i16;
 
                 let color = Rgba::rgb(
@@ -730,15 +861,34 @@ mod tests {
     }
 
     #[test]
-    fn sample_fbm_stretched_identity() {
-        for i in 0..20 {
-            let x = (i % 5) as f64 * 0.2;
-            let y = (i / 5) as f64 * 0.2;
-            let stretched = sample_fbm_stretched(x, y, 1.0, 1.0, 4, 1.0, 2.0, 0.5, 42);
-            let normal = sample_fbm(x, y, 4, 1.0, 2.0, 0.5, 42);
+    fn sample_fbm_tiling_deterministic() {
+        let a = sample_fbm_tiling(10.0, 20.0, 64.0, 1.0, 1.0, 4, 1.0, 2.0, 0.5, 42);
+        let b = sample_fbm_tiling(10.0, 20.0, 64.0, 1.0, 1.0, 4, 1.0, 2.0, 0.5, 42);
+        assert!((a - b).abs() < 1e-12);
+    }
+
+    #[test]
+    fn sample_fbm_tiling_wraps() {
+        // f(0, y) should equal f(tile_size, y) due to torus mapping
+        for y in 0..10 {
+            let yf = y as f64 * 6.4;
+            let at_zero = sample_fbm_tiling(0.0, yf, 64.0, 1.0, 1.0, 4, 1.0, 2.0, 0.5, 42);
+            let at_tile =
+                sample_fbm_tiling(64.0, yf, 64.0, 1.0, 1.0, 4, 1.0, 2.0, 0.5, 42);
             assert!(
-                (stretched - normal).abs() < 1e-12,
-                "mismatch at ({x}, {y}): {stretched} vs {normal}"
+                (at_zero - at_tile).abs() < 1e-10,
+                "x-wrap mismatch at y={yf}: {at_zero} vs {at_tile}"
+            );
+        }
+        // f(x, 0) should equal f(x, tile_size)
+        for x in 0..10 {
+            let xf = x as f64 * 6.4;
+            let at_zero = sample_fbm_tiling(xf, 0.0, 64.0, 1.0, 1.0, 4, 1.0, 2.0, 0.5, 42);
+            let at_tile =
+                sample_fbm_tiling(xf, 64.0, 64.0, 1.0, 1.0, 4, 1.0, 2.0, 0.5, 42);
+            assert!(
+                (at_zero - at_tile).abs() < 1e-10,
+                "y-wrap mismatch at x={xf}: {at_zero} vs {at_tile}"
             );
         }
     }
@@ -810,5 +960,103 @@ mod tests {
             stddev > 15.0,
             "grass green channel stddev {stddev} should be > 15"
         );
+    }
+
+    /// Helper: check that a texture tiles seamlessly by comparing the average
+    /// color difference at the seam (column 0 vs column w-1, row 0 vs row h-1)
+    /// against the average difference between adjacent columns/rows in the interior.
+    /// The seam difference should not be significantly worse than interior differences.
+    fn assert_texture_tiles(tex: &Texture, name: &str) {
+        let w = tex.width();
+        let h = tex.height();
+        let data = tex.data();
+
+        let pixel_diff = |a: Rgba, b: Rgba| -> f64 {
+            let dr = (a.r as f64 - b.r as f64).abs();
+            let dg = (a.g as f64 - b.g as f64).abs();
+            let db = (a.b as f64 - b.b as f64).abs();
+            (dr + dg + db) / 3.0
+        };
+
+        // Horizontal: compare seam (col w-1 → col 0) vs interior column pairs
+        let mut seam_diff_h = 0.0;
+        for y in 0..h {
+            let left = data[(y * w) as usize];
+            let right = data[(y * w + w - 1) as usize];
+            seam_diff_h += pixel_diff(left, right);
+        }
+        seam_diff_h /= h as f64;
+
+        let mut interior_diff_h = 0.0;
+        let mut count = 0u32;
+        for y in 0..h {
+            for x in 0..(w - 1) {
+                let a = data[(y * w + x) as usize];
+                let b = data[(y * w + x + 1) as usize];
+                interior_diff_h += pixel_diff(a, b);
+                count += 1;
+            }
+        }
+        interior_diff_h /= count as f64;
+
+        // Vertical: compare seam (row h-1 → row 0) vs interior row pairs
+        let mut seam_diff_v = 0.0;
+        for x in 0..w {
+            let top = data[x as usize];
+            let bottom = data[((h - 1) * w + x) as usize];
+            seam_diff_v += pixel_diff(top, bottom);
+        }
+        seam_diff_v /= w as f64;
+
+        let mut interior_diff_v = 0.0;
+        count = 0;
+        for y in 0..(h - 1) {
+            for x in 0..w {
+                let a = data[(y * w + x) as usize];
+                let b = data[((y + 1) * w + x) as usize];
+                interior_diff_v += pixel_diff(a, b);
+                count += 1;
+            }
+        }
+        interior_diff_v /= count as f64;
+
+        // Seam should be no more than 4x the average interior difference.
+        // Patterns with sharp structural boundaries (e.g. brick mortar) at the
+        // tile edge raise the seam average even when tiling is correct.
+        let max_ratio = 4.0;
+        assert!(
+            seam_diff_h <= interior_diff_h * max_ratio,
+            "{name} horizontal seam too discontinuous: seam_avg={seam_diff_h:.1}, interior_avg={interior_diff_h:.1}, ratio={:.1}",
+            seam_diff_h / interior_diff_h
+        );
+        assert!(
+            seam_diff_v <= interior_diff_v * max_ratio,
+            "{name} vertical seam too discontinuous: seam_avg={seam_diff_v:.1}, interior_avg={interior_diff_v:.1}, ratio={:.1}",
+            seam_diff_v / interior_diff_v
+        );
+    }
+
+    #[test]
+    fn grass_tiles_seamlessly() {
+        let tex = generate_grass(42);
+        assert_texture_tiles(&tex, "grass");
+    }
+
+    #[test]
+    fn dirt_tiles_seamlessly() {
+        let tex = generate_dirt(42);
+        assert_texture_tiles(&tex, "dirt");
+    }
+
+    #[test]
+    fn stone_tiles_seamlessly() {
+        let tex = generate_stone(42);
+        assert_texture_tiles(&tex, "stone");
+    }
+
+    #[test]
+    fn brick_tiles_seamlessly() {
+        let tex = generate_brick(42);
+        assert_texture_tiles(&tex, "brick");
     }
 }

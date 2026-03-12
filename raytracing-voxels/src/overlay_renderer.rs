@@ -1,11 +1,10 @@
 use anyhow::Result;
+use wgpu::util::DeviceExt;
 
 use crate::overlay;
 
 pub struct OverlayRenderer {
     pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
     sampler: wgpu::Sampler,
     #[allow(dead_code)]
     white_texture: wgpu::Texture,
@@ -13,8 +12,6 @@ pub struct OverlayRenderer {
     bind_group_layout: wgpu::BindGroupLayout,
     screen_uniform_buffer: wgpu::Buffer,
     screen_bind_group: wgpu::BindGroup,
-    vertex_capacity: u64,
-    index_capacity: u64,
 }
 
 impl OverlayRenderer {
@@ -168,23 +165,6 @@ impl OverlayRenderer {
             cache: None,
         });
 
-        let vertex_capacity = 1024 * std::mem::size_of::<overlay::OverlayVertex>() as u64;
-        let index_capacity = 2048 * std::mem::size_of::<u32>() as u64;
-
-        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("overlay_vertex_buffer"),
-            size: vertex_capacity,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("overlay_index_buffer"),
-            size: index_capacity,
-            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
         let screen_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("overlay_screen_uniform"),
             size: std::mem::size_of::<[f32; 2]>() as u64,
@@ -203,16 +183,12 @@ impl OverlayRenderer {
 
         Ok(Self {
             pipeline,
-            vertex_buffer,
-            index_buffer,
             sampler,
             white_texture,
             white_bind_group,
             bind_group_layout,
             screen_uniform_buffer,
             screen_bind_group,
-            vertex_capacity,
-            index_capacity,
         })
     }
 
@@ -290,7 +266,7 @@ impl OverlayRenderer {
     pub fn render(
         &mut self,
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        _queue: &wgpu::Queue,
         view: &wgpu::TextureView,
         encoder: &mut wgpu::CommandEncoder,
         draw_list: &overlay::DrawList,
@@ -300,31 +276,17 @@ impl OverlayRenderer {
             return;
         }
 
-        let needed_vertex_bytes = draw_list.vertex_data().len() as u64;
-        let needed_index_bytes = draw_list.index_data().len() as u64;
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("overlay_vertex_buffer"),
+            contents: draw_list.vertex_data(),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
 
-        if needed_vertex_bytes > self.vertex_capacity {
-            self.vertex_capacity = needed_vertex_bytes.next_power_of_two();
-            self.vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("overlay_vertex_buffer"),
-                size: self.vertex_capacity,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-        }
-
-        if needed_index_bytes > self.index_capacity {
-            self.index_capacity = needed_index_bytes.next_power_of_two();
-            self.index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("overlay_index_buffer"),
-                size: self.index_capacity,
-                usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-        }
-
-        queue.write_buffer(&self.vertex_buffer, 0, draw_list.vertex_data());
-        queue.write_buffer(&self.index_buffer, 0, draw_list.index_data());
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("overlay_index_buffer"),
+            contents: draw_list.index_data(),
+            usage: wgpu::BufferUsages::INDEX,
+        });
 
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -344,8 +306,8 @@ impl OverlayRenderer {
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &self.screen_bind_group, &[]);
             pass.set_bind_group(1, texture_bind_group, &[]);
-            pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+            pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..draw_list.index_count(), 0, 0..1);
         }
     }
