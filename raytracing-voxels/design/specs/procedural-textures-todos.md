@@ -1,0 +1,6 @@
+- [x] 7.1 Add noise crate and create noise helpers
+- [x] 7.2 Grass texture generator
+- [x] 7.3 Dirt texture generator
+- [x] 7.4 Stone texture generator with Worley noise
+- [x] 7.5 Brick texture generator
+- [x] 7.6 Remove unused tiles and clean up

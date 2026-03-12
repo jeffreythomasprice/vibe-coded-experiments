@@ -42,11 +42,28 @@ pub fn generate_test_chunk() -> Chunk {
                 let boundary_count =
                     at_x_boundary as u8 + at_y_boundary as u8 + at_z_boundary as u8;
                 if boundary_count >= 2 {
-                    chunk.set(x, y, z, 1);
+                    let id = if at_y_boundary && at_z_boundary {
+                        1 // edges along X axis
+                    } else if at_x_boundary && at_z_boundary {
+                        2 // edges along Y axis
+                    } else {
+                        3 // edges along Z axis
+                    };
+                    chunk.set(x, y, z, id);
                 }
             }
         }
     }
+    // A few solid interior voxels with additional IDs
+    chunk.set(4, 4, 4, 3);
+    chunk.set(4, 4, 5, 3);
+    chunk.set(4, 5, 4, 3);
+    chunk.set(4, 5, 5, 3);
+    chunk.set(11, 11, 11, 4);
+    chunk.set(11, 11, 12, 4);
+    chunk.set(11, 12, 11, 4);
+    chunk.set(11, 12, 12, 4);
+
     chunk
 }
 

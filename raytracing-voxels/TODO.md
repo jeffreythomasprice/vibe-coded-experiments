@@ -1,8 +1,4 @@
-/init
-
-procedural textures, noise
-
-textured voxels, multiple kinds of voxel that render from a texture atlas
+grass and dirt look especially bad
 
 add and remove voxels
 

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::{bail, Result};
 
-use crate::overlay::{Rgba, Texture};
+use crate::overlay::Texture;
 
 pub struct AtlasRegion {
     pub x: u32,
@@ -33,6 +33,10 @@ impl TextureAtlas {
 
     pub fn texture(&self) -> &Texture {
         &self.texture
+    }
+
+    pub fn into_texture(self) -> Texture {
+        self.texture
     }
 }
 
@@ -128,6 +132,7 @@ fn try_pack(entries: &[(String, Texture)], atlas_size: u32) -> Option<TextureAtl
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::overlay::Rgba;
 
     #[test]
     fn single_image_packs_correctly() {

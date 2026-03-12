@@ -33,6 +33,8 @@ Real-time voxel raytracer using wgpu + winit. Renders a 16x16x16 voxel chunk via
 - `Chunk` — 16³ flat array of `u8` voxel IDs, uploaded to GPU as a 4096-byte storage buffer.
 - `DrawList` / `OverlayVertex` / `Texture` / `Rgba` (`overlay.rs`) — immediate-mode 2D drawing primitives. `DrawList` accumulates quads as vertex/index data each frame.
 - `OverlayRenderer` (`overlay_renderer.rs`) — manages the overlay pipeline, dynamically grows vertex/index buffers, and handles texture bind group creation.
+- `TextureAtlas` / `TextureAtlasBuilder` (`texture_atlas.rs`) — packs multiple sub-images into a single `Texture` with named regions and UV-rect lookups.
+- `TextureAtlasFont` (`texture_atlas_font.rs`) — rasterizes a font charset into a `TextureAtlas` via `ab_glyph`, then exposes `draw_text` to emit quads into a `DrawList`.
 
 ### App loop
 

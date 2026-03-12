@@ -5,6 +5,7 @@ mod overlay_renderer;
 mod texture_atlas;
 mod texture_atlas_font;
 mod voxel_renderer;
+mod voxel_textures;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -49,6 +50,9 @@ struct App {
     font: Option<TextureAtlasFont>,
     font_bind_group: Option<wgpu::BindGroup>,
     draw_list: DrawList,
+    frame_count: u32,
+    fps_accum: f32,
+    fps_display: f32,
 }
 
 impl App {
@@ -64,6 +68,9 @@ impl App {
             font: None,
             font_bind_group: None,
             draw_list: DrawList::new(),
+            frame_count: 0,
+            fps_accum: 0.0,
+            fps_display: 0.0,
         }
     }
 
@@ -96,8 +103,11 @@ impl App {
                 .create_window(window_attrs)
                 .context("failed to create window")?,
         );
-        let renderer = Renderer::new(window.clone())?;
+        let mut renderer = Renderer::new(window.clone())?;
         renderer.upload_chunk(self.chunk.data());
+
+        let atlas = voxel_textures::build_voxel_atlas(42)?;
+        renderer.upload_voxel_atlas(atlas.texture(), atlas.uv_map());
 
         let ascii_charset: String = (0x20u8..=0x7E).map(|b| b as char).collect();
         let font = TextureAtlasFont::new(MINECRAFT_FONT, 32.0, &ascii_charset)
@@ -198,6 +208,14 @@ impl ApplicationHandler for App {
                 let dt = self.last_frame.elapsed().as_secs_f32().min(MAX_DT);
                 self.last_frame = Instant::now();
 
+                self.frame_count += 1;
+                self.fps_accum += dt;
+                if self.fps_accum >= 1.0 {
+                    self.fps_display = self.frame_count as f32 / self.fps_accum;
+                    self.frame_count = 0;
+                    self.fps_accum = 0.0;
+                }
+
                 let move_dist = MOVE_SPEED * dt;
                 if self.input.forward {
                     self.camera.move_forward(move_dist);
@@ -227,11 +245,12 @@ impl ApplicationHandler for App {
 
                         self.draw_list.clear();
                         if let Some(font) = &self.font {
+                            let fps_text = format!("FPS: {:.0}", self.fps_display);
                             font.draw_text(
                                 &mut self.draw_list,
-                                "Hello, World!",
-                                50.0,
-                                50.0,
+                                &fps_text,
+                                10.0,
+                                10.0,
                                 Rgba::WHITE,
                             );
                         }

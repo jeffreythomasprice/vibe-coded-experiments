@@ -1,0 +1,5 @@
+- [x] 6.1 Voxel texture atlas builder on the CPU
+- [x] 6.2 Upload voxel texture atlas to the GPU
+- [x] 6.3 Shader: compute face UVs from ray hit position
+- [x] 6.4 Update test chunk to use multiple voxel types
+- [x] 6.5 Wire up atlas creation and upload in App

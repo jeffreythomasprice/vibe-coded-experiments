@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 
 use crate::camera::CameraUniforms;
+use crate::overlay::Texture;
 use crate::overlay_renderer::OverlayRenderer;
 use winit::window::Window;
 
@@ -17,6 +18,8 @@ pub struct Renderer {
     chunk_buffer: wgpu::Buffer,
     chunk_bind_group: wgpu::BindGroup,
     overlay_renderer: OverlayRenderer,
+    atlas_bind_group_layout: wgpu::BindGroupLayout,
+    atlas_bind_group: Option<wgpu::BindGroup>,
 }
 
 impl Renderer {
@@ -110,9 +113,41 @@ impl Renderer {
             }],
         });
 
+        let atlas_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("atlas_bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("pipeline_layout"),
-            bind_group_layouts: &[&bind_group_layout, &chunk_bgl],
+            bind_group_layouts: &[&bind_group_layout, &chunk_bgl, &atlas_bgl],
             immediate_size: 0,
         });
 
@@ -164,6 +199,8 @@ impl Renderer {
             chunk_buffer,
             chunk_bind_group,
             overlay_renderer,
+            atlas_bind_group_layout: atlas_bgl,
+            atlas_bind_group: None,
         })
     }
 
@@ -179,6 +216,85 @@ impl Renderer {
 
     pub fn upload_chunk(&self, data: &[u8; 4096]) {
         self.queue.write_buffer(&self.chunk_buffer, 0, data);
+    }
+
+    pub fn upload_voxel_atlas(&mut self, atlas_texture: &Texture, uv_map: &[[f32; 4]; 256]) {
+        let tex_size = wgpu::Extent3d {
+            width: atlas_texture.width(),
+            height: atlas_texture.height(),
+            depth_or_array_layers: 1,
+        };
+
+        let gpu_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("voxel_atlas_texture"),
+            size: tex_size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        self.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &gpu_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            bytemuck::cast_slice(atlas_texture.data()),
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * atlas_texture.width()),
+                rows_per_image: Some(atlas_texture.height()),
+            },
+            tex_size,
+        );
+
+        let texture_view = gpu_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("voxel_atlas_sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            ..Default::default()
+        });
+
+        let uv_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("voxel_atlas_uv_map"),
+            size: (256 * 4 * std::mem::size_of::<f32>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        self.queue
+            .write_buffer(&uv_buffer, 0, bytemuck::cast_slice(uv_map));
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("atlas_bg"),
+            layout: &self.atlas_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: uv_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        self.atlas_bind_group = Some(bind_group);
     }
 
     pub fn aspect(&self) -> f32 {
@@ -230,6 +346,9 @@ impl Renderer {
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.camera_bind_group, &[]);
         pass.set_bind_group(1, &self.chunk_bind_group, &[]);
+        if let Some(ref atlas_bg) = self.atlas_bind_group {
+            pass.set_bind_group(2, atlas_bg, &[]);
+        }
         pass.draw(0..3, 0..1);
     }
 

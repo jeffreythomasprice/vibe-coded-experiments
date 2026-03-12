@@ -1,0 +1,4 @@
+- [x] 1.1 Add noise composition helpers
+- [x] 1.2 Rewrite dirt texture generator
+- [x] 1.3 Rewrite grass texture generator
+- [x] 1.4 Clean up old helpers and verify integration

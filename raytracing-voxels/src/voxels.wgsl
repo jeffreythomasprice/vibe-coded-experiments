@@ -31,6 +31,9 @@ struct Camera {
 
 @group(0) @binding(0) var<uniform> camera: Camera;
 @group(1) @binding(0) var<storage, read> voxels: array<u32>;
+@group(2) @binding(0) var atlas_tex: texture_2d<f32>;
+@group(2) @binding(1) var atlas_sampler: sampler;
+@group(2) @binding(2) var<storage, read> uv_map: array<vec4<f32>>;
 
 fn ray_box(ro: vec3<f32>, rd: vec3<f32>, box_min: vec3<f32>, box_max: vec3<f32>) -> vec2<f32> {
     let inv_rd = 1.0 / rd;
@@ -103,16 +106,67 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let t_delta = abs(inv_rd);
 
-    var normal = vec3<f32>(0.0, 0.0, 0.0);
+    // Compute entry face normal so the first solid voxel hit gets correct UVs.
+    // The entry face is the axis whose tmin plane was crossed last (= max of tmin components).
+    var normal: vec3<f32>;
+    if t.x > 0.0 {
+        let t1 = (chunk_min - ro) * inv_rd;
+        let t2 = (chunk_max - ro) * inv_rd;
+        let tmin_v = min(t1, t2);
+        if tmin_v.x >= tmin_v.y && tmin_v.x >= tmin_v.z {
+            normal = vec3<f32>(select(1.0, -1.0, rd.x >= 0.0), 0.0, 0.0);
+        } else if tmin_v.y >= tmin_v.z {
+            normal = vec3<f32>(0.0, select(1.0, -1.0, rd.y >= 0.0), 0.0);
+        } else {
+            normal = vec3<f32>(0.0, 0.0, select(1.0, -1.0, rd.z >= 0.0));
+        }
+    } else {
+        normal = vec3<f32>(0.0, 0.0, 0.0);
+    }
 
     for (var i = 0; i < 128; i = i + 1) {
         let v = get_voxel(voxel.x, voxel.y, voxel.z);
         if v != 0u {
-            // Hit a solid voxel
+            // Hit a solid voxel — compute hit t based on which face was hit
+            var t_hit: f32;
+            if abs(normal.x) > 0.5 {
+                t_hit = t_max.x - t_delta.x;
+            } else if abs(normal.y) > 0.5 {
+                t_hit = t_max.y - t_delta.y;
+            } else if abs(normal.z) > 0.5 {
+                t_hit = t_max.z - t_delta.z;
+            } else {
+                // Camera inside a solid voxel — no face crossing available
+                t_hit = entry_t;
+            }
+
+            // Compute hit position in local voxel space [0, 1]
+            let hit_pos = ro + rd * t_hit;
+            let local_hit = hit_pos - chunk_min - vec3<f32>(f32(voxel.x), f32(voxel.y), f32(voxel.z));
+
+            // Determine face UV from the two non-normal axes
+            var face_uv: vec2<f32>;
+            if abs(normal.x) > 0.5 {
+                face_uv = vec2<f32>(local_hit.z, local_hit.y);
+            } else if abs(normal.y) > 0.5 {
+                face_uv = vec2<f32>(local_hit.x, local_hit.z);
+            } else {
+                face_uv = vec2<f32>(local_hit.x, local_hit.y);
+            }
+            face_uv = clamp(face_uv, vec2<f32>(0.0), vec2<f32>(1.0));
+
+            // Look up atlas UV rect and remap
+            let uv_rect = uv_map[v];
+            let atlas_uv = uv_rect.xy + face_uv * (uv_rect.zw - uv_rect.xy);
+
+            // Sample atlas texture (textureSampleLevel for non-uniform control flow)
+            let tex_color = textureSampleLevel(atlas_tex, atlas_sampler, atlas_uv, 0.0);
+
+            // Lighting
             let light_dir = normalize(vec3<f32>(1.0, 2.0, 3.0));
             let diffuse = max(dot(normal, light_dir), 0.0);
             let ambient = 0.15;
-            let color = vec3<f32>(0.9, 0.3, 0.2) * (ambient + diffuse * 0.85);
+            let color = tex_color.rgb * (ambient + diffuse * 0.85);
             return vec4<f32>(color, 1.0);
         }
 

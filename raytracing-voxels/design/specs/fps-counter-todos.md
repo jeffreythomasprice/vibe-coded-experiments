@@ -1,0 +1,2 @@
+- [x] 1.1 Add frame-time tracking to `App`
+- [x] 1.2 Replace "Hello, World!" with FPS display
