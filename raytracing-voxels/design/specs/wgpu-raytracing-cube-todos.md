@@ -1,0 +1,6 @@
+- [x] 1.1 Winit window + event loop with Escape handling
+- [x] 1.2 Initialize wgpu surface, device, and queue
+- [x] 1.3 Full-screen quad render pipeline
+- [x] 1.4 Camera uniform buffer and bind group
+- [x] 1.5 Ray-tracing fragment shader for a unit cube
+- [x] 1.6 Window resize handling and aspect ratio update

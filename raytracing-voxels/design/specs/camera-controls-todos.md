@@ -1,0 +1,4 @@
+- [x] 2.1 Camera struct with yaw/pitch orientation
+- [x] 2.2 Keyboard movement (WASD + Space/Shift)
+- [x] 2.3 Mouse look with cursor grab
+- [x] 2.4 Delta-time and frame pacing

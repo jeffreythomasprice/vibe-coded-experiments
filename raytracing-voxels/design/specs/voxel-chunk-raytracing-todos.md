@@ -1,0 +1,5 @@
+- [x] 3.1 Chunk data structure on the Rust side
+- [x] 3.2 GPU storage buffer for chunk data
+- [x] 3.3 Upload test chunk at startup
+- [x] 3.4 DDA ray marching in the shader
+- [x] 3.5 Verify and tune
