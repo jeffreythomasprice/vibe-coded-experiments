@@ -4,6 +4,7 @@ mod chunk_manager;
 mod config;
 mod overlay;
 mod overlay_renderer;
+mod player;
 mod texture_atlas;
 mod texture_atlas_font;
 mod voxel_renderer;
@@ -22,6 +23,7 @@ use camera::Camera;
 use chunk_manager::ChunkManager;
 use config::Config;
 use overlay::{DrawList, Rgba, Texture};
+use player::{InputState, Player};
 use texture_atlas_font::TextureAtlasFont;
 use voxel_renderer::Renderer;
 use world::World;
@@ -36,24 +38,14 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key, KeyCode, NamedKey, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
 
-const MOVE_SPEED: f32 = 7.5;
 const MOUSE_SENSITIVITY: f32 = 0.003;
 const MAX_DT: f32 = 0.1;
-
-#[derive(Default)]
-struct InputState {
-    forward: bool,
-    back: bool,
-    left: bool,
-    right: bool,
-    up: bool,
-    down: bool,
-}
 
 struct App {
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
     camera: Camera,
+    player: Player,
     world: World,
     chunk_manager: ChunkManager,
     input: InputState,
@@ -100,10 +92,13 @@ impl App {
 
         chunk_manager.load_initial(camera.position, &mut world);
 
+        let player = Player::new(camera.position);
+
         Self {
             window: None,
             renderer: None,
             camera,
+            player,
             world,
             chunk_manager,
             input: InputState::default(),
@@ -306,6 +301,7 @@ impl ApplicationHandler for App {
                     KeyCode::KeyD => self.input.right = pressed,
                     KeyCode::Space => self.input.up = pressed,
                     KeyCode::ShiftLeft => self.input.down = pressed,
+                    KeyCode::F1 if pressed => self.player.toggle_fly_mode(),
                     KeyCode::Digit1 if pressed => self.active_voxel_type = VOXEL_KEY_TO_ID[1],
                     KeyCode::Digit2 if pressed => self.active_voxel_type = VOXEL_KEY_TO_ID[2],
                     KeyCode::Digit3 if pressed => self.active_voxel_type = VOXEL_KEY_TO_ID[3],
@@ -330,25 +326,8 @@ impl ApplicationHandler for App {
                     self.fps_accum = 0.0;
                 }
 
-                let move_dist = MOVE_SPEED * dt;
-                if self.input.forward {
-                    self.camera.move_forward(move_dist);
-                }
-                if self.input.back {
-                    self.camera.move_forward(-move_dist);
-                }
-                if self.input.right {
-                    self.camera.move_right(move_dist);
-                }
-                if self.input.left {
-                    self.camera.move_right(-move_dist);
-                }
-                if self.input.up {
-                    self.camera.move_up(move_dist);
-                }
-                if self.input.down {
-                    self.camera.move_up(-move_dist);
-                }
+                self.player.tick(dt, &self.input, self.camera.yaw, &self.world);
+                self.camera.position = self.player.eye_position();
 
                 self.chunk_manager.update_camera(self.camera.position);
                 self.chunk_manager.drain_results(&mut self.world);
@@ -465,6 +444,19 @@ impl ApplicationHandler for App {
                                 &format!("Active: {}", voxel_name),
                                 10.0,
                                 screen_height - line_height - 50.0,
+                                Rgba::WHITE,
+                            );
+
+                            let mode_text = if self.player.fly_mode {
+                                "Mode: FLY"
+                            } else {
+                                "Mode: WALK"
+                            };
+                            font.draw_text(
+                                &mut self.draw_list,
+                                mode_text,
+                                10.0,
+                                screen_height - 2.0 * line_height - 50.0,
                                 Rgba::WHITE,
                             );
                             let _ = y;

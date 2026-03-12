@@ -1,0 +1,8 @@
+- [x] 1. Create Player struct with fly-mode passthrough
+- [x] 2. Add `is_chunk_loaded` to World and AABB collision helper
+- [x] 3. Add gravity and ground detection
+- [x] 4. Add jumping
+- [x] 5. Add horizontal collision and wall sliding
+- [x] 6. Add step-up logic
+- [x] 7. Add step-down snapping
+- [x] 8. Add HUD indicator for physics mode

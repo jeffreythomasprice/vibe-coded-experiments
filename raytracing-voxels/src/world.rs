@@ -86,6 +86,10 @@ impl World {
         self.chunks.get_mut(pos)
     }
 
+    pub fn is_chunk_loaded(&self, chunk_pos: &IVec3) -> bool {
+        self.chunks.contains_key(chunk_pos)
+    }
+
     pub fn world_to_chunk(voxel_pos: IVec3) -> (IVec3, [usize; 3]) {
         let chunk_pos = IVec3::new(
             voxel_pos.x.div_euclid(CHUNK_SIZE),
@@ -459,6 +463,19 @@ mod tests {
         assert!(world.is_chunk_modified(&IVec3::ZERO));
         world.remove(&IVec3::ZERO);
         assert!(!world.is_chunk_modified(&IVec3::ZERO));
+    }
+
+    #[test]
+    fn is_chunk_loaded_returns_true_for_inserted() {
+        let mut world = World::new();
+        world.insert(IVec3::ZERO, Chunk::new());
+        assert!(world.is_chunk_loaded(&IVec3::ZERO));
+    }
+
+    #[test]
+    fn is_chunk_loaded_returns_false_for_missing() {
+        let world = World::new();
+        assert!(!world.is_chunk_loaded(&IVec3::ZERO));
     }
 
     #[test]
