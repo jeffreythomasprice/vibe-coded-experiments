@@ -1,0 +1,4 @@
+- [x] 1. Add wood texture generator
+- [x] 2. Add leaves texture generator
+- [x] 3. Register wood and leaves in TILE_DEFS
+- [x] 4. Add tree structure generation

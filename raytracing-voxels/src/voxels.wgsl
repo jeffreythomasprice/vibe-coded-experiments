@@ -168,15 +168,17 @@ fn march_chunk(ro: vec3<f32>, rd: vec3<f32>, chunk_min: vec3<f32>,
 
             let tex_color = textureSampleLevel(atlas_tex, atlas_sampler, atlas_uv, 0.0);
 
-            let light_dir = normalize(vec3<f32>(1.0, 2.0, 3.0));
-            let diffuse = max(dot(normal, light_dir), 0.0);
-            let ambient = 0.15;
-            let color = tex_color.rgb * (ambient + diffuse * 0.85);
+            if tex_color.a >= 0.5 {
+                let light_dir = normalize(vec3<f32>(1.0, 2.0, 3.0));
+                let diffuse = max(dot(normal, light_dir), 0.0);
+                let ambient = 0.15;
+                let color = tex_color.rgb * (ambient + diffuse * 0.85);
 
-            result.hit = true;
-            result.color = vec4<f32>(color, 1.0);
-            result.t = t_hit;
-            return result;
+                result.hit = true;
+                result.color = vec4<f32>(color, 1.0);
+                result.t = t_hit;
+                return result;
+            }
         }
 
         if t_max_dda.x < t_max_dda.y && t_max_dda.x < t_max_dda.z {

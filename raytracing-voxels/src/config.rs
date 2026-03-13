@@ -17,11 +17,10 @@ struct WorldConfig {
 }
 
 const DEFAULT_CHUNK_STORAGE_DIR: &str = "/tmp/voxels";
-const DEFAULT_SEED: u32 = 12345;
 
 pub struct Config {
     pub chunk_storage_dir: PathBuf,
-    pub seed: u32,
+    pub seed: Option<u32>,
 }
 
 impl Config {
@@ -44,10 +43,7 @@ impl Config {
 
         fs::create_dir_all(&chunk_storage_dir)?;
 
-        let seed = config_file
-            .world
-            .and_then(|w| w.seed)
-            .unwrap_or(DEFAULT_SEED);
+        let seed = config_file.world.and_then(|w| w.seed);
 
         Ok(Config {
             chunk_storage_dir,

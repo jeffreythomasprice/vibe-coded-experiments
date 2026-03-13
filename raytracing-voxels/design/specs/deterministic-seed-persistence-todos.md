@@ -1,0 +1,6 @@
+- [x] 1. Add `rand` dependency for time-based seed generation
+- [x] 2. Create seed file read/write utilities
+- [x] 3. Add `serde_json` dependency
+- [x] 4. Integrate seed resolution into Config
+- [x] 5. Register the seed module
+- [x] 6. Verify determinism across generation orders

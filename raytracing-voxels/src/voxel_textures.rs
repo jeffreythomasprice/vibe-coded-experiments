@@ -239,10 +239,12 @@ fn generate_grass_parameterized(seed: u32, params: &GrassParams) -> Texture {
             let detail = noise_layer(x, y, TILE_SIZE, &detail_config);
 
             let h = pixel_hash(x, y, seed.wrapping_add(1000));
-            let hash_jitter =
-                (h % 100) as f64 / 100.0 * params.hash_jitter_range * 2.0 - params.hash_jitter_range;
+            let hash_jitter = (h % 100) as f64 / 100.0 * params.hash_jitter_range * 2.0
+                - params.hash_jitter_range;
 
-            let t = (cluster * params.cluster_weight + detail * params.detail_weight + hash_jitter
+            let t = (cluster * params.cluster_weight
+                + detail * params.detail_weight
+                + hash_jitter
                 + 0.05)
                 .clamp(0.0, 1.0);
 
@@ -569,6 +571,207 @@ fn generate_brick(seed: u32) -> Texture {
     tex
 }
 
+struct WoodParams {
+    palette: Vec<Rgba>,
+    grain_frequency: f64,
+    grain_octaves: u32,
+    grain_x_scale: f64,
+    grain_y_scale: f64,
+    detail_frequency: f64,
+    detail_octaves: u32,
+    detail_x_scale: f64,
+    detail_y_scale: f64,
+    grain_weight: f64,
+    detail_weight: f64,
+    hash_jitter_range: f64,
+    posterize_levels: u32,
+    brightness_shift_range: i16,
+}
+
+impl Default for WoodParams {
+    fn default() -> Self {
+        Self {
+            palette: vec![
+                Rgba::rgb(40, 30, 20),
+                Rgba::rgb(60, 45, 30),
+                Rgba::rgb(80, 65, 40),
+                Rgba::rgb(100, 90, 60),
+                Rgba::rgb(120, 105, 70),
+                Rgba::rgb(150, 130, 90),
+            ],
+            grain_frequency: 1.0,
+            grain_octaves: 3,
+            grain_x_scale: 0.3,
+            grain_y_scale: 2.0,
+            detail_frequency: 4.0,
+            detail_octaves: 2,
+            detail_x_scale: 1.0,
+            detail_y_scale: 1.0,
+            grain_weight: 0.65,
+            detail_weight: 0.25,
+            hash_jitter_range: 0.06,
+            posterize_levels: 6,
+            brightness_shift_range: 4,
+        }
+    }
+}
+
+fn generate_wood_parameterized(seed: u32, params: &WoodParams) -> Texture {
+    let mut tex = Texture::new(TILE_SIZE, TILE_SIZE);
+
+    let grain_config = NoiseLayerConfig {
+        octaves: params.grain_octaves,
+        frequency: params.grain_frequency,
+        lacunarity: 2.0,
+        persistence: 0.5,
+        x_scale: params.grain_x_scale,
+        y_scale: params.grain_y_scale,
+        seed,
+    };
+
+    let detail_config = NoiseLayerConfig {
+        octaves: params.detail_octaves,
+        frequency: params.detail_frequency,
+        lacunarity: 2.0,
+        persistence: 0.5,
+        x_scale: params.detail_x_scale,
+        y_scale: params.detail_y_scale,
+        seed: seed.wrapping_add(500),
+    };
+
+    for y in 0..TILE_SIZE {
+        for x in 0..TILE_SIZE {
+            let grain = noise_layer(x, y, TILE_SIZE, &grain_config);
+            let detail = noise_layer(x, y, TILE_SIZE, &detail_config);
+
+            let h = pixel_hash(x, y, seed.wrapping_add(1000));
+            let hash_jitter = (h % 100) as f64 / 100.0 * params.hash_jitter_range * 2.0
+                - params.hash_jitter_range;
+
+            let t =
+                (grain * params.grain_weight + detail * params.detail_weight + hash_jitter + 0.05)
+                    .clamp(0.0, 1.0);
+
+            let color = palette_select(&params.palette, posterize(t, params.posterize_levels));
+
+            let shift_range = params.brightness_shift_range as u32 * 2 + 1;
+            let brightness_shift = ((h >> 8) % shift_range) as i16 - params.brightness_shift_range;
+            let color = Rgba::rgb(
+                (color.r as i16 + brightness_shift).clamp(0, 255) as u8,
+                (color.g as i16 + brightness_shift).clamp(0, 255) as u8,
+                (color.b as i16 + brightness_shift).clamp(0, 255) as u8,
+            );
+
+            tex.set_pixel(x, y, color);
+        }
+    }
+
+    tex
+}
+
+fn generate_wood(seed: u32) -> Texture {
+    generate_wood_parameterized(seed, &WoodParams::default())
+}
+
+struct LeavesParams {
+    bright_color: Rgba,
+    dark_color: Rgba,
+    stipple_frequency: f64,
+    stipple_octaves: u32,
+    stipple_posterize_levels: u32,
+    cluster_frequency: f64,
+    cluster_octaves: u32,
+    cluster_weight: f64,
+    stipple_weight: f64,
+    hash_jitter_range: f64,
+    brightness_shift_range: i16,
+    alpha_cutoff: f64,
+}
+
+impl Default for LeavesParams {
+    fn default() -> Self {
+        Self {
+            bright_color: Rgba::rgb(35, 210, 35),
+            dark_color: Rgba::rgb(5, 45, 5),
+            stipple_frequency: 14.0,
+            stipple_octaves: 2,
+            stipple_posterize_levels: 2,
+            cluster_frequency: 2.0,
+            cluster_octaves: 3,
+            cluster_weight: 0.5,
+            stipple_weight: 0.5,
+            hash_jitter_range: 0.04,
+            brightness_shift_range: 8,
+            alpha_cutoff: 0.22,
+        }
+    }
+}
+
+fn generate_leaves_parameterized(seed: u32, params: &LeavesParams) -> Texture {
+    let mut tex = Texture::new(TILE_SIZE, TILE_SIZE);
+
+    let stipple_config = NoiseLayerConfig {
+        octaves: params.stipple_octaves,
+        frequency: params.stipple_frequency,
+        lacunarity: 2.0,
+        persistence: 0.5,
+        x_scale: 1.0,
+        y_scale: 1.0,
+        seed,
+    };
+
+    let cluster_config = NoiseLayerConfig {
+        octaves: params.cluster_octaves,
+        frequency: params.cluster_frequency,
+        lacunarity: 2.0,
+        persistence: 0.5,
+        x_scale: 1.0,
+        y_scale: 1.0,
+        seed: seed.wrapping_add(700),
+    };
+
+    for y in 0..TILE_SIZE {
+        for x in 0..TILE_SIZE {
+            let stipple = noise_layer(x, y, TILE_SIZE, &stipple_config);
+            let stipple_post = posterize(stipple, params.stipple_posterize_levels);
+
+            let cluster = noise_layer(x, y, TILE_SIZE, &cluster_config);
+
+            let h = pixel_hash(x, y, seed.wrapping_add(1200));
+            let hash_jitter = (h % 100) as f64 / 100.0 * params.hash_jitter_range * 2.0
+                - params.hash_jitter_range;
+
+            let t = (stipple_post * params.stipple_weight
+                + cluster * params.cluster_weight
+                + hash_jitter)
+                .clamp(0.0, 1.0);
+
+            if t < params.alpha_cutoff {
+                tex.set_pixel(x, y, Rgba::new(0, 0, 0, 0));
+                continue;
+            }
+
+            let color = lerp_color(params.dark_color, params.bright_color, t);
+
+            let shift_range = params.brightness_shift_range as u32 * 2 + 1;
+            let brightness_shift = ((h >> 8) % shift_range) as i16 - params.brightness_shift_range;
+            let color = Rgba::rgb(
+                (color.r as i16 + brightness_shift).clamp(0, 255) as u8,
+                (color.g as i16 + brightness_shift).clamp(0, 255) as u8,
+                (color.b as i16 + brightness_shift).clamp(0, 255) as u8,
+            );
+
+            tex.set_pixel(x, y, color);
+        }
+    }
+
+    tex
+}
+
+fn generate_leaves(seed: u32) -> Texture {
+    generate_leaves_parameterized(seed, &LeavesParams::default())
+}
+
 const TILE_DEFS: &[TileDef] = &[
     TileDef {
         id: 1,
@@ -589,6 +792,16 @@ const TILE_DEFS: &[TileDef] = &[
         id: 4,
         name: "brick",
         generator: generate_brick,
+    },
+    TileDef {
+        id: 5,
+        name: "wood",
+        generator: generate_wood,
+    },
+    TileDef {
+        id: 6,
+        name: "leaves",
+        generator: generate_leaves,
     },
 ];
 
@@ -808,9 +1021,9 @@ mod tests {
     }
 
     #[test]
-    fn atlas_has_valid_uv_for_ids_1_to_4() -> Result<()> {
+    fn atlas_has_valid_uv_for_ids_1_to_6() -> Result<()> {
         let atlas = build_voxel_atlas(42)?;
-        for id in 1..=4u8 {
+        for id in 1..=6u8 {
             let uv = atlas.uv_map()[id as usize];
             assert!(uv[0] < uv[2], "id {id} has invalid u range");
             assert!(uv[1] < uv[3], "id {id} has invalid v range");
@@ -873,8 +1086,7 @@ mod tests {
         for y in 0..10 {
             let yf = y as f64 * 6.4;
             let at_zero = sample_fbm_tiling(0.0, yf, 64.0, 1.0, 1.0, 4, 1.0, 2.0, 0.5, 42);
-            let at_tile =
-                sample_fbm_tiling(64.0, yf, 64.0, 1.0, 1.0, 4, 1.0, 2.0, 0.5, 42);
+            let at_tile = sample_fbm_tiling(64.0, yf, 64.0, 1.0, 1.0, 4, 1.0, 2.0, 0.5, 42);
             assert!(
                 (at_zero - at_tile).abs() < 1e-10,
                 "x-wrap mismatch at y={yf}: {at_zero} vs {at_tile}"
@@ -884,8 +1096,7 @@ mod tests {
         for x in 0..10 {
             let xf = x as f64 * 6.4;
             let at_zero = sample_fbm_tiling(xf, 0.0, 64.0, 1.0, 1.0, 4, 1.0, 2.0, 0.5, 42);
-            let at_tile =
-                sample_fbm_tiling(xf, 64.0, 64.0, 1.0, 1.0, 4, 1.0, 2.0, 0.5, 42);
+            let at_tile = sample_fbm_tiling(xf, 64.0, 64.0, 1.0, 1.0, 4, 1.0, 2.0, 0.5, 42);
             assert!(
                 (at_zero - at_tile).abs() < 1e-10,
                 "y-wrap mismatch at x={xf}: {at_zero} vs {at_tile}"
@@ -1058,5 +1269,129 @@ mod tests {
     fn brick_tiles_seamlessly() {
         let tex = generate_brick(42);
         assert_texture_tiles(&tex, "brick");
+    }
+
+    #[test]
+    fn wood_correct_size_and_opaque() {
+        let tex = generate_wood(42);
+        assert_eq!(tex.width(), TILE_SIZE);
+        assert_eq!(tex.height(), TILE_SIZE);
+        assert!(tex.data().iter().all(|p| p.a == 255));
+    }
+
+    #[test]
+    fn wood_deterministic() {
+        let a = generate_wood(42);
+        let b = generate_wood(42);
+        assert_eq!(a.data(), b.data());
+    }
+
+    #[test]
+    fn wood_different_seeds_differ() {
+        let a = generate_wood(42);
+        let b = generate_wood(99);
+        assert_ne!(a.data(), b.data());
+    }
+
+    #[test]
+    fn wood_tiles_seamlessly() {
+        let tex = generate_wood(42);
+        assert_texture_tiles(&tex, "wood");
+    }
+
+    #[test]
+    fn wood_brown_dominant() {
+        let tex = generate_wood(42);
+        let pixels = tex.data();
+        let red_mean: f64 = pixels.iter().map(|p| p.r as f64).sum::<f64>() / pixels.len() as f64;
+        let green_mean: f64 = pixels.iter().map(|p| p.g as f64).sum::<f64>() / pixels.len() as f64;
+        let blue_mean: f64 = pixels.iter().map(|p| p.b as f64).sum::<f64>() / pixels.len() as f64;
+        assert!(
+            red_mean > blue_mean,
+            "red mean ({red_mean:.1}) should exceed blue mean ({blue_mean:.1})"
+        );
+        assert!(
+            green_mean < red_mean,
+            "green mean ({green_mean:.1}) should be less than red mean ({red_mean:.1})"
+        );
+    }
+
+    #[test]
+    fn leaves_correct_size() {
+        let tex = generate_leaves(42);
+        assert_eq!(tex.width(), TILE_SIZE);
+        assert_eq!(tex.height(), TILE_SIZE);
+    }
+
+    #[test]
+    fn leaves_deterministic() {
+        let a = generate_leaves(42);
+        let b = generate_leaves(42);
+        assert_eq!(a.data(), b.data());
+    }
+
+    #[test]
+    fn leaves_different_seeds_differ() {
+        let a = generate_leaves(42);
+        let b = generate_leaves(99);
+        assert_ne!(a.data(), b.data());
+    }
+
+    #[test]
+    fn leaves_tiles_seamlessly() {
+        let tex = generate_leaves(42);
+        assert_texture_tiles(&tex, "leaves");
+    }
+
+    #[test]
+    fn leaves_green_dominant() {
+        let tex = generate_leaves(42);
+        let opaque: Vec<_> = tex.data().iter().filter(|p| p.a == 255).collect();
+        let green_dominant = opaque.iter().filter(|p| p.g > p.r && p.g > p.b).count();
+        let ratio = green_dominant as f64 / opaque.len() as f64;
+        assert!(
+            ratio > 0.95,
+            "expected >95% green-dominant opaque pixels, got {:.1}%",
+            ratio * 100.0
+        );
+    }
+
+    #[test]
+    fn leaves_high_contrast() {
+        let tex = generate_leaves(42);
+        let opaque: Vec<_> = tex.data().iter().filter(|p| p.a == 255).collect();
+        let mean: f64 = opaque.iter().map(|p| p.g as f64).sum::<f64>() / opaque.len() as f64;
+        let variance: f64 = opaque
+            .iter()
+            .map(|p| (p.g as f64 - mean).powi(2))
+            .sum::<f64>()
+            / opaque.len() as f64;
+        let stddev = variance.sqrt();
+        assert!(
+            stddev > 25.0,
+            "leaves green channel stddev {stddev:.1} should be > 25"
+        );
+    }
+
+    #[test]
+    fn leaves_alpha_binary() {
+        let tex = generate_leaves(42);
+        assert!(
+            tex.data().iter().all(|p| p.a == 0 || p.a == 255),
+            "all alpha values should be either 0 or 255"
+        );
+    }
+
+    #[test]
+    fn leaves_transparency_ratio() {
+        let tex = generate_leaves(42);
+        let pixels = tex.data();
+        let transparent = pixels.iter().filter(|p| p.a == 0).count();
+        let ratio = transparent as f64 / pixels.len() as f64;
+        assert!(
+            (0.15..=0.35).contains(&ratio),
+            "expected 15-35% transparent pixels, got {:.1}%",
+            ratio * 100.0
+        );
     }
 }

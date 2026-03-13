@@ -1,0 +1,2 @@
+- [x] 1. Add alpha cutoff to leaves texture generation
+- [x] 2. Alpha test in shader DDA raymarching loop

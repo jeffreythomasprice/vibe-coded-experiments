@@ -6,6 +6,7 @@ mod config;
 mod overlay;
 mod overlay_renderer;
 mod player;
+mod seed;
 mod texture_atlas;
 mod texture_atlas_font;
 mod voxel_renderer;
@@ -66,6 +67,7 @@ struct App {
     voxel_uv_map: [[f32; 4]; 256],
     last_save: Instant,
     storage_dir: PathBuf,
+    seed: u32,
 }
 
 impl App {
@@ -119,6 +121,7 @@ impl App {
             voxel_uv_map: [[0.0; 4]; 256],
             last_save: Instant::now(),
             storage_dir,
+            seed,
         }
     }
 
@@ -156,7 +159,7 @@ impl App {
         renderer.upload_world(&voxel_data, &chunk_infos, chunk_infos.len() as u32, &bvh_nodes);
         self.world.clear_dirty();
 
-        let atlas = voxel_textures::build_voxel_atlas(42)?;
+        let atlas = voxel_textures::build_voxel_atlas(self.seed)?;
         renderer.upload_voxel_atlas(atlas.texture(), atlas.uv_map());
         self.voxel_uv_map = *atlas.uv_map();
 
@@ -575,8 +578,9 @@ fn format_bytes(bytes: u64) -> String {
 fn main() -> Result<()> {
     env_logger::init();
     let config = Config::load()?;
+    let seed = seed::resolve_seed(&config.chunk_storage_dir, config.seed)?;
     let event_loop = EventLoop::new().context("failed to create event loop")?;
-    let mut app = App::new(config.chunk_storage_dir, config.seed);
+    let mut app = App::new(config.chunk_storage_dir, seed);
     event_loop.run_app(&mut app).context("event loop error")?;
     Ok(())
 }
