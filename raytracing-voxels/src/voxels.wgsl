@@ -51,6 +51,123 @@ struct BvhNode {
 @group(2) @binding(1) var atlas_sampler: sampler;
 @group(2) @binding(2) var<storage, read> uv_map: array<vec4<f32>>;
 
+struct InteractionState {
+    highlight_pos: vec3<f32>,
+    highlight_active: u32,
+    break_pos: vec3<f32>,
+    break_progress: f32,
+};
+
+@group(3) @binding(0) var<uniform> interaction: InteractionState;
+
+fn is_wireframe_edge(face_uv: vec2<f32>, thickness: f32) -> bool {
+    return face_uv.x < thickness || face_uv.x > (1.0 - thickness)
+        || face_uv.y < thickness || face_uv.y > (1.0 - thickness);
+}
+
+fn hash1(p: vec2<f32>) -> f32 {
+    return fract(sin(dot(p, vec2<f32>(127.1, 311.7))) * 43758.5453);
+}
+
+fn hash2(p: vec2<f32>) -> vec2<f32> {
+    return vec2<f32>(
+        fract(sin(dot(p, vec2<f32>(127.1, 311.7))) * 43758.5453),
+        fract(sin(dot(p, vec2<f32>(269.5, 183.3))) * 43758.5453),
+    );
+}
+
+struct VoronoiResult {
+    edge_dist: f32,
+    cell_hash: f32,
+};
+
+fn voronoi_edges(uv: vec2<f32>, scale: f32, seed: f32) -> VoronoiResult {
+    let st = uv * scale;
+    let i_st = floor(st);
+    let f_st = fract(st);
+
+    var d1: f32 = 1e10;
+    var d2: f32 = 1e10;
+    var nearest_cell: vec2<f32>;
+
+    for (var y: i32 = -1; y <= 1; y += 1) {
+        for (var x: i32 = -1; x <= 1; x += 1) {
+            let neighbor = vec2<f32>(f32(x), f32(y));
+            let cell = i_st + neighbor;
+            let point = neighbor + hash2(cell + vec2<f32>(seed, seed * 0.7)) - f_st;
+            let dist = dot(point, point);
+            if dist < d1 {
+                d2 = d1;
+                d1 = dist;
+                nearest_cell = cell;
+            } else if dist < d2 {
+                d2 = dist;
+            }
+        }
+    }
+
+    var result: VoronoiResult;
+    result.edge_dist = sqrt(d2) - sqrt(d1);
+    result.cell_hash = hash1(nearest_cell + vec2<f32>(seed));
+    return result;
+}
+
+fn crack_overlay(face_uv: vec2<f32>, progress: f32, seed: f32) -> f32 {
+    let v1 = voronoi_edges(face_uv, 3.0, seed);
+    let v2 = voronoi_edges(face_uv, 6.0, seed + 100.0);
+
+    let crack_width = mix(0.02, 0.15, progress * progress);
+    var darken: f32 = 0.0;
+
+    // Primary cracks: appear progressively based on cell hash
+    let threshold1 = v1.cell_hash * 0.8;
+    if progress > threshold1 {
+        let crack1 = smoothstep(crack_width, 0.0, v1.edge_dist);
+        darken += crack1 * 0.6;
+    }
+
+    // Secondary fine cracks: appear later in the break
+    let threshold2 = v2.cell_hash * 0.6 + 0.3;
+    if progress > threshold2 {
+        let crack2 = smoothstep(crack_width * 0.7, 0.0, v2.edge_dist);
+        darken += crack2 * 0.4;
+    }
+
+    // Subtle surface darkening for dust/damage feel
+    darken += progress * progress * 0.3;
+
+    return min(darken, 0.8);
+}
+
+fn wireframe_box(ro: vec3<f32>, rd: vec3<f32>, box_min: vec3<f32>, closest_t: f32, color_in: vec4<f32>, wire_color: vec3<f32>, thickness: f32) -> vec4<f32> {
+    let box_max = box_min + vec3<f32>(1.0, 1.0, 1.0);
+    let t = ray_box(ro, rd, box_min, box_max);
+    let entry_t = t.x;
+    if entry_t > t.y || t.y < 0.0 || entry_t > closest_t {
+        return color_in;
+    }
+    let hit_point = ro + rd * max(entry_t, 0.0001);
+    let local = hit_point - box_min;
+    let inv_rd = 1.0 / rd;
+    let t1 = (box_min - ro) * inv_rd;
+    let t2 = (box_max - ro) * inv_rd;
+    let tmin_v = min(t1, t2);
+    var face_uv: vec2<f32>;
+    if tmin_v.x >= tmin_v.y && tmin_v.x >= tmin_v.z {
+        face_uv = vec2<f32>(fract(local.z), fract(local.y));
+    } else if tmin_v.y >= tmin_v.z {
+        face_uv = vec2<f32>(fract(local.x), fract(local.z));
+    } else {
+        face_uv = vec2<f32>(fract(local.x), fract(local.y));
+    }
+    face_uv = clamp(face_uv, vec2<f32>(0.0), vec2<f32>(1.0));
+    if is_wireframe_edge(face_uv, thickness) {
+        let alpha = 0.6;
+        return vec4<f32>(mix(color_in.rgb, wire_color, alpha), 1.0);
+    }
+    return color_in;
+}
+
 fn ray_box(ro: vec3<f32>, rd: vec3<f32>, box_min: vec3<f32>, box_max: vec3<f32>) -> vec2<f32> {
     let inv_rd = 1.0 / rd;
     let t1 = (box_min - ro) * inv_rd;
@@ -276,12 +393,51 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
 
+    var final_color: vec4<f32>;
     if hit_anything {
-        return result_color;
+        final_color = result_color;
+    } else {
+        let sky_t = rd.y * 0.5 + 0.5;
+        let sky = mix(vec3<f32>(0.8, 0.85, 0.9), vec3<f32>(0.3, 0.5, 0.8), sky_t);
+        final_color = vec4<f32>(sky, 1.0);
     }
 
-    // Miss — sky gradient
-    let sky_t = rd.y * 0.5 + 0.5;
-    let sky = mix(vec3<f32>(0.8, 0.85, 0.9), vec3<f32>(0.3, 0.5, 0.8), sky_t);
-    return vec4<f32>(sky, 1.0);
+    // Break progress overlay on the voxel being broken (ray-box intersection approach)
+    if interaction.break_progress > 0.0 && hit_anything {
+        let bp = interaction.break_pos;
+        let box_max = bp + vec3<f32>(1.0, 1.0, 1.0);
+        let t = ray_box(ro, rd, bp, box_max);
+        // Check ray hits this box AND it's close to the closest voxel hit
+        if t.x <= t.y && t.y >= 0.0 && t.x <= closest_t + 0.01 {
+            let hit_point = ro + rd * max(t.x, 0.0001);
+            let local = hit_point - bp;
+            let inv_rd = 1.0 / rd;
+            let t1 = (bp - ro) * inv_rd;
+            let t2 = (box_max - ro) * inv_rd;
+            let tmin_v = min(t1, t2);
+            var face_uv: vec2<f32>;
+            var face_index: f32;
+            if tmin_v.x >= tmin_v.y && tmin_v.x >= tmin_v.z {
+                face_uv = vec2<f32>(fract(local.z), fract(local.y));
+                face_index = select(1.0, 0.0, rd.x >= 0.0);
+            } else if tmin_v.y >= tmin_v.z {
+                face_uv = vec2<f32>(fract(local.x), fract(local.z));
+                face_index = select(3.0, 2.0, rd.y >= 0.0);
+            } else {
+                face_uv = vec2<f32>(fract(local.x), fract(local.y));
+                face_index = select(5.0, 4.0, rd.z >= 0.0);
+            }
+            face_uv = clamp(face_uv, vec2<f32>(0.0), vec2<f32>(1.0));
+            let seed = dot(bp, vec3<f32>(17.0, 31.0, 59.0)) + face_index * 97.0;
+            let darken = crack_overlay(face_uv, interaction.break_progress, seed);
+            final_color = vec4<f32>(final_color.rgb * (1.0 - darken), 1.0);
+        }
+    }
+
+    // Placement preview wireframe
+    if interaction.highlight_active != 0u {
+        final_color = wireframe_box(ro, rd, interaction.highlight_pos, closest_t + 0.01, final_color, vec3<f32>(1.0, 1.0, 1.0), 0.04);
+    }
+
+    return final_color;
 }

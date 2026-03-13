@@ -2,12 +2,23 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 
+use bytemuck::{Pod, Zeroable};
+
 use crate::bvh::GpuBvhNode;
 use crate::camera::CameraUniforms;
 use crate::overlay::Texture;
 use crate::overlay_renderer::OverlayRenderer;
 use crate::world::GpuChunkInfo;
 use winit::window::Window;
+
+#[repr(C)]
+#[derive(Copy, Clone, Pod, Zeroable)]
+pub struct GpuInteractionState {
+    pub highlight_pos: [f32; 3],
+    pub highlight_active: u32,
+    pub break_pos: [f32; 3],
+    pub break_progress: f32,
+}
 
 pub struct Renderer {
     surface: wgpu::Surface<'static>,
@@ -28,6 +39,8 @@ pub struct Renderer {
     atlas_bind_group_layout: wgpu::BindGroupLayout,
     atlas_bind_group: Option<wgpu::BindGroup>,
     voxel_atlas_bytes: u64,
+    interaction_buffer: wgpu::Buffer,
+    interaction_bind_group: wgpu::BindGroup,
 }
 
 pub struct GpuMemoryStats {
@@ -250,9 +263,39 @@ impl Renderer {
             ],
         });
 
+        let interaction_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("interaction_buffer"),
+            size: std::mem::size_of::<GpuInteractionState>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let interaction_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("interaction_bgl"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+
+        let interaction_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("interaction_bg"),
+            layout: &interaction_bgl,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: interaction_buffer.as_entire_binding(),
+            }],
+        });
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("pipeline_layout"),
-            bind_group_layouts: &[&bind_group_layout, &chunk_bgl, &atlas_bgl],
+            bind_group_layouts: &[&bind_group_layout, &chunk_bgl, &atlas_bgl, &interaction_bgl],
             immediate_size: 0,
         });
 
@@ -312,6 +355,8 @@ impl Renderer {
             atlas_bind_group_layout: atlas_bgl,
             atlas_bind_group: None,
             voxel_atlas_bytes: 0,
+            interaction_buffer,
+            interaction_bind_group,
         })
     }
 
@@ -535,7 +580,13 @@ impl Renderer {
         if let Some(ref atlas_bg) = self.atlas_bind_group {
             pass.set_bind_group(2, atlas_bg, &[]);
         }
+        pass.set_bind_group(3, &self.interaction_bind_group, &[]);
         pass.draw(0..3, 0..1);
+    }
+
+    pub fn upload_interaction(&self, state: &GpuInteractionState) {
+        self.queue
+            .write_buffer(&self.interaction_buffer, 0, bytemuck::bytes_of(state));
     }
 
     pub fn create_encoder(&self) -> wgpu::CommandEncoder {

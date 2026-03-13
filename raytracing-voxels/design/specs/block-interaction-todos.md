@@ -1,0 +1,6 @@
+- [x] 1. Swap mouse button bindings (right-click place, left-click break stub)
+- [x] 2. Add highlight block uniform to the voxel shader
+- [x] 3. Render wireframe outline in the shader
+- [x] 4. Hold-to-break mechanic with state tracking
+- [x] 5. Break progress visual indicator in the shader
+- [x] 6. Cancel break on cursor release or escape

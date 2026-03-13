@@ -20,6 +20,7 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 use glam::{IVec3, Vec2, Vec3};
+use voxel_renderer::GpuInteractionState;
 
 use camera::Camera;
 use chunk_manager::ChunkManager;
@@ -58,6 +59,13 @@ use winit::window::{CursorGrabMode, Window, WindowId};
 
 const MOUSE_SENSITIVITY: f32 = 0.003;
 const MAX_DT: f32 = 0.1;
+const BREAK_TIME: f32 = 0.4;
+const INTERACT_REACH: f32 = 6.0;
+
+struct BreakState {
+    world_pos: IVec3,
+    elapsed: f32,
+}
 
 struct App {
     window: Option<Arc<Window>>,
@@ -78,6 +86,7 @@ struct App {
     fps_accum: f32,
     fps_display: f32,
     active_voxel_type: Option<u8>,
+    break_state: Option<BreakState>,
     crosshair_bind_group: Option<wgpu::BindGroup>,
     voxel_atlas_overlay_bind_group: Option<wgpu::BindGroup>,
     solid_bind_group: Option<wgpu::BindGroup>,
@@ -134,6 +143,7 @@ impl App {
             fps_accum: 0.0,
             fps_display: 0.0,
             active_voxel_type: Some(VOXEL_KEY_TO_ID[1]), // default: grass
+            break_state: None,
             crosshair_bind_group: None,
             voxel_atlas_overlay_bind_group: None,
             solid_bind_group: None,
@@ -162,6 +172,7 @@ impl App {
             let _ = window.set_cursor_grab(CursorGrabMode::None);
             window.set_cursor_visible(true);
             self.cursor_grabbed = false;
+            self.break_state = None;
         }
     }
 }
@@ -265,10 +276,10 @@ impl ApplicationHandler for App {
                 ..
             } => {
                 if self.cursor_grabbed {
-                    if let Some(voxel_id) = self.active_voxel_type
-                        && let Some(hit) =
-                            self.world
-                                .raycast(self.camera.position, self.camera.forward(), 50.0)
+                    if let Some(hit) =
+                        self.world
+                            .raycast(self.camera.position, self.camera.forward(), INTERACT_REACH)
+                        && hit.voxel_id != 0
                     {
                         let hit_world = hit.chunk_pos * 16
                             + IVec3::new(
@@ -276,12 +287,21 @@ impl ApplicationHandler for App {
                                 hit.local_pos[1] as i32,
                                 hit.local_pos[2] as i32,
                             );
-                        let place_pos = hit_world + hit.normal;
-                        self.world.set_voxel(place_pos, voxel_id);
+                        self.break_state = Some(BreakState {
+                            world_pos: hit_world,
+                            elapsed: 0.0,
+                        });
                     }
                 } else {
                     self.grab_cursor();
                 }
+            }
+            WindowEvent::MouseInput {
+                button: MouseButton::Left,
+                state: ElementState::Released,
+                ..
+            } => {
+                self.break_state = None;
             }
             WindowEvent::MouseInput {
                 button: MouseButton::Right,
@@ -289,9 +309,10 @@ impl ApplicationHandler for App {
                 ..
             } => {
                 if self.cursor_grabbed
+                    && let Some(voxel_id) = self.active_voxel_type
                     && let Some(hit) =
                         self.world
-                            .raycast(self.camera.position, self.camera.forward(), 50.0)
+                            .raycast(self.camera.position, self.camera.forward(), INTERACT_REACH)
                 {
                     let hit_world = hit.chunk_pos * 16
                         + IVec3::new(
@@ -299,7 +320,8 @@ impl ApplicationHandler for App {
                             hit.local_pos[1] as i32,
                             hit.local_pos[2] as i32,
                         );
-                    self.world.set_voxel(hit_world, 0);
+                    let place_pos = hit_world + hit.normal;
+                    self.world.set_voxel(place_pos, voxel_id);
                 }
             }
             WindowEvent::KeyboardInput {
@@ -382,7 +404,75 @@ impl ApplicationHandler for App {
                     self.last_save = Instant::now();
                 }
 
+                // Update break state
+                if let Some(bs) = &mut self.break_state {
+                    if let Some(hit) =
+                        self.world
+                            .raycast(self.camera.position, self.camera.forward(), INTERACT_REACH)
+                    {
+                        let hit_world = hit.chunk_pos * 16
+                            + IVec3::new(
+                                hit.local_pos[0] as i32,
+                                hit.local_pos[1] as i32,
+                                hit.local_pos[2] as i32,
+                            );
+                        if hit_world == bs.world_pos {
+                            bs.elapsed += dt;
+                            if bs.elapsed >= BREAK_TIME {
+                                let pos = bs.world_pos;
+                                self.world.set_voxel(pos, 0);
+                                self.break_state = None;
+                            }
+                        } else {
+                            self.break_state = None;
+                        }
+                    } else {
+                        self.break_state = None;
+                    }
+                }
+
+                // Build interaction state for GPU
+                let mut interaction = GpuInteractionState {
+                    highlight_pos: [0.0; 3],
+                    highlight_active: 0,
+                    break_pos: [0.0; 3],
+                    break_progress: 0.0,
+                };
+
+                // Placement preview highlight
+                if self.active_voxel_type.is_some()
+                    && let Some(hit) =
+                        self.world
+                            .raycast(self.camera.position, self.camera.forward(), INTERACT_REACH)
+                {
+                    let hit_world = hit.chunk_pos * 16
+                        + IVec3::new(
+                            hit.local_pos[0] as i32,
+                            hit.local_pos[1] as i32,
+                            hit.local_pos[2] as i32,
+                        );
+                    let place_pos = hit_world + hit.normal;
+                    interaction.highlight_pos = [
+                        place_pos.x as f32,
+                        place_pos.y as f32,
+                        place_pos.z as f32,
+                    ];
+                    interaction.highlight_active = 1;
+                }
+
+                // Break progress
+                if let Some(bs) = &self.break_state {
+                    interaction.break_pos = [
+                        bs.world_pos.x as f32,
+                        bs.world_pos.y as f32,
+                        bs.world_pos.z as f32,
+                    ];
+                    interaction.break_progress = (bs.elapsed / BREAK_TIME).clamp(0.0, 1.0);
+                }
+
                 if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
+                    renderer.upload_interaction(&interaction);
+
                     if self.world.is_dirty() {
                         let (voxel_data, chunk_infos, bvh_nodes) = self.world.pack_gpu_data();
                         renderer.upload_world(&voxel_data, &chunk_infos, chunk_infos.len() as u32, &bvh_nodes);
