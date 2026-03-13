@@ -30,10 +30,14 @@ Real-time voxel raytracer using wgpu + winit. Renders a multi-chunk world of 16�
 
 - `Renderer` — owns the wgpu surface, device, queue, and both render pipelines. Coordinates frame lifecycle (`begin_frame` → render passes → `submit`).
 - `Camera` / `CameraUniforms` — FPS-style camera with yaw/pitch. `CameraUniforms` is a `Pod` struct matching the GPU uniform layout (with explicit padding).
-- `Chunk` (`chunk.rs`) — 16³ flat array of `u8` voxel IDs (4096 bytes). Voxel ID 0 = air; IDs 1–4 map to texture tiles (stone, dirt, grass, brick). `generate_test_chunk()` creates terrain with procedural placement.
+- `Player` (`player.rs`) — physics-based player with AABB collision, gravity, jumping, step-up, and fly mode toggle. Owns `InputState`, `feet_pos`, `velocity`, and `on_ground` state. Eye position is `feet_pos + EYE_HEIGHT`.
+- `Chunk` (`chunk.rs`) — 16³ flat array of `u8` voxel IDs (4096 bytes). Voxel ID 0 = air; IDs 1–6 map to texture tiles (stone, dirt, grass, brick, wood, leaves).
 - `World` (`world.rs`) — `HashMap<[i32; 3], Chunk>` with dirty tracking. `pack_gpu_data()` serializes all chunks into a flat voxel buffer + `GpuChunkInfo` array for the shader.
 - `Config` (`config.rs`) — loads `voxels.toml` from CWD (falls back to defaults). Currently configures `chunk_storage_dir` (default `/tmp/voxels`).
 - `ChunkManager` (`chunk_manager.rs`) — async chunk loading/eviction system using tokio channels. Manages a sliding window of loaded chunks around the camera, with `ChunkCommand`/`ChunkResult` message passing between the main thread and a background task.
+- `terrain.rs` — noise-based terrain generation (Fbm Perlin) with tree placement via deterministic hashing. Generates chunks given a world seed and chunk position.
+- `seed.rs` — world seed persistence. Loads/saves `seed.json` from the chunk storage directory; generates a random seed on first run.
+- `GpuBvhNode` / `bvh.rs` — builds a BVH (bounding volume hierarchy) over chunk AABBs for efficient GPU ray traversal. Leaf nodes reference chunk indices.
 - `VoxelTextureAtlas` / `voxel_textures.rs` — procedurally generates tile textures (noise-based) and packs them into a texture atlas with a `uv_map: [[f32; 4]; 256]` lookup by voxel ID. Tile definitions live in `TILE_DEFS`.
 - `DrawList` / `OverlayVertex` / `Texture` / `Rgba` (`overlay.rs`) — immediate-mode 2D drawing primitives. `DrawList` accumulates quads as vertex/index data each frame.
 - `OverlayRenderer` (`overlay_renderer.rs`) — manages the overlay pipeline, dynamically grows vertex/index buffers, and handles texture bind group creation.
@@ -60,4 +64,5 @@ Feature specs and their TODO checklists live in `design/specs/`. Each feature ha
 - `bytemuck` — zero-copy casting of structs to GPU buffer bytes
 - `ab_glyph` — font rasterization for the overlay text system
 - `noise` — procedural noise for terrain/texture generation
-- `serde` + `toml` — configuration file parsing (`voxels.toml`)
+- `serde` + `serde_json` + `toml` — config parsing (`voxels.toml`) and seed persistence (`seed.json`)
+- `rand` — random seed generation on first run

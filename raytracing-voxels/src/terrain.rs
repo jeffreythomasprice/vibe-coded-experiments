@@ -15,7 +15,7 @@ const LEAVES: u8 = 6;
 const GRASS: u8 = 3;
 
 /// How far outside the chunk XZ range to scan for tree candidates.
-const TREE_SCAN_MARGIN: i32 = 8;
+const TREE_SCAN_MARGIN: i32 = 10;
 
 /// Tree placement threshold. A tree is placed when `tree_hash(...) % TREE_DENSITY_MOD == 0`.
 /// With a 1-in-200 chance per column, roughly 1 tree per ~14x14 area on average.
@@ -32,8 +32,18 @@ fn tree_hash(x: i32, z: i32, seed: u32) -> u32 {
     h ^ (h >> 13)
 }
 
+/// Whether a tree has a 1x1 or 2x2 trunk footprint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TreeKind {
+    /// 1x1 base, 6-10 units tall (60% of trees)
+    Small,
+    /// 2x2 base, 8-14 units tall (40% of trees)
+    Large,
+}
+
 /// Parameters for a single tree derived deterministically from its position.
 struct TreeParams {
+    kind: TreeKind,
     trunk_height: i32,
     canopy_radius: i32,
 }
@@ -41,11 +51,23 @@ struct TreeParams {
 impl TreeParams {
     fn from_position(wx: i32, wz: i32, seed: u32) -> Self {
         let h = tree_hash(wx.wrapping_add(7919), wz.wrapping_add(6271), seed);
-        let trunk_height = 4 + (h % 5) as i32; // 4..=8
-        let canopy_radius = 3 + ((h >> 8) % 2) as i32; // 3 or 4
-        Self {
-            trunk_height,
-            canopy_radius,
+        // 60% small, 40% large
+        let kind = if (h % 10) < 6 {
+            TreeKind::Small
+        } else {
+            TreeKind::Large
+        };
+        match kind {
+            TreeKind::Small => {
+                let trunk_height = 6 + ((h >> 4) % 5) as i32; // 6..=10
+                let canopy_radius = 2 + ((h >> 8) % 2) as i32; // 2 or 3
+                Self { kind, trunk_height, canopy_radius }
+            }
+            TreeKind::Large => {
+                let trunk_height = 8 + ((h >> 4) % 7) as i32; // 8..=14
+                let canopy_radius = 3 + ((h >> 8) % 2) as i32; // 3 or 4
+                Self { kind, trunk_height, canopy_radius }
+            }
         }
     }
 }
@@ -143,31 +165,72 @@ impl TerrainGenerator {
                 let surface_y = self.surface_height(tx, tz);
                 let params = TreeParams::from_position(tx, tz, self.seed);
 
-                // Place trunk
-                for dy in 1..=params.trunk_height {
-                    let wy = surface_y + dy;
-                    let ly = wy - world_y;
-                    let lx = tx - world_x;
-                    let lz = tz - world_z;
-                    if (0..SIZE_I32).contains(&lx) && (0..SIZE_I32).contains(&ly) && (0..SIZE_I32).contains(&lz) {
-                        // Only place wood in air
-                        if chunk.get(lx as usize, ly as usize, lz as usize) == 0 {
-                            chunk.set(lx as usize, ly as usize, lz as usize, WOOD);
+                // Trunk footprint offsets: 1x1 for small, 2x2 for large
+                let trunk_offsets: &[(i32, i32)] = match params.kind {
+                    TreeKind::Small => &[(0, 0)],
+                    TreeKind::Large => &[(0, 0), (1, 0), (0, 1), (1, 1)],
+                };
+
+                // For 2x2 trees, fill ground under corners that are lower than
+                // the tree's base so no air gaps appear under the trunk.
+                if params.kind == TreeKind::Large {
+                    for &(ox, oz) in trunk_offsets {
+                        let wx = tx + ox;
+                        let wz = tz + oz;
+                        let corner_surface = self.surface_height(wx, wz);
+                        if corner_surface < surface_y {
+                            for wy in (corner_surface + 1)..=surface_y {
+                                let lx = wx - world_x;
+                                let ly = wy - world_y;
+                                let lz = wz - world_z;
+                                if (0..SIZE_I32).contains(&lx) && (0..SIZE_I32).contains(&ly) && (0..SIZE_I32).contains(&lz) {
+                                    if chunk.get(lx as usize, ly as usize, lz as usize) == 0 {
+                                        chunk.set(lx as usize, ly as usize, lz as usize, GRASS);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
 
-                // Place canopy raised so 2-4 trunk segments are visible below leaves
+                // Place trunk
+                for dy in 1..=params.trunk_height {
+                    let wy = surface_y + dy;
+                    let ly = wy - world_y;
+                    for &(ox, oz) in trunk_offsets {
+                        let lx = (tx + ox) - world_x;
+                        let lz = (tz + oz) - world_z;
+                        if (0..SIZE_I32).contains(&lx) && (0..SIZE_I32).contains(&ly) && (0..SIZE_I32).contains(&lz) {
+                            if chunk.get(lx as usize, ly as usize, lz as usize) == 0 {
+                                chunk.set(lx as usize, ly as usize, lz as usize, WOOD);
+                            }
+                        }
+                    }
+                }
+
+                // Place canopy raised so some trunk segments are visible below leaves
                 let r = params.canopy_radius;
                 let r_sq = r * r;
-                let visible_trunk = (params.trunk_height / 2).clamp(2, 4);
-                let canopy_center_y = surface_y + visible_trunk + r;
+                // Center canopy near the top of the trunk, leaving a few segments visible below
+                let canopy_center_y = surface_y + params.trunk_height - r + 1;
 
-                for dx in -r..=r {
+                // For large trees, offset canopy center to middle of 2x2 footprint
+                let canopy_cx = match params.kind {
+                    TreeKind::Small => tx as f32,
+                    TreeKind::Large => tx as f32 + 0.5,
+                };
+                let canopy_cz = match params.kind {
+                    TreeKind::Small => tz as f32,
+                    TreeKind::Large => tz as f32 + 0.5,
+                };
+
+                for dx in -(r + 1)..=(r + 1) {
                     for dy in -r..=r {
-                        for dz in -r..=r {
-                            let dist_sq = dx * dx + dy * dy + dz * dz;
-                            if dist_sq > r_sq {
+                        for dz in -(r + 1)..=(r + 1) {
+                            let fx = tx as f32 + dx as f32 - canopy_cx;
+                            let fz = tz as f32 + dz as f32 - canopy_cz;
+                            let dist_sq = fx * fx + (dy * dy) as f32 + fz * fz;
+                            if dist_sq > (r * r) as f32 {
                                 continue;
                             }
 
@@ -186,6 +249,38 @@ impl TerrainGenerator {
                                 }
                             }
                         }
+                    }
+                }
+
+                // Cap trunk columns: place leaves above any exposed wood so no
+                // wood is open to the sky. Walk upward from trunk top until we
+                // hit existing leaves or place one leaf cap.
+                for &(ox, oz) in trunk_offsets {
+                    let wx = tx + ox;
+                    let wz = tz + oz;
+                    let lx = wx - world_x;
+                    let lz = wz - world_z;
+                    if !(0..SIZE_I32).contains(&lx) || !(0..SIZE_I32).contains(&lz) {
+                        continue;
+                    }
+                    // Start from the block above the trunk top
+                    let mut wy = surface_y + params.trunk_height + 1;
+                    loop {
+                        let ly = wy - world_y;
+                        if !(0..SIZE_I32).contains(&ly) {
+                            break;
+                        }
+                        let v = chunk.get(lx as usize, ly as usize, lz as usize);
+                        if v == LEAVES {
+                            // Already covered by canopy
+                            break;
+                        }
+                        if v == 0 {
+                            chunk.set(lx as usize, ly as usize, lz as usize, LEAVES);
+                            break;
+                        }
+                        // v is WOOD or terrain — keep going up
+                        wy += 1;
                     }
                 }
             }

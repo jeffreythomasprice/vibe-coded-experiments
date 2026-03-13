@@ -7,11 +7,11 @@ mod overlay;
 mod overlay_renderer;
 mod player;
 mod seed;
+mod terrain;
 mod texture_atlas;
 mod texture_atlas_font;
 mod voxel_renderer;
 mod voxel_textures;
-mod terrain;
 mod world;
 
 use std::path::PathBuf;
@@ -95,12 +95,13 @@ struct App {
     last_save: Instant,
     storage_dir: PathBuf,
     seed: u32,
+    last_space_press: Option<Instant>,
 }
 
 impl App {
     fn new(storage_dir: PathBuf, seed: u32) -> Self {
         let mut world = World::new();
-        let mut chunk_manager = ChunkManager::new(7, 5000, 5.0, storage_dir.clone(), seed);
+        let mut chunk_manager = ChunkManager::new(9, 5000, 5.0, storage_dir.clone(), seed);
 
         let camera = match Camera::load_from_file(&camera::camera_file_path(&storage_dir)) {
             Ok(cam) => {
@@ -152,6 +153,7 @@ impl App {
             last_save: Instant::now(),
             storage_dir,
             seed,
+            last_space_press: None,
         }
     }
 
@@ -187,7 +189,12 @@ impl App {
         );
         let mut renderer = Renderer::new(window.clone())?;
         let (voxel_data, chunk_infos, bvh_nodes) = self.world.pack_gpu_data();
-        renderer.upload_world(&voxel_data, &chunk_infos, chunk_infos.len() as u32, &bvh_nodes);
+        renderer.upload_world(
+            &voxel_data,
+            &chunk_infos,
+            chunk_infos.len() as u32,
+            &bvh_nodes,
+        );
         self.world.clear_dirty();
 
         let atlas = voxel_textures::build_voxel_atlas(self.seed)?;
@@ -276,10 +283,11 @@ impl ApplicationHandler for App {
                 ..
             } => {
                 if self.cursor_grabbed {
-                    if let Some(hit) =
-                        self.world
-                            .raycast(self.camera.position, self.camera.forward(), INTERACT_REACH)
-                        && hit.voxel_id != 0
+                    if let Some(hit) = self.world.raycast(
+                        self.camera.position,
+                        self.camera.forward(),
+                        INTERACT_REACH,
+                    ) && hit.voxel_id != 0
                     {
                         let hit_world = hit.chunk_pos * 16
                             + IVec3::new(
@@ -310,9 +318,11 @@ impl ApplicationHandler for App {
             } => {
                 if self.cursor_grabbed
                     && let Some(voxel_id) = self.active_voxel_type
-                    && let Some(hit) =
-                        self.world
-                            .raycast(self.camera.position, self.camera.forward(), INTERACT_REACH)
+                    && let Some(hit) = self.world.raycast(
+                        self.camera.position,
+                        self.camera.forward(),
+                        INTERACT_REACH,
+                    )
                 {
                     let hit_world = hit.chunk_pos * 16
                         + IVec3::new(
@@ -349,6 +359,7 @@ impl ApplicationHandler for App {
                     KeyEvent {
                         physical_key: PhysicalKey::Code(code),
                         state,
+                        repeat,
                         ..
                     },
                 ..
@@ -359,9 +370,23 @@ impl ApplicationHandler for App {
                     KeyCode::KeyS => self.input.back = pressed,
                     KeyCode::KeyA => self.input.left = pressed,
                     KeyCode::KeyD => self.input.right = pressed,
-                    KeyCode::Space => self.input.up = pressed,
+                    KeyCode::Space => {
+                        self.input.up = pressed;
+                        if pressed && !repeat {
+                            let now = Instant::now();
+                            if let Some(last) = self.last_space_press {
+                                if now.duration_since(last).as_millis() < 300 {
+                                    self.player.toggle_fly_mode();
+                                    self.last_space_press = None;
+                                } else {
+                                    self.last_space_press = Some(now);
+                                }
+                            } else {
+                                self.last_space_press = Some(now);
+                            }
+                        }
+                    }
                     KeyCode::ShiftLeft => self.input.down = pressed,
-                    KeyCode::F1 if pressed => self.player.toggle_fly_mode(),
                     KeyCode::Digit0 if pressed => self.active_voxel_type = None,
                     KeyCode::Digit1 if pressed => self.active_voxel_type = Some(VOXEL_KEY_TO_ID[1]),
                     KeyCode::Digit2 if pressed => self.active_voxel_type = Some(VOXEL_KEY_TO_ID[2]),
@@ -389,7 +414,8 @@ impl ApplicationHandler for App {
                     self.fps_accum = 0.0;
                 }
 
-                self.player.tick(dt, &self.input, self.camera.yaw, &self.world);
+                self.player
+                    .tick(dt, &self.input, self.camera.yaw, &self.world);
                 self.camera.position = self.player.eye_position();
 
                 self.chunk_manager.update_camera(self.camera.position);
@@ -406,10 +432,11 @@ impl ApplicationHandler for App {
 
                 // Update break state
                 if let Some(bs) = &mut self.break_state {
-                    if let Some(hit) =
-                        self.world
-                            .raycast(self.camera.position, self.camera.forward(), INTERACT_REACH)
-                    {
+                    if let Some(hit) = self.world.raycast(
+                        self.camera.position,
+                        self.camera.forward(),
+                        INTERACT_REACH,
+                    ) {
                         let hit_world = hit.chunk_pos * 16
                             + IVec3::new(
                                 hit.local_pos[0] as i32,
@@ -441,9 +468,11 @@ impl ApplicationHandler for App {
 
                 // Placement preview highlight
                 if self.active_voxel_type.is_some()
-                    && let Some(hit) =
-                        self.world
-                            .raycast(self.camera.position, self.camera.forward(), INTERACT_REACH)
+                    && let Some(hit) = self.world.raycast(
+                        self.camera.position,
+                        self.camera.forward(),
+                        INTERACT_REACH,
+                    )
                 {
                     let hit_world = hit.chunk_pos * 16
                         + IVec3::new(
@@ -452,11 +481,8 @@ impl ApplicationHandler for App {
                             hit.local_pos[2] as i32,
                         );
                     let place_pos = hit_world + hit.normal;
-                    interaction.highlight_pos = [
-                        place_pos.x as f32,
-                        place_pos.y as f32,
-                        place_pos.z as f32,
-                    ];
+                    interaction.highlight_pos =
+                        [place_pos.x as f32, place_pos.y as f32, place_pos.z as f32];
                     interaction.highlight_active = 1;
                 }
 
@@ -475,7 +501,12 @@ impl ApplicationHandler for App {
 
                     if self.world.is_dirty() {
                         let (voxel_data, chunk_infos, bvh_nodes) = self.world.pack_gpu_data();
-                        renderer.upload_world(&voxel_data, &chunk_infos, chunk_infos.len() as u32, &bvh_nodes);
+                        renderer.upload_world(
+                            &voxel_data,
+                            &chunk_infos,
+                            chunk_infos.len() as u32,
+                            &bvh_nodes,
+                        );
                         self.world.clear_dirty();
                     }
 
@@ -514,53 +545,26 @@ impl ApplicationHandler for App {
                             y += line_height;
 
                             let cpu_chunk_bytes = chunk_count as u64 * 4096;
-                            font.draw_text(
-                                &mut self.draw_list,
-                                &format!("CPU: chunks {}", format_bytes(cpu_chunk_bytes)),
-                                10.0,
-                                y,
-                                Rgba::WHITE,
-                            );
-                            y += line_height;
-
-                            let gpu_stats = renderer.gpu_memory_stats();
-                            let gpu_chunk_total = gpu_stats.voxel_buffer_bytes
-                                + gpu_stats.chunk_info_bytes
-                                + gpu_stats.chunk_count_bytes
-                                + gpu_stats.bvh_node_bytes
-                                + gpu_stats.bvh_count_bytes;
-
                             let font_atlas_bytes = self.font.as_ref().map_or(0u64, |f| {
                                 let tex = f.atlas().texture();
                                 tex.width() as u64 * tex.height() as u64 * 4
                             });
-                            let crosshair_bytes: u64 = 32 * 32 * 4;
+                            let total_cpu = cpu_chunk_bytes + font_atlas_bytes;
 
-                            font.draw_text(
-                                &mut self.draw_list,
-                                &format!(
-                                    "GPU: chunks {} | atlas {} | font {} | xhair {}",
-                                    format_bytes(gpu_chunk_total),
-                                    format_bytes(gpu_stats.voxel_atlas_bytes),
-                                    format_bytes(font_atlas_bytes),
-                                    format_bytes(crosshair_bytes),
-                                ),
-                                10.0,
-                                y,
-                                Rgba::WHITE,
-                            );
-                            y += line_height;
-
-                            let cpu_font_bytes = font_atlas_bytes;
-                            let total_cpu = cpu_chunk_bytes + cpu_font_bytes;
-                            let total_gpu = gpu_chunk_total
+                            let gpu_stats = renderer.gpu_memory_stats();
+                            let total_gpu = gpu_stats.voxel_buffer_bytes
+                                + gpu_stats.chunk_info_bytes
+                                + gpu_stats.chunk_count_bytes
+                                + gpu_stats.bvh_node_bytes
+                                + gpu_stats.bvh_count_bytes
                                 + gpu_stats.voxel_atlas_bytes
                                 + font_atlas_bytes
-                                + crosshair_bytes;
+                                + 32 * 32 * 4; // crosshair
+
                             font.draw_text(
                                 &mut self.draw_list,
                                 &format!(
-                                    "Total: CPU {} | GPU {}",
+                                    "Mem: CPU {} | GPU {}",
                                     format_bytes(total_cpu),
                                     format_bytes(total_gpu),
                                 ),
@@ -575,13 +579,7 @@ impl ApplicationHandler for App {
                             } else {
                                 "Mode: WALK"
                             };
-                            font.draw_text(
-                                &mut self.draw_list,
-                                mode_text,
-                                10.0,
-                                y,
-                                Rgba::WHITE,
-                            );
+                            font.draw_text(&mut self.draw_list, mode_text, 10.0, y, Rgba::WHITE);
                         }
 
                         if let Some(texture_bg) = &self.font_bind_group {
@@ -646,14 +644,17 @@ impl ApplicationHandler for App {
 
                         // Highlight selected tile
                         if let Some(active_id) = self.active_voxel_type
-                            && let Some(idx) = TILE_PICKER_TILE_IDS.iter().position(|&id| id == active_id)
+                            && let Some(idx) =
+                                TILE_PICKER_TILE_IDS.iter().position(|&id| id == active_id)
                         {
                             let highlight_pad = 3.0;
-                            let hx = picker_x + TILE_PICKER_BORDER + TILE_PICKER_PADDING
+                            let hx = picker_x
+                                + TILE_PICKER_BORDER
+                                + TILE_PICKER_PADDING
                                 + idx as f32 * (TILE_PICKER_TILE_SIZE + TILE_PICKER_SPACING)
                                 - highlight_pad;
-                            let hy = picker_y + TILE_PICKER_BORDER + TILE_PICKER_PADDING
-                                - highlight_pad;
+                            let hy =
+                                picker_y + TILE_PICKER_BORDER + TILE_PICKER_PADDING - highlight_pad;
                             self.picker_draw_list.solid_rect(
                                 hx,
                                 hy,
@@ -677,7 +678,9 @@ impl ApplicationHandler for App {
                         for (i, &tile_id) in TILE_PICKER_TILE_IDS.iter().enumerate() {
                             let uv = self.voxel_uv_map[tile_id as usize];
                             if uv[2] > uv[0] {
-                                let tx = picker_x + TILE_PICKER_BORDER + TILE_PICKER_PADDING
+                                let tx = picker_x
+                                    + TILE_PICKER_BORDER
+                                    + TILE_PICKER_PADDING
                                     + i as f32 * (TILE_PICKER_TILE_SIZE + TILE_PICKER_SPACING);
                                 let ty = picker_y + TILE_PICKER_BORDER + TILE_PICKER_PADDING;
                                 self.hud_draw_list.rect(
@@ -704,7 +707,9 @@ impl ApplicationHandler for App {
                         if let Some(font) = &self.font {
                             self.draw_list.clear();
                             for (i, &tile_id) in TILE_PICKER_TILE_IDS.iter().enumerate() {
-                                let tx = picker_x + TILE_PICKER_BORDER + TILE_PICKER_PADDING
+                                let tx = picker_x
+                                    + TILE_PICKER_BORDER
+                                    + TILE_PICKER_PADDING
                                     + i as f32 * (TILE_PICKER_TILE_SIZE + TILE_PICKER_SPACING);
                                 let ty = picker_y + TILE_PICKER_BORDER + TILE_PICKER_PADDING;
                                 let label = format!("{}", i + 1);
@@ -716,12 +721,24 @@ impl ApplicationHandler for App {
                                 } else {
                                     Rgba::WHITE
                                 };
-                                font.draw_text(&mut self.draw_list, &label, label_x, label_y, label_color);
+                                font.draw_text(
+                                    &mut self.draw_list,
+                                    &label,
+                                    label_x,
+                                    label_y,
+                                    label_color,
+                                );
                             }
                             // "0: none" hint
                             let hint_x = picker_x + picker_outer_w + 6.0;
                             let hint_y = picker_y + picker_outer_h - 18.0;
-                            font.draw_text(&mut self.draw_list, "0: none", hint_x, hint_y, Rgba::new(180, 180, 180, 200));
+                            font.draw_text(
+                                &mut self.draw_list,
+                                "0: none",
+                                hint_x,
+                                hint_y,
+                                Rgba::new(180, 180, 180, 200),
+                            );
 
                             if let Some(font_bg) = &self.font_bind_group {
                                 renderer.render_overlay(
