@@ -1,0 +1,7 @@
+- [x] 1.1 Create mesh catalog with GPU types and torch mesh
+- [x] 1.2 Add mesh buffers to the renderer
+- [x] 1.3 Add mesh structs and ray-triangle intersection to shader
+- [x] 1.4 Modify DDA loop to handle mesh voxels
+- [x] 1.5 Wire up mesh catalog initialization
+- [x] 1.6 Add precise CPU-side mesh raycasting
+- [x] 1.7 Add torch to hotbar and rework placement/removal controls

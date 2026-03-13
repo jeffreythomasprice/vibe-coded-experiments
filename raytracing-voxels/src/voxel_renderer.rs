@@ -7,6 +7,7 @@ use bytemuck::{Pod, Zeroable};
 
 use crate::bvh::GpuBvhNode;
 use crate::camera::CameraUniforms;
+use crate::mesh_catalog::MeshCatalog;
 use crate::overlay::Texture;
 use crate::overlay_renderer::OverlayRenderer;
 use crate::world::GpuChunkInfo;
@@ -56,6 +57,8 @@ pub struct Renderer {
     chunk_count_buffer: wgpu::Buffer,
     bvh_node_buffer: wgpu::Buffer,
     bvh_count_buffer: wgpu::Buffer,
+    mesh_triangle_buffer: wgpu::Buffer,
+    mesh_info_buffer: wgpu::Buffer,
     chunk_bind_group: wgpu::BindGroup,
     chunk_bgl: wgpu::BindGroupLayout,
     overlay_renderer: OverlayRenderer,
@@ -197,6 +200,20 @@ impl Renderer {
             mapped_at_creation: false,
         });
 
+        let mesh_triangle_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("mesh_triangle_buffer"),
+            size: 48, // minimum size: one GpuTriangle (48 bytes)
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let mesh_info_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("mesh_info_buffer"),
+            size: 16, // minimum size: one GpuMeshInfo (16 bytes)
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         let chunk_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("chunk_bgl"),
             entries: &[
@@ -250,6 +267,26 @@ impl Renderer {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 5,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 6,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         });
 
@@ -276,6 +313,14 @@ impl Renderer {
                 wgpu::BindGroupEntry {
                     binding: 4,
                     resource: bvh_count_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: mesh_triangle_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: mesh_info_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -474,6 +519,8 @@ impl Renderer {
             chunk_count_buffer,
             bvh_node_buffer,
             bvh_count_buffer,
+            mesh_triangle_buffer,
+            mesh_info_buffer,
             chunk_bind_group,
             chunk_bgl,
             overlay_renderer,
@@ -555,6 +602,14 @@ impl Renderer {
                     binding: 4,
                     resource: self.bvh_count_buffer.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: self.mesh_triangle_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: self.mesh_info_buffer.as_entire_binding(),
+                },
             ],
         });
 
@@ -568,6 +623,72 @@ impl Renderer {
         }
         let bvh_count_padded: [u32; 4] = [bvh_nodes.len() as u32, 0, 0, 0];
         self.queue.write_buffer(&self.bvh_count_buffer, 0, bytemuck::cast_slice(&bvh_count_padded));
+    }
+
+    pub fn upload_mesh_catalog(&mut self, catalog: &MeshCatalog) {
+        let tri_data: &[u8] = bytemuck::cast_slice(&catalog.triangles);
+        let tri_size = (tri_data.len() as u64).max(48);
+        if self.mesh_triangle_buffer.size() < tri_size {
+            self.mesh_triangle_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("mesh_triangle_buffer"),
+                size: tri_size,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+        }
+
+        let info_data: &[u8] = bytemuck::cast_slice(&catalog.mesh_infos);
+        let info_size = (info_data.len() as u64).max(16);
+        if self.mesh_info_buffer.size() < info_size {
+            self.mesh_info_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("mesh_info_buffer"),
+                size: info_size,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+        }
+
+        self.chunk_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("chunk_bg"),
+            layout: &self.chunk_bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.voxel_mega_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.chunk_info_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: self.chunk_count_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: self.bvh_node_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: self.bvh_count_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: self.mesh_triangle_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: self.mesh_info_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        if !catalog.triangles.is_empty() {
+            self.queue.write_buffer(&self.mesh_triangle_buffer, 0, tri_data);
+        }
+        if !catalog.mesh_infos.is_empty() {
+            self.queue.write_buffer(&self.mesh_info_buffer, 0, info_data);
+        }
     }
 
     pub fn upload_voxel_atlas(&mut self, atlas_texture: &Texture, uv_map: &[[f32; 4]; 256]) {

@@ -5,6 +5,7 @@ use glam::{IVec3, Vec3};
 
 use crate::bvh::{self, GpuBvhNode};
 use crate::chunk::Chunk;
+use crate::mesh_catalog::{MeshCatalog, MESH_VOXEL_BASE};
 
 const CHUNK_SIZE: i32 = 16;
 
@@ -124,7 +125,13 @@ impl World {
             .map_or(0, |c| c.get(local[0], local[1], local[2]))
     }
 
-    pub fn raycast(&self, origin: Vec3, direction: Vec3, max_distance: f32) -> Option<RaycastHit> {
+    pub fn raycast(
+        &self,
+        origin: Vec3,
+        direction: Vec3,
+        max_distance: f32,
+        mesh_catalog: Option<&MeshCatalog>,
+    ) -> Option<RaycastHit> {
         let dir = direction.normalize();
 
         // Starting voxel coordinates
@@ -137,13 +144,37 @@ impl World {
         // Check if starting inside a solid voxel
         let id = self.get_voxel(voxel);
         if id != 0 {
-            let (chunk_pos, local_pos) = Self::world_to_chunk(voxel);
-            return Some(RaycastHit {
-                chunk_pos,
-                local_pos,
-                normal: IVec3::ZERO,
-                voxel_id: id,
-            });
+            if id >= MESH_VOXEL_BASE {
+                // Starting inside a mesh voxel — do a mesh raycast from origin
+                if let Some(catalog) = mesh_catalog {
+                    let voxel_min = Vec3::new(voxel.x as f32, voxel.y as f32, voxel.z as f32);
+                    let local_origin = origin - voxel_min;
+                    let mesh_type = id - MESH_VOXEL_BASE;
+                    if let Some((_t, normal)) = catalog.raycast(mesh_type, local_origin, dir) {
+                        let (chunk_pos, local_pos) = Self::world_to_chunk(voxel);
+                        return Some(RaycastHit {
+                            chunk_pos,
+                            local_pos,
+                            normal: IVec3::new(
+                                normal.x.round() as i32,
+                                normal.y.round() as i32,
+                                normal.z.round() as i32,
+                            ),
+                            voxel_id: id,
+                        });
+                    }
+                    // No mesh triangle hit — continue DDA
+                }
+                // No catalog provided — continue DDA
+            } else {
+                let (chunk_pos, local_pos) = Self::world_to_chunk(voxel);
+                return Some(RaycastHit {
+                    chunk_pos,
+                    local_pos,
+                    normal: IVec3::ZERO,
+                    voxel_id: id,
+                });
+            }
         }
 
         let step = IVec3::new(
@@ -225,13 +256,44 @@ impl World {
 
             let id = self.get_voxel(voxel);
             if id != 0 {
-                let (chunk_pos, local_pos) = Self::world_to_chunk(voxel);
-                return Some(RaycastHit {
-                    chunk_pos,
-                    local_pos,
-                    normal,
-                    voxel_id: id,
-                });
+                if id >= MESH_VOXEL_BASE {
+                    // Mesh voxel: test ray against mesh triangles
+                    if let Some(catalog) = mesh_catalog {
+                        let voxel_min = Vec3::new(voxel.x as f32, voxel.y as f32, voxel.z as f32);
+                        // Compute t_entry: the t value where the ray enters this voxel
+                        let t_entry = {
+                            let t_min = (voxel_min - origin) / dir;
+                            let t_max_box = (voxel_min + Vec3::ONE - origin) / dir;
+                            let t_near = t_min.min(t_max_box);
+                            t_near.x.max(t_near.y).max(t_near.z).max(0.0)
+                        };
+                        let local_origin = origin + dir * t_entry - voxel_min;
+                        let mesh_type = id - MESH_VOXEL_BASE;
+                        if let Some((_t, tri_normal)) = catalog.raycast(mesh_type, local_origin, dir) {
+                            let (chunk_pos, local_pos) = Self::world_to_chunk(voxel);
+                            return Some(RaycastHit {
+                                chunk_pos,
+                                local_pos,
+                                normal: IVec3::new(
+                                    tri_normal.x.round() as i32,
+                                    tri_normal.y.round() as i32,
+                                    tri_normal.z.round() as i32,
+                                ),
+                                voxel_id: id,
+                            });
+                        }
+                        // No triangle hit — ray passes through, continue DDA
+                    }
+                    // No catalog — treat as passthrough, continue DDA
+                } else {
+                    let (chunk_pos, local_pos) = Self::world_to_chunk(voxel);
+                    return Some(RaycastHit {
+                        chunk_pos,
+                        local_pos,
+                        normal,
+                        voxel_id: id,
+                    });
+                }
             }
         }
     }
@@ -394,7 +456,7 @@ mod tests {
         world.insert(IVec3::ZERO, chunk);
 
         let hit = world
-            .raycast(Vec3::new(8.5, 8.5, 0.5), Vec3::new(0.0, 0.0, 1.0), 50.0)
+            .raycast(Vec3::new(8.5, 8.5, 0.5), Vec3::new(0.0, 0.0, 1.0), 50.0, None)
             .expect("should hit");
         assert_eq!(hit.chunk_pos, IVec3::ZERO);
         assert_eq!(hit.local_pos, [8, 8, 8]);
@@ -410,7 +472,7 @@ mod tests {
 
         // Approaching from -Z direction
         let hit = world
-            .raycast(Vec3::new(8.5, 8.5, 0.5), Vec3::new(0.0, 0.0, 1.0), 50.0)
+            .raycast(Vec3::new(8.5, 8.5, 0.5), Vec3::new(0.0, 0.0, 1.0), 50.0, None)
             .expect("should hit");
         assert_eq!(hit.normal, IVec3::new(0, 0, -1));
     }
@@ -420,7 +482,7 @@ mod tests {
         let mut world = World::new();
         world.insert(IVec3::ZERO, Chunk::new());
         assert!(world
-            .raycast(Vec3::new(8.5, 8.5, 0.5), Vec3::new(0.0, 0.0, 1.0), 50.0)
+            .raycast(Vec3::new(8.5, 8.5, 0.5), Vec3::new(0.0, 0.0, 1.0), 50.0, None)
             .is_none());
     }
 
@@ -432,7 +494,7 @@ mod tests {
         world.insert(IVec3::ZERO, chunk);
 
         let hit = world
-            .raycast(Vec3::new(5.5, 5.5, 5.5), Vec3::new(1.0, 0.0, 0.0), 50.0)
+            .raycast(Vec3::new(5.5, 5.5, 5.5), Vec3::new(1.0, 0.0, 0.0), 50.0, None)
             .expect("should hit");
         assert_eq!(hit.voxel_id, 4);
         assert_eq!(hit.normal, IVec3::ZERO);
@@ -484,6 +546,37 @@ mod tests {
     }
 
     #[test]
+    fn raycast_mesh_continues_past_miss() {
+        use crate::mesh_catalog::{MeshCatalog, MESH_TORCH};
+
+        let mut world = World::new();
+        let mut chunk = Chunk::new();
+        // Place a mesh torch at (8, 8, 8)
+        chunk.set(8, 8, 8, MESH_TORCH);
+        // Place a solid block behind it at (8, 8, 10)
+        chunk.set(8, 8, 10, 1);
+        world.insert(IVec3::ZERO, chunk);
+
+        let catalog = MeshCatalog::build();
+        // Cast a ray through the corner of the torch voxel (should miss mesh triangles)
+        // and hit the solid block behind it
+        let hit = world
+            .raycast(
+                Vec3::new(8.05, 8.5, 0.5),
+                Vec3::new(0.0, 0.0, 1.0),
+                50.0,
+                Some(&catalog),
+            );
+        assert!(hit.is_some(), "should hit the solid block behind the torch");
+        let hit = match hit {
+            Some(h) => h,
+            None => panic!("expected hit"),
+        };
+        assert_eq!(hit.local_pos, [8, 8, 10]);
+        assert_eq!(hit.voxel_id, 1);
+    }
+
+    #[test]
     fn raycast_across_chunk_boundary() {
         let mut world = World::new();
         world.insert(IVec3::ZERO, Chunk::new());
@@ -492,7 +585,7 @@ mod tests {
         world.insert(IVec3::X, chunk1);
 
         let hit = world
-            .raycast(Vec3::new(14.5, 8.5, 8.5), Vec3::new(1.0, 0.0, 0.0), 50.0)
+            .raycast(Vec3::new(14.5, 8.5, 8.5), Vec3::new(1.0, 0.0, 0.0), 50.0, None)
             .expect("should hit");
         assert_eq!(hit.chunk_pos, IVec3::X);
         assert_eq!(hit.local_pos, [0, 8, 8]);

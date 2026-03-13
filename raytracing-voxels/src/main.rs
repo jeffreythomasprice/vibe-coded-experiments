@@ -3,6 +3,7 @@ mod camera;
 mod chunk;
 mod chunk_manager;
 mod config;
+mod mesh_catalog;
 mod overlay;
 mod overlay_renderer;
 mod player;
@@ -97,6 +98,7 @@ struct App {
     storage_dir: PathBuf,
     seed: u32,
     last_space_press: Option<Instant>,
+    mesh_catalog: mesh_catalog::MeshCatalog,
     point_lights: Vec<GpuPointLight>,
     point_lights_dirty: bool,
     sun_angle: f32,
@@ -166,6 +168,7 @@ impl App {
             storage_dir,
             seed,
             last_space_press: None,
+            mesh_catalog: mesh_catalog::MeshCatalog::build(),
             point_lights: Vec::new(),
             point_lights_dirty: false,
             sun_angle: config.sun_angle,
@@ -219,6 +222,8 @@ impl App {
         let atlas = voxel_textures::build_voxel_atlas(self.seed)?;
         renderer.upload_voxel_atlas(atlas.texture(), atlas.uv_map());
         self.voxel_uv_map = *atlas.uv_map();
+
+        renderer.upload_mesh_catalog(&self.mesh_catalog);
 
         self.voxel_atlas_overlay_bind_group = Some(renderer.overlay().create_texture(
             renderer.device(),
@@ -308,6 +313,7 @@ impl ApplicationHandler for App {
                         self.camera.position,
                         self.camera.forward(),
                         INTERACT_REACH,
+                        Some(&self.mesh_catalog),
                     ) && hit.voxel_id != 0
                     {
                         let hit_world = hit.chunk_pos * 16
@@ -316,10 +322,28 @@ impl ApplicationHandler for App {
                                 hit.local_pos[1] as i32,
                                 hit.local_pos[2] as i32,
                             );
-                        self.break_state = Some(BreakState {
-                            world_pos: hit_world,
-                            elapsed: 0.0,
-                        });
+                        if hit.voxel_id >= mesh_catalog::MESH_VOXEL_BASE {
+                            // Mesh voxel (e.g. torch): instant removal
+                            self.world.set_voxel(hit_world, 0);
+                            let voxel_center = Vec3::new(
+                                hit_world.x as f32 + 0.5,
+                                hit_world.y as f32 + 0.5,
+                                hit_world.z as f32 + 0.5,
+                            );
+                            if let Some(idx) = self.point_lights.iter().position(|l| {
+                                let lp = Vec3::from_array(l.position);
+                                (lp - voxel_center).length() < 1.0
+                            }) {
+                                self.point_lights.remove(idx);
+                                self.point_lights_dirty = true;
+                            }
+                        } else {
+                            // Regular block: hold-to-break
+                            self.break_state = Some(BreakState {
+                                world_pos: hit_world,
+                                elapsed: 0.0,
+                            });
+                        }
                     }
                 } else {
                     self.grab_cursor();
@@ -343,6 +367,7 @@ impl ApplicationHandler for App {
                         self.camera.position,
                         self.camera.forward(),
                         INTERACT_REACH,
+                        Some(&self.mesh_catalog),
                     )
                 {
                     let hit_world = hit.chunk_pos * 16
@@ -354,50 +379,14 @@ impl ApplicationHandler for App {
                     let place_pos = hit_world + hit.normal;
                     trace!(pos = ?place_pos, voxel_id, "placed voxel");
                     self.world.set_voxel(place_pos, voxel_id);
-                }
-            }
-            WindowEvent::MouseInput {
-                button: MouseButton::Middle,
-                state: ElementState::Pressed,
-                ..
-            } => {
-                if self.cursor_grabbed {
-                    if self.input.down {
-                        // Shift + middle click: remove nearest light
-                        let cam_pos = self.camera.position;
-                        let mut closest_idx = None;
-                        let mut closest_dist = INTERACT_REACH;
-                        for (i, light) in self.point_lights.iter().enumerate() {
-                            let light_pos = Vec3::from(light.position);
-                            let dist = cam_pos.distance(light_pos);
-                            if dist < closest_dist {
-                                closest_dist = dist;
-                                closest_idx = Some(i);
-                            }
-                        }
-                        if let Some(idx) = closest_idx {
-                            self.point_lights.remove(idx);
-                            self.point_lights_dirty = true;
-                        }
-                    } else if let Some(hit) = self.world.raycast(
-                        self.camera.position,
-                        self.camera.forward(),
-                        INTERACT_REACH,
-                    ) {
-                        let hit_world = hit.chunk_pos * 16
-                            + IVec3::new(
-                                hit.local_pos[0] as i32,
-                                hit.local_pos[1] as i32,
-                                hit.local_pos[2] as i32,
-                            );
-                        let place_pos = hit_world + hit.normal;
-                        let pos = Vec3::new(
-                            place_pos.x as f32 + 0.5,
-                            place_pos.y as f32 + 0.5,
-                            place_pos.z as f32 + 0.5,
-                        );
+                    if voxel_id >= mesh_catalog::MESH_VOXEL_BASE {
+                        // Mesh placement: also create a point light
                         self.point_lights.push(GpuPointLight {
-                            position: pos.to_array(),
+                            position: [
+                                place_pos.x as f32 + 0.5,
+                                place_pos.y as f32 + 0.85,
+                                place_pos.z as f32 + 0.5,
+                            ],
                             radius: 8.0,
                             color: [1.0, 0.9, 0.7],
                             _padding: 0.0,
@@ -466,6 +455,7 @@ impl ApplicationHandler for App {
                     KeyCode::Digit4 if pressed => self.active_voxel_type = Some(VOXEL_KEY_TO_ID[4]),
                     KeyCode::Digit5 if pressed => self.active_voxel_type = Some(VOXEL_KEY_TO_ID[5]),
                     KeyCode::Digit6 if pressed => self.active_voxel_type = Some(VOXEL_KEY_TO_ID[6]),
+                    KeyCode::Digit9 if pressed => self.active_voxel_type = Some(mesh_catalog::MESH_TORCH),
                     _ => {}
                 }
             }
@@ -509,6 +499,7 @@ impl ApplicationHandler for App {
                         self.camera.position,
                         self.camera.forward(),
                         INTERACT_REACH,
+                        Some(&self.mesh_catalog),
                     ) {
                         let hit_world = hit.chunk_pos * 16
                             + IVec3::new(
@@ -546,6 +537,7 @@ impl ApplicationHandler for App {
                         self.camera.position,
                         self.camera.forward(),
                         INTERACT_REACH,
+                        Some(&self.mesh_catalog),
                     )
                 {
                     let hit_world = hit.chunk_pos * 16
@@ -728,10 +720,13 @@ impl ApplicationHandler for App {
                             );
                         }
 
-                        // Tile picker
+                        // Tile picker (6 block tiles + separator gap + 1 torch slot)
                         let num_tiles = TILE_PICKER_TILE_IDS.len() as f32;
-                        let picker_inner_w = num_tiles * TILE_PICKER_TILE_SIZE
+                        let torch_separator = TILE_PICKER_SPACING * 2.0;
+                        let num_total_slots = num_tiles + 1.0; // +1 for torch
+                        let picker_inner_w = num_total_slots * TILE_PICKER_TILE_SIZE
                             + (num_tiles - 1.0) * TILE_PICKER_SPACING
+                            + torch_separator
                             + 2.0 * TILE_PICKER_PADDING;
                         let label_extra = 20.0;
                         let picker_inner_h =
@@ -778,6 +773,68 @@ impl ApplicationHandler for App {
                                 TILE_PICKER_TILE_SIZE + 2.0 * highlight_pad,
                                 TILE_PICKER_TILE_SIZE + 2.0 * highlight_pad,
                                 TILE_PICKER_HIGHLIGHT_COLOR,
+                            );
+                        }
+
+                        // Torch slot position (after the 6 block tiles + separator)
+                        let torch_slot_x = picker_x
+                            + TILE_PICKER_BORDER
+                            + TILE_PICKER_PADDING
+                            + num_tiles * (TILE_PICKER_TILE_SIZE + TILE_PICKER_SPACING)
+                            - TILE_PICKER_SPACING
+                            + torch_separator;
+                        let torch_slot_y = picker_y + TILE_PICKER_BORDER + TILE_PICKER_PADDING;
+
+                        // Highlight torch slot if selected
+                        if self.active_voxel_type == Some(mesh_catalog::MESH_TORCH) {
+                            let highlight_pad = 3.0;
+                            self.picker_draw_list.solid_rect(
+                                torch_slot_x - highlight_pad,
+                                torch_slot_y - highlight_pad,
+                                TILE_PICKER_TILE_SIZE + 2.0 * highlight_pad,
+                                TILE_PICKER_TILE_SIZE + 2.0 * highlight_pad,
+                                TILE_PICKER_HIGHLIGHT_COLOR,
+                            );
+                        }
+
+                        // Draw torch icon: brown stick + orange/yellow flame
+                        {
+                            let ts = TILE_PICKER_TILE_SIZE;
+                            // Stick (brown rectangle)
+                            let stick_w = ts * 0.25;
+                            let stick_h = ts * 0.55;
+                            let stick_x = torch_slot_x + (ts - stick_w) / 2.0;
+                            let stick_y = torch_slot_y + ts - stick_h;
+                            self.picker_draw_list.solid_rect(
+                                stick_x,
+                                stick_y,
+                                stick_w,
+                                stick_h,
+                                Rgba::new(140, 90, 38, 255),
+                            );
+                            // Flame base (orange-yellow rectangle)
+                            let flame_w = ts * 0.4;
+                            let flame_h = ts * 0.3;
+                            let flame_x = torch_slot_x + (ts - flame_w) / 2.0;
+                            let flame_y = torch_slot_y + ts * 0.15;
+                            self.picker_draw_list.solid_rect(
+                                flame_x,
+                                flame_y,
+                                flame_w,
+                                flame_h,
+                                Rgba::new(255, 200, 50, 255),
+                            );
+                            // Flame tip (smaller orange rectangle)
+                            let tip_w = ts * 0.2;
+                            let tip_h = ts * 0.15;
+                            let tip_x = torch_slot_x + (ts - tip_w) / 2.0;
+                            let tip_y = torch_slot_y;
+                            self.picker_draw_list.solid_rect(
+                                tip_x,
+                                tip_y,
+                                tip_w,
+                                tip_h,
+                                Rgba::new(255, 115, 13, 255),
                             );
                         }
 
@@ -846,6 +903,26 @@ impl ApplicationHandler for App {
                                     label_color,
                                 );
                             }
+                            // Torch "9" label
+                            {
+                                let label = "9";
+                                let char_width = font.text_width(label);
+                                let label_x = torch_slot_x + TILE_PICKER_TILE_SIZE / 2.0 - char_width / 2.0;
+                                let label_y = torch_slot_y + TILE_PICKER_TILE_SIZE + 4.0;
+                                let label_color = if self.active_voxel_type == Some(mesh_catalog::MESH_TORCH) {
+                                    TILE_PICKER_HIGHLIGHT_COLOR
+                                } else {
+                                    Rgba::WHITE
+                                };
+                                font.draw_text(
+                                    &mut self.draw_list,
+                                    label,
+                                    label_x,
+                                    label_y,
+                                    label_color,
+                                );
+                            }
+
                             // "0: none" hint
                             let hint_x = picker_x + picker_outer_w + 6.0;
                             let hint_y = picker_y + picker_outer_h - 18.0;

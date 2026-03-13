@@ -47,6 +47,26 @@ struct BvhNode {
 
 @group(1) @binding(3) var<storage, read> bvh_nodes: array<BvhNode>;
 @group(1) @binding(4) var<uniform> bvh_node_count: u32;
+
+struct MeshTriangle {
+    v0: vec3<f32>,
+    color_r: f32,
+    v1: vec3<f32>,
+    color_g: f32,
+    v2: vec3<f32>,
+    color_b: f32,
+};
+
+struct MeshInfo {
+    tri_offset: u32,
+    tri_count: u32,
+    _pad0: u32,
+    _pad1: u32,
+};
+
+@group(1) @binding(5) var<storage, read> mesh_triangles: array<MeshTriangle>;
+@group(1) @binding(6) var<storage, read> mesh_infos: array<MeshInfo>;
+
 @group(2) @binding(0) var atlas_tex: texture_2d<f32>;
 @group(2) @binding(1) var atlas_sampler: sampler;
 @group(2) @binding(2) var<storage, read> uv_map: array<vec4<f32>>;
@@ -211,6 +231,84 @@ fn get_voxel(x: i32, y: i32, z: i32, data_offset: u32) -> u32 {
     return (voxels[byte_idx] >> shift) & 0xFFu;
 }
 
+struct TriHitResult {
+    hit: bool,
+    t: f32,
+    normal: vec3<f32>,
+};
+
+fn ray_triangle(ro: vec3<f32>, rd: vec3<f32>, v0: vec3<f32>, v1: vec3<f32>, v2: vec3<f32>, max_t: f32) -> TriHitResult {
+    var result: TriHitResult;
+    result.hit = false;
+    result.t = max_t;
+    result.normal = vec3<f32>(0.0);
+
+    let e1 = v1 - v0;
+    let e2 = v2 - v0;
+    let h = cross(rd, e2);
+    let a = dot(e1, h);
+
+    // Ray is parallel to triangle
+    if abs(a) < 1e-8 {
+        return result;
+    }
+
+    let f = 1.0 / a;
+    let s = ro - v0;
+    let u = f * dot(s, h);
+
+    if u < 0.0 || u > 1.0 {
+        return result;
+    }
+
+    let q = cross(s, e1);
+    let v = f * dot(rd, q);
+
+    if v < 0.0 || u + v > 1.0 {
+        return result;
+    }
+
+    let t = f * dot(e2, q);
+
+    if t > 0.001 && t < max_t {
+        result.hit = true;
+        result.t = t;
+        var n = normalize(cross(e1, e2));
+        // Orient normal to face the ray
+        if dot(n, rd) > 0.0 {
+            n = -n;
+        }
+        result.normal = n;
+    }
+
+    return result;
+}
+
+fn intersect_mesh_voxel(ro: vec3<f32>, rd: vec3<f32>, voxel_world_min: vec3<f32>, mesh_type: u32, max_t: f32) -> MarchResult {
+    var result: MarchResult;
+    result.hit = false;
+    result.color = vec4<f32>(0.0);
+    result.t = max_t;
+    result.normal = vec3<f32>(0.0);
+
+    let local_ro = ro - voxel_world_min;
+    let info = mesh_infos[mesh_type];
+    let tri_end = info.tri_offset + info.tri_count;
+
+    for (var i = info.tri_offset; i < tri_end; i += 1u) {
+        let tri = mesh_triangles[i];
+        let tri_hit = ray_triangle(local_ro, rd, tri.v0, tri.v1, tri.v2, result.t);
+        if tri_hit.hit {
+            result.hit = true;
+            result.t = tri_hit.t;
+            result.normal = tri_hit.normal;
+            result.color = vec4<f32>(tri.color_r, tri.color_g, tri.color_b, 1.0);
+        }
+    }
+
+    return result;
+}
+
 struct MarchResult {
     hit: bool,
     color: vec4<f32>,
@@ -290,30 +388,45 @@ fn march_chunk(ro: vec3<f32>, rd: vec3<f32>, chunk_min: vec3<f32>,
                 break;
             }
 
-            let hit_pos = ro + rd * t_hit;
-            let local_hit = hit_pos - chunk_min - vec3<f32>(f32(voxel.x), f32(voxel.y), f32(voxel.z));
-
-            var face_uv: vec2<f32>;
-            if abs(normal.x) > 0.5 {
-                face_uv = vec2<f32>(local_hit.z, local_hit.y);
-            } else if abs(normal.y) > 0.5 {
-                face_uv = vec2<f32>(local_hit.x, local_hit.z);
+            if v >= 128u {
+                // Mesh voxel: ray-trace triangles
+                let mesh_type = v - 128u;
+                let voxel_world = chunk_min + vec3<f32>(f32(voxel.x), f32(voxel.y), f32(voxel.z));
+                let mesh_result = intersect_mesh_voxel(ro, rd, voxel_world, mesh_type, max_t);
+                if mesh_result.hit {
+                    result.hit = true;
+                    result.color = mesh_result.color;
+                    result.t = mesh_result.t;
+                    result.normal = mesh_result.normal;
+                    return result;
+                }
+                // No triangle hit — ray passes through, continue DDA
             } else {
-                face_uv = vec2<f32>(local_hit.x, local_hit.y);
-            }
-            face_uv = clamp(face_uv, vec2<f32>(0.0), vec2<f32>(1.0));
+                let hit_pos = ro + rd * t_hit;
+                let local_hit = hit_pos - chunk_min - vec3<f32>(f32(voxel.x), f32(voxel.y), f32(voxel.z));
 
-            let uv_rect = uv_map[v];
-            let atlas_uv = uv_rect.xy + face_uv * (uv_rect.zw - uv_rect.xy);
+                var face_uv: vec2<f32>;
+                if abs(normal.x) > 0.5 {
+                    face_uv = vec2<f32>(local_hit.z, local_hit.y);
+                } else if abs(normal.y) > 0.5 {
+                    face_uv = vec2<f32>(local_hit.x, local_hit.z);
+                } else {
+                    face_uv = vec2<f32>(local_hit.x, local_hit.y);
+                }
+                face_uv = clamp(face_uv, vec2<f32>(0.0), vec2<f32>(1.0));
 
-            let tex_color = textureSampleLevel(atlas_tex, atlas_sampler, atlas_uv, 0.0);
+                let uv_rect = uv_map[v];
+                let atlas_uv = uv_rect.xy + face_uv * (uv_rect.zw - uv_rect.xy);
 
-            if tex_color.a >= 0.5 {
-                result.hit = true;
-                result.color = tex_color;
-                result.t = t_hit;
-                result.normal = normal;
-                return result;
+                let tex_color = textureSampleLevel(atlas_tex, atlas_sampler, atlas_uv, 0.0);
+
+                if tex_color.a >= 0.5 {
+                    result.hit = true;
+                    result.color = tex_color;
+                    result.t = t_hit;
+                    result.normal = normal;
+                    return result;
+                }
             }
         }
 
@@ -376,7 +489,7 @@ fn march_chunk_occlusion(ro: vec3<f32>, rd: vec3<f32>, chunk_min: vec3<f32>,
 
     for (var i = 0; i < 128; i = i + 1) {
         let v = get_voxel(voxel.x, voxel.y, voxel.z, data_offset);
-        if v != 0u {
+        if v != 0u && v < 128u {
             return true;
         }
 
