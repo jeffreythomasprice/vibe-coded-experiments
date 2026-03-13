@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use tracing::{error, info};
 
 use bytemuck::{Pod, Zeroable};
 
@@ -55,7 +56,11 @@ pub struct GpuMemoryStats {
 impl Renderer {
     pub fn new(window: Arc<Window>) -> Result<Self> {
         let size = window.inner_size();
-        let instance = wgpu::Instance::default();
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            flags: wgpu::InstanceFlags::VALIDATION | wgpu::InstanceFlags::GPU_BASED_VALIDATION,
+            ..Default::default()
+        });
         let surface = instance
             .create_surface(window)
             .context("failed to create surface")?;
@@ -64,10 +69,21 @@ impl Renderer {
             ..Default::default()
         }))
         .context("failed to find adapter")?;
+
+        info!(
+            adapter = ?adapter.get_info().name,
+            backend = ?adapter.get_info().backend,
+            "selected GPU adapter"
+        );
+
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor::default(),
         ))
         .context("failed to create device")?;
+
+        device.on_uncaptured_error(Arc::new(|error| {
+            error!("wgpu uncaptured error: {error}");
+        }));
 
         let caps = surface.get_capabilities(&adapter);
         let format = caps.formats[0];

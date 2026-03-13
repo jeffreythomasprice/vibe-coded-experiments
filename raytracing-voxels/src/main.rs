@@ -20,6 +20,7 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 use glam::{IVec3, Vec2, Vec3};
+use tracing::{error, info, trace};
 use voxel_renderer::GpuInteractionState;
 
 use camera::Camera;
@@ -101,27 +102,32 @@ struct App {
 impl App {
     fn new(storage_dir: PathBuf, seed: u32) -> Self {
         let mut world = World::new();
-        let mut chunk_manager = ChunkManager::new(9, 5000, 5.0, storage_dir.clone(), seed);
+        let mut chunk_manager = ChunkManager::new(6, 2197, storage_dir.clone(), seed);
 
         let camera = match Camera::load_from_file(&camera::camera_file_path(&storage_dir)) {
             Ok(cam) => {
-                log::info!("loaded camera from {}", storage_dir.display());
+                info!("loaded camera from {}", storage_dir.display());
                 cam
             }
             Err(_) => {
-                let cam_pos = Vec3::new(24.0, 64.0, 40.0);
-                let delta = Vec3::ZERO - cam_pos;
-                let horizontal_dist = Vec3::new(delta.x, 0.0, delta.z).length();
+                let spawn_x = 24;
+                let spawn_z = 40;
+                let terrain_gen = terrain::TerrainGenerator::new(seed);
+                let surface_y = terrain_gen.surface_height(spawn_x, spawn_z);
+                let feet_y = (surface_y + 1) as f32;
+                let cam_pos = Vec3::new(spawn_x as f32, feet_y + player::EYE_HEIGHT, spawn_z as f32);
                 Camera::new(
                     cam_pos,
-                    f32::atan2(-delta.x, -delta.z),
-                    f32::atan2(delta.y, horizontal_dist),
+                    0.0,
+                    0.0,
                     60.0_f32.to_radians(),
                 )
             }
         };
 
-        chunk_manager.load_initial(camera.position, &mut world);
+        info!(position = ?camera.position, "initial camera position");
+        chunk_manager.load_initial_sync(camera.position, &mut world, 2);
+        info!(chunks = world.chunk_count(), "initial chunks loaded synchronously");
 
         let player = Player::new(camera.position);
 
@@ -181,6 +187,7 @@ impl App {
 
 impl App {
     fn try_resume(&mut self, event_loop: &ActiveEventLoop) -> Result<()> {
+        info!("initializing renderer and window");
         let window_attrs = Window::default_attributes().with_title("Raytracing Voxels");
         let window = Arc::new(
             event_loop
@@ -235,6 +242,7 @@ impl App {
         self.window = Some(window);
         self.renderer = Some(renderer);
         self.last_frame = Instant::now();
+        info!("renderer initialization complete");
         Ok(())
     }
 }
@@ -245,7 +253,7 @@ impl ApplicationHandler for App {
             return;
         }
         if let Err(e) = self.try_resume(event_loop) {
-            log::error!("failed to initialize: {e:#}");
+            error!("failed to initialize: {e:#}");
             event_loop.exit();
         }
     }
@@ -270,9 +278,10 @@ impl ApplicationHandler for App {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
+                info!("window close requested, saving state");
                 let cam_path = camera::camera_file_path(&self.storage_dir);
                 if let Err(e) = self.camera.save_to_file(&cam_path) {
-                    log::error!("failed to save camera: {e:#}");
+                    error!("failed to save camera: {e:#}");
                 }
                 self.chunk_manager.save_all_modified(&mut self.world);
                 event_loop.exit();
@@ -331,6 +340,7 @@ impl ApplicationHandler for App {
                             hit.local_pos[2] as i32,
                         );
                     let place_pos = hit_world + hit.normal;
+                    trace!(pos = ?place_pos, voxel_id, "placed voxel");
                     self.world.set_voxel(place_pos, voxel_id);
                 }
             }
@@ -348,7 +358,7 @@ impl ApplicationHandler for App {
                 } else {
                     let cam_path = camera::camera_file_path(&self.storage_dir);
                     if let Err(e) = self.camera.save_to_file(&cam_path) {
-                        log::error!("failed to save camera: {e:#}");
+                        error!("failed to save camera: {e:#}");
                     }
                     self.chunk_manager.save_all_modified(&mut self.world);
                     event_loop.exit();
@@ -422,10 +432,11 @@ impl ApplicationHandler for App {
                 self.chunk_manager.drain_results(&mut self.world);
 
                 if self.last_save.elapsed().as_secs_f32() >= 5.0 {
+                    trace!("periodic save tick");
                     self.chunk_manager.save_modified(&mut self.world);
                     let cam_path = camera::camera_file_path(&self.storage_dir);
                     if let Err(e) = self.camera.save_to_file(&cam_path) {
-                        log::error!("failed to save camera: {e:#}");
+                        error!("failed to save camera: {e:#}");
                     }
                     self.last_save = Instant::now();
                 }
@@ -447,6 +458,7 @@ impl ApplicationHandler for App {
                             bs.elapsed += dt;
                             if bs.elapsed >= BREAK_TIME {
                                 let pos = bs.world_pos;
+                                trace!(?pos, "broke voxel");
                                 self.world.set_voxel(pos, 0);
                                 self.break_state = None;
                             }
@@ -804,12 +816,37 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
+fn setup_tracing(log_dir: &std::path::Path) -> tracing_appender::non_blocking::WorkerGuard {
+    use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+
+    let file_appender = tracing_appender::rolling::daily(log_dir, "voxels.log");
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+
+    let default_filter = "warn,raytracing_voxels=trace";
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| default_filter.into());
+
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt::layer().with_writer(non_blocking).with_ansi(false))
+        .init();
+
+    guard
+}
+
 fn main() -> Result<()> {
-    env_logger::init();
     let config = Config::load()?;
+    let _log_guard = setup_tracing(&config.log_dir);
+
+    info!(log_dir = %config.log_dir.display(), "logging initialized");
+    info!(storage_dir = %config.chunk_storage_dir.display(), "chunk storage directory");
+
     let seed = seed::resolve_seed(&config.chunk_storage_dir, config.seed)?;
+    info!(seed, "world seed resolved");
+
     let event_loop = EventLoop::new().context("failed to create event loop")?;
     let mut app = App::new(config.chunk_storage_dir, seed);
+
+    info!("entering event loop");
     event_loop.run_app(&mut app).context("event loop error")?;
     Ok(())
 }

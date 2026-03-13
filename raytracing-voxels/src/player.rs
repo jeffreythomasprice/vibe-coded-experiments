@@ -1,4 +1,5 @@
 use glam::{IVec3, Vec3};
+use tracing::debug;
 
 use crate::world::World;
 
@@ -49,6 +50,7 @@ impl Player {
         if !self.fly_mode {
             self.velocity = Vec3::ZERO;
         }
+        debug!(fly_mode = self.fly_mode, "toggled fly mode");
     }
 
     pub fn tick(&mut self, dt: f32, input: &InputState, yaw: f32, world: &World) {
@@ -256,7 +258,7 @@ impl Player {
             wish_dir = wish_dir.normalize();
         }
 
-        self.feet_pos += wish_dir * MOVE_SPEED * dt;
+        self.feet_pos += wish_dir * MOVE_SPEED * 2.5 * dt;
     }
 }
 
@@ -299,7 +301,7 @@ mod tests {
         let yaw = 0.0;
         player.tick(dt, &input, yaw, &mut world);
 
-        let expected_feet = Vec3::new(0.0, 10.0 - EYE_HEIGHT, 0.0 - MOVE_SPEED);
+        let expected_feet = Vec3::new(0.0, 10.0 - EYE_HEIGHT, 0.0 - MOVE_SPEED * 2.5);
         assert!(approx_eq(player.feet_pos, expected_feet, 1e-4));
     }
 

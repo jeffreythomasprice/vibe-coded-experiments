@@ -7,6 +7,7 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 struct ConfigFile {
     chunk_storage_dir: Option<String>,
+    log_dir: Option<String>,
     #[serde(default)]
     world: Option<WorldConfig>,
 }
@@ -20,6 +21,7 @@ const DEFAULT_CHUNK_STORAGE_DIR: &str = "/tmp/voxels";
 
 pub struct Config {
     pub chunk_storage_dir: PathBuf,
+    pub log_dir: PathBuf,
     pub seed: Option<u32>,
 }
 
@@ -31,6 +33,7 @@ impl Config {
         } else {
             ConfigFile {
                 chunk_storage_dir: None,
+                log_dir: None,
                 world: None,
             }
         };
@@ -41,12 +44,20 @@ impl Config {
                 .unwrap_or_else(|| DEFAULT_CHUNK_STORAGE_DIR.to_string()),
         );
 
+        let log_dir = PathBuf::from(
+            config_file
+                .log_dir
+                .unwrap_or_else(|| chunk_storage_dir.join("logs").to_string_lossy().into_owned()),
+        );
+
         fs::create_dir_all(&chunk_storage_dir)?;
+        fs::create_dir_all(&log_dir)?;
 
         let seed = config_file.world.and_then(|w| w.seed);
 
         Ok(Config {
             chunk_storage_dir,
+            log_dir,
             seed,
         })
     }

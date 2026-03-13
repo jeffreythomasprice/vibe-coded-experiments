@@ -1,0 +1,5 @@
+- [x] 1. Heightmap overhaul for mountains
+- [x] 2. Slope-dependent tree density
+- [x] 3. Cave noise system
+- [x] 4. Integrate cave carving into chunk generation
+- [x] 5. Update existing tests for new height ranges

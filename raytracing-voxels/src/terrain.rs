@@ -1,25 +1,44 @@
 use glam::IVec3;
 use noise::{Fbm, MultiFractal, NoiseFn, Perlin};
+use tracing::trace;
 
 use crate::chunk::Chunk;
 
 const SIZE: usize = 16;
 const SIZE_I32: i32 = SIZE as i32;
-const BASE_HEIGHT: f64 = 32.0;
-const AMPLITUDE: f64 = 24.0;
+const BASE_HEIGHT: f64 = 40.0;
+const MIN_AMPLITUDE: f64 = 16.0;
+const MAX_AMPLITUDE: f64 = 160.0;
 const DIRT_LAYERS: i32 = 3;
 
-/// Voxel IDs for tree blocks.
+const STONE: u8 = 1;
 const WOOD: u8 = 5;
 const LEAVES: u8 = 6;
 const GRASS: u8 = 3;
 
+/// Height above which mountain peaks are bare stone instead of grass.
+const BARE_PEAK_HEIGHT: f64 = BASE_HEIGHT + MAX_AMPLITUDE * 0.6;
+
+/// Cave spaghetti tunnel threshold: lower = thinner tunnels.
+const WORM_THRESHOLD: f64 = 0.012;
+/// Cave cavern threshold: higher = fewer/smaller caverns.
+const CAVERN_THRESHOLD: f64 = 0.6;
+
+/// Fraction of 8x8 regions that allow surface cave entrances (1 in N).
+const ENTRANCE_ZONE_DIVISOR: u32 = 5;
+/// Depth at which cave thresholds reach full strength.
+const CAVE_SURFACE_RAMP_DEPTH: f64 = 10.0;
+/// Near-surface worm threshold multiplier (scales down tunnel size near surface).
+const CAVE_SURFACE_WORM_SCALE: f64 = 0.7;
+
 /// How far outside the chunk XZ range to scan for tree candidates.
 const TREE_SCAN_MARGIN: i32 = 10;
 
-/// Tree placement threshold. A tree is placed when `tree_hash(...) % TREE_DENSITY_MOD == 0`.
-/// With a 1-in-200 chance per column, roughly 1 tree per ~14x14 area on average.
-const TREE_DENSITY_MOD: u32 = 200;
+/// Tree placement threshold for flat areas.
+const TREE_DENSITY_MOD: u32 = 150;
+
+/// No trees above this height (near mountain peaks).
+const TREE_HEIGHT_LIMIT: f64 = BASE_HEIGHT + MAX_AMPLITUDE * 0.7;
 
 /// Deterministic hash for tree placement decisions, modeled after `pixel_hash`.
 fn tree_hash(x: i32, z: i32, seed: u32) -> u32 {
@@ -72,8 +91,13 @@ impl TreeParams {
     }
 }
 
+#[derive(Clone)]
 pub struct TerrainGenerator {
     height_noise: Fbm<Perlin>,
+    mountain_noise: Fbm<Perlin>,
+    cave_worm_noise_a: Fbm<Perlin>,
+    cave_worm_noise_b: Fbm<Perlin>,
+    cave_cavern_noise: Fbm<Perlin>,
     seed: u32,
 }
 
@@ -81,16 +105,90 @@ impl TerrainGenerator {
     pub fn new(seed: u32) -> Self {
         let height_noise = Fbm::<Perlin>::new(seed)
             .set_octaves(4)
-            .set_frequency(0.02)
+            .set_frequency(0.01)
             .set_lacunarity(2.0)
             .set_persistence(0.5);
-        Self { height_noise, seed }
+        let mountain_noise = Fbm::<Perlin>::new(seed.wrapping_add(1))
+            .set_octaves(3)
+            .set_frequency(0.005)
+            .set_lacunarity(2.0)
+            .set_persistence(0.5);
+        let cave_worm_noise_a = Fbm::<Perlin>::new(seed.wrapping_add(10))
+            .set_octaves(3)
+            .set_frequency(0.04)
+            .set_lacunarity(2.0)
+            .set_persistence(0.5);
+        let cave_worm_noise_b = Fbm::<Perlin>::new(seed.wrapping_add(11))
+            .set_octaves(3)
+            .set_frequency(0.04)
+            .set_lacunarity(2.0)
+            .set_persistence(0.5);
+        let cave_cavern_noise = Fbm::<Perlin>::new(seed.wrapping_add(12))
+            .set_octaves(2)
+            .set_frequency(0.015)
+            .set_lacunarity(2.0)
+            .set_persistence(0.5);
+        Self {
+            height_noise, mountain_noise,
+            cave_worm_noise_a, cave_worm_noise_b, cave_cavern_noise,
+            seed,
+        }
     }
 
     /// Compute the surface height at world coordinates (wx, wz).
     pub fn surface_height(&self, wx: i32, wz: i32) -> i32 {
-        let noise_val = self.height_noise.get([wx as f64, wz as f64]);
-        (BASE_HEIGHT + noise_val * AMPLITUDE) as i32
+        let height_val = self.height_noise.get([wx as f64, wz as f64]);
+        let mountain_raw = self.mountain_noise.get([wx as f64, wz as f64]);
+        let mountain_factor = ((mountain_raw + 0.3) * 1.5).clamp(0.0, 1.0);
+        let amplitude = MIN_AMPLITUDE + (MAX_AMPLITUDE - MIN_AMPLITUDE) * mountain_factor;
+        (BASE_HEIGHT + height_val * amplitude) as i32
+    }
+
+    /// Returns true if the voxel at (wx, wy, wz) should be carved out as a cave.
+    pub fn is_cave_at(&self, wx: i32, wy: i32, wz: i32) -> bool {
+        let surface = self.surface_height(wx, wz);
+        let depth = surface - wy;
+
+        // Near-surface: only allow caves in entrance zones
+        if depth < 3 {
+            let entrance_hash = tree_hash(wx.div_euclid(8), wz.div_euclid(8), self.seed.wrapping_add(20));
+            if !entrance_hash.is_multiple_of(ENTRANCE_ZONE_DIVISOR) {
+                return false;
+            }
+        }
+
+        let coords = [wx as f64, wy as f64, wz as f64];
+
+        // Spaghetti caves: intersection of two noise channels near zero
+        let a = self.cave_worm_noise_a.get(coords);
+        let b = self.cave_worm_noise_b.get(coords);
+        let worm_val = a * a + b * b;
+
+        // Caverns: large open spaces
+        let cavern_val = self.cave_cavern_noise.get(coords);
+
+        // Depth bias: make caves rarer near the surface
+        let (worm_thresh, cavern_thresh) = if depth < 10 {
+            let factor = (depth as f64).max(0.0) / CAVE_SURFACE_RAMP_DEPTH;
+            (WORM_THRESHOLD * factor * CAVE_SURFACE_WORM_SCALE, CAVERN_THRESHOLD + (1.0 - factor) * 0.3)
+        } else {
+            (WORM_THRESHOLD, CAVERN_THRESHOLD)
+        };
+
+        worm_val < worm_thresh || cavern_val > cavern_thresh
+    }
+
+    /// Approximate slope at (wx, wz) as max absolute height difference to cardinal neighbors.
+    fn slope_at(&self, wx: i32, wz: i32) -> i32 {
+        let center = self.surface_height(wx, wz);
+        let n = self.surface_height(wx, wz - 1);
+        let s = self.surface_height(wx, wz + 1);
+        let e = self.surface_height(wx + 1, wz);
+        let w = self.surface_height(wx - 1, wz);
+        (center - n).abs()
+            .max((center - s).abs())
+            .max((center - e).abs())
+            .max((center - w).abs())
     }
 
     /// Returns true if a tree should be placed at world column (wx, wz).
@@ -99,51 +197,105 @@ impl TerrainGenerator {
         if !h.is_multiple_of(TREE_DENSITY_MOD) {
             return false;
         }
-        // Only place trees on grass surfaces
         let surface = self.surface_height(wx, wz);
+        // No trees near mountain peaks
+        if surface as f64 > TREE_HEIGHT_LIMIT {
+            return false;
+        }
+        // Slope-based thinning
+        let slope = self.slope_at(wx, wz);
+        if slope > 3 {
+            return false;
+        }
+        if slope >= 1 {
+            let slope_hash = tree_hash(wx, wz, self.seed.wrapping_add(2));
+            if !slope_hash.is_multiple_of(slope as u32 * 3) {
+                return false;
+            }
+        }
+        // Only place trees on grass surfaces
         let surface_voxel = self.terrain_voxel_at(wx, surface, wz);
         surface_voxel == GRASS
     }
 
     /// Return the base terrain voxel at a world position (before trees).
-    fn terrain_voxel_at(&self, _wx: i32, wy: i32, _wz: i32) -> u8 {
-        let height = self.surface_height(_wx, _wz);
+    fn terrain_voxel_at(&self, wx: i32, wy: i32, wz: i32) -> u8 {
+        let height = self.surface_height(wx, wz);
+        Self::terrain_voxel_at_with_height(wy, height)
+    }
+
+    /// Same as `terrain_voxel_at` but uses a precomputed surface height.
+    fn terrain_voxel_at_with_height(wy: i32, height: i32) -> u8 {
         if wy > height {
             0
         } else if wy == height {
-            GRASS
+            if height as f64 > BARE_PEAK_HEIGHT {
+                STONE
+            } else {
+                GRASS
+            }
         } else if wy > height - DIRT_LAYERS {
             2 // dirt
         } else {
-            1 // stone
+            STONE
         }
     }
 
+    /// Same as `is_cave_at` but uses a precomputed surface height.
+    fn is_cave_at_with_surface(&self, wx: i32, wy: i32, wz: i32, surface: i32) -> bool {
+        let depth = surface - wy;
+
+        // Near-surface: only allow caves in entrance zones
+        if depth < 3 {
+            let entrance_hash = tree_hash(wx.div_euclid(8), wz.div_euclid(8), self.seed.wrapping_add(20));
+            if !entrance_hash.is_multiple_of(ENTRANCE_ZONE_DIVISOR) {
+                return false;
+            }
+        }
+
+        let coords = [wx as f64, wy as f64, wz as f64];
+
+        let a = self.cave_worm_noise_a.get(coords);
+        let b = self.cave_worm_noise_b.get(coords);
+        let worm_val = a * a + b * b;
+
+        let cavern_val = self.cave_cavern_noise.get(coords);
+
+        let (worm_thresh, cavern_thresh) = if depth < 10 {
+            let factor = (depth as f64).max(0.0) / CAVE_SURFACE_RAMP_DEPTH;
+            (WORM_THRESHOLD * factor * CAVE_SURFACE_WORM_SCALE, CAVERN_THRESHOLD + (1.0 - factor) * 0.3)
+        } else {
+            (WORM_THRESHOLD, CAVERN_THRESHOLD)
+        };
+
+        worm_val < worm_thresh || cavern_val > cavern_thresh
+    }
+
     pub fn generate_chunk(&self, chunk_pos: IVec3) -> Chunk {
+        trace!(?chunk_pos, "generating terrain chunk");
         let mut chunk = Chunk::new();
         let world_x = chunk_pos.x * SIZE_I32;
         let world_y = chunk_pos.y * SIZE_I32;
         let world_z = chunk_pos.z * SIZE_I32;
 
-        // Base terrain pass
-        for lx in 0..SIZE {
-            for lz in 0..SIZE {
+        // Precompute surface heights per column (avoids redundant noise evals)
+        let mut heights = [[0i32; SIZE]; SIZE];
+        for (lx, col) in heights.iter_mut().enumerate() {
+            for (lz, h) in col.iter_mut().enumerate() {
+                *h = self.surface_height(world_x + lx as i32, world_z + lz as i32);
+            }
+        }
+
+        // Combined terrain + cave pass using cached heights
+        for (lx, col) in heights.iter().enumerate() {
+            for (lz, &height) in col.iter().enumerate() {
                 let wx = world_x + lx as i32;
                 let wz = world_z + lz as i32;
-                let height = self.surface_height(wx, wz);
 
                 for ly in 0..SIZE {
                     let wy = world_y + ly as i32;
-                    let voxel = if wy > height {
-                        0 // air
-                    } else if wy == height {
-                        3 // grass
-                    } else if wy > height - DIRT_LAYERS {
-                        2 // dirt
-                    } else {
-                        1 // stone
-                    };
-                    if voxel != 0 {
+                    let voxel = Self::terrain_voxel_at_with_height(wy, height);
+                    if voxel != 0 && !self.is_cave_at_with_surface(wx, wy, wz, height) {
                         chunk.set(lx, ly, lz, voxel);
                     }
                 }
@@ -163,6 +315,10 @@ impl TerrainGenerator {
                 }
 
                 let surface_y = self.surface_height(tx, tz);
+                // Skip trees over cave entrances
+                if self.is_cave_at(tx, surface_y, tz) || self.is_cave_at(tx, surface_y - 1, tz) {
+                    continue;
+                }
                 let params = TreeParams::from_position(tx, tz, self.seed);
 
                 // Trunk footprint offsets: 1x1 for small, 2x2 for large
@@ -304,7 +460,8 @@ mod tests {
     #[test]
     fn terrain_chunk_above_surface_is_air() {
         let generator = TerrainGenerator::new(0);
-        let chunk = generator.generate_chunk(IVec3::new(0, 100, 0));
+        // Mountains can reach ~200, so use a very high Y
+        let chunk = generator.generate_chunk(IVec3::new(0, 200, 0));
         assert!(chunk.data().iter().all(|&v| v == 0));
     }
 
@@ -319,26 +476,28 @@ mod tests {
     #[test]
     fn terrain_chunks_share_border_heights() {
         let generator = TerrainGenerator::new(42);
-        // Two vertically adjacent chunks should produce consistent columns:
-        // if the surface height for a column falls at world y=15, the lower
-        // chunk should have grass at local y=15, and the upper chunk should
-        // have air at local y=0 for that same column.
+        // Two vertically adjacent chunks should produce consistent columns.
+        // Cave carving can create air pockets, so we only check terrain
+        // consistency where caves aren't involved.
         let lower = generator.generate_chunk(IVec3::new(0, 0, 0));
         let upper = generator.generate_chunk(IVec3::new(0, 1, 0));
 
         for x in 0..16 {
             for z in 0..16 {
-                // If the top of the lower chunk (y=15) is air, then
-                // the bottom of the upper chunk (y=0) must also be air
-                // (surface is below both).
-                // If the bottom of the upper chunk (y=0) is solid,
-                // then the top of the lower chunk (y=15) must also be solid
-                // (surface is above both).
+                let wx = x as i32;
+                let wz = z as i32;
+                let lower_wy = 15; // world y of top of lower chunk
+                let upper_wy = 16; // world y of bottom of upper chunk
+
+                // Skip columns where caves are involved
+                if generator.is_cave_at(wx, lower_wy, wz) || generator.is_cave_at(wx, upper_wy, wz) {
+                    continue;
+                }
+
                 let lower_top = lower.get(x, 15, z);
                 let upper_bottom = upper.get(x, 0, z);
-                // Skip tree voxels — trees can place leaves/wood in air above terrain
+                // Skip tree voxels
                 if lower_top == 0 {
-                    // upper_bottom can be 0 (air) or a tree voxel placed by cross-chunk scan
                     if upper_bottom != 0 && upper_bottom != WOOD && upper_bottom != LEAVES {
                         panic!("column ({x},{z}): lower top is air but upper bottom is terrain {upper_bottom}");
                     }
@@ -355,8 +514,7 @@ mod tests {
     fn terrain_with_trees_has_wood() {
         let generator = TerrainGenerator::new(42);
         let mut found_wood = false;
-        // Search across several chunks near terrain surface
-        for cy in 0..4 {
+        for cy in 0..10 {
             for cx in -2..3 {
                 for cz in -2..3 {
                     let chunk = generator.generate_chunk(IVec3::new(cx, cy, cz));
@@ -373,7 +531,7 @@ mod tests {
     fn terrain_with_trees_has_leaves() {
         let generator = TerrainGenerator::new(42);
         let mut found_leaves = false;
-        for cy in 0..4 {
+        for cy in 0..10 {
             for cx in -2..3 {
                 for cz in -2..3 {
                     let chunk = generator.generate_chunk(IVec3::new(cx, cy, cz));
@@ -452,7 +610,7 @@ mod tests {
     #[test]
     fn trees_only_on_surface() {
         let generator = TerrainGenerator::new(42);
-        for cy in 0..4 {
+        for cy in 0..10 {
             for cx in -2..3 {
                 for cz in -2..3 {
                     let chunk_pos = IVec3::new(cx, cy, cz);
@@ -475,6 +633,231 @@ mod tests {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn terrain_has_tall_mountains() {
+        let generator = TerrainGenerator::new(42);
+        let mut max_height = 0;
+        for cx in -20..20 {
+            for cz in -20..20 {
+                for lx in 0..SIZE_I32 {
+                    for lz in 0..SIZE_I32 {
+                        let wx = cx * SIZE_I32 + lx;
+                        let wz = cz * SIZE_I32 + lz;
+                        let h = generator.surface_height(wx, wz);
+                        if h > max_height {
+                            max_height = h;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(max_height > 120, "expected mountain heights above 120, got {max_height}");
+    }
+
+    #[test]
+    fn terrain_has_low_valleys() {
+        let generator = TerrainGenerator::new(42);
+        let mut min_height = i32::MAX;
+        for cx in -20..20 {
+            for cz in -20..20 {
+                for lx in 0..SIZE_I32 {
+                    for lz in 0..SIZE_I32 {
+                        let wx = cx * SIZE_I32 + lx;
+                        let wz = cz * SIZE_I32 + lz;
+                        let h = generator.surface_height(wx, wz);
+                        if h < min_height {
+                            min_height = h;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(min_height < 50, "expected valley heights below 50, got {min_height}");
+    }
+
+    #[test]
+    fn trees_sparser_on_slopes() {
+        let generator = TerrainGenerator::new(42);
+        let mut flat_trees = 0u32;
+        let mut steep_trees = 0u32;
+        let mut flat_cols = 0u32;
+        let mut steep_cols = 0u32;
+
+        for cx in -10..10 {
+            for cz in -10..10 {
+                for lx in 0..SIZE_I32 {
+                    for lz in 0..SIZE_I32 {
+                        let wx = cx * SIZE_I32 + lx;
+                        let wz = cz * SIZE_I32 + lz;
+                        let slope = generator.slope_at(wx, wz);
+                        let has_tree = generator.has_tree_at(wx, wz);
+                        if slope == 0 {
+                            flat_cols += 1;
+                            if has_tree { flat_trees += 1; }
+                        } else if slope >= 2 {
+                            steep_cols += 1;
+                            if has_tree { steep_trees += 1; }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Normalize to density (trees per 10000 columns)
+        let flat_density = if flat_cols > 0 { flat_trees as f64 / flat_cols as f64 } else { 0.0 };
+        let steep_density = if steep_cols > 0 { steep_trees as f64 / steep_cols as f64 } else { 0.0 };
+        assert!(flat_density > steep_density,
+            "expected flat areas to have more trees: flat={flat_density:.6} steep={steep_density:.6}");
+    }
+
+    #[test]
+    fn cave_generation_deterministic() {
+        let gen1 = TerrainGenerator::new(42);
+        let gen2 = TerrainGenerator::new(42);
+        for x in -50..50 {
+            for z in -50..50 {
+                for y in 0..30 {
+                    assert_eq!(gen1.is_cave_at(x, y, z), gen2.is_cave_at(x, y, z));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn caves_exist_underground() {
+        let generator = TerrainGenerator::new(42);
+        let mut found_cave = false;
+        'outer: for cx in -5..5 {
+            for cz in -5..5 {
+                for lx in 0..SIZE_I32 {
+                    for lz in 0..SIZE_I32 {
+                        let wx = cx * SIZE_I32 + lx;
+                        let wz = cz * SIZE_I32 + lz;
+                        let surface = generator.surface_height(wx, wz);
+                        for wy in 1..surface - 3 {
+                            if generator.is_cave_at(wx, wy, wz) {
+                                let base_voxel = generator.terrain_voxel_at(wx, wy, wz);
+                                if base_voxel != 0 {
+                                    found_cave = true;
+                                    break 'outer;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(found_cave, "expected to find at least one cave voxel underground");
+    }
+
+    #[test]
+    fn caves_mostly_underground() {
+        let generator = TerrainGenerator::new(42);
+        let mut total_cave = 0u32;
+        let mut underground_cave = 0u32;
+        for cx in -3..3 {
+            for cz in -3..3 {
+                for lx in 0..SIZE_I32 {
+                    for lz in 0..SIZE_I32 {
+                        let wx = cx * SIZE_I32 + lx;
+                        let wz = cz * SIZE_I32 + lz;
+                        let surface = generator.surface_height(wx, wz);
+                        for wy in 1..surface {
+                            if generator.is_cave_at(wx, wy, wz) {
+                                total_cave += 1;
+                                if wy < surface {
+                                    underground_cave += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if total_cave > 0 {
+            let ratio = underground_cave as f64 / total_cave as f64;
+            assert!(ratio > 0.9, "expected >90% caves underground, got {ratio:.2} ({underground_cave}/{total_cave})");
+        }
+    }
+
+    #[test]
+    fn no_trees_in_caves() {
+        let generator = TerrainGenerator::new(42);
+        for cy in 0..10 {
+            for cx in -2..3 {
+                for cz in -2..3 {
+                    let chunk_pos = IVec3::new(cx, cy, cz);
+                    let chunk = generator.generate_chunk(chunk_pos);
+                    let world_x = chunk_pos.x * SIZE_I32;
+                    let world_y = chunk_pos.y * SIZE_I32;
+                    let world_z = chunk_pos.z * SIZE_I32;
+
+                    for lx in 0..SIZE {
+                        for ly in 0..SIZE {
+                            for lz in 0..SIZE {
+                                let v = chunk.get(lx, ly, lz);
+                                if v == WOOD || v == LEAVES {
+                                    let wx = world_x + lx as i32;
+                                    let wy = world_y + ly as i32;
+                                    let wz = world_z + lz as i32;
+                                    assert!(!generator.is_cave_at(wx, wy, wz),
+                                        "tree block at ({wx},{wy},{wz}) is inside a cave");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn caves_carve_through_stone() {
+        let generator = TerrainGenerator::new(42);
+        let mut found = false;
+        'outer: for cx in -5..5 {
+            for cz in -5..5 {
+                let chunk_pos = IVec3::new(cx, 0, cz);
+                let chunk = generator.generate_chunk(chunk_pos);
+                let world_x = chunk_pos.x * SIZE_I32;
+                let world_z = chunk_pos.z * SIZE_I32;
+
+                for lx in 0..SIZE {
+                    for lz in 0..SIZE {
+                        let wx = world_x + lx as i32;
+                        let wz = world_z + lz as i32;
+                        let surface = generator.surface_height(wx, wz);
+                        for ly in 0..SIZE {
+                            let wy = ly as i32;
+                            if wy < surface - DIRT_LAYERS && chunk.get(lx, ly, lz) == 0 {
+                                if generator.is_cave_at(wx, wy, wz) {
+                                    found = true;
+                                    break 'outer;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(found, "expected to find stone carved out by caves");
+    }
+
+    #[test]
+    fn terrain_caves_persistent_across_restart() {
+        let gen1 = TerrainGenerator::new(123);
+        let gen2 = TerrainGenerator::new(123);
+        for cy in 0..3 {
+            for cx in -2..3 {
+                for cz in -2..3 {
+                    let pos = IVec3::new(cx, cy, cz);
+                    assert_eq!(gen1.generate_chunk(pos).data(), gen2.generate_chunk(pos).data(),
+                        "chunks at {pos} differ between generator instances with same seed");
                 }
             }
         }

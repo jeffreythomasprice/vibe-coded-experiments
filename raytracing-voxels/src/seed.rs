@@ -4,6 +4,7 @@ use std::path::Path;
 use anyhow::Result;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 #[derive(Serialize, Deserialize)]
 pub struct SeedData {
@@ -31,18 +32,18 @@ pub fn save_seed(storage_dir: &Path, data: &SeedData) -> Result<()> {
 
 pub fn resolve_seed(storage_dir: &Path, config_seed: Option<u32>) -> Result<u32> {
     if let Some(s) = config_seed {
-        log::info!("using seed from config: {s}");
+        info!("using seed from config: {s}");
         save_seed(storage_dir, &SeedData { seed: s })?;
         return Ok(s);
     }
 
     if let Some(data) = load_seed(storage_dir)? {
-        log::info!("loaded seed from file: {}", data.seed);
+        info!("loaded seed from file: {}", data.seed);
         return Ok(data.seed);
     }
 
     let seed: u32 = rand::rng().random();
-    log::info!("generated new seed: {seed}");
+    info!("generated new seed: {seed}");
     save_seed(storage_dir, &SeedData { seed })?;
     Ok(seed)
 }

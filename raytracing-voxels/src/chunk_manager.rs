@@ -1,9 +1,11 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::sync::Arc;
 
 use glam::{IVec3, Vec3};
 use tokio::sync::mpsc;
+use tokio::task::JoinSet;
+use tracing::{debug, info, trace, warn};
 
 use crate::chunk::{chunk_file_path, Chunk};
 use crate::terrain::TerrainGenerator;
@@ -11,6 +13,7 @@ use crate::world::World;
 
 pub enum ChunkCommand {
     UpdateCamera(Vec3),
+    InitialLoaded(HashSet<IVec3>),
     Shutdown,
 }
 
@@ -89,23 +92,29 @@ fn load_or_generate_chunk(storage_dir: &Path, pos: IVec3, generator: &TerrainGen
     let path = chunk_file_path(storage_dir, pos);
     if path.exists() {
         match Chunk::load_from_file(&path) {
-            Ok(chunk) => return chunk,
-            Err(e) => log::warn!("failed to load chunk at {:?}: {:#}", pos, e),
+            Ok(chunk) => {
+                trace!(?pos, "loaded chunk from disk");
+                return chunk;
+            }
+            Err(e) => warn!(?pos, error = %e, "failed to load chunk from disk, regenerating"),
         }
     }
+    trace!(?pos, "generating chunk");
     generator.generate_chunk(pos)
 }
+
+const BATCH_SIZE: usize = 8;
 
 async fn chunk_loader_task(
     load_radius: i32,
     max_loaded: usize,
-    cycle_budget: Duration,
     storage_dir: PathBuf,
     seed: u32,
     mut cmd_rx: mpsc::UnboundedReceiver<ChunkCommand>,
     result_tx: mpsc::UnboundedSender<ChunkResult>,
 ) {
-    let generator = TerrainGenerator::new(seed);
+    info!("chunk loader background task started");
+    let generator = Arc::new(TerrainGenerator::new(seed));
     let mut camera_pos = Vec3::ZERO;
     let mut loaded_positions: HashSet<IVec3> = HashSet::new();
 
@@ -113,8 +122,18 @@ async fn chunk_loader_task(
         // Drain all pending commands
         loop {
             match cmd_rx.try_recv() {
-                Ok(ChunkCommand::UpdateCamera(pos)) => camera_pos = pos,
-                Ok(ChunkCommand::Shutdown) => return,
+                Ok(ChunkCommand::UpdateCamera(pos)) => {
+                    trace!(?pos, "received UpdateCamera command");
+                    camera_pos = pos;
+                }
+                Ok(ChunkCommand::InitialLoaded(positions)) => {
+                    debug!(count = positions.len(), "received InitialLoaded command");
+                    loaded_positions.extend(positions);
+                }
+                Ok(ChunkCommand::Shutdown) => {
+                    info!("chunk loader received shutdown command");
+                    return;
+                }
                 Err(_) => break,
             }
         }
@@ -122,63 +141,68 @@ async fn chunk_loader_task(
         let camera_chunk = camera_chunk_coord(camera_pos);
         let desired = desired_chunks(camera_chunk, load_radius);
 
-        let cycle_start = tokio::time::Instant::now();
-        let mut did_work = false;
-
-        loop {
+        // Collect a batch of work
+        let mut batch: Vec<(IVec3, Option<IVec3>)> = Vec::with_capacity(BATCH_SIZE);
+        for _ in 0..BATCH_SIZE {
             let action = compute_next_load(camera_chunk, &loaded_positions, &desired, max_loaded);
             match action {
                 Some(LoadAction::Load(pos)) => {
-                    let chunk = load_or_generate_chunk(&storage_dir, pos, &generator);
                     loaded_positions.insert(pos);
-                    if result_tx
-                        .send(ChunkResult {
-                            pos,
-                            chunk,
-                            evict: None,
-                        })
-                        .is_err()
-                    {
-                        return;
-                    }
-                    did_work = true;
+                    batch.push((pos, None));
                 }
                 Some(LoadAction::Swap { evict, load }) => {
-                    let chunk = load_or_generate_chunk(&storage_dir, load, &generator);
                     loaded_positions.remove(&evict);
                     loaded_positions.insert(load);
-                    if result_tx
-                        .send(ChunkResult {
-                            pos: load,
-                            chunk,
-                            evict: Some(evict),
-                        })
-                        .is_err()
-                    {
-                        return;
-                    }
-                    did_work = true;
+                    batch.push((load, Some(evict)));
                 }
                 None => break,
             }
-
-            if cycle_start.elapsed() >= cycle_budget {
-                break;
-            }
         }
 
-        if !did_work {
-            // Nothing to load — wait for new commands
+        if batch.is_empty() {
+            trace!("no chunks to load, waiting for commands");
             match cmd_rx.recv().await {
-                Some(ChunkCommand::UpdateCamera(pos)) => camera_pos = pos,
-                Some(ChunkCommand::Shutdown) | None => return,
+                Some(ChunkCommand::UpdateCamera(pos)) => {
+                    trace!(?pos, "received UpdateCamera command (while idle)");
+                    camera_pos = pos;
+                }
+                Some(ChunkCommand::InitialLoaded(positions)) => {
+                    debug!(count = positions.len(), "received InitialLoaded command (while idle)");
+                    loaded_positions.extend(positions);
+                }
+                Some(ChunkCommand::Shutdown) | None => {
+                    info!("chunk loader shutting down");
+                    return;
+                }
             }
-        } else {
-            let elapsed = cycle_start.elapsed();
-            if elapsed < cycle_budget {
-                tokio::time::sleep(cycle_budget - elapsed).await;
+            continue;
+        }
+
+        debug!(batch_size = batch.len(), "dispatching chunk generation batch");
+        let mut join_set = JoinSet::new();
+        for (pos, evict) in batch {
+            let gen_clone = generator.clone();
+            let dir = storage_dir.clone();
+            join_set.spawn_blocking(move || {
+                let chunk = load_or_generate_chunk(&dir, pos, &gen_clone);
+                ChunkResult { pos, chunk, evict }
+            });
+        }
+
+        while let Some(result) = join_set.join_next().await {
+            match result {
+                Ok(chunk_result) => {
+                    if result_tx.send(chunk_result).is_err() {
+                        return;
+                    }
+                }
+                Err(e) => {
+                    warn!(error = %e, "chunk generation task panicked");
+                }
             }
         }
+
+        // Drain commands between batches to pick up camera updates
     }
 }
 
@@ -189,31 +213,31 @@ pub struct ChunkManager {
     load_radius: i32,
     max_loaded: usize,
     storage_dir: PathBuf,
+    seed: u32,
 }
 
 impl ChunkManager {
     pub fn new(
         load_radius: i32,
         max_loaded: usize,
-        updates_per_second: f32,
         storage_dir: PathBuf,
         seed: u32,
     ) -> Self {
-        let cycle_budget = Duration::from_secs_f32(1.0 / updates_per_second);
-
+        info!(load_radius, max_loaded, seed, storage = %storage_dir.display(), "creating chunk manager");
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
         let (result_tx, result_rx) = mpsc::unbounded_channel();
 
         let task_storage_dir = storage_dir.clone();
         let worker = std::thread::spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
+            // TODO: restore to worker_threads(4) after diagnosing segfault
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(1)
                 .enable_time()
                 .build()
                 .expect("failed to create tokio runtime");
             rt.block_on(chunk_loader_task(
                 load_radius,
                 max_loaded,
-                cycle_budget,
                 task_storage_dir,
                 seed,
                 cmd_rx,
@@ -228,6 +252,7 @@ impl ChunkManager {
             load_radius,
             max_loaded,
             storage_dir,
+            seed,
         }
     }
 
@@ -236,12 +261,19 @@ impl ChunkManager {
     }
 
     pub fn drain_results(&mut self, world: &mut World) {
+        let mut count = 0u32;
         while let Ok(result) = self.result_rx.try_recv() {
             if let Some(evict_pos) = &result.evict {
+                trace!(?evict_pos, "evicting chunk");
                 self.save_before_evict(world, evict_pos);
                 world.remove(evict_pos);
             }
+            trace!(pos = ?result.pos, "inserting chunk into world");
             world.insert(result.pos, result.chunk);
+            count += 1;
+        }
+        if count > 0 {
+            debug!(count, total = world.chunk_count(), "drained chunk results");
         }
     }
 
@@ -264,19 +296,26 @@ impl ChunkManager {
         {
             let path = chunk_file_path(&self.storage_dir, *evict_pos);
             if let Err(e) = chunk.save_to_file(&path) {
-                log::warn!("failed to save chunk {:?} on eviction: {e:#}", evict_pos);
+                warn!(?evict_pos, error = %e, "failed to save chunk on eviction");
             } else {
+                trace!(?evict_pos, "saved modified chunk before eviction");
                 world.mark_chunk_saved(evict_pos);
             }
         }
     }
 
     pub fn save_modified(&self, world: &mut World) {
-        for pos in world.take_modified() {
+        let modified = world.take_modified();
+        if !modified.is_empty() {
+            debug!(count = modified.len(), "saving modified chunks");
+        }
+        for pos in modified {
             if let Some(chunk) = world.get(&pos) {
                 let path = chunk_file_path(&self.storage_dir, pos);
                 if let Err(e) = chunk.save_to_file(&path) {
-                    log::warn!("failed to save modified chunk {:?}: {e:#}", pos);
+                    warn!(?pos, error = %e, "failed to save modified chunk");
+                } else {
+                    trace!(?pos, "saved modified chunk");
                 }
             }
         }
@@ -286,35 +325,41 @@ impl ChunkManager {
         self.save_modified(world);
     }
 
-    pub fn load_initial(&mut self, camera_pos: Vec3, world: &mut World) {
-        self.update_camera(camera_pos);
+    /// Synchronously generate a small set of chunks around the camera for fast startup.
+    /// Then kicks off background loading for the rest.
+    pub fn load_initial_sync(
+        &mut self,
+        camera_pos: Vec3,
+        world: &mut World,
+        initial_radius: i32,
+    ) {
+        let generator = TerrainGenerator::new(self.seed);
+        let camera_chunk = camera_chunk_coord(camera_pos);
+        let initial_desired = desired_chunks(camera_chunk, initial_radius);
 
-        let quiet_timeout = Duration::from_millis(100);
-        let mut last_recv = std::time::Instant::now();
+        info!(
+            camera_chunk = ?camera_chunk,
+            initial_radius,
+            count = initial_desired.len(),
+            "loading initial chunks synchronously"
+        );
 
-        loop {
-            match self.result_rx.try_recv() {
-                Ok(result) => {
-                    if let Some(evict_pos) = &result.evict {
-                        self.save_before_evict(world, evict_pos);
-                        world.remove(evict_pos);
-                    }
-                    world.insert(result.pos, result.chunk);
-                    last_recv = std::time::Instant::now();
-                }
-                Err(_) => {
-                    if last_recv.elapsed() >= quiet_timeout {
-                        return;
-                    }
-                    std::thread::sleep(Duration::from_millis(1));
-                }
-            }
+        let mut loaded = HashSet::with_capacity(initial_desired.len());
+        for pos in &initial_desired {
+            let chunk = load_or_generate_chunk(&self.storage_dir, *pos, &generator);
+            world.insert(*pos, chunk);
+            loaded.insert(*pos);
         }
+
+        info!(loaded = loaded.len(), "initial sync load complete, notifying background task");
+        let _ = self.cmd_tx.send(ChunkCommand::InitialLoaded(loaded));
+        self.update_camera(camera_pos);
     }
 }
 
 impl Drop for ChunkManager {
     fn drop(&mut self) {
+        info!("chunk manager dropping, sending shutdown");
         let _ = self.cmd_tx.send(ChunkCommand::Shutdown);
     }
 }
@@ -431,50 +476,45 @@ mod tests {
     }
 
     #[test]
-    fn load_initial_fills_all_desired() {
-        let mut cm = ChunkManager::new(2, 125, 5.0, PathBuf::from("/nonexistent"), 12345);
+    fn load_initial_sync_fills_radius() {
+        let mut cm = ChunkManager::new(2, 125, PathBuf::from("/nonexistent"), 12345);
         let mut world = World::new();
-        cm.load_initial(Vec3::new(8.0, 8.0, 8.0), &mut world);
+        cm.load_initial_sync(Vec3::new(8.0, 8.0, 8.0), &mut world, 2);
         assert_eq!(world.chunk_count(), 125);
     }
 
     #[test]
-    fn load_initial_respects_max_loaded() {
-        let mut cm = ChunkManager::new(2, 50, 5.0, PathBuf::from("/nonexistent"), 12345);
+    fn load_initial_sync_small_radius() {
+        let mut cm = ChunkManager::new(4, 1000, PathBuf::from("/nonexistent"), 12345);
         let mut world = World::new();
-        let cam = Vec3::new(8.0, 8.0, 8.0);
-        cm.load_initial(cam, &mut world);
-        assert_eq!(world.chunk_count(), 50);
-        let camera_chunk = camera_chunk_coord(cam);
-        let desired = desired_chunks(camera_chunk, 2);
-        for (&pos, _) in world.iter() {
-            assert!(desired.contains(&pos));
-        }
+        cm.load_initial_sync(Vec3::new(8.0, 8.0, 8.0), &mut world, 1);
+        // Only loads radius 1 = 27 chunks synchronously
+        assert_eq!(world.chunk_count(), 27);
     }
 
     #[test]
     fn drain_results_applies_chunks() {
-        let mut cm = ChunkManager::new(1, 27, 1000.0, PathBuf::from("/nonexistent"), 12345);
+        let mut cm = ChunkManager::new(1, 27, PathBuf::from("/nonexistent"), 12345);
         let mut world = World::new();
         cm.update_camera(Vec3::new(8.0, 8.0, 8.0));
         // Give the background task time to generate
-        std::thread::sleep(Duration::from_millis(200));
+        std::thread::sleep(std::time::Duration::from_millis(500));
         cm.drain_results(&mut world);
         assert!(world.chunk_count() > 0);
     }
 
     #[test]
     fn camera_move_swaps_chunks() {
-        let mut cm = ChunkManager::new(1, 27, 5.0, PathBuf::from("/nonexistent"), 12345);
+        let mut cm = ChunkManager::new(1, 27, PathBuf::from("/nonexistent"), 12345);
         let mut world = World::new();
         let cam1 = Vec3::new(8.0, 8.0, 8.0);
-        cm.load_initial(cam1, &mut world);
+        cm.load_initial_sync(cam1, &mut world, 1);
         assert_eq!(world.chunk_count(), 27);
 
         let cam2 = Vec3::new(200.0, 8.0, 8.0);
         cm.update_camera(cam2);
-        // Give background task time to process
-        std::thread::sleep(Duration::from_millis(500));
+        // Give background task time to process (parallel generation is fast)
+        std::thread::sleep(std::time::Duration::from_millis(500));
         cm.drain_results(&mut world);
 
         let new_camera_chunk = camera_chunk_coord(cam2);
