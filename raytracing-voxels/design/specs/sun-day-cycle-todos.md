@@ -1,0 +1,7 @@
+- [x] 1.1 Animate sun_angle over time
+- [x] 1.2 Disable directional light below the horizon
+- [x] 1.3 Pass sun direction to the shader for sky rendering
+- [x] 1.4 Render a visible sun disc in the shader
+- [x] 1.5 Dynamic sky color based on sun position
+- [x] 1.6 Add day_duration_secs to config
+- [x] 1.7 Display time-of-day in HUD

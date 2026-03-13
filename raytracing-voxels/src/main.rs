@@ -21,7 +21,7 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 use glam::{IVec3, Vec2, Vec3};
 use tracing::{error, info, trace};
-use voxel_renderer::GpuInteractionState;
+use voxel_renderer::{GpuInteractionState, GpuLightingUniforms, GpuPointLight};
 
 use camera::Camera;
 use chunk_manager::ChunkManager;
@@ -97,10 +97,16 @@ struct App {
     storage_dir: PathBuf,
     seed: u32,
     last_space_press: Option<Instant>,
+    point_lights: Vec<GpuPointLight>,
+    point_lights_dirty: bool,
+    sun_angle: f32,
+    ambient: f32,
+    sun_intensity: f32,
+    day_duration_secs: f32,
 }
 
 impl App {
-    fn new(storage_dir: PathBuf, seed: u32) -> Self {
+    fn new(storage_dir: PathBuf, seed: u32, config: &Config) -> Self {
         let mut world = World::new();
         let mut chunk_manager = ChunkManager::new(6, 2197, storage_dir.clone(), seed);
 
@@ -160,6 +166,12 @@ impl App {
             storage_dir,
             seed,
             last_space_press: None,
+            point_lights: Vec::new(),
+            point_lights_dirty: false,
+            sun_angle: config.sun_angle,
+            ambient: config.ambient,
+            sun_intensity: config.sun_intensity,
+            day_duration_secs: config.day_duration_secs,
         }
     }
 
@@ -344,6 +356,56 @@ impl ApplicationHandler for App {
                     self.world.set_voxel(place_pos, voxel_id);
                 }
             }
+            WindowEvent::MouseInput {
+                button: MouseButton::Middle,
+                state: ElementState::Pressed,
+                ..
+            } => {
+                if self.cursor_grabbed {
+                    if self.input.down {
+                        // Shift + middle click: remove nearest light
+                        let cam_pos = self.camera.position;
+                        let mut closest_idx = None;
+                        let mut closest_dist = INTERACT_REACH;
+                        for (i, light) in self.point_lights.iter().enumerate() {
+                            let light_pos = Vec3::from(light.position);
+                            let dist = cam_pos.distance(light_pos);
+                            if dist < closest_dist {
+                                closest_dist = dist;
+                                closest_idx = Some(i);
+                            }
+                        }
+                        if let Some(idx) = closest_idx {
+                            self.point_lights.remove(idx);
+                            self.point_lights_dirty = true;
+                        }
+                    } else if let Some(hit) = self.world.raycast(
+                        self.camera.position,
+                        self.camera.forward(),
+                        INTERACT_REACH,
+                    ) {
+                        let hit_world = hit.chunk_pos * 16
+                            + IVec3::new(
+                                hit.local_pos[0] as i32,
+                                hit.local_pos[1] as i32,
+                                hit.local_pos[2] as i32,
+                            );
+                        let place_pos = hit_world + hit.normal;
+                        let pos = Vec3::new(
+                            place_pos.x as f32 + 0.5,
+                            place_pos.y as f32 + 0.5,
+                            place_pos.z as f32 + 0.5,
+                        );
+                        self.point_lights.push(GpuPointLight {
+                            position: pos.to_array(),
+                            radius: 8.0,
+                            color: [1.0, 0.9, 0.7],
+                            _padding: 0.0,
+                        });
+                        self.point_lights_dirty = true;
+                    }
+                }
+            }
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
@@ -508,8 +570,45 @@ impl ApplicationHandler for App {
                     interaction.break_progress = (bs.elapsed / BREAK_TIME).clamp(0.0, 1.0);
                 }
 
+                self.sun_angle += (std::f32::consts::TAU / self.day_duration_secs) * dt;
+                let sun_y = self.sun_angle.sin();
+                let sun_xz = self.sun_angle.cos();
+                let sun_dir = Vec3::new(sun_xz, sun_y, 0.3).normalize();
+                let time_of_day = (self.sun_angle / std::f32::consts::TAU).fract();
+
+                let effective_intensity = if sun_y > 0.0 {
+                    self.sun_intensity
+                } else {
+                    0.0
+                };
+
+                let effective_ambient = if sun_y > 0.1 {
+                    self.ambient
+                } else if sun_y > -0.1 {
+                    let t = (sun_y + 0.1) / 0.2;
+                    self.ambient * (0.3 + 0.7 * t)
+                } else {
+                    self.ambient * 0.3
+                };
+
                 if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
                     renderer.upload_interaction(&interaction);
+
+                    renderer.upload_lighting(&GpuLightingUniforms {
+                        sun_dir: sun_dir.to_array(),
+                        ambient: effective_ambient,
+                        sun_color: [1.0, 1.0, 1.0],
+                        sun_intensity: effective_intensity,
+                        time_of_day,
+                        _pad0: 0.0,
+                        _pad1: 0.0,
+                        _pad2: 0.0,
+                    });
+
+                    if self.point_lights_dirty {
+                        renderer.upload_point_lights(&self.point_lights);
+                        self.point_lights_dirty = false;
+                    }
 
                     if self.world.is_dirty() {
                         let (voxel_data, chunk_infos, bvh_nodes) = self.world.pack_gpu_data();
@@ -592,6 +691,12 @@ impl ApplicationHandler for App {
                                 "Mode: WALK"
                             };
                             font.draw_text(&mut self.draw_list, mode_text, 10.0, y, Rgba::WHITE);
+                            y += line_height;
+
+                            let hour = (time_of_day * 24.0) as u32;
+                            let minute = ((time_of_day * 24.0).fract() * 60.0) as u32;
+                            let time_text = format!("Time: {:02}:{:02}", hour, minute);
+                            font.draw_text(&mut self.draw_list, &time_text, 10.0, y, Rgba::WHITE);
                         }
 
                         if let Some(texture_bg) = &self.font_bind_group {
@@ -844,7 +949,7 @@ fn main() -> Result<()> {
     info!(seed, "world seed resolved");
 
     let event_loop = EventLoop::new().context("failed to create event loop")?;
-    let mut app = App::new(config.chunk_storage_dir, seed);
+    let mut app = App::new(config.chunk_storage_dir.clone(), seed, &config);
 
     info!("entering event loop");
     event_loop.run_app(&mut app).context("event loop error")?;

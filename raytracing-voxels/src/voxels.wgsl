@@ -60,6 +60,28 @@ struct InteractionState {
 
 @group(3) @binding(0) var<uniform> interaction: InteractionState;
 
+struct LightingUniforms {
+    sun_dir: vec3<f32>,
+    ambient: f32,
+    sun_color: vec3<f32>,
+    sun_intensity: f32,
+    time_of_day: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
+};
+
+struct PointLight {
+    position: vec3<f32>,
+    radius: f32,
+    color: vec3<f32>,
+    _padding: f32,
+};
+
+@group(4) @binding(0) var<uniform> lighting: LightingUniforms;
+@group(4) @binding(1) var<storage, read> point_lights: array<PointLight>;
+@group(4) @binding(2) var<uniform> point_light_count: u32;
+
 fn is_wireframe_edge(face_uv: vec2<f32>, thickness: f32) -> bool {
     return face_uv.x < thickness || face_uv.x > (1.0 - thickness)
         || face_uv.y < thickness || face_uv.y > (1.0 - thickness);
@@ -193,6 +215,7 @@ struct MarchResult {
     hit: bool,
     color: vec4<f32>,
     t: f32,
+    normal: vec3<f32>,
 };
 
 fn march_chunk(ro: vec3<f32>, rd: vec3<f32>, chunk_min: vec3<f32>,
@@ -286,14 +309,10 @@ fn march_chunk(ro: vec3<f32>, rd: vec3<f32>, chunk_min: vec3<f32>,
             let tex_color = textureSampleLevel(atlas_tex, atlas_sampler, atlas_uv, 0.0);
 
             if tex_color.a >= 0.5 {
-                let light_dir = normalize(vec3<f32>(1.0, 2.0, 3.0));
-                let diffuse = max(dot(normal, light_dir), 0.0);
-                let ambient = 0.15;
-                let color = tex_color.rgb * (ambient + diffuse * 0.85);
-
                 result.hit = true;
-                result.color = vec4<f32>(color, 1.0);
+                result.color = tex_color;
                 result.t = t_hit;
+                result.normal = normal;
                 return result;
             }
         }
@@ -320,6 +339,128 @@ fn march_chunk(ro: vec3<f32>, rd: vec3<f32>, chunk_min: vec3<f32>,
     return result;
 }
 
+fn march_chunk_occlusion(ro: vec3<f32>, rd: vec3<f32>, chunk_min: vec3<f32>,
+                         data_offset: u32, max_t: f32) -> bool {
+    let chunk_max = chunk_min + vec3<f32>(16.0, 16.0, 16.0);
+
+    let t = ray_box(ro, rd, chunk_min, chunk_max);
+    if t.x > t.y || t.y < 0.0 || t.x > max_t {
+        return false;
+    }
+    let entry_t = max(t.x, 0.0) + 0.001;
+    let entry = ro + rd * entry_t;
+    let local = entry - chunk_min;
+
+    var voxel = vec3<i32>(
+        clamp(i32(floor(local.x)), 0, 15),
+        clamp(i32(floor(local.y)), 0, 15),
+        clamp(i32(floor(local.z)), 0, 15),
+    );
+
+    let step = vec3<i32>(
+        select(-1, 1, rd.x >= 0.0),
+        select(-1, 1, rd.y >= 0.0),
+        select(-1, 1, rd.z >= 0.0),
+    );
+
+    let inv_rd = 1.0 / rd;
+
+    let next_boundary = vec3<f32>(
+        chunk_min.x + f32(select(voxel.x, voxel.x + 1, rd.x >= 0.0)),
+        chunk_min.y + f32(select(voxel.y, voxel.y + 1, rd.y >= 0.0)),
+        chunk_min.z + f32(select(voxel.z, voxel.z + 1, rd.z >= 0.0)),
+    );
+    var t_max_dda = (next_boundary - ro) * inv_rd;
+
+    let t_delta = abs(inv_rd);
+
+    for (var i = 0; i < 128; i = i + 1) {
+        let v = get_voxel(voxel.x, voxel.y, voxel.z, data_offset);
+        if v != 0u {
+            return true;
+        }
+
+        if t_max_dda.x < t_max_dda.y && t_max_dda.x < t_max_dda.z {
+            if t_max_dda.x > max_t { break; }
+            voxel.x = voxel.x + step.x;
+            t_max_dda.x = t_max_dda.x + t_delta.x;
+        } else if t_max_dda.y < t_max_dda.z {
+            if t_max_dda.y > max_t { break; }
+            voxel.y = voxel.y + step.y;
+            t_max_dda.y = t_max_dda.y + t_delta.y;
+        } else {
+            if t_max_dda.z > max_t { break; }
+            voxel.z = voxel.z + step.z;
+            t_max_dda.z = t_max_dda.z + t_delta.z;
+        }
+
+        if voxel.x < 0 || voxel.x >= 16 || voxel.y < 0 || voxel.y >= 16 || voxel.z < 0 || voxel.z >= 16 {
+            break;
+        }
+    }
+
+    return false;
+}
+
+fn is_occluded(origin: vec3<f32>, direction: vec3<f32>, max_dist: f32) -> bool {
+    var stack: array<u32, 32>;
+    var stack_ptr: i32 = 0;
+
+    if bvh_node_count > 0u {
+        stack[0] = 0u;
+        stack_ptr = 1;
+    }
+
+    while stack_ptr > 0 {
+        stack_ptr -= 1;
+        let node_idx = stack[stack_ptr];
+        let node = bvh_nodes[node_idx];
+
+        let t = ray_box(origin, direction, node.aabb_min, node.aabb_max);
+        if t.x > t.y || t.y < 0.0 || t.x > max_dist {
+            continue;
+        }
+
+        let is_leaf = (node.right_or_chunk & 0x80000000u) != 0u;
+        if is_leaf {
+            let chunk_idx = node.right_or_chunk & 0x7FFFFFFFu;
+            if march_chunk_occlusion(origin, direction, chunks[chunk_idx].world_offset,
+                                     chunks[chunk_idx].data_offset, max_dist) {
+                return true;
+            }
+        } else {
+            let left_idx = node_idx + 1u;
+            let right_idx = node.right_or_chunk;
+
+            if stack_ptr < 30 {
+                let t_left = ray_box(origin, direction, bvh_nodes[left_idx].aabb_min, bvh_nodes[left_idx].aabb_max);
+                let t_right = ray_box(origin, direction, bvh_nodes[right_idx].aabb_min, bvh_nodes[right_idx].aabb_max);
+
+                let left_valid = t_left.x <= t_left.y && t_left.y >= 0.0 && t_left.x <= max_dist;
+                let right_valid = t_right.x <= t_right.y && t_right.y >= 0.0 && t_right.x <= max_dist;
+
+                if left_valid {
+                    if right_valid {
+                        if t_left.x < t_right.x {
+                            stack[stack_ptr] = right_idx; stack_ptr += 1;
+                            stack[stack_ptr] = left_idx; stack_ptr += 1;
+                        } else {
+                            stack[stack_ptr] = left_idx; stack_ptr += 1;
+                            stack[stack_ptr] = right_idx; stack_ptr += 1;
+                        }
+                    } else {
+                        stack[stack_ptr] = left_idx; stack_ptr += 1;
+                    }
+                } else if right_valid {
+                    stack[stack_ptr] = right_idx; stack_ptr += 1;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let half_h = tan(camera.fov * 0.5);
@@ -337,6 +478,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var stack_ptr: i32 = 0;
     var closest_t: f32 = 1e30;
     var result_color: vec4<f32>;
+    var result_normal: vec3<f32> = vec3<f32>(0.0);
     var hit_anything: bool = false;
 
     if bvh_node_count > 0u {
@@ -362,6 +504,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             if mr.hit {
                 closest_t = mr.t;
                 result_color = mr.color;
+                result_normal = mr.normal;
                 hit_anything = true;
             }
         } else {
@@ -395,11 +538,72 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var final_color: vec4<f32>;
     if hit_anything {
-        final_color = result_color;
+        let hit_pos = ro + rd * closest_t;
+        let shadow_origin = hit_pos + result_normal * 0.01;
+
+        var total_light = vec3<f32>(lighting.ambient);
+
+        let sun_diffuse = max(dot(result_normal, lighting.sun_dir), 0.0);
+        if sun_diffuse > 0.0 {
+            let in_shadow = is_occluded(shadow_origin, lighting.sun_dir, 128.0);
+            if !in_shadow {
+                total_light += lighting.sun_color * lighting.sun_intensity * sun_diffuse;
+            }
+        }
+
+        let pc = point_light_count;
+        for (var i = 0u; i < pc; i += 1u) {
+            let light = point_lights[i];
+            let to_light = light.position - hit_pos;
+            let dist = length(to_light);
+            if dist > light.radius { continue; }
+            let dir = to_light / dist;
+            let ndotl = max(dot(result_normal, dir), 0.0);
+            if ndotl <= 0.0 { continue; }
+            let attenuation = max(1.0 - (dist * dist) / (light.radius * light.radius), 0.0);
+            total_light += light.color * ndotl * attenuation;
+        }
+
+        final_color = vec4<f32>(result_color.rgb * total_light, 1.0);
     } else {
+        let sun_elev = lighting.sun_dir.y;
         let sky_t = rd.y * 0.5 + 0.5;
-        let sky = mix(vec3<f32>(0.8, 0.85, 0.9), vec3<f32>(0.3, 0.5, 0.8), sky_t);
-        final_color = vec4<f32>(sky, 1.0);
+
+        let day_top = vec3<f32>(0.3, 0.5, 0.8);
+        let day_bottom = vec3<f32>(0.8, 0.85, 0.9);
+        let sunset_top = vec3<f32>(0.2, 0.15, 0.4);
+        let sunset_bottom = vec3<f32>(0.9, 0.4, 0.2);
+        let night_top = vec3<f32>(0.02, 0.02, 0.06);
+        let night_bottom = vec3<f32>(0.05, 0.05, 0.1);
+
+        var sky: vec3<f32>;
+        if sun_elev > 0.2 {
+            sky = mix(day_bottom, day_top, sky_t);
+        } else if sun_elev > -0.1 {
+            let blend = smoothstep(-0.1, 0.2, sun_elev);
+            let top = mix(sunset_top, day_top, blend);
+            let bottom = mix(sunset_bottom, day_bottom, blend);
+            sky = mix(bottom, top, sky_t);
+        } else {
+            let blend = smoothstep(-0.3, -0.1, sun_elev);
+            let top = mix(night_top, sunset_top, blend);
+            let bottom = mix(night_bottom, sunset_bottom, blend);
+            sky = mix(bottom, top, sky_t);
+        }
+
+        let sun_dot = dot(rd, lighting.sun_dir);
+        let sun_angular_size = 0.995;
+        if sun_dot > sun_angular_size && rd.y > 0.0 {
+            let sun_edge = smoothstep(sun_angular_size, sun_angular_size + 0.003, sun_dot);
+            let sun_glow = vec3<f32>(1.0, 0.95, 0.8) * sun_edge * 2.0;
+            final_color = vec4<f32>(min(sun_glow, vec3<f32>(1.0)), 1.0);
+        } else if sun_dot > 0.98 && rd.y > 0.0 {
+            let glow_strength = smoothstep(0.98, sun_angular_size, sun_dot);
+            let glow = vec3<f32>(1.0, 0.9, 0.7) * glow_strength * 0.3;
+            final_color = vec4<f32>(sky + glow, 1.0);
+        } else {
+            final_color = vec4<f32>(sky, 1.0);
+        }
     }
 
     // Break progress overlay on the voxel being broken (ray-box intersection approach)

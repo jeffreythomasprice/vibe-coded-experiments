@@ -21,6 +21,28 @@ pub struct GpuInteractionState {
     pub break_progress: f32,
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, Pod, Zeroable)]
+pub struct GpuLightingUniforms {
+    pub sun_dir: [f32; 3],
+    pub ambient: f32,
+    pub sun_color: [f32; 3],
+    pub sun_intensity: f32,
+    pub time_of_day: f32,
+    pub _pad0: f32,
+    pub _pad1: f32,
+    pub _pad2: f32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Pod, Zeroable)]
+pub struct GpuPointLight {
+    pub position: [f32; 3],
+    pub radius: f32,
+    pub color: [f32; 3],
+    pub _padding: f32,
+}
+
 pub struct Renderer {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -42,6 +64,11 @@ pub struct Renderer {
     voxel_atlas_bytes: u64,
     interaction_buffer: wgpu::Buffer,
     interaction_bind_group: wgpu::BindGroup,
+    lighting_buffer: wgpu::Buffer,
+    point_light_buffer: wgpu::Buffer,
+    point_light_count_buffer: wgpu::Buffer,
+    lighting_bind_group: wgpu::BindGroup,
+    lighting_bgl: wgpu::BindGroupLayout,
 }
 
 pub struct GpuMemoryStats {
@@ -77,7 +104,13 @@ impl Renderer {
         );
 
         let (device, queue) = pollster::block_on(adapter.request_device(
-            &wgpu::DeviceDescriptor::default(),
+            &wgpu::DeviceDescriptor {
+                required_limits: wgpu::Limits {
+                    max_bind_groups: 5,
+                    ..wgpu::Limits::default()
+                },
+                ..Default::default()
+            },
         ))
         .context("failed to create device")?;
 
@@ -309,9 +342,85 @@ impl Renderer {
             }],
         });
 
+        let lighting_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("lighting_buffer"),
+            size: std::mem::size_of::<GpuLightingUniforms>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let point_light_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("point_light_buffer"),
+            size: (64 * std::mem::size_of::<GpuPointLight>() as u64).max(32),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let point_light_count_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("point_light_count_buffer"),
+            size: 16,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let lighting_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("lighting_bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
+        let lighting_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("lighting_bg"),
+            layout: &lighting_bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: lighting_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: point_light_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: point_light_count_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("pipeline_layout"),
-            bind_group_layouts: &[&bind_group_layout, &chunk_bgl, &atlas_bgl, &interaction_bgl],
+            bind_group_layouts: &[&bind_group_layout, &chunk_bgl, &atlas_bgl, &interaction_bgl, &lighting_bgl],
             immediate_size: 0,
         });
 
@@ -373,6 +482,11 @@ impl Renderer {
             voxel_atlas_bytes: 0,
             interaction_buffer,
             interaction_bind_group,
+            lighting_buffer,
+            point_light_buffer,
+            point_light_count_buffer,
+            lighting_bind_group,
+            lighting_bgl,
         })
     }
 
@@ -597,7 +711,56 @@ impl Renderer {
             pass.set_bind_group(2, atlas_bg, &[]);
         }
         pass.set_bind_group(3, &self.interaction_bind_group, &[]);
+        pass.set_bind_group(4, &self.lighting_bind_group, &[]);
         pass.draw(0..3, 0..1);
+    }
+
+    pub fn upload_lighting(&self, uniforms: &GpuLightingUniforms) {
+        self.queue
+            .write_buffer(&self.lighting_buffer, 0, bytemuck::bytes_of(uniforms));
+    }
+
+    pub fn upload_point_lights(&mut self, lights: &[GpuPointLight]) {
+        let count = lights.len() as u32;
+        let count_padded: [u32; 4] = [count, 0, 0, 0];
+        self.queue.write_buffer(
+            &self.point_light_count_buffer,
+            0,
+            bytemuck::cast_slice(&count_padded),
+        );
+
+        if !lights.is_empty() {
+            let needed = std::mem::size_of_val(lights) as u64;
+            if self.point_light_buffer.size() < needed {
+                self.point_light_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("point_light_buffer"),
+                    size: needed,
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                self.lighting_bind_group =
+                    self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("lighting_bg"),
+                        layout: &self.lighting_bgl,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: self.lighting_buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: self.point_light_buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: self.point_light_count_buffer.as_entire_binding(),
+                            },
+                        ],
+                    });
+            }
+            self.queue
+                .write_buffer(&self.point_light_buffer, 0, bytemuck::cast_slice(lights));
+        }
     }
 
     pub fn upload_interaction(&self, state: &GpuInteractionState) {

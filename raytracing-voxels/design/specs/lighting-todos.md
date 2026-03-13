@@ -1,0 +1,8 @@
+- [x] 1.1 Refactor MarchResult to carry normal and unlit color
+- [x] 1.2 Create lighting GPU structs and bind group (Rust side)
+- [x] 1.3 Add lighting uniform declarations in shader and read from uniforms
+- [x] 1.4 Implement shadow ray occlusion test
+- [x] 1.5 Wire up sun shadow rays
+- [x] 1.6 Add point light loop in shader
+- [x] 1.7 Add point light placement and removal input handling
+- [x] 1.8 Add lighting configuration

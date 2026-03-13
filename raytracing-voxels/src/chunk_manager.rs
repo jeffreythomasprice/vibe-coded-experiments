@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tracing::{debug, info, trace, warn};
 
-use crate::chunk::{chunk_file_path, Chunk};
+use crate::chunk::{Chunk, chunk_file_path};
 use crate::terrain::TerrainGenerator;
 use crate::world::World;
 
@@ -167,7 +167,10 @@ async fn chunk_loader_task(
                     camera_pos = pos;
                 }
                 Some(ChunkCommand::InitialLoaded(positions)) => {
-                    debug!(count = positions.len(), "received InitialLoaded command (while idle)");
+                    debug!(
+                        count = positions.len(),
+                        "received InitialLoaded command (while idle)"
+                    );
                     loaded_positions.extend(positions);
                 }
                 Some(ChunkCommand::Shutdown) | None => {
@@ -178,7 +181,10 @@ async fn chunk_loader_task(
             continue;
         }
 
-        debug!(batch_size = batch.len(), "dispatching chunk generation batch");
+        debug!(
+            batch_size = batch.len(),
+            "dispatching chunk generation batch"
+        );
         let mut join_set = JoinSet::new();
         for (pos, evict) in batch {
             let gen_clone = generator.clone();
@@ -217,21 +223,15 @@ pub struct ChunkManager {
 }
 
 impl ChunkManager {
-    pub fn new(
-        load_radius: i32,
-        max_loaded: usize,
-        storage_dir: PathBuf,
-        seed: u32,
-    ) -> Self {
+    pub fn new(load_radius: i32, max_loaded: usize, storage_dir: PathBuf, seed: u32) -> Self {
         info!(load_radius, max_loaded, seed, storage = %storage_dir.display(), "creating chunk manager");
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
         let (result_tx, result_rx) = mpsc::unbounded_channel();
 
         let task_storage_dir = storage_dir.clone();
         let worker = std::thread::spawn(move || {
-            // TODO: restore to worker_threads(4) after diagnosing segfault
             let rt = tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(1)
+                .worker_threads(4)
                 .enable_time()
                 .build()
                 .expect("failed to create tokio runtime");
@@ -327,12 +327,7 @@ impl ChunkManager {
 
     /// Synchronously generate a small set of chunks around the camera for fast startup.
     /// Then kicks off background loading for the rest.
-    pub fn load_initial_sync(
-        &mut self,
-        camera_pos: Vec3,
-        world: &mut World,
-        initial_radius: i32,
-    ) {
+    pub fn load_initial_sync(&mut self, camera_pos: Vec3, world: &mut World, initial_radius: i32) {
         let generator = TerrainGenerator::new(self.seed);
         let camera_chunk = camera_chunk_coord(camera_pos);
         let initial_desired = desired_chunks(camera_chunk, initial_radius);
@@ -351,7 +346,10 @@ impl ChunkManager {
             loaded.insert(*pos);
         }
 
-        info!(loaded = loaded.len(), "initial sync load complete, notifying background task");
+        info!(
+            loaded = loaded.len(),
+            "initial sync load complete, notifying background task"
+        );
         let _ = self.cmd_tx.send(ChunkCommand::InitialLoaded(loaded));
         self.update_camera(camera_pos);
     }
@@ -391,10 +389,7 @@ mod tests {
 
     #[test]
     fn chebyshev_distance_nonzero() {
-        assert_eq!(
-            chebyshev_distance(IVec3::ZERO, IVec3::new(3, 1, 2)),
-            3
-        );
+        assert_eq!(chebyshev_distance(IVec3::ZERO, IVec3::new(3, 1, 2)), 3);
     }
 
     #[test]
@@ -535,6 +530,9 @@ mod tests {
             .flat_map(|x| (0..16).map(move |z| (x, z)))
             .filter(|&(x, z)| chunk.get(x, 0, z) != 0)
             .count();
-        assert!(bottom_solid > 30, "bottom layer should have substantial solid terrain, got {bottom_solid}/256");
+        assert!(
+            bottom_solid > 30,
+            "bottom layer should have substantial solid terrain, got {bottom_solid}/256"
+        );
     }
 }
