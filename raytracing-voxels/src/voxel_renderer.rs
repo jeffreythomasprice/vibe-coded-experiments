@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 
+use crate::bvh::GpuBvhNode;
 use crate::camera::CameraUniforms;
 use crate::overlay::Texture;
 use crate::overlay_renderer::OverlayRenderer;
@@ -19,6 +20,8 @@ pub struct Renderer {
     voxel_mega_buffer: wgpu::Buffer,
     chunk_info_buffer: wgpu::Buffer,
     chunk_count_buffer: wgpu::Buffer,
+    bvh_node_buffer: wgpu::Buffer,
+    bvh_count_buffer: wgpu::Buffer,
     chunk_bind_group: wgpu::BindGroup,
     chunk_bgl: wgpu::BindGroupLayout,
     overlay_renderer: OverlayRenderer,
@@ -31,6 +34,8 @@ pub struct GpuMemoryStats {
     pub voxel_buffer_bytes: u64,
     pub chunk_info_bytes: u64,
     pub chunk_count_bytes: u64,
+    pub bvh_node_bytes: u64,
+    pub bvh_count_bytes: u64,
     pub voxel_atlas_bytes: u64,
 }
 
@@ -116,6 +121,20 @@ impl Renderer {
             mapped_at_creation: false,
         });
 
+        let bvh_node_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("bvh_node_buffer"),
+            size: 32, // minimum size: one GpuBvhNode (32 bytes)
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let bvh_count_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("bvh_count_buffer"),
+            size: 16, // u32 padded to 16 bytes for uniform alignment
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         let chunk_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("chunk_bgl"),
             entries: &[
@@ -149,6 +168,26 @@ impl Renderer {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         });
 
@@ -167,6 +206,14 @@ impl Renderer {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: chunk_count_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: bvh_node_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: bvh_count_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -257,6 +304,8 @@ impl Renderer {
             voxel_mega_buffer,
             chunk_info_buffer,
             chunk_count_buffer,
+            bvh_node_buffer,
+            bvh_count_buffer,
             chunk_bind_group,
             chunk_bgl,
             overlay_renderer,
@@ -276,7 +325,7 @@ impl Renderer {
         self.overlay_renderer.resize(&self.queue, width, height);
     }
 
-    pub fn upload_world(&mut self, voxel_data: &[u8], chunk_infos: &[GpuChunkInfo], chunk_count: u32) {
+    pub fn upload_world(&mut self, voxel_data: &[u8], chunk_infos: &[GpuChunkInfo], chunk_count: u32, bvh_nodes: &[GpuBvhNode]) {
         let voxel_size = (voxel_data.len() as u64).max(4);
         if self.voxel_mega_buffer.size() < voxel_size {
             self.voxel_mega_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -292,6 +341,16 @@ impl Renderer {
             self.chunk_info_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("chunk_info_buffer"),
                 size: info_size,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+        }
+
+        let bvh_size = (std::mem::size_of_val(bvh_nodes) as u64).max(32);
+        if self.bvh_node_buffer.size() < bvh_size {
+            self.bvh_node_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("bvh_node_buffer"),
+                size: bvh_size,
                 usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
@@ -313,6 +372,14 @@ impl Renderer {
                     binding: 2,
                     resource: self.chunk_count_buffer.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: self.bvh_node_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: self.bvh_count_buffer.as_entire_binding(),
+                },
             ],
         });
 
@@ -320,6 +387,12 @@ impl Renderer {
         self.queue.write_buffer(&self.chunk_info_buffer, 0, bytemuck::cast_slice(chunk_infos));
         let count_padded: [u32; 4] = [chunk_count, 0, 0, 0];
         self.queue.write_buffer(&self.chunk_count_buffer, 0, bytemuck::cast_slice(&count_padded));
+
+        if !bvh_nodes.is_empty() {
+            self.queue.write_buffer(&self.bvh_node_buffer, 0, bytemuck::cast_slice(bvh_nodes));
+        }
+        let bvh_count_padded: [u32; 4] = [bvh_nodes.len() as u32, 0, 0, 0];
+        self.queue.write_buffer(&self.bvh_count_buffer, 0, bytemuck::cast_slice(&bvh_count_padded));
     }
 
     pub fn upload_voxel_atlas(&mut self, atlas_texture: &Texture, uv_map: &[[f32; 4]; 256]) {
@@ -491,6 +564,8 @@ impl Renderer {
             voxel_buffer_bytes: self.voxel_mega_buffer.size(),
             chunk_info_bytes: self.chunk_info_buffer.size(),
             chunk_count_bytes: self.chunk_count_buffer.size(),
+            bvh_node_bytes: self.bvh_node_buffer.size(),
+            bvh_count_bytes: self.bvh_count_buffer.size(),
             voxel_atlas_bytes: self.voxel_atlas_bytes,
         }
     }

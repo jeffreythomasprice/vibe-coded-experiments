@@ -259,14 +259,14 @@ impl ChunkManager {
     }
 
     fn save_before_evict(&self, world: &mut World, evict_pos: &IVec3) {
-        if world.is_chunk_modified(evict_pos) {
-            if let Some(chunk) = world.get(evict_pos) {
-                let path = chunk_file_path(&self.storage_dir, *evict_pos);
-                if let Err(e) = chunk.save_to_file(&path) {
-                    log::warn!("failed to save chunk {:?} on eviction: {e:#}", evict_pos);
-                } else {
-                    world.mark_chunk_saved(evict_pos);
-                }
+        if world.is_chunk_modified(evict_pos)
+            && let Some(chunk) = world.get(evict_pos)
+        {
+            let path = chunk_file_path(&self.storage_dir, *evict_pos);
+            if let Err(e) = chunk.save_to_file(&path) {
+                log::warn!("failed to save chunk {:?} on eviction: {e:#}", evict_pos);
+            } else {
+                world.mark_chunk_saved(evict_pos);
             }
         }
     }

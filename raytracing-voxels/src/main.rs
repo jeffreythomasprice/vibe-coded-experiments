@@ -1,3 +1,4 @@
+mod bvh;
 mod camera;
 mod chunk;
 mod chunk_manager;
@@ -151,8 +152,8 @@ impl App {
                 .context("failed to create window")?,
         );
         let mut renderer = Renderer::new(window.clone())?;
-        let (voxel_data, chunk_infos) = self.world.pack_gpu_data();
-        renderer.upload_world(&voxel_data, &chunk_infos, chunk_infos.len() as u32);
+        let (voxel_data, chunk_infos, bvh_nodes) = self.world.pack_gpu_data();
+        renderer.upload_world(&voxel_data, &chunk_infos, chunk_infos.len() as u32, &bvh_nodes);
         self.world.clear_dirty();
 
         let atlas = voxel_textures::build_voxel_atlas(42)?;
@@ -343,8 +344,8 @@ impl ApplicationHandler for App {
 
                 if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
                     if self.world.is_dirty() {
-                        let (voxel_data, chunk_infos) = self.world.pack_gpu_data();
-                        renderer.upload_world(&voxel_data, &chunk_infos, chunk_infos.len() as u32);
+                        let (voxel_data, chunk_infos, bvh_nodes) = self.world.pack_gpu_data();
+                        renderer.upload_world(&voxel_data, &chunk_infos, chunk_infos.len() as u32, &bvh_nodes);
                         self.world.clear_dirty();
                     }
 
@@ -395,7 +396,9 @@ impl ApplicationHandler for App {
                             let gpu_stats = renderer.gpu_memory_stats();
                             let gpu_chunk_total = gpu_stats.voxel_buffer_bytes
                                 + gpu_stats.chunk_info_bytes
-                                + gpu_stats.chunk_count_bytes;
+                                + gpu_stats.chunk_count_bytes
+                                + gpu_stats.bvh_node_bytes
+                                + gpu_stats.bvh_count_bytes;
 
                             let font_atlas_bytes = self.font.as_ref().map_or(0u64, |f| {
                                 let tex = f.atlas().texture();

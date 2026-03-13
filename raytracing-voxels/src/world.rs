@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use bytemuck::{Pod, Zeroable};
 use glam::{IVec3, Vec3};
 
+use crate::bvh::{self, GpuBvhNode};
 use crate::chunk::Chunk;
 
 const CHUNK_SIZE: i32 = 16;
@@ -235,7 +236,7 @@ impl World {
         }
     }
 
-    pub fn pack_gpu_data(&self) -> (Vec<u8>, Vec<GpuChunkInfo>) {
+    pub fn pack_gpu_data(&self) -> (Vec<u8>, Vec<GpuChunkInfo>, Vec<GpuBvhNode>) {
         let mut keys: Vec<IVec3> = self.chunks.keys().copied().collect();
         keys.sort_by_key(|a| a.to_array());
 
@@ -252,7 +253,9 @@ impl World {
             });
         }
 
-        (voxel_data, chunk_infos)
+        let bvh_nodes = bvh::build_bvh(&chunk_infos);
+
+        (voxel_data, chunk_infos, bvh_nodes)
     }
 }
 
@@ -296,9 +299,10 @@ mod tests {
     fn pack_single_chunk() {
         let mut world = World::new();
         world.insert(IVec3::ZERO, test_chunk());
-        let (voxel_data, infos) = world.pack_gpu_data();
+        let (voxel_data, infos, bvh_nodes) = world.pack_gpu_data();
         assert_eq!(voxel_data.len(), 4096);
         assert_eq!(infos.len(), 1);
+        assert_eq!(bvh_nodes.len(), 1);
         assert_eq!(infos[0].data_offset, 0);
         assert_eq!(infos[0].world_offset, Vec3::ZERO);
     }
@@ -308,9 +312,10 @@ mod tests {
         let mut world = World::new();
         world.insert(IVec3::ZERO, test_chunk());
         world.insert(IVec3::X, test_chunk());
-        let (voxel_data, infos) = world.pack_gpu_data();
+        let (voxel_data, infos, bvh_nodes) = world.pack_gpu_data();
         assert_eq!(voxel_data.len(), 8192);
         assert_eq!(infos.len(), 2);
+        assert_eq!(bvh_nodes.len(), 3);
         assert_eq!(infos[1].data_offset, 1024);
         assert_eq!(infos[1].world_offset, Vec3::new(16.0, 0.0, 0.0));
     }

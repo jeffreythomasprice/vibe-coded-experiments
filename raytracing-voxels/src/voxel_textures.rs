@@ -287,7 +287,7 @@ struct DirtParams {
 
 impl Default for DirtParams {
     fn default() -> Self {
-        let mc_palette = vec![
+        let mc_palette = [
             Rgba::rgb(80, 60, 35),
             Rgba::rgb(100, 75, 45),
             Rgba::rgb(120, 90, 55),

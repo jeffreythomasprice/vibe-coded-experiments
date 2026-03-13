@@ -1,0 +1,7 @@
+- [x] 1.1 Create `GpuBvhNode` struct and BVH construction module
+- [x] 1.2 Integrate BVH construction into `World::pack_gpu_data`
+- [x] 1.3 Add BVH GPU buffers and bind group entries to the renderer
+- [x] 1.4 Update call sites in `main.rs`
+- [x] 1.5 Extract DDA march into a WGSL helper function
+- [x] 1.6 Replace linear chunk scan with BVH traversal in the shader
+- [x] 1.7 Clean up and verify
