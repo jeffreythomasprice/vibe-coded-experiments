@@ -1,0 +1,7 @@
+- [x] 1. Extend voxel type constants and key mapping
+- [x] 2. Update placement logic for remove-only mode
+- [x] 3. Draw the tile picker background and border
+- [x] 4. Draw tile texture previews in the picker
+- [x] 5. Draw highlight around the selected tile
+- [x] 6. Draw key labels below each tile
+- [x] 7. Remove old bottom-left voxel HUD elements

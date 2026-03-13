@@ -30,8 +30,24 @@ use texture_atlas_font::TextureAtlasFont;
 use voxel_renderer::Renderer;
 use world::World;
 
-const VOXEL_TYPE_NAMES: &[&str] = &["", "stone", "dirt", "grass", "brick"];
-const VOXEL_KEY_TO_ID: [u8; 5] = [0, 3, 2, 1, 4];
+const VOXEL_TYPE_NAMES: &[&str] = &["", "stone", "dirt", "grass", "brick", "wood", "leaves"];
+const VOXEL_KEY_TO_ID: [u8; 7] = [0, 3, 2, 1, 4, 5, 6];
+const TILE_PICKER_TILE_IDS: [u8; 6] = [
+    VOXEL_KEY_TO_ID[1], // key 1: grass
+    VOXEL_KEY_TO_ID[2], // key 2: dirt
+    VOXEL_KEY_TO_ID[3], // key 3: stone
+    VOXEL_KEY_TO_ID[4], // key 4: brick
+    VOXEL_KEY_TO_ID[5], // key 5: wood
+    VOXEL_KEY_TO_ID[6], // key 6: leaves
+];
+
+const TILE_PICKER_TILE_SIZE: f32 = 48.0;
+const TILE_PICKER_SPACING: f32 = 8.0;
+const TILE_PICKER_PADDING: f32 = 12.0;
+const TILE_PICKER_BORDER: f32 = 3.0;
+const TILE_PICKER_BG_COLOR: Rgba = Rgba::new(30, 30, 30, 200);
+const TILE_PICKER_BORDER_COLOR: Rgba = Rgba::new(80, 80, 80, 220);
+const TILE_PICKER_HIGHLIGHT_COLOR: Rgba = Rgba::new(255, 255, 100, 180);
 
 const MINECRAFT_FONT: &[u8] = include_bytes!("../resources/Minecraft.otf");
 use winit::application::ApplicationHandler;
@@ -61,9 +77,11 @@ struct App {
     frame_count: u32,
     fps_accum: f32,
     fps_display: f32,
-    active_voxel_type: u8,
+    active_voxel_type: Option<u8>,
     crosshair_bind_group: Option<wgpu::BindGroup>,
     voxel_atlas_overlay_bind_group: Option<wgpu::BindGroup>,
+    solid_bind_group: Option<wgpu::BindGroup>,
+    picker_draw_list: DrawList,
     voxel_uv_map: [[f32; 4]; 256],
     last_save: Instant,
     storage_dir: PathBuf,
@@ -115,9 +133,11 @@ impl App {
             frame_count: 0,
             fps_accum: 0.0,
             fps_display: 0.0,
-            active_voxel_type: VOXEL_KEY_TO_ID[1], // default: grass
+            active_voxel_type: Some(VOXEL_KEY_TO_ID[1]), // default: grass
             crosshair_bind_group: None,
             voxel_atlas_overlay_bind_group: None,
+            solid_bind_group: None,
+            picker_draw_list: DrawList::new(),
             voxel_uv_map: [[0.0; 4]; 256],
             last_save: Instant::now(),
             storage_dir,
@@ -186,6 +206,14 @@ impl App {
         ));
         self.font = Some(font);
 
+        let mut solid_tex = Texture::new(1, 1);
+        solid_tex.set_pixel(0, 0, Rgba::WHITE);
+        self.solid_bind_group = Some(renderer.overlay().create_texture(
+            renderer.device(),
+            renderer.queue(),
+            &solid_tex,
+        ));
+
         self.window = Some(window);
         self.renderer = Some(renderer);
         self.last_frame = Instant::now();
@@ -237,9 +265,10 @@ impl ApplicationHandler for App {
                 ..
             } => {
                 if self.cursor_grabbed {
-                    if let Some(hit) =
-                        self.world
-                            .raycast(self.camera.position, self.camera.forward(), 50.0)
+                    if let Some(voxel_id) = self.active_voxel_type
+                        && let Some(hit) =
+                            self.world
+                                .raycast(self.camera.position, self.camera.forward(), 50.0)
                     {
                         let hit_world = hit.chunk_pos * 16
                             + IVec3::new(
@@ -248,7 +277,7 @@ impl ApplicationHandler for App {
                                 hit.local_pos[2] as i32,
                             );
                         let place_pos = hit_world + hit.normal;
-                        self.world.set_voxel(place_pos, self.active_voxel_type);
+                        self.world.set_voxel(place_pos, voxel_id);
                     }
                 } else {
                     self.grab_cursor();
@@ -285,6 +314,11 @@ impl ApplicationHandler for App {
                 if self.cursor_grabbed {
                     self.release_cursor();
                 } else {
+                    let cam_path = camera::camera_file_path(&self.storage_dir);
+                    if let Err(e) = self.camera.save_to_file(&cam_path) {
+                        log::error!("failed to save camera: {e:#}");
+                    }
+                    self.chunk_manager.save_all_modified(&mut self.world);
                     event_loop.exit();
                 }
             }
@@ -306,10 +340,13 @@ impl ApplicationHandler for App {
                     KeyCode::Space => self.input.up = pressed,
                     KeyCode::ShiftLeft => self.input.down = pressed,
                     KeyCode::F1 if pressed => self.player.toggle_fly_mode(),
-                    KeyCode::Digit1 if pressed => self.active_voxel_type = VOXEL_KEY_TO_ID[1],
-                    KeyCode::Digit2 if pressed => self.active_voxel_type = VOXEL_KEY_TO_ID[2],
-                    KeyCode::Digit3 if pressed => self.active_voxel_type = VOXEL_KEY_TO_ID[3],
-                    KeyCode::Digit4 if pressed => self.active_voxel_type = VOXEL_KEY_TO_ID[4],
+                    KeyCode::Digit0 if pressed => self.active_voxel_type = None,
+                    KeyCode::Digit1 if pressed => self.active_voxel_type = Some(VOXEL_KEY_TO_ID[1]),
+                    KeyCode::Digit2 if pressed => self.active_voxel_type = Some(VOXEL_KEY_TO_ID[2]),
+                    KeyCode::Digit3 if pressed => self.active_voxel_type = Some(VOXEL_KEY_TO_ID[3]),
+                    KeyCode::Digit4 if pressed => self.active_voxel_type = Some(VOXEL_KEY_TO_ID[4]),
+                    KeyCode::Digit5 if pressed => self.active_voxel_type = Some(VOXEL_KEY_TO_ID[5]),
+                    KeyCode::Digit6 if pressed => self.active_voxel_type = Some(VOXEL_KEY_TO_ID[6]),
                     _ => {}
                 }
             }
@@ -443,16 +480,6 @@ impl ApplicationHandler for App {
                             );
                             y += line_height;
 
-                            // Active voxel HUD
-                            let voxel_name = VOXEL_TYPE_NAMES[self.active_voxel_type as usize];
-                            font.draw_text(
-                                &mut self.draw_list,
-                                &format!("Active: {}", voxel_name),
-                                10.0,
-                                screen_height - line_height - 50.0,
-                                Rgba::WHITE,
-                            );
-
                             let mode_text = if self.player.fly_mode {
                                 "Mode: FLY"
                             } else {
@@ -462,10 +489,9 @@ impl ApplicationHandler for App {
                                 &mut self.draw_list,
                                 mode_text,
                                 10.0,
-                                screen_height - 2.0 * line_height - 50.0,
+                                y,
                                 Rgba::WHITE,
                             );
-                            let _ = y;
                         }
 
                         if let Some(texture_bg) = &self.font_bind_group {
@@ -497,20 +523,83 @@ impl ApplicationHandler for App {
                             );
                         }
 
-                        // Voxel preview HUD
-                        self.hud_draw_list.clear();
-                        let uv = self.voxel_uv_map[self.active_voxel_type as usize];
-                        if uv[2] > uv[0] {
-                            let preview_size = 48.0;
-                            self.hud_draw_list.rect(
-                                10.0,
-                                screen_height - preview_size - 10.0,
-                                preview_size,
-                                preview_size,
-                                Vec2::new(uv[0], uv[1]),
-                                Vec2::new(uv[2], uv[3]),
-                                Rgba::WHITE,
+                        // Tile picker
+                        let num_tiles = TILE_PICKER_TILE_IDS.len() as f32;
+                        let picker_inner_w = num_tiles * TILE_PICKER_TILE_SIZE
+                            + (num_tiles - 1.0) * TILE_PICKER_SPACING
+                            + 2.0 * TILE_PICKER_PADDING;
+                        let label_extra = 20.0;
+                        let picker_inner_h =
+                            TILE_PICKER_TILE_SIZE + 2.0 * TILE_PICKER_PADDING + label_extra;
+                        let picker_x = (screen_width - picker_inner_w) / 2.0 - TILE_PICKER_BORDER;
+                        let picker_y = screen_height - picker_inner_h - TILE_PICKER_BORDER - 20.0;
+                        let picker_outer_w = picker_inner_w + 2.0 * TILE_PICKER_BORDER;
+                        let picker_outer_h = picker_inner_h + 2.0 * TILE_PICKER_BORDER;
+
+                        self.picker_draw_list.clear();
+                        // Border
+                        self.picker_draw_list.solid_rect(
+                            picker_x,
+                            picker_y,
+                            picker_outer_w,
+                            picker_outer_h,
+                            TILE_PICKER_BORDER_COLOR,
+                        );
+                        // Background
+                        self.picker_draw_list.solid_rect(
+                            picker_x + TILE_PICKER_BORDER,
+                            picker_y + TILE_PICKER_BORDER,
+                            picker_inner_w,
+                            picker_inner_h,
+                            TILE_PICKER_BG_COLOR,
+                        );
+
+                        // Highlight selected tile
+                        if let Some(active_id) = self.active_voxel_type
+                            && let Some(idx) = TILE_PICKER_TILE_IDS.iter().position(|&id| id == active_id)
+                        {
+                            let highlight_pad = 3.0;
+                            let hx = picker_x + TILE_PICKER_BORDER + TILE_PICKER_PADDING
+                                + idx as f32 * (TILE_PICKER_TILE_SIZE + TILE_PICKER_SPACING)
+                                - highlight_pad;
+                            let hy = picker_y + TILE_PICKER_BORDER + TILE_PICKER_PADDING
+                                - highlight_pad;
+                            self.picker_draw_list.solid_rect(
+                                hx,
+                                hy,
+                                TILE_PICKER_TILE_SIZE + 2.0 * highlight_pad,
+                                TILE_PICKER_TILE_SIZE + 2.0 * highlight_pad,
+                                TILE_PICKER_HIGHLIGHT_COLOR,
                             );
+                        }
+
+                        if let Some(solid_bg) = &self.solid_bind_group {
+                            renderer.render_overlay(
+                                &view,
+                                &mut encoder,
+                                &self.picker_draw_list,
+                                solid_bg,
+                            );
+                        }
+
+                        // Tile texture previews
+                        self.hud_draw_list.clear();
+                        for (i, &tile_id) in TILE_PICKER_TILE_IDS.iter().enumerate() {
+                            let uv = self.voxel_uv_map[tile_id as usize];
+                            if uv[2] > uv[0] {
+                                let tx = picker_x + TILE_PICKER_BORDER + TILE_PICKER_PADDING
+                                    + i as f32 * (TILE_PICKER_TILE_SIZE + TILE_PICKER_SPACING);
+                                let ty = picker_y + TILE_PICKER_BORDER + TILE_PICKER_PADDING;
+                                self.hud_draw_list.rect(
+                                    tx,
+                                    ty,
+                                    TILE_PICKER_TILE_SIZE,
+                                    TILE_PICKER_TILE_SIZE,
+                                    Vec2::new(uv[0], uv[1]),
+                                    Vec2::new(uv[2], uv[3]),
+                                    Rgba::WHITE,
+                                );
+                            }
                         }
                         if let Some(voxel_bg) = &self.voxel_atlas_overlay_bind_group {
                             renderer.render_overlay(
@@ -519,6 +608,39 @@ impl ApplicationHandler for App {
                                 &self.hud_draw_list,
                                 voxel_bg,
                             );
+                        }
+
+                        // Key labels below tiles
+                        if let Some(font) = &self.font {
+                            self.draw_list.clear();
+                            for (i, &tile_id) in TILE_PICKER_TILE_IDS.iter().enumerate() {
+                                let tx = picker_x + TILE_PICKER_BORDER + TILE_PICKER_PADDING
+                                    + i as f32 * (TILE_PICKER_TILE_SIZE + TILE_PICKER_SPACING);
+                                let ty = picker_y + TILE_PICKER_BORDER + TILE_PICKER_PADDING;
+                                let label = format!("{}", i + 1);
+                                let char_width = font.text_width(&label);
+                                let label_x = tx + TILE_PICKER_TILE_SIZE / 2.0 - char_width / 2.0;
+                                let label_y = ty + TILE_PICKER_TILE_SIZE + 4.0;
+                                let label_color = if self.active_voxel_type == Some(tile_id) {
+                                    TILE_PICKER_HIGHLIGHT_COLOR
+                                } else {
+                                    Rgba::WHITE
+                                };
+                                font.draw_text(&mut self.draw_list, &label, label_x, label_y, label_color);
+                            }
+                            // "0: none" hint
+                            let hint_x = picker_x + picker_outer_w + 6.0;
+                            let hint_y = picker_y + picker_outer_h - 18.0;
+                            font.draw_text(&mut self.draw_list, "0: none", hint_x, hint_y, Rgba::new(180, 180, 180, 200));
+
+                            if let Some(font_bg) = &self.font_bind_group {
+                                renderer.render_overlay(
+                                    &view,
+                                    &mut encoder,
+                                    &self.draw_list,
+                                    font_bg,
+                                );
+                            }
                         }
 
                         renderer.submit(encoder);
