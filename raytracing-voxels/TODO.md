@@ -1,5 +1,3 @@
-mouse wheel
-
 shadows for point light sources
 
 water

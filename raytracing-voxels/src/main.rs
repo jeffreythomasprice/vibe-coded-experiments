@@ -54,7 +54,9 @@ const TILE_PICKER_HIGHLIGHT_COLOR: Rgba = Rgba::new(255, 255, 100, 180);
 
 const MINECRAFT_FONT: &[u8] = include_bytes!("../resources/Minecraft.otf");
 use winit::application::ApplicationHandler;
-use winit::event::{DeviceEvent, DeviceId, ElementState, KeyEvent, MouseButton, WindowEvent};
+use winit::event::{
+    DeviceEvent, DeviceId, ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent,
+};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key, KeyCode, NamedKey, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
@@ -393,6 +395,41 @@ impl ApplicationHandler for App {
                         });
                         self.point_lights_dirty = true;
                     }
+                }
+            }
+            WindowEvent::MouseWheel { delta, .. } if self.cursor_grabbed => {
+                let scroll = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => y as f64,
+                    MouseScrollDelta::PixelDelta(pos) => pos.y / 40.0,
+                };
+                if scroll.abs() > 0.0 {
+                    const ALL_SLOTS: [u8; 7] = [
+                        TILE_PICKER_TILE_IDS[0],
+                        TILE_PICKER_TILE_IDS[1],
+                        TILE_PICKER_TILE_IDS[2],
+                        TILE_PICKER_TILE_IDS[3],
+                        TILE_PICKER_TILE_IDS[4],
+                        TILE_PICKER_TILE_IDS[5],
+                        mesh_catalog::MESH_TORCH,
+                    ];
+                    let current_idx = self
+                        .active_voxel_type
+                        .and_then(|id| ALL_SLOTS.iter().position(|&s| s == id));
+                    let len = ALL_SLOTS.len() as i32;
+                    let new_idx = if scroll > 0.0 {
+                        // Scroll up = move left (previous slot)
+                        match current_idx {
+                            Some(i) => ((i as i32 - 1).rem_euclid(len)) as usize,
+                            None => ALL_SLOTS.len() - 1,
+                        }
+                    } else {
+                        // Scroll down = move right (next slot)
+                        match current_idx {
+                            Some(i) => ((i as i32 + 1).rem_euclid(len)) as usize,
+                            None => 0,
+                        }
+                    };
+                    self.active_voxel_type = Some(ALL_SLOTS[new_idx]);
                 }
             }
             WindowEvent::KeyboardInput {
