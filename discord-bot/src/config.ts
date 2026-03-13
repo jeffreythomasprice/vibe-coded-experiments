@@ -7,6 +7,7 @@ const configSchema = z.object({
   host: z.string().default("127.0.0.1"),
   port: z.int().default(45192),
   defaultRecipient: z.string().default("jeff0587"),
+  logFile: z.string().optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;

@@ -95,7 +95,7 @@ systemctl --user start discord-bot.service
 | Restart | `systemctl --user restart discord-bot` |
 | Status | `systemctl --user status discord-bot` |
 | Logs (live) | `journalctl --user -u discord-bot -f` |
-| After rebuild | `systemctl --user restart discord-bot` |
+| After rebuild | `bun build src/index.ts --compile --outfile dist/discord-bot && systemctl --user restart discord-bot` |
 
 ## Example Claude Code Config
 
@@ -107,7 +107,7 @@ systemctl --user start discord-bot.service
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'INPUT=$(cat); TITLE=$(echo \"$INPUT\" | jq -r .title); MSG=$(echo \"$INPUT\" | jq -r .message); TYPE=$(echo \"$INPUT\" | jq -r .notification_type); /home/jeff/workspaces/personal/vibe-coded-experiments/discord-bot/dist/discord-bot send \"[$TYPE] $TITLE\" \"$MSG\"'"
+            "command": "/home/jeff/workspaces/personal/vibe-coded-experiments/discord-bot/dist/discord-bot claude-notification"
           }
         ]
       }
