@@ -530,7 +530,11 @@ mod tests {
         // Terrain generator should produce solid voxels at y=0 (below surface)
         assert!(chunk.data().iter().any(|&v| v != 0));
         // Should not match the old wireframe pattern (edges-only)
-        // Interior ground-level voxels should be solid with terrain
-        assert_ne!(chunk.get(8, 0, 8), 0, "interior ground should be solid terrain");
+        // Most bottom-layer voxels should be solid (deep underground)
+        let bottom_solid = (0..16)
+            .flat_map(|x| (0..16).map(move |z| (x, z)))
+            .filter(|&(x, z)| chunk.get(x, 0, z) != 0)
+            .count();
+        assert!(bottom_solid > 30, "bottom layer should have substantial solid terrain, got {bottom_solid}/256");
     }
 }

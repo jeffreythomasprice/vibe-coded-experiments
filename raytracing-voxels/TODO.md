@@ -1,8 +1,3 @@
-commit notes:
-mounts, caves, performance improvements, logging
-
-
-
 water
 wibbly shader that makes water move?
 

@@ -20,16 +20,16 @@ const GRASS: u8 = 3;
 const BARE_PEAK_HEIGHT: f64 = BASE_HEIGHT + MAX_AMPLITUDE * 0.6;
 
 /// Cave spaghetti tunnel threshold: lower = thinner tunnels.
-const WORM_THRESHOLD: f64 = 0.012;
+const WORM_THRESHOLD: f64 = 0.016;
 /// Cave cavern threshold: higher = fewer/smaller caverns.
-const CAVERN_THRESHOLD: f64 = 0.6;
+const CAVERN_THRESHOLD: f64 = 0.72;
 
 /// Fraction of 8x8 regions that allow surface cave entrances (1 in N).
-const ENTRANCE_ZONE_DIVISOR: u32 = 5;
+const ENTRANCE_ZONE_DIVISOR: u32 = 3;
 /// Depth at which cave thresholds reach full strength.
 const CAVE_SURFACE_RAMP_DEPTH: f64 = 10.0;
 /// Near-surface worm threshold multiplier (scales down tunnel size near surface).
-const CAVE_SURFACE_WORM_SCALE: f64 = 0.7;
+const CAVE_SURFACE_WORM_SCALE: f64 = 1.0;
 
 /// How far outside the chunk XZ range to scan for tree candidates.
 const TREE_SCAN_MARGIN: i32 = 10;
@@ -115,12 +115,12 @@ impl TerrainGenerator {
             .set_persistence(0.5);
         let cave_worm_noise_a = Fbm::<Perlin>::new(seed.wrapping_add(10))
             .set_octaves(3)
-            .set_frequency(0.04)
+            .set_frequency(0.014)
             .set_lacunarity(2.0)
             .set_persistence(0.5);
         let cave_worm_noise_b = Fbm::<Perlin>::new(seed.wrapping_add(11))
             .set_octaves(3)
-            .set_frequency(0.04)
+            .set_frequency(0.014)
             .set_lacunarity(2.0)
             .set_persistence(0.5);
         let cave_cavern_noise = Fbm::<Perlin>::new(seed.wrapping_add(12))
@@ -299,6 +299,74 @@ impl TerrainGenerator {
                         chunk.set(lx, ly, lz, voxel);
                     }
                 }
+            }
+        }
+
+        // Cleanup pass: erode thin floating features near cave entrances.
+        // Iteratively remove any terrain block (not tree) near the surface that
+        // has fewer than 2 solid cardinal neighbours.  This collapses 1-wide
+        // lines and isolated blocks that remain after cave carving.
+        loop {
+            let mut changed = false;
+            for lx in 0..SIZE {
+                for lz in 0..SIZE {
+                    let wx = world_x + lx as i32;
+                    let wz = world_z + lz as i32;
+                    let surface = heights[lx][lz];
+
+                    for ly in 0..SIZE {
+                        let v = chunk.get(lx, ly, lz);
+                        // Only erode terrain blocks (stone, dirt, grass), not trees
+                        if v == 0 || v == WOOD || v == LEAVES {
+                            continue;
+                        }
+                        let wy = world_y + ly as i32;
+                        // Only clean up near the surface (within ramp depth)
+                        let depth = surface - wy;
+                        if depth > CAVE_SURFACE_RAMP_DEPTH as i32 + 2 {
+                            continue;
+                        }
+
+                        // Count solid cardinal neighbours (6 directions).
+                        // Out-of-chunk neighbours are resolved via world-space
+                        // terrain + cave queries so chunk edges are handled.
+                        let mut solid = 0u8;
+                        for &(dx, dy, dz) in &[
+                            (-1i32, 0i32, 0i32), (1, 0, 0),
+                            (0, -1, 0), (0, 1, 0),
+                            (0, 0, -1), (0, 0, 1),
+                        ] {
+                            let nx = lx as i32 + dx;
+                            let ny = ly as i32 + dy;
+                            let nz = lz as i32 + dz;
+                            let is_solid = if (0..SIZE_I32).contains(&nx)
+                                && (0..SIZE_I32).contains(&ny)
+                                && (0..SIZE_I32).contains(&nz)
+                            {
+                                chunk.get(nx as usize, ny as usize, nz as usize) != 0
+                            } else {
+                                // World-space check for out-of-chunk neighbours
+                                let nwx = wx + dx;
+                                let nwy = wy + dy;
+                                let nwz = wz + dz;
+                                let nh = self.surface_height(nwx, nwz);
+                                let base = Self::terrain_voxel_at_with_height(nwy, nh);
+                                base != 0 && !self.is_cave_at_with_surface(nwx, nwy, nwz, nh)
+                            };
+                            if is_solid {
+                                solid += 1;
+                            }
+                        }
+
+                        if solid < 2 {
+                            chunk.set(lx, ly, lz, 0);
+                            changed = true;
+                        }
+                    }
+                }
+            }
+            if !changed {
+                break;
             }
         }
 
