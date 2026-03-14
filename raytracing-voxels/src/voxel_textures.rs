@@ -772,6 +772,59 @@ fn generate_leaves(seed: u32) -> Texture {
     generate_leaves_parameterized(seed, &LeavesParams::default())
 }
 
+fn generate_water(seed: u32) -> Texture {
+    let mut tex = Texture::new(TILE_SIZE, TILE_SIZE);
+
+    let ripple_config = NoiseLayerConfig {
+        octaves: 4,
+        frequency: 2.0,
+        lacunarity: 2.0,
+        persistence: 0.5,
+        x_scale: 1.0,
+        y_scale: 1.0,
+        seed,
+    };
+
+    let wave_config = NoiseLayerConfig {
+        octaves: 2,
+        frequency: 0.8,
+        lacunarity: 2.0,
+        persistence: 0.5,
+        x_scale: 1.0,
+        y_scale: 1.0,
+        seed: seed.wrapping_add(800),
+    };
+
+    let base_color = Rgba::new(30, 80, 180, 140);
+    let highlight_color = Rgba::new(60, 130, 220, 140);
+
+    for y in 0..TILE_SIZE {
+        for x in 0..TILE_SIZE {
+            let ripple = noise_layer(x, y, TILE_SIZE, &ripple_config);
+            let wave = noise_layer(x, y, TILE_SIZE, &wave_config);
+
+            let t = (ripple * 0.6 + wave * 0.4).clamp(0.0, 1.0);
+
+            let r = (base_color.r as f64 * (1.0 - t) + highlight_color.r as f64 * t) as u8;
+            let g = (base_color.g as f64 * (1.0 - t) + highlight_color.g as f64 * t) as u8;
+            let b = (base_color.b as f64 * (1.0 - t) + highlight_color.b as f64 * t) as u8;
+
+            let h = pixel_hash(x, y, seed.wrapping_add(900));
+            let brightness_shift = (h % 11) as i16 - 5;
+            let r = (r as i16 + brightness_shift).clamp(0, 255) as u8;
+            let g = (g as i16 + brightness_shift).clamp(0, 255) as u8;
+            let b = (b as i16 + brightness_shift).clamp(0, 255) as u8;
+
+            let alpha_shift = (h >> 8) % 21;
+            let a = (140i16 - 10 + alpha_shift as i16).clamp(100, 200) as u8;
+
+            tex.set_pixel(x, y, Rgba::new(r, g, b, a));
+        }
+    }
+
+    tex
+}
+
 const TILE_DEFS: &[TileDef] = &[
     TileDef {
         id: 1,
@@ -802,6 +855,11 @@ const TILE_DEFS: &[TileDef] = &[
         id: 6,
         name: "leaves",
         generator: generate_leaves,
+    },
+    TileDef {
+        id: 7,
+        name: "water",
+        generator: generate_water,
     },
 ];
 
@@ -1393,5 +1451,24 @@ mod tests {
             "expected 15-35% transparent pixels, got {:.1}%",
             ratio * 100.0
         );
+    }
+
+    #[test]
+    fn water_correct_size() {
+        let tex = generate_water(42);
+        assert_eq!(tex.width(), TILE_SIZE);
+        assert_eq!(tex.height(), TILE_SIZE);
+    }
+
+    #[test]
+    fn water_is_semitransparent() {
+        let tex = generate_water(42);
+        for p in tex.data() {
+            assert!(
+                (100..=200).contains(&p.a),
+                "water alpha {} should be between 100 and 200",
+                p.a
+            );
+        }
     }
 }

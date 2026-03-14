@@ -15,6 +15,8 @@ const STONE: u8 = 1;
 const WOOD: u8 = 5;
 const LEAVES: u8 = 6;
 const GRASS: u8 = 3;
+pub const WATER: u8 = 7;
+pub const WATER_LEVEL: i32 = 36;
 
 /// Height above which mountain peaks are bare stone instead of grass.
 const BARE_PEAK_HEIGHT: f64 = BASE_HEIGHT + MAX_AMPLITUDE * 0.6;
@@ -198,6 +200,9 @@ impl TerrainGenerator {
             return false;
         }
         let surface = self.surface_height(wx, wz);
+        if surface < WATER_LEVEL {
+            return false;
+        }
         // No trees near mountain peaks
         if surface as f64 > TREE_HEIGHT_LIMIT {
             return false;
@@ -367,6 +372,18 @@ impl TerrainGenerator {
             }
             if !changed {
                 break;
+            }
+        }
+
+        // Water fill pass: flood empty space below the water level
+        for lx in 0..SIZE {
+            for lz in 0..SIZE {
+                for ly in 0..SIZE {
+                    let wy = world_y + ly as i32;
+                    if wy <= WATER_LEVEL && chunk.get(lx, ly, lz) == 0 {
+                        chunk.set(lx, ly, lz, WATER);
+                    }
+                }
             }
         }
 
@@ -902,7 +919,8 @@ mod tests {
                         let surface = generator.surface_height(wx, wz);
                         for ly in 0..SIZE {
                             let wy = ly as i32;
-                            if wy < surface - DIRT_LAYERS && chunk.get(lx, ly, lz) == 0 {
+                            let v = chunk.get(lx, ly, lz);
+                            if wy < surface - DIRT_LAYERS && (v == 0 || v == WATER) {
                                 if generator.is_cave_at(wx, wy, wz) {
                                     found = true;
                                     break 'outer;
@@ -914,6 +932,83 @@ mod tests {
             }
         }
         assert!(found, "expected to find stone carved out by caves");
+    }
+
+    #[test]
+    fn water_fills_below_level() {
+        let generator = TerrainGenerator::new(42);
+        let chunk = generator.generate_chunk(IVec3::new(0, 2, 0));
+        assert!(
+            chunk.data().iter().any(|&v| v == WATER),
+            "expected water voxels in chunk spanning water level"
+        );
+    }
+
+    #[test]
+    fn water_does_not_fill_solid() {
+        let generator = TerrainGenerator::new(42);
+        for cx in -3..3 {
+            for cz in -3..3 {
+                for cy in 0..4 {
+                    let chunk_pos = IVec3::new(cx, cy, cz);
+                    let chunk = generator.generate_chunk(chunk_pos);
+                    let world_x = chunk_pos.x * SIZE_I32;
+                    let world_y = chunk_pos.y * SIZE_I32;
+                    let world_z = chunk_pos.z * SIZE_I32;
+
+                    for lx in 0..SIZE {
+                        for lz in 0..SIZE {
+                            let wx = world_x + lx as i32;
+                            let wz = world_z + lz as i32;
+                            let height = generator.surface_height(wx, wz);
+                            for ly in 0..SIZE {
+                                let wy = world_y + ly as i32;
+                                if chunk.get(lx, ly, lz) == WATER {
+                                    let base = TerrainGenerator::terrain_voxel_at_with_height(wy, height);
+                                    // Water should only appear where the voxel would be air,
+                                    // either naturally or because a cave carved it out
+                                    let is_air = base == 0
+                                        || generator.is_cave_at_with_surface(wx, wy, wz, height);
+                                    assert!(
+                                        is_air,
+                                        "water at ({wx},{wy},{wz}) replaced solid terrain (base voxel {base})"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn no_trees_underwater() {
+        let generator = TerrainGenerator::new(42);
+        for cx in -3..3 {
+            for cz in -3..3 {
+                for cy in 0..4 {
+                    let chunk_pos = IVec3::new(cx, cy, cz);
+                    let chunk = generator.generate_chunk(chunk_pos);
+                    let world_y = chunk_pos.y * SIZE_I32;
+
+                    for lx in 0..SIZE {
+                        for ly in 0..SIZE {
+                            let wy = world_y + ly as i32;
+                            if wy < WATER_LEVEL {
+                                for lz in 0..SIZE {
+                                    let v = chunk.get(lx, ly, lz);
+                                    assert!(
+                                        v != WOOD && v != LEAVES,
+                                        "tree voxel {v} found at world y={wy} below water level"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[test]

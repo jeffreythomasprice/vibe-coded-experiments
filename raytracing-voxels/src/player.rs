@@ -91,7 +91,6 @@ impl Player {
         if self.on_ground && input.up {
             self.velocity.y = JUMP_VELOCITY;
         }
-
         self.velocity.y -= GRAVITY * dt;
         self.velocity.y = self.velocity.y.max(-MAX_FALL_SPEED);
 
@@ -219,7 +218,7 @@ impl Player {
                     if !world.is_chunk_loaded(&chunk_pos) {
                         return true;
                     }
-                    if world.get_voxel(voxel_pos) != 0 {
+                    if world.is_solid_voxel(voxel_pos) {
                         return true;
                     }
                 }
@@ -357,6 +356,16 @@ mod tests {
         chunk.set(8, 4, 8, 1);
         world.insert(IVec3::ZERO, chunk);
         let feet_pos = Vec3::new(8.3, 5.0, 8.3);
+        assert!(!Player::aabb_collides(feet_pos, &world));
+    }
+
+    #[test]
+    fn aabb_water_no_collision() {
+        let mut world = World::new();
+        let mut chunk = crate::chunk::Chunk::new();
+        chunk.set(8, 8, 8, 7);
+        world.insert(IVec3::ZERO, chunk);
+        let feet_pos = Vec3::new(8.0, 8.0, 8.0);
         assert!(!Player::aabb_collides(feet_pos, &world));
     }
 
@@ -936,4 +945,5 @@ mod tests {
             "player should enter free-fall over a 2-voxel drop"
         );
     }
+
 }

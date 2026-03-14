@@ -8,6 +8,7 @@ use crate::chunk::Chunk;
 use crate::mesh_catalog::{MeshCatalog, MESH_VOXEL_BASE};
 
 const CHUNK_SIZE: i32 = 16;
+pub const WATER_VOXEL_ID: u8 = 7;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -125,6 +126,11 @@ impl World {
             .map_or(0, |c| c.get(local[0], local[1], local[2]))
     }
 
+    pub fn is_solid_voxel(&self, voxel_pos: IVec3) -> bool {
+        let v = self.get_voxel(voxel_pos);
+        v != 0 && v != WATER_VOXEL_ID
+    }
+
     pub fn raycast(
         &self,
         origin: Vec3,
@@ -166,7 +172,7 @@ impl World {
                     // No mesh triangle hit — continue DDA
                 }
                 // No catalog provided — continue DDA
-            } else {
+            } else if id != WATER_VOXEL_ID {
                 let (chunk_pos, local_pos) = Self::world_to_chunk(voxel);
                 return Some(RaycastHit {
                     chunk_pos,
@@ -285,7 +291,7 @@ impl World {
                         // No triangle hit — ray passes through, continue DDA
                     }
                     // No catalog — treat as passthrough, continue DDA
-                } else {
+                } else if id != WATER_VOXEL_ID {
                     let (chunk_pos, local_pos) = Self::world_to_chunk(voxel);
                     return Some(RaycastHit {
                         chunk_pos,
@@ -572,6 +578,30 @@ mod tests {
             Some(h) => h,
             None => panic!("expected hit"),
         };
+        assert_eq!(hit.local_pos, [8, 8, 10]);
+        assert_eq!(hit.voxel_id, 1);
+    }
+
+    #[test]
+    fn water_not_solid() {
+        let mut world = World::new();
+        let mut chunk = Chunk::new();
+        chunk.set(8, 8, 8, WATER_VOXEL_ID);
+        world.insert(IVec3::ZERO, chunk);
+        assert!(!world.is_solid_voxel(IVec3::new(8, 8, 8)));
+    }
+
+    #[test]
+    fn raycast_skips_water() {
+        let mut world = World::new();
+        let mut chunk = Chunk::new();
+        chunk.set(8, 8, 8, WATER_VOXEL_ID);
+        chunk.set(8, 8, 10, 1);
+        world.insert(IVec3::ZERO, chunk);
+
+        let hit = world
+            .raycast(Vec3::new(8.5, 8.5, 0.5), Vec3::new(0.0, 0.0, 1.0), 50.0, None)
+            .expect("should hit stone behind water");
         assert_eq!(hit.local_pos, [8, 8, 10]);
         assert_eq!(hit.voxel_id, 1);
     }

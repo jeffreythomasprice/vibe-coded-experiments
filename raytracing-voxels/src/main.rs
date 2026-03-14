@@ -33,15 +33,16 @@ use texture_atlas_font::TextureAtlasFont;
 use voxel_renderer::Renderer;
 use world::World;
 
-const VOXEL_TYPE_NAMES: &[&str] = &["", "stone", "dirt", "grass", "brick", "wood", "leaves"];
-const VOXEL_KEY_TO_ID: [u8; 7] = [0, 3, 2, 1, 4, 5, 6];
-const TILE_PICKER_TILE_IDS: [u8; 6] = [
+const VOXEL_TYPE_NAMES: &[&str] = &["", "stone", "dirt", "grass", "brick", "wood", "leaves", "water"];
+const VOXEL_KEY_TO_ID: [u8; 8] = [0, 3, 2, 1, 4, 5, 6, 7];
+const TILE_PICKER_TILE_IDS: [u8; 7] = [
     VOXEL_KEY_TO_ID[1], // key 1: grass
     VOXEL_KEY_TO_ID[2], // key 2: dirt
     VOXEL_KEY_TO_ID[3], // key 3: stone
     VOXEL_KEY_TO_ID[4], // key 4: brick
     VOXEL_KEY_TO_ID[5], // key 5: wood
     VOXEL_KEY_TO_ID[6], // key 6: leaves
+    VOXEL_KEY_TO_ID[7], // key 7: water
 ];
 
 const TILE_PICKER_TILE_SIZE: f32 = 48.0;
@@ -492,6 +493,7 @@ impl ApplicationHandler for App {
                     KeyCode::Digit4 if pressed => self.active_voxel_type = Some(VOXEL_KEY_TO_ID[4]),
                     KeyCode::Digit5 if pressed => self.active_voxel_type = Some(VOXEL_KEY_TO_ID[5]),
                     KeyCode::Digit6 if pressed => self.active_voxel_type = Some(VOXEL_KEY_TO_ID[6]),
+                    KeyCode::Digit7 if pressed => self.active_voxel_type = Some(VOXEL_KEY_TO_ID[7]),
                     KeyCode::Digit9 if pressed => self.active_voxel_type = Some(mesh_catalog::MESH_TORCH),
                     _ => {}
                 }
@@ -561,11 +563,22 @@ impl ApplicationHandler for App {
                 }
 
                 // Build interaction state for GPU
+                let eye_voxel_pos = IVec3::new(
+                    self.camera.position.x.floor() as i32,
+                    self.camera.position.y.floor() as i32,
+                    self.camera.position.z.floor() as i32,
+                );
+                let is_submerged = if self.world.get_voxel(eye_voxel_pos) == world::WATER_VOXEL_ID { 1u32 } else { 0u32 };
+
                 let mut interaction = GpuInteractionState {
                     highlight_pos: [0.0; 3],
                     highlight_active: 0,
                     break_pos: [0.0; 3],
                     break_progress: 0.0,
+                    is_submerged,
+                    _pad0: 0,
+                    _pad1: 0,
+                    _pad2: 0,
                 };
 
                 // Placement preview highlight

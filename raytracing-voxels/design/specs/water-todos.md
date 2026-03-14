@@ -1,0 +1,7 @@
+- [x] 1. Add water voxel constant and texture
+- [x] 2. Fill water in terrain generation
+- [x] 3. Water rendering in shader (semi-transparent surface)
+- [x] 4. Exclude water from player collision
+- [x] 5. Player water physics
+- [x] 6. Underwater screen tint
+- [x] 7. Update main.rs voxel type arrays and tile picker

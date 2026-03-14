@@ -76,6 +76,10 @@ struct InteractionState {
     highlight_active: u32,
     break_pos: vec3<f32>,
     break_progress: f32,
+    is_submerged: u32,
+    _pad0: u32,
+    _pad1: u32,
+    _pad2: u32,
 };
 
 @group(3) @binding(0) var<uniform> interaction: InteractionState;
@@ -101,6 +105,8 @@ struct PointLight {
 @group(4) @binding(0) var<uniform> lighting: LightingUniforms;
 @group(4) @binding(1) var<storage, read> point_lights: array<PointLight>;
 @group(4) @binding(2) var<uniform> point_light_count: u32;
+
+const WATER_ID: u32 = 7u;
 
 fn is_wireframe_edge(face_uv: vec2<f32>, thickness: f32) -> bool {
     return face_uv.x < thickness || face_uv.x > (1.0 - thickness)
@@ -290,6 +296,9 @@ fn intersect_mesh_voxel(ro: vec3<f32>, rd: vec3<f32>, voxel_world_min: vec3<f32>
     result.color = vec4<f32>(0.0);
     result.t = max_t;
     result.normal = vec3<f32>(0.0);
+    result.water_hit = false;
+    result.water_color = vec4<f32>(0.0);
+    result.water_t = 1e30;
 
     let local_ro = ro - voxel_world_min;
     let info = mesh_infos[mesh_type];
@@ -314,6 +323,9 @@ struct MarchResult {
     color: vec4<f32>,
     t: f32,
     normal: vec3<f32>,
+    water_hit: bool,
+    water_color: vec4<f32>,
+    water_t: f32,
 };
 
 fn march_chunk(ro: vec3<f32>, rd: vec3<f32>, chunk_min: vec3<f32>,
@@ -322,6 +334,9 @@ fn march_chunk(ro: vec3<f32>, rd: vec3<f32>, chunk_min: vec3<f32>,
     result.hit = false;
     result.color = vec4<f32>(0.0);
     result.t = max_t;
+    result.water_hit = false;
+    result.water_color = vec4<f32>(0.0);
+    result.water_t = 1e30;
 
     let chunk_max = chunk_min + vec3<f32>(16.0, 16.0, 16.0);
 
@@ -401,6 +416,38 @@ fn march_chunk(ro: vec3<f32>, rd: vec3<f32>, chunk_min: vec3<f32>,
                     return result;
                 }
                 // No triangle hit — ray passes through, continue DDA
+            } else if v == WATER_ID {
+                // Water: record but continue marching
+                if !result.water_hit {
+                    var water_t_hit: f32;
+                    if abs(normal.y) > 0.5 && normal.y < 0.0 {
+                        // Top face: lower surface by 0.15
+                        let voxel_world_y = chunk_min.y + f32(voxel.y);
+                        water_t_hit = ((voxel_world_y + 0.85) - ro.y) / rd.y;
+                    } else {
+                        water_t_hit = t_hit;
+                    }
+                    if water_t_hit < max_t {
+                        let water_hit_pos = ro + rd * water_t_hit;
+                        let water_local = water_hit_pos - chunk_min - vec3<f32>(f32(voxel.x), f32(voxel.y), f32(voxel.z));
+                        var water_face_uv: vec2<f32>;
+                        if abs(normal.x) > 0.5 {
+                            water_face_uv = vec2<f32>(water_local.z, water_local.y);
+                        } else if abs(normal.y) > 0.5 {
+                            water_face_uv = vec2<f32>(water_local.x, water_local.z);
+                        } else {
+                            water_face_uv = vec2<f32>(water_local.x, water_local.y);
+                        }
+                        water_face_uv = clamp(water_face_uv, vec2<f32>(0.0), vec2<f32>(1.0));
+                        let water_uv_rect = uv_map[WATER_ID];
+                        let water_atlas_uv = water_uv_rect.xy + water_face_uv * (water_uv_rect.zw - water_uv_rect.xy);
+                        let water_tex = textureSampleLevel(atlas_tex, atlas_sampler, water_atlas_uv, 0.0);
+                        result.water_hit = true;
+                        result.water_color = water_tex;
+                        result.water_t = water_t_hit;
+                    }
+                }
+                // Continue DDA - don't return
             } else {
                 let hit_pos = ro + rd * t_hit;
                 let local_hit = hit_pos - chunk_min - vec3<f32>(f32(voxel.x), f32(voxel.y), f32(voxel.z));
@@ -593,6 +640,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var result_color: vec4<f32>;
     var result_normal: vec3<f32> = vec3<f32>(0.0);
     var hit_anything: bool = false;
+    var water_hit_any: bool = false;
+    var water_color_final: vec4<f32> = vec4<f32>(0.0);
+    var water_t_final: f32 = 1e30;
 
     if bvh_node_count > 0u {
         stack[0] = 0u;
@@ -619,6 +669,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
                 result_color = mr.color;
                 result_normal = mr.normal;
                 hit_anything = true;
+            }
+            if mr.water_hit && mr.water_t < water_t_final {
+                water_hit_any = true;
+                water_color_final = mr.water_color;
+                water_t_final = mr.water_t;
             }
         } else {
             let left_idx = node_idx + 1u;
@@ -719,6 +774,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
 
+    // Water transparency blending
+    if water_hit_any && water_t_final < closest_t {
+        let water_alpha = water_color_final.a;
+        final_color = vec4<f32>(
+            mix(final_color.rgb, water_color_final.rgb, water_alpha),
+            1.0
+        );
+    }
+
     // Break progress overlay on the voxel being broken (ray-box intersection approach)
     if interaction.break_progress > 0.0 && hit_anything {
         let bp = interaction.break_pos;
@@ -754,6 +818,17 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Placement preview wireframe
     if interaction.highlight_active != 0u {
         final_color = wireframe_box(ro, rd, interaction.highlight_pos, closest_t + 0.01, final_color, vec3<f32>(1.0, 1.0, 1.0), 0.04);
+    }
+
+    // Underwater tint
+    if interaction.is_submerged != 0u {
+        let underwater_tint = vec3<f32>(0.2, 0.4, 0.75);
+        final_color = vec4<f32>(mix(final_color.rgb, underwater_tint, 0.12), 1.0);
+        if hit_anything {
+            let fog_dist = closest_t / 48.0;
+            let fog_factor = clamp(fog_dist * fog_dist, 0.0, 0.5);
+            final_color = vec4<f32>(mix(final_color.rgb, underwater_tint, fog_factor), 1.0);
+        }
     }
 
     return final_color;

@@ -20,6 +20,10 @@ pub struct GpuInteractionState {
     pub highlight_active: u32,
     pub break_pos: [f32; 3],
     pub break_progress: f32,
+    pub is_submerged: u32,
+    pub _pad0: u32,
+    pub _pad1: u32,
+    pub _pad2: u32,
 }
 
 #[repr(C)]
