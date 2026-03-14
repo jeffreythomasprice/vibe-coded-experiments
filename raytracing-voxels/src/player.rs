@@ -1,7 +1,7 @@
 use glam::{IVec3, Vec3};
 use tracing::debug;
 
-use crate::world::World;
+use crate::world::{World, WATER_VOXEL_ID};
 
 const EPSILON: f32 = 1e-4;
 
@@ -13,6 +13,20 @@ pub const GRAVITY: f32 = 28.0;
 pub const MAX_FALL_SPEED: f32 = 50.0;
 pub const JUMP_VELOCITY: f32 = 11.0;
 pub const STEP_HEIGHT: f32 = 1.0;
+
+const WATER_MOVE_SPEED_FACTOR: f32 = 0.4;
+const WATER_SWIM_UP_SPEED: f32 = 3.5;
+const WATER_GRAVITY: f32 = 5.0;
+const WATER_MAX_FALL_SPEED: f32 = 8.0;
+const TREADING_WATER_THRESHOLD: f32 = 0.5;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WaterState {
+    Dry,
+    Underwater,
+    TreadingWater,
+    AboveWater,
+}
 
 #[derive(Default)]
 pub struct InputState {
@@ -29,6 +43,7 @@ pub struct Player {
     pub velocity: Vec3,
     pub on_ground: bool,
     pub fly_mode: bool,
+    pub water_state: WaterState,
 }
 
 impl Player {
@@ -38,6 +53,7 @@ impl Player {
             velocity: Vec3::ZERO,
             on_ground: false,
             fly_mode: false,
+            water_state: WaterState::Dry,
         }
     }
 
@@ -61,8 +77,60 @@ impl Player {
         }
     }
 
+    fn compute_water_state(&self, world: &World) -> WaterState {
+        let eye_pos = self.eye_position();
+        let eye_voxel = IVec3::new(
+            eye_pos.x.floor() as i32,
+            eye_pos.y.floor() as i32,
+            eye_pos.z.floor() as i32,
+        );
+
+        // Eye inside water → Underwater
+        if world.get_voxel(eye_voxel) == WATER_VOXEL_ID {
+            return WaterState::Underwater;
+        }
+
+        // Check if eye is within TREADING_WATER_THRESHOLD above a water surface
+        let voxel_below_eye = IVec3::new(eye_voxel.x, eye_voxel.y - 1, eye_voxel.z);
+        let dist_above_voxel_below = eye_pos.y - (eye_voxel.y as f32);
+        if dist_above_voxel_below < TREADING_WATER_THRESHOLD
+            && world.get_voxel(voxel_below_eye) == WATER_VOXEL_ID
+        {
+            return WaterState::TreadingWater;
+        }
+
+        // Check if the eye voxel itself is just above water (eye near bottom of its voxel)
+        // Also check the voxel at eye level - if it's water we already returned Underwater
+        // So check if any voxel in the player AABB is water
+        let half_w = PLAYER_WIDTH / 2.0;
+        let min = self.feet_pos - Vec3::new(half_w, 0.0, half_w);
+        let max = self.feet_pos + Vec3::new(half_w, PLAYER_HEIGHT, half_w);
+
+        let x_start = min.x.floor() as i32;
+        let x_end = (max.x - EPSILON).floor() as i32;
+        let y_start = min.y.floor() as i32;
+        let y_end = (max.y - EPSILON).floor() as i32;
+        let z_start = min.z.floor() as i32;
+        let z_end = (max.z - EPSILON).floor() as i32;
+
+        for x in x_start..=x_end {
+            for y in y_start..=y_end {
+                for z in z_start..=z_end {
+                    if world.get_voxel(IVec3::new(x, y, z)) == WATER_VOXEL_ID {
+                        return WaterState::AboveWater;
+                    }
+                }
+            }
+        }
+
+        WaterState::Dry
+    }
+
     fn tick_physics(&mut self, dt: f32, input: &InputState, yaw: f32, world: &World) {
         let was_on_ground = self.on_ground;
+        self.water_state = self.compute_water_state(world);
+        let in_water = self.water_state != WaterState::Dry;
+
         let (sy, cy) = yaw.sin_cos();
         let forward_dir = Vec3::new(-sy, 0.0, -cy);
         let right_dir = Vec3::new(cy, 0.0, -sy);
@@ -85,14 +153,38 @@ impl Player {
             wish_dir = wish_dir.normalize();
         }
 
-        self.velocity.x = wish_dir.x * MOVE_SPEED;
-        self.velocity.z = wish_dir.z * MOVE_SPEED;
+        let move_speed = if in_water {
+            MOVE_SPEED * WATER_MOVE_SPEED_FACTOR
+        } else {
+            MOVE_SPEED
+        };
+        self.velocity.x = wish_dir.x * move_speed;
+        self.velocity.z = wish_dir.z * move_speed;
 
-        if self.on_ground && input.up {
-            self.velocity.y = JUMP_VELOCITY;
+        // Vertical movement
+        match self.water_state {
+            WaterState::Underwater | WaterState::TreadingWater => {
+                if input.up {
+                    self.velocity.y = WATER_SWIM_UP_SPEED;
+                }
+            }
+            WaterState::AboveWater => {
+                // No jump, no swim — gravity pulls back down
+            }
+            WaterState::Dry => {
+                if self.on_ground && input.up {
+                    self.velocity.y = JUMP_VELOCITY;
+                }
+            }
         }
-        self.velocity.y -= GRAVITY * dt;
-        self.velocity.y = self.velocity.y.max(-MAX_FALL_SPEED);
+
+        let (gravity, max_fall) = if in_water {
+            (WATER_GRAVITY, WATER_MAX_FALL_SPEED)
+        } else {
+            (GRAVITY, MAX_FALL_SPEED)
+        };
+        self.velocity.y -= gravity * dt;
+        self.velocity.y = self.velocity.y.max(-max_fall);
 
         let new_feet_y = self.feet_pos.y + self.velocity.y * dt;
         let candidate = Vec3::new(self.feet_pos.x, new_feet_y, self.feet_pos.z);
@@ -118,7 +210,9 @@ impl Player {
         let candidate_x = Vec3::new(new_feet_x, self.feet_pos.y, self.feet_pos.z);
         if Self::aabb_collides(candidate_x, world) {
             let mut stepped = false;
-            if self.on_ground
+            if self.water_state != WaterState::Underwater
+                && self.water_state != WaterState::TreadingWater
+                && self.on_ground
                 && let Some(landed) = Self::try_step_up(self.feet_pos, candidate_x, world)
             {
                 self.feet_pos = landed;
@@ -141,7 +235,9 @@ impl Player {
         let candidate_z = Vec3::new(self.feet_pos.x, self.feet_pos.y, new_feet_z);
         if Self::aabb_collides(candidate_z, world) {
             let mut stepped = false;
-            if self.on_ground
+            if self.water_state != WaterState::Underwater
+                && self.water_state != WaterState::TreadingWater
+                && self.on_ground
                 && let Some(landed) = Self::try_step_up(self.feet_pos, candidate_z, world)
             {
                 self.feet_pos = landed;
@@ -401,6 +497,7 @@ mod tests {
             velocity: Vec3::ZERO,
             on_ground: false,
             fly_mode: false,
+            water_state: WaterState::Dry,
         };
         let input = InputState::default();
         let dt = 1.0 / 60.0;
@@ -429,6 +526,7 @@ mod tests {
             velocity: Vec3::ZERO,
             on_ground: true,
             fly_mode: false,
+            water_state: WaterState::Dry,
         };
         let input = InputState::default();
         let dt = 1.0 / 60.0;
@@ -450,6 +548,7 @@ mod tests {
             velocity: Vec3::new(0.0, 20.0, 0.0),
             on_ground: false,
             fly_mode: false,
+            water_state: WaterState::Dry,
         };
         let input = InputState::default();
         let dt = 1.0 / 60.0;
@@ -477,6 +576,7 @@ mod tests {
             velocity: Vec3::ZERO,
             on_ground: true,
             fly_mode: false,
+            water_state: WaterState::Dry,
         };
         let input = InputState {
             up: true,
@@ -497,6 +597,7 @@ mod tests {
             velocity: Vec3::new(0.0, -2.0, 0.0),
             on_ground: false,
             fly_mode: false,
+            water_state: WaterState::Dry,
         };
         let input = InputState {
             up: true,
@@ -517,6 +618,7 @@ mod tests {
             velocity: Vec3::ZERO,
             on_ground: true,
             fly_mode: false,
+            water_state: WaterState::Dry,
         };
         let jump_input = InputState {
             up: true,
@@ -569,6 +671,7 @@ mod tests {
             velocity: Vec3::ZERO,
             on_ground: true,
             fly_mode: false,
+            water_state: WaterState::Dry,
         };
         let input = InputState {
             forward: true,
@@ -610,6 +713,7 @@ mod tests {
             velocity: Vec3::ZERO,
             on_ground: true,
             fly_mode: false,
+            water_state: WaterState::Dry,
         };
         let input = InputState {
             forward: true,
@@ -658,6 +762,7 @@ mod tests {
             velocity: Vec3::ZERO,
             on_ground: true,
             fly_mode: false,
+            water_state: WaterState::Dry,
         };
         let input = InputState {
             forward: true,
@@ -698,6 +803,7 @@ mod tests {
             velocity: Vec3::ZERO,
             on_ground: true,
             fly_mode: false,
+            water_state: WaterState::Dry,
         };
         let input = InputState {
             forward: true,
@@ -735,6 +841,7 @@ mod tests {
             velocity: Vec3::ZERO,
             on_ground: true,
             fly_mode: false,
+            water_state: WaterState::Dry,
         };
         let input = InputState {
             right: true,
@@ -773,6 +880,7 @@ mod tests {
             velocity: Vec3::ZERO,
             on_ground: true,
             fly_mode: false,
+            water_state: WaterState::Dry,
         };
         let input = InputState {
             right: true,
@@ -809,6 +917,7 @@ mod tests {
             velocity: Vec3::new(0.0, -1.0, 0.0),
             on_ground: false,
             fly_mode: false,
+            water_state: WaterState::Dry,
         };
         let input = InputState {
             right: true,
@@ -841,6 +950,7 @@ mod tests {
             velocity: Vec3::ZERO,
             on_ground: true,
             fly_mode: false,
+            water_state: WaterState::Dry,
         };
         let input = InputState {
             right: true,
@@ -887,6 +997,7 @@ mod tests {
             velocity: Vec3::ZERO,
             on_ground: true,
             fly_mode: false,
+            water_state: WaterState::Dry,
         };
         let input = InputState {
             right: true,
@@ -923,6 +1034,7 @@ mod tests {
             velocity: Vec3::ZERO,
             on_ground: true,
             fly_mode: false,
+            water_state: WaterState::Dry,
         };
         let input = InputState {
             right: true,

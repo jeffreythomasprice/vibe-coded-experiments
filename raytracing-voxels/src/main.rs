@@ -563,12 +563,7 @@ impl ApplicationHandler for App {
                 }
 
                 // Build interaction state for GPU
-                let eye_voxel_pos = IVec3::new(
-                    self.camera.position.x.floor() as i32,
-                    self.camera.position.y.floor() as i32,
-                    self.camera.position.z.floor() as i32,
-                );
-                let is_submerged = if self.world.get_voxel(eye_voxel_pos) == world::WATER_VOXEL_ID { 1u32 } else { 0u32 };
+                let is_submerged = if self.player.water_state == player::WaterState::Underwater { 1u32 } else { 0u32 };
 
                 let mut interaction = GpuInteractionState {
                     highlight_pos: [0.0; 3],
