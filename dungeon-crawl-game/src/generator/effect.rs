@@ -13,7 +13,6 @@ fn result_type_table() -> WeightTable<EffectResultType> {
         (MentalDamage,    30.0, 10.0),
         (Teleport,         1.0, 10.0),
         (LoseTurn,         1.0, 10.0),
-        (ForcedMovement,   1.0, 10.0),
         (ModifyItem,       1.0, 10.0),
         (ModifyRoom,       1.0, 10.0),
     ])

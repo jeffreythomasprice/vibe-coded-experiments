@@ -36,8 +36,9 @@ pub fn update_sidebar(
     players: Option<Res<Players>>,
     mut panel: Query<&mut Node, With<SidebarPanel>>,
     mut title: Query<&mut Text, With<SidebarTitle>>,
-    mut description: Query<&mut Text, (With<SidebarDescription>, Without<SidebarTitle>, Without<SidebarPlayers>)>,
-    mut players_text: Query<&mut Text, (With<SidebarPlayers>, Without<SidebarTitle>, Without<SidebarDescription>)>,
+    mut description: Query<&mut Text, (With<SidebarDescription>, Without<SidebarTitle>, Without<SidebarPlayers>, Without<SidebarEffects>)>,
+    mut players_text: Query<&mut Text, (With<SidebarPlayers>, Without<SidebarTitle>, Without<SidebarDescription>, Without<SidebarEffects>)>,
+    mut effects_text: Query<&mut Text, (With<SidebarEffects>, Without<SidebarTitle>, Without<SidebarDescription>, Without<SidebarPlayers>)>,
 ) {
     if !hovered.is_changed() {
         return;
@@ -46,6 +47,7 @@ pub fn update_sidebar(
     let Ok(mut title_text) = title.single_mut() else { return };
     let Ok(mut desc_text) = description.single_mut() else { return };
     let Ok(mut pt) = players_text.single_mut() else { return };
+    let Ok(mut et) = effects_text.single_mut() else { return };
 
     match hovered.0.and_then(|pos| dungeon.grid.get(&pos).map(|placed| (pos, placed))) {
         Some((pos, placed)) => {
@@ -66,6 +68,15 @@ pub fn update_sidebar(
                 **pt = String::new();
             } else {
                 **pt = format!("Players: {}", player_names.join(", "));
+            }
+
+            if placed.active_effects.is_empty() {
+                **et = String::new();
+            } else {
+                let descs: Vec<String> = placed.active_effects.iter()
+                    .map(|ae| crate::effects::format_effect_description(&ae.effect))
+                    .collect();
+                **et = format!("Effects: {}", descs.join(", "));
             }
 
             panel_node.display = Display::Flex;
@@ -100,7 +111,8 @@ pub fn update_player_sidebar(
     players: Option<Res<Players>>,
     mut panel: Query<&mut Node, With<PlayerSidebarPanel>>,
     mut name: Query<&mut Text, With<PlayerSidebarName>>,
-    mut desc: Query<&mut Text, (With<PlayerSidebarDescription>, Without<PlayerSidebarName>)>,
+    mut desc: Query<&mut Text, (With<PlayerSidebarDescription>, Without<PlayerSidebarName>, Without<PlayerSidebarEffects>)>,
+    mut effects: Query<&mut Text, (With<PlayerSidebarEffects>, Without<PlayerSidebarName>, Without<PlayerSidebarDescription>)>,
 ) {
     if !hovered.is_changed() {
         return;
@@ -108,11 +120,26 @@ pub fn update_player_sidebar(
     let Ok(mut panel_node) = panel.single_mut() else { return };
     let Ok(mut name_text) = name.single_mut() else { return };
     let Ok(mut desc_text) = desc.single_mut() else { return };
+    let Ok(mut effects_text) = effects.single_mut() else { return };
 
     match hovered.0.and_then(|idx| players.as_ref().and_then(|p| p.0.get(idx))) {
         Some(info) => {
-            **name_text = info.player.name.clone();
+            **name_text = if info.dead {
+                format!("{} [DEAD]", info.player.name)
+            } else {
+                info.player.name.clone()
+            };
             **desc_text = info.player.description.clone();
+
+            if info.active_effects.is_empty() {
+                **effects_text = String::new();
+            } else {
+                let descs: Vec<String> = info.active_effects.iter()
+                    .map(|ae| crate::effects::format_effect_description(&ae.effect))
+                    .collect();
+                **effects_text = format!("Effects: {}", descs.join(", "));
+            }
+
             panel_node.display = Display::Flex;
         }
         None => {

@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use tracing_subscriber::EnvFilter;
 
 mod dungeon;
+mod effects;
 mod generator;
 mod loader;
 mod placement;
@@ -73,6 +74,7 @@ fn main() {
         .insert_resource(TurnNumber::default())
         .insert_resource(SelectedPlayer::default())
         .insert_resource(PendingPlayers(pending_players))
+        .insert_resource(EffectLogBuffer::default())
         .add_systems(Startup, ui::setup_ui)
         .add_systems(
             Update,
@@ -89,6 +91,7 @@ fn main() {
                 players::update_player_hud,
                 players::update_player_dots,
                 players::update_selected_player_highlight,
+                players::update_dead_hud,
                 players::update_selected_hud_highlight,
                 sidebar::detect_player_hover,
                 sidebar::update_player_sidebar,
@@ -122,5 +125,8 @@ fn main() {
         .add_systems(OnEnter(GameState::RevealingRoom), placement::enter_revealing)
         .add_systems(OnEnter(GameState::Placing), placement::enter_placing)
         .add_systems(OnExit(GameState::Placing), placement::exit_placing)
+        .add_systems(OnEnter(GameState::ShowingEffectLog), ui::spawn_effect_log_popup)
+        .add_systems(OnExit(GameState::ShowingEffectLog), ui::despawn_effect_log_popup)
+        .add_systems(Update, ui::handle_effect_log_dismiss.run_if(in_state(GameState::ShowingEffectLog)))
         .run();
 }

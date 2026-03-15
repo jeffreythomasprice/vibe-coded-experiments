@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use bevy::prelude::*;
 
-use crate::schema_types::Player;
+use crate::schema_types::{Effect, Player};
 
 #[derive(Resource, Default)]
 pub struct HoveredRoom(pub Option<IVec2>);
@@ -32,6 +32,7 @@ pub enum GameState {
     Moving,
     RevealingRoom,
     Placing,
+    ShowingEffectLog,
 }
 
 #[derive(Resource)]
@@ -71,6 +72,14 @@ pub const PLAYER_COLORS: [Color; 4] = [
     Color::srgb(0.7, 0.3, 0.9),
 ];
 
+#[derive(Debug, Clone)]
+pub struct ActiveEffect {
+    pub effect: Effect,
+    pub source_room: IVec2,
+    pub remaining_turns: Option<u32>,
+    pub delay_turns: Option<u32>,
+}
+
 pub struct PlayerInfo {
     pub player: Player,
     pub color: Color,
@@ -78,6 +87,8 @@ pub struct PlayerInfo {
     pub remaining_move: i64,
     pub destination: Option<IVec2>,
     pub path: VecDeque<IVec2>,
+    pub active_effects: Vec<ActiveEffect>,
+    pub dead: bool,
 }
 
 #[derive(Resource)]
@@ -116,6 +127,18 @@ pub struct PlayerSidebarDescription;
 #[derive(Component)]
 pub struct PlaceholderRoom;
 
+#[derive(Resource, Default)]
+pub struct EffectLogBuffer(pub Vec<crate::effects::EffectLog>);
+
+#[derive(Resource)]
+pub struct ResumeState(pub GameState);
+
+#[derive(Component)]
+pub struct EffectLogPopup;
+
+#[derive(Component)]
+pub struct EffectLogDismissButton;
+
 #[derive(Component)]
 pub struct TurnNumberText;
 
@@ -130,3 +153,12 @@ pub struct ReachableMarker;
 
 #[derive(Component)]
 pub struct PathPreviewMarker;
+
+#[derive(Component)]
+pub struct SidebarEffects;
+
+#[derive(Component)]
+pub struct PlayerSidebarEffects;
+
+#[derive(Component)]
+pub struct PlayerHudDead(pub usize);

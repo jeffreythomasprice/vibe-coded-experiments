@@ -1,14 +1,12 @@
-I want to implement effects. Leave items and events for later. I just want to stage us to implement those later.
+lsat thing I committed, theoretically done, untested:
 
-We need a function to apply an effect, which takes a triggering player, a triggering room, and an effect. This should produce whatever updates are necessary to apply the effect.
+we should get a popup whenever effects are applied to a player, like a summary page of everything that just happened
 
-Since some effects occur after a certain number of turns, and some effects occur for a duration of some turns, we need the ability to track both on players and rooms.
-
-We should display a list of ongoing effects in the sidebar when mousing over players and rooms.
+we should log every time an effect applies, both when the item or event occurs, and when ongoing stuff ticks
 
 
 
-
+players should be allowed to decide how their physical or mental damage is distributed, instead of it being random
 
 end of turn, or start of new turn, summary of ongoing effects
 

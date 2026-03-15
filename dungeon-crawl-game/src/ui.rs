@@ -111,6 +111,13 @@ pub fn setup_ui(mut commands: Commands) {
                             TextColor(Color::srgb(0.7, 0.9, 0.7)),
                             PlayerHudMove(i),
                         ));
+                        slot.spawn((
+                            Node { display: Display::None, ..default() },
+                            Text::new("✕"),
+                            TextFont { font_size: 20.0, ..default() },
+                            TextColor(Color::srgb(0.9, 0.1, 0.1)),
+                            PlayerHudDead(i),
+                        ));
                     });
             }
         });
@@ -172,6 +179,12 @@ pub fn setup_ui(mut commands: Commands) {
                 TextColor(Color::srgb(0.9, 0.85, 0.5)),
                 SidebarPlayers,
             ));
+            parent.spawn((
+                Text::new(""),
+                TextFont { font_size: 13.0, ..default() },
+                TextColor(Color::srgb(0.8, 0.5, 0.5)),
+                SidebarEffects,
+            ));
         });
 
     // Player sidebar for player info on hover
@@ -204,6 +217,12 @@ pub fn setup_ui(mut commands: Commands) {
                 TextFont { font_size: 14.0, ..default() },
                 TextColor(Color::srgb(0.8, 0.8, 0.8)),
                 PlayerSidebarDescription,
+            ));
+            parent.spawn((
+                Text::new(""),
+                TextFont { font_size: 13.0, ..default() },
+                TextColor(Color::srgb(0.8, 0.5, 0.5)),
+                PlayerSidebarEffects,
             ));
         });
 
@@ -249,6 +268,128 @@ pub fn update_end_turn_visibility(
     let visible = matches!(state.get(), GameState::SelectingDestinations | GameState::Moving);
     for mut node in &mut query {
         node.display = if visible { Display::Flex } else { Display::None };
+    }
+}
+
+pub fn spawn_effect_log_popup(
+    mut commands: Commands,
+    log_buffer: Res<EffectLogBuffer>,
+    players: Option<Res<Players>>,
+) {
+    let logs = &log_buffer.0;
+
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                top: Val::Px(0.0),
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
+            GlobalZIndex(100),
+            EffectLogPopup,
+        ))
+        .with_children(|overlay| {
+            overlay
+                .spawn((
+                    Node {
+                        width: Val::Px(400.0),
+                        flex_direction: FlexDirection::Column,
+                        padding: UiRect::all(Val::Px(20.0)),
+                        row_gap: Val::Px(12.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.15, 0.15, 0.2)),
+                ))
+                .with_children(|panel| {
+                    panel.spawn((
+                        Text::new("Effect Log"),
+                        TextFont { font_size: 24.0, ..default() },
+                        TextColor(Color::WHITE),
+                    ));
+
+                    // Group logs by player
+                    let mut grouped: std::collections::BTreeMap<usize, Vec<&str>> =
+                        std::collections::BTreeMap::new();
+                    for log in logs {
+                        grouped.entry(log.player_idx).or_default().push(&log.description);
+                    }
+
+                    for (idx, descs) in &grouped {
+                        let name = players
+                            .as_ref()
+                            .and_then(|p| p.0.get(*idx))
+                            .map(|info| info.player.name.as_str())
+                            .unwrap_or("Unknown");
+
+                        panel.spawn((
+                            Text::new(name.to_string()),
+                            TextFont { font_size: 18.0, ..default() },
+                            TextColor(PLAYER_COLORS.get(*idx).copied().unwrap_or(Color::WHITE)),
+                        ));
+
+                        for desc in descs {
+                            panel.spawn((
+                                Text::new(format!("  • {desc}")),
+                                TextFont { font_size: 14.0, ..default() },
+                                TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                            ));
+                        }
+                    }
+
+                    panel
+                        .spawn((
+                            Button,
+                            Node {
+                                padding: UiRect::axes(Val::Px(20.0), Val::Px(10.0)),
+                                align_self: AlignSelf::Center,
+                                margin: UiRect::top(Val::Px(8.0)),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.3, 0.5, 0.8)),
+                            EffectLogDismissButton,
+                        ))
+                        .with_child((
+                            Text::new("Continue"),
+                            TextFont { font_size: 18.0, ..default() },
+                            TextColor(Color::WHITE),
+                        ));
+                });
+        });
+}
+
+pub fn despawn_effect_log_popup(
+    mut commands: Commands,
+    popups: Query<Entity, With<EffectLogPopup>>,
+    mut log_buffer: ResMut<EffectLogBuffer>,
+) {
+    for entity in &popups {
+        commands.entity(entity).despawn_recursive();
+    }
+    log_buffer.0.clear();
+}
+
+pub fn handle_effect_log_dismiss(
+    mut commands: Commands,
+    mut next_state: ResMut<NextState<GameState>>,
+    resume: Option<Res<ResumeState>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    buttons: Query<&Interaction, (Changed<Interaction>, With<EffectLogDismissButton>)>,
+) {
+    let dismiss = keys.just_pressed(KeyCode::Space)
+        || keys.just_pressed(KeyCode::Enter)
+        || buttons.iter().any(|i| *i == Interaction::Pressed);
+
+    if !dismiss { return; }
+
+    if let Some(resume) = resume {
+        next_state.set(resume.0.clone());
+        commands.remove_resource::<ResumeState>();
     }
 }
 

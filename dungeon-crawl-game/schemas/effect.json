@@ -42,7 +42,6 @@
             "mental_damage",
             "teleport",
             "lose_turn",
-            "forced_movement",
             "modify_item",
             "modify_room"
           ]

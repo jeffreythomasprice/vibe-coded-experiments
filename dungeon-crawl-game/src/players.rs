@@ -22,6 +22,8 @@ pub fn check_pending_players(
                 remaining_move: 0,
                 destination: None,
                 path: VecDeque::new(),
+                active_effects: Vec::new(),
+                dead: false,
             })
             .collect();
         commands.insert_resource(Players(infos));
@@ -109,6 +111,21 @@ pub fn update_selected_player_highlight(
             ));
             break;
         }
+    }
+}
+
+pub fn update_dead_hud(
+    players: Option<Res<Players>>,
+    mut query: Query<(&mut Node, &PlayerHudDead)>,
+) {
+    let Some(players) = players else { return };
+    if !players.is_changed() { return; }
+    for (mut node, hud) in &mut query {
+        node.display = if players.0.get(hud.0).is_some_and(|p| p.dead) {
+            Display::Flex
+        } else {
+            Display::None
+        };
     }
 }
 

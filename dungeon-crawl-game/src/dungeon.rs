@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use bevy::prelude::*;
 
 use crate::schema_types::{DoorConfigArrangement, Room};
+use crate::types::ActiveEffect;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Direction {
@@ -98,6 +99,7 @@ pub struct PlacedRoom {
     pub room: Room,
     pub rotation: u8,
     pub doors: HashSet<Direction>,
+    pub active_effects: Vec<ActiveEffect>,
 }
 
 #[derive(Resource, Default)]
@@ -108,7 +110,7 @@ pub struct Dungeon {
 impl Dungeon {
     pub fn place(&mut self, pos: IVec2, room: Room, rotation: u8) {
         let doors = rotated_doors(&room.door_config.arrangement, rotation);
-        self.grid.insert(pos, PlacedRoom { room, rotation, doors });
+        self.grid.insert(pos, PlacedRoom { room, rotation, doors, active_effects: Vec::new() });
     }
 
     pub fn candidate_cells(&self) -> HashSet<IVec2> {

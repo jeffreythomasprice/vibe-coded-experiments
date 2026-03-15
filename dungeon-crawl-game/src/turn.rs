@@ -37,7 +37,26 @@ pub fn auto_start_first_turn(
     }
 }
 
-pub fn enter_starting_turn(mut next_state: ResMut<NextState<GameState>>) {
+pub fn enter_starting_turn(
+    mut commands: Commands,
+    mut next_state: ResMut<NextState<GameState>>,
+    mut players: Option<ResMut<Players>>,
+    dungeon: Res<Dungeon>,
+    mut log_buffer: ResMut<EffectLogBuffer>,
+) {
+    if let Some(ref mut players) = players {
+        let mut rng = rand::rngs::ThreadRng::default();
+        let logs = crate::effects::tick_effects(&mut players.0, &dungeon, &mut rng);
+        for log in &logs {
+            tracing::info!("Effect tick: {}", log.description);
+        }
+        if !logs.is_empty() {
+            log_buffer.0 = logs;
+            commands.insert_resource(ResumeState(GameState::SelectingDestinations));
+            next_state.set(GameState::ShowingEffectLog);
+            return;
+        }
+    }
     next_state.set(GameState::SelectingDestinations);
 }
 
@@ -56,7 +75,11 @@ pub fn enter_selecting(
 
     if let Some(ref mut players) = players {
         for info in &mut players.0 {
-            info.remaining_move = (info.player.stats.speed + 1) / 2;
+            if info.dead {
+                info.remaining_move = 0;
+            } else {
+                info.remaining_move = (info.player.stats.speed + 1) / 2;
+            }
             info.destination = None;
             info.path.clear();
         }
@@ -283,7 +306,7 @@ pub fn check_all_destinations_set(
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     let Some(ref players) = players else { return; };
-    if players.0.iter().all(|p| p.remaining_move <= 0 || p.destination.is_some()) {
+    if players.0.iter().all(|p| p.dead || p.remaining_move <= 0 || p.destination.is_some()) {
         next_state.set(GameState::Moving);
     }
 }
@@ -307,7 +330,7 @@ pub fn advance_movement(
 
     for i in 0..players.0.len() {
         let info = &players.0[i];
-        if info.remaining_move <= 0 || info.path.is_empty() { continue; }
+        if info.dead || info.remaining_move <= 0 || info.path.is_empty() { continue; }
         let next = info.path[0];
         if !dungeon.grid.contains_key(&next) {
             commands.insert_resource(RevealingPlayer(i));
@@ -320,7 +343,7 @@ pub fn advance_movement(
 
     let mut any_moved = false;
     for info in &mut players.0 {
-        if info.remaining_move <= 0 || info.path.is_empty() { continue; }
+        if info.dead || info.remaining_move <= 0 || info.path.is_empty() { continue; }
         let next = info.path.pop_front().unwrap();
         info.location = next;
         info.remaining_move -= 1;
