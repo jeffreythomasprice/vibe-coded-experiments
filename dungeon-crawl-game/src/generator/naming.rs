@@ -109,6 +109,33 @@ pub async fn name_event(
     Ok(())
 }
 
+pub async fn name_player(
+    player: &mut Player,
+    contexts: &[GeneratorContext],
+    config: &Config,
+) -> Result<()> {
+    let ctx = filter_context(contexts, ContextEntryAppliesTo::Player);
+    let skeleton = serde_json::to_string_pretty(player)?;
+
+    let prompt = format!(
+        "You are a creative game designer naming player characters for a dungeon crawl game.\n\
+         \n\
+         Theme context:\n{ctx}\n\
+         \n\
+         Here is the mechanical skeleton of a player character:\n{skeleton}\n\
+         \n\
+         Respond with ONLY a JSON object with two fields:\n\
+         - \"name\": a short, evocative character name\n\
+         - \"description\": a one-sentence description of the character"
+    );
+
+    let result = ask_llm(&config.model, &prompt).await?;
+    player.name = result.name;
+    player.description = result.description;
+
+    Ok(())
+}
+
 pub async fn name_room(
     room: &mut Room,
     contexts: &[GeneratorContext],

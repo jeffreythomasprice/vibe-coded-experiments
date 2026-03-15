@@ -18,6 +18,9 @@
     },
     "stats": {
       "$ref": "#/definitions/PlayerStats"
+    },
+    "color": {
+      "type": "string"
     }
   },
   "additionalProperties": false,

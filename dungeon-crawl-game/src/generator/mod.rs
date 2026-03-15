@@ -2,11 +2,13 @@ mod effect;
 mod event;
 mod item;
 pub mod naming;
+mod player;
 mod room;
 
 pub use effect::generate_effect;
 pub use event::generate_event;
 pub use item::generate_item;
+pub use player::generate_player;
 pub use room::generate_room;
 
 use rand::distr::weighted::WeightedIndex;

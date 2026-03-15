@@ -101,13 +101,8 @@ impl Dungeon {
         self.grid.insert(pos, PlacedRoom { room, rotation, doors });
     }
 
-    pub fn valid_placements(
-        &self,
-        arrangement: &DoorConfigArrangement,
-    ) -> Vec<(IVec2, Vec<u8>)> {
-        let mut candidates: HashSet<IVec2> = HashSet::new();
-
-        // collect empty cells adjacent to existing rooms that have a door facing outward
+    pub fn candidate_cells(&self) -> HashSet<IVec2> {
+        let mut candidates = HashSet::new();
         for (pos, placed) in &self.grid {
             for dir in &placed.doors {
                 let neighbor = *pos + dir.offset();
@@ -116,50 +111,22 @@ impl Dungeon {
                 }
             }
         }
+        candidates
+    }
 
-        let mut result = Vec::new();
-        let num_rotations = rotation_count(arrangement);
+    pub fn is_valid_placement(
+        &self,
+        pos: IVec2,
+        arrangement: &DoorConfigArrangement,
+        rotation: u8,
+    ) -> bool {
+        let doors = rotated_doors(arrangement, rotation);
 
-        for candidate in candidates {
-            let mut valid_rotations = Vec::new();
-
-            for rot in 0..num_rotations {
-                let doors = rotated_doors(arrangement, rot);
-                let mut ok = true;
-
-                for dir in Direction::all() {
-                    let neighbor_pos = candidate + dir.offset();
-                    let has_door = doors.contains(&dir);
-
-                    if let Some(neighbor) = self.grid.get(&neighbor_pos) {
-                        let neighbor_has_door = neighbor.doors.contains(&dir.opposite());
-                        // doors must match: both present or both absent
-                        if has_door != neighbor_has_door {
-                            ok = false;
-                            break;
-                        }
-                    }
-                }
-
-                // at least one door must face an existing neighbor that also has a matching door
-                if ok {
-                    let connects = doors.iter().any(|dir| {
-                        let neighbor_pos = candidate + dir.offset();
-                        self.grid
-                            .get(&neighbor_pos)
-                            .is_some_and(|n| n.doors.contains(&dir.opposite()))
-                    });
-                    if connects {
-                        valid_rotations.push(rot);
-                    }
-                }
-            }
-
-            if !valid_rotations.is_empty() {
-                result.push((candidate, valid_rotations));
-            }
-        }
-
-        result
+        doors.iter().any(|dir| {
+            let neighbor_pos = pos + dir.offset();
+            self.grid
+                .get(&neighbor_pos)
+                .is_some_and(|n| n.doors.contains(&dir.opposite()))
+        })
     }
 }
