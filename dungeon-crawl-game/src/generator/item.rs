@@ -9,6 +9,7 @@ pub async fn generate_item(
     rng: &mut impl Rng,
     contexts: &[GeneratorContext],
     config: &Config,
+    existing_names: &[String],
 ) -> Result<Item> {
     let count = roll_effect_count(magnitude, rng);
     let effects: Vec<Effect> = (0..count)
@@ -26,6 +27,6 @@ pub async fn generate_item(
         tradable: !cursed,
     };
 
-    naming::name_item(&mut item, contexts, config).await?;
+    naming::name_item(&mut item, contexts, config, existing_names).await?;
     Ok(item)
 }

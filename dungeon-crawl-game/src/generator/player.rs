@@ -8,6 +8,7 @@ pub async fn generate_player(
     rng: &mut impl Rng,
     contexts: &[GeneratorContext],
     config: &Config,
+    existing_names: &[String],
 ) -> Result<Player> {
     let base = 10_i64;
     let mut player = Player {
@@ -24,6 +25,6 @@ pub async fn generate_player(
         color: None,
     };
 
-    naming::name_player(&mut player, contexts, config).await?;
+    naming::name_player(&mut player, contexts, config, existing_names).await?;
     Ok(player)
 }

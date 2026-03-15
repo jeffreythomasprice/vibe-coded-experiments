@@ -9,6 +9,7 @@ pub async fn generate_event(
     rng: &mut impl Rng,
     contexts: &[GeneratorContext],
     config: &Config,
+    existing_names: &[String],
 ) -> Result<Event> {
     let count = roll_effect_count(magnitude, rng);
     let effects: Vec<Effect> = (0..count)
@@ -22,6 +23,6 @@ pub async fn generate_event(
         magnitude,
     };
 
-    naming::name_event(&mut event, contexts, config).await?;
+    naming::name_event(&mut event, contexts, config, existing_names).await?;
     Ok(event)
 }

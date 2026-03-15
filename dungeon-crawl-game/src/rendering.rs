@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use bevy::text::TextBounds;
 
+use crate::PlaceholderRoom;
 use crate::dungeon::Direction;
 
 pub const ROOM_SIZE: f32 = 120.0;
@@ -90,6 +91,31 @@ pub fn spawn_room_visuals(commands: &mut Commands, pos: IVec2, doors: &HashSet<D
                     width: Some(ROOM_SIZE - padding * 2.0),
                     height: Some(ROOM_SIZE - padding * 2.0),
                 },
+                Anchor::Center,
+                Transform::from_translation(Vec3::new(0.0, 0.0, 2.0)),
+            ));
+        });
+}
+
+pub fn spawn_placeholder_room(commands: &mut Commands, pos: IVec2) {
+    let world = grid_to_world(pos);
+    commands
+        .spawn((
+            Sprite {
+                color: ROOM_COLOR,
+                custom_size: Some(Vec2::splat(ROOM_SIZE)),
+                ..default()
+            },
+            Transform::from_translation(world.extend(0.0)),
+            RoomSprite(pos),
+            PlaceholderRoom,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text2d::new("?"),
+                TextFont { font_size: 16.0, ..default() },
+                TextColor(Color::WHITE),
+                TextLayout { justify: JustifyText::Center, ..default() },
                 Anchor::Center,
                 Transform::from_translation(Vec3::new(0.0, 0.0, 2.0)),
             ));

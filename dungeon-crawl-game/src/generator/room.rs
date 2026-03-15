@@ -9,6 +9,7 @@ pub async fn generate_room(
     rng: &mut impl Rng,
     contexts: &[GeneratorContext],
     config: &Config,
+    existing_names: &[String],
 ) -> Result<Room> {
     let arrangements = [
         DoorConfigArrangement::DeadEnd,
@@ -20,9 +21,9 @@ pub async fn generate_room(
     let arrangement = arrangements.choose(rng).unwrap().clone();
 
     let content = if rng.random_bool(0.5) {
-        RoomContent::Item(generate_item(magnitude, rng, contexts, config).await?)
+        RoomContent::Item(generate_item(magnitude, rng, contexts, config, existing_names).await?)
     } else {
-        RoomContent::Event(generate_event(magnitude, rng, contexts, config).await?)
+        RoomContent::Event(generate_event(magnitude, rng, contexts, config, existing_names).await?)
     };
 
     let mut room = Room {
@@ -33,6 +34,6 @@ pub async fn generate_room(
         content: Some(content),
     };
 
-    naming::name_room(&mut room, contexts, config).await?;
+    naming::name_room(&mut room, contexts, config, existing_names).await?;
     Ok(room)
 }

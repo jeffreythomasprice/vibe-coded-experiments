@@ -10,6 +10,7 @@ use crate::schema_types::*;
 
 struct Inner {
     rooms: VecDeque<Room>,
+    used_names: Vec<String>,
     in_flight: usize,
 }
 
@@ -22,6 +23,7 @@ impl RoomQueue {
     pub fn new(config: Config, themes: Vec<GeneratorContext>, target_size: usize) -> Self {
         let inner = Arc::new(Mutex::new(Inner {
             rooms: VecDeque::new(),
+            used_names: Vec::new(),
             in_flight: 0,
         }));
 
@@ -38,19 +40,24 @@ impl RoomQueue {
                     };
 
                     if should_generate {
-                        {
-                            shared.lock().unwrap().in_flight += 1;
-                        }
+                        let existing_names = {
+                            let mut lock = shared.lock().unwrap();
+                            lock.in_flight += 1;
+                            let mut names = lock.used_names.clone();
+                            names.extend(lock.rooms.iter().map(|r| r.name.clone()));
+                            names
+                        };
 
                         let magnitude: f64 = rand::Rng::random_range(&mut rng, 0.0..=1.0);
                         match crate::generator::generate_room(
-                            magnitude, &mut rng, &themes, &config,
+                            magnitude, &mut rng, &themes, &config, &existing_names,
                         )
                         .await
                         {
                             Ok(room) => {
                                 info!("Generated room:\n{}", serde_json::to_string_pretty(&room).unwrap_or_default());
                                 let mut lock = shared.lock().unwrap();
+                                lock.used_names.push(room.name.clone());
                                 lock.rooms.push_back(room);
                                 lock.in_flight -= 1;
                             }

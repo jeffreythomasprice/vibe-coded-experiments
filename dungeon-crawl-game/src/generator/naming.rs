@@ -55,10 +55,46 @@ async fn ask_llm(model: &str, prompt: &str) -> Result<NameDescription> {
     Ok(result)
 }
 
+fn is_too_similar(name: &str, existing: &[String]) -> bool {
+    let lower = name.to_lowercase();
+    existing.iter().any(|e| {
+        let el = e.to_lowercase();
+        el == lower || el.contains(&lower) || lower.contains(&el)
+    })
+}
+
+fn avoid_duplicates_clause(existing: &[String]) -> String {
+    if existing.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\n\nDo not reuse or closely resemble any of these existing names: {}",
+            existing.join(", ")
+        )
+    }
+}
+
+async fn ask_llm_unique(
+    model: &str,
+    base_prompt: &str,
+    existing: &[String],
+) -> Result<NameDescription> {
+    let prompt = format!("{base_prompt}{}", avoid_duplicates_clause(existing));
+    for attempt in 0..3 {
+        let result = ask_llm(model, &prompt).await?;
+        if attempt < 2 && is_too_similar(&result.name, existing) {
+            continue;
+        }
+        return Ok(result);
+    }
+    unreachable!()
+}
+
 pub async fn name_item(
     item: &mut Item,
     contexts: &[GeneratorContext],
     config: &Config,
+    existing_names: &[String],
 ) -> Result<()> {
     let ctx = filter_context(contexts, ContextEntryAppliesTo::Item);
     let skeleton = serde_json::to_string_pretty(item)?;
@@ -75,7 +111,7 @@ pub async fn name_item(
          - \"description\": a one-sentence description of the item"
     );
 
-    let result = ask_llm(&config.model, &prompt).await?;
+    let result = ask_llm_unique(&config.model, &prompt, existing_names).await?;
     item.name = result.name;
     item.description = result.description;
 
@@ -86,6 +122,7 @@ pub async fn name_event(
     event: &mut Event,
     contexts: &[GeneratorContext],
     config: &Config,
+    existing_names: &[String],
 ) -> Result<()> {
     let ctx = filter_context(contexts, ContextEntryAppliesTo::Event);
     let skeleton = serde_json::to_string_pretty(event)?;
@@ -102,7 +139,7 @@ pub async fn name_event(
          - \"description\": a one-sentence description of the event"
     );
 
-    let result = ask_llm(&config.model, &prompt).await?;
+    let result = ask_llm_unique(&config.model, &prompt, existing_names).await?;
     event.name = result.name;
     event.description = result.description;
 
@@ -113,6 +150,7 @@ pub async fn name_player(
     player: &mut Player,
     contexts: &[GeneratorContext],
     config: &Config,
+    existing_names: &[String],
 ) -> Result<()> {
     let ctx = filter_context(contexts, ContextEntryAppliesTo::Player);
     let skeleton = serde_json::to_string_pretty(player)?;
@@ -129,7 +167,7 @@ pub async fn name_player(
          - \"description\": a one-sentence description of the character"
     );
 
-    let result = ask_llm(&config.model, &prompt).await?;
+    let result = ask_llm_unique(&config.model, &prompt, existing_names).await?;
     player.name = result.name;
     player.description = result.description;
 
@@ -140,6 +178,7 @@ pub async fn name_room(
     room: &mut Room,
     contexts: &[GeneratorContext],
     config: &Config,
+    existing_names: &[String],
 ) -> Result<()> {
     let ctx = filter_context(contexts, ContextEntryAppliesTo::Room);
     let skeleton = serde_json::to_string_pretty(room)?;
@@ -156,7 +195,7 @@ pub async fn name_room(
          - \"description\": a two-sentence atmospheric description of the room"
     );
 
-    let result = ask_llm(&config.model, &prompt).await?;
+    let result = ask_llm_unique(&config.model, &prompt, existing_names).await?;
     room.name = result.name;
     room.description = result.description;
 
