@@ -1,7 +1,16 @@
-unit tests?
+I want to implement effects. Leave items and events for later. I just want to stage us to implement those later.
+
+We need a function to apply an effect, which takes a triggering player, a triggering room, and an effect. This should produce whatever updates are necessary to apply the effect.
+
+Since some effects occur after a certain number of turns, and some effects occur for a duration of some turns, we need the ability to track both on players and rooms.
+
+We should display a list of ongoing effects in the sidebar when mousing over players and rooms.
 
 
 
+
+
+end of turn, or start of new turn, summary of ongoing effects
 
 room generation gets stuck? similarity/duplicate checks too expensive?
 

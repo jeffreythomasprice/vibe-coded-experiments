@@ -239,3 +239,204 @@ impl Dungeon {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::schema_types::{DoorConfig, Room};
+
+    fn make_room(arrangement: DoorConfigArrangement) -> Room {
+        Room {
+            name: String::new(),
+            description: String::new(),
+            door_config: DoorConfig { arrangement },
+            magnitude: 0.5,
+            content: None,
+        }
+    }
+
+    #[test]
+    fn direction_opposite() {
+        assert_eq!(Direction::North.opposite(), Direction::South);
+        assert_eq!(Direction::East.opposite(), Direction::West);
+        assert_eq!(Direction::South.opposite(), Direction::North);
+        assert_eq!(Direction::West.opposite(), Direction::East);
+    }
+
+    #[test]
+    fn direction_offset() {
+        assert_eq!(Direction::North.offset(), IVec2::Y);
+        assert_eq!(Direction::East.offset(), IVec2::X);
+        assert_eq!(Direction::South.offset(), IVec2::NEG_Y);
+        assert_eq!(Direction::West.offset(), IVec2::NEG_X);
+    }
+
+    #[test]
+    fn direction_rotate_cw() {
+        assert_eq!(Direction::North.rotate_cw(1), Direction::East);
+        assert_eq!(Direction::North.rotate_cw(2), Direction::South);
+        assert_eq!(Direction::North.rotate_cw(4), Direction::North);
+        assert_eq!(Direction::West.rotate_cw(1), Direction::North);
+    }
+
+    #[test]
+    fn direction_from_offset() {
+        assert_eq!(Direction::from_offset(IVec2::new(0, 1)), Some(Direction::North));
+        assert_eq!(Direction::from_offset(IVec2::new(1, 1)), None);
+    }
+
+    #[test]
+    fn canonical_doors_dead_end() {
+        let doors = canonical_doors(&DoorConfigArrangement::DeadEnd);
+        assert_eq!(doors, vec![Direction::South]);
+    }
+
+    #[test]
+    fn canonical_doors_crossroads() {
+        let doors = canonical_doors(&DoorConfigArrangement::Crossroads);
+        assert_eq!(doors.len(), 4);
+    }
+
+    #[test]
+    fn rotated_doors_corner() {
+        let doors = rotated_doors(&DoorConfigArrangement::Corner, 0);
+        assert!(doors.contains(&Direction::South));
+        assert!(doors.contains(&Direction::East));
+        let rotated = rotated_doors(&DoorConfigArrangement::Corner, 1);
+        assert!(rotated.contains(&Direction::West));
+        assert!(rotated.contains(&Direction::South));
+    }
+
+    #[test]
+    fn rotation_count_values() {
+        assert_eq!(rotation_count(&DoorConfigArrangement::Crossroads), 1);
+        assert_eq!(rotation_count(&DoorConfigArrangement::Straight), 2);
+        assert_eq!(rotation_count(&DoorConfigArrangement::DeadEnd), 4);
+        assert_eq!(rotation_count(&DoorConfigArrangement::Corner), 4);
+        assert_eq!(rotation_count(&DoorConfigArrangement::TIntersection), 4);
+    }
+
+    #[test]
+    fn candidate_cells_from_single_room() {
+        let mut dungeon = Dungeon::default();
+        dungeon.place(IVec2::ZERO, make_room(DoorConfigArrangement::Crossroads), 0);
+        let candidates = dungeon.candidate_cells();
+        assert_eq!(candidates.len(), 4);
+        assert!(candidates.contains(&IVec2::new(0, 1)));
+        assert!(candidates.contains(&IVec2::new(1, 0)));
+        assert!(candidates.contains(&IVec2::new(0, -1)));
+        assert!(candidates.contains(&IVec2::new(-1, 0)));
+    }
+
+    #[test]
+    fn candidate_cells_excludes_occupied() {
+        let mut dungeon = Dungeon::default();
+        dungeon.place(IVec2::ZERO, make_room(DoorConfigArrangement::Straight), 0);
+        // doors: N and S
+        dungeon.place(IVec2::new(0, 1), make_room(DoorConfigArrangement::Straight), 0);
+        let candidates = dungeon.candidate_cells();
+        // (0,1) is occupied, so candidates are (0,-1) and (0,2)
+        assert!(candidates.contains(&IVec2::new(0, -1)));
+        assert!(candidates.contains(&IVec2::new(0, 2)));
+        assert!(!candidates.contains(&IVec2::new(0, 1)));
+    }
+
+    #[test]
+    fn neighbors_connected_doors() {
+        let mut dungeon = Dungeon::default();
+        dungeon.place(IVec2::ZERO, make_room(DoorConfigArrangement::Straight), 0);
+        dungeon.place(IVec2::new(0, 1), make_room(DoorConfigArrangement::Straight), 0);
+        let n = dungeon.neighbors(IVec2::ZERO);
+        assert!(n.contains(&IVec2::new(0, 1)));
+    }
+
+    #[test]
+    fn neighbors_no_matching_door() {
+        let mut dungeon = Dungeon::default();
+        // straight room at origin: doors N, S
+        dungeon.place(IVec2::ZERO, make_room(DoorConfigArrangement::Straight), 0);
+        // dead end at (1,0): door S only — no door facing West toward origin
+        dungeon.place(IVec2::new(1, 0), make_room(DoorConfigArrangement::DeadEnd), 0);
+        let n = dungeon.neighbors(IVec2::ZERO);
+        assert!(!n.contains(&IVec2::new(1, 0)));
+    }
+
+    #[test]
+    fn shortest_path_same_cell() {
+        let dungeon = Dungeon::default();
+        let path = dungeon.shortest_path(IVec2::ZERO, IVec2::ZERO);
+        assert_eq!(path, Some(vec![IVec2::ZERO]));
+    }
+
+    #[test]
+    fn shortest_path_linear() {
+        let mut dungeon = Dungeon::default();
+        for y in 0..3 {
+            dungeon.place(IVec2::new(0, y), make_room(DoorConfigArrangement::Straight), 0);
+        }
+        let path = dungeon.shortest_path(IVec2::ZERO, IVec2::new(0, 2)).unwrap();
+        assert_eq!(path, vec![IVec2::new(0, 0), IVec2::new(0, 1), IVec2::new(0, 2)]);
+    }
+
+    #[test]
+    fn shortest_path_unreachable() {
+        let mut dungeon = Dungeon::default();
+        dungeon.place(IVec2::ZERO, make_room(DoorConfigArrangement::DeadEnd), 0);
+        dungeon.place(IVec2::new(5, 5), make_room(DoorConfigArrangement::DeadEnd), 0);
+        assert!(dungeon.shortest_path(IVec2::ZERO, IVec2::new(5, 5)).is_none());
+    }
+
+    #[test]
+    fn reachable_within_steps() {
+        let mut dungeon = Dungeon::default();
+        for y in 0..5 {
+            dungeon.place(IVec2::new(0, y), make_room(DoorConfigArrangement::Straight), 0);
+        }
+        let reachable = dungeon.reachable_within(IVec2::ZERO, 2);
+        assert!(reachable.contains(&IVec2::ZERO));
+        assert!(reachable.contains(&IVec2::new(0, 1)));
+        assert!(reachable.contains(&IVec2::new(0, 2)));
+        // (0,-1) is a candidate cell (unrevealed), reachable at dist 1
+        assert!(reachable.contains(&IVec2::new(0, -1)));
+        // (0,3) should be reachable at dist 3 — beyond limit
+        assert!(!reachable.contains(&IVec2::new(0, 3)));
+    }
+
+    #[test]
+    fn is_valid_placement_connects() {
+        let mut dungeon = Dungeon::default();
+        dungeon.place(IVec2::ZERO, make_room(DoorConfigArrangement::Straight), 0);
+        // straight at (0,1) with rotation 0 has N/S doors — S matches origin's N
+        assert!(dungeon.is_valid_placement(IVec2::new(0, 1), &DoorConfigArrangement::Straight, 0));
+        // straight at (1,0) has N/S — no door facing W to connect to origin's E (origin has no E door)
+        assert!(!dungeon.is_valid_placement(IVec2::new(1, 0), &DoorConfigArrangement::Straight, 0));
+    }
+
+    #[test]
+    fn find_first_valid_rotation_found() {
+        let mut dungeon = Dungeon::default();
+        dungeon.place(IVec2::ZERO, make_room(DoorConfigArrangement::Crossroads), 0);
+        // need a dead end at (0,1) with door facing South
+        let rot = dungeon.find_first_valid_rotation(
+            IVec2::new(0, 1),
+            &DoorConfigArrangement::DeadEnd,
+            Direction::South,
+        );
+        assert!(rot.is_some());
+        let doors = rotated_doors(&DoorConfigArrangement::DeadEnd, rot.unwrap());
+        assert!(doors.contains(&Direction::South));
+    }
+
+    #[test]
+    fn find_first_valid_rotation_none() {
+        let dungeon = Dungeon::default();
+        // no neighbors, so no valid placement
+        let rot = dungeon.find_first_valid_rotation(
+            IVec2::ZERO,
+            &DoorConfigArrangement::DeadEnd,
+            Direction::South,
+        );
+        assert!(rot.is_none());
+    }
+}

@@ -6,6 +6,7 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use tracing::info;
 
+use crate::generator::LlmClient;
 use crate::schema_types::*;
 
 struct Inner {
@@ -20,7 +21,12 @@ pub struct RoomQueue {
 }
 
 impl RoomQueue {
-    pub fn new(config: Config, themes: Vec<GeneratorContext>, target_size: usize) -> Self {
+    pub fn new(
+        config: Config,
+        themes: Vec<GeneratorContext>,
+        target_size: usize,
+        llm: Arc<dyn LlmClient>,
+    ) -> Self {
         let inner = Arc::new(Mutex::new(Inner {
             rooms: VecDeque::new(),
             used_names: Vec::new(),
@@ -50,7 +56,7 @@ impl RoomQueue {
 
                         let magnitude: f64 = rand::Rng::random_range(&mut rng, 0.0..=1.0);
                         match crate::generator::generate_room(
-                            magnitude, &mut rng, &themes, &config, &existing_names,
+                            magnitude, &mut rng, &themes, &config, &existing_names, llm.as_ref(),
                         )
                         .await
                         {

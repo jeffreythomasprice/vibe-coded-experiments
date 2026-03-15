@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rand::prelude::*;
 
-use super::{generate_effect, naming, roll_effect_count};
+use super::{LlmClient, generate_effect, naming, roll_effect_count};
 use crate::schema_types::*;
 
 pub async fn generate_event(
@@ -10,6 +10,7 @@ pub async fn generate_event(
     contexts: &[GeneratorContext],
     config: &Config,
     existing_names: &[String],
+    llm: &dyn LlmClient,
 ) -> Result<Event> {
     let count = roll_effect_count(magnitude, rng);
     let effects: Vec<Effect> = (0..count)
@@ -23,6 +24,6 @@ pub async fn generate_event(
         magnitude,
     };
 
-    naming::name_event(&mut event, contexts, config, existing_names).await?;
+    naming::name_event(&mut event, contexts, config, existing_names, llm).await?;
     Ok(event)
 }

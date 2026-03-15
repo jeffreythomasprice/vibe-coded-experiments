@@ -29,28 +29,20 @@
       "type": "object",
       "required": [
         "strength",
-        "dexterity",
+        "speed",
         "intelligence",
-        "health"
+        "sanity"
       ],
       "properties": {
         "strength": {
           "type": "integer",
           "default": 10
         },
-        "dexterity": {
+        "speed": {
           "type": "integer",
           "default": 10
         },
         "intelligence": {
-          "type": "integer",
-          "default": 10
-        },
-        "health": {
-          "type": "integer",
-          "default": 10
-        },
-        "speed": {
           "type": "integer",
           "default": 10
         },

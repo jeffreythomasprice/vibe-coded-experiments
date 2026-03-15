@@ -95,3 +95,67 @@ pub fn generate_effect(magnitude: f64, rng: &mut impl Rng) -> Effect {
         timing_turns,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
+
+    #[test]
+    fn generate_effect_low_magnitude() {
+        let mut rng = StdRng::seed_from_u64(42);
+        let effect = generate_effect(0.0, &mut rng);
+        if let Some(amt) = effect.result_amount {
+            assert!(amt >= 1 && amt <= 15);
+        }
+    }
+
+    #[test]
+    fn generate_effect_high_magnitude() {
+        let mut rng = StdRng::seed_from_u64(42);
+        let effect = generate_effect(1.0, &mut rng);
+        if let Some(amt) = effect.result_amount {
+            assert!(amt >= 1 && amt <= 15);
+        }
+    }
+
+    #[test]
+    fn generate_effect_has_trigger_stat_for_stat_check() {
+        let mut rng = StdRng::seed_from_u64(0);
+        for _ in 0..200 {
+            let effect = generate_effect(1.0, &mut rng);
+            if matches!(effect.trigger_type, EffectTriggerType::StatCheck) {
+                assert!(effect.trigger_stat.is_some());
+            }
+        }
+    }
+
+    #[test]
+    fn generate_effect_timing_turns_for_duration() {
+        let mut rng = StdRng::seed_from_u64(0);
+        for _ in 0..200 {
+            let effect = generate_effect(1.0, &mut rng);
+            match effect.timing_type {
+                EffectTimingType::Duration | EffectTimingType::Delayed => {
+                    assert!(effect.timing_turns.is_some());
+                }
+                EffectTimingType::Immediate => {
+                    assert!(effect.timing_turns.is_none());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn generate_effect_modify_stat_has_stat() {
+        let mut rng = StdRng::seed_from_u64(0);
+        for _ in 0..200 {
+            let effect = generate_effect(0.5, &mut rng);
+            if matches!(effect.result_type, EffectResultType::ModifyStat) {
+                assert!(effect.result_stat.is_some());
+                assert!(effect.result_amount.is_some());
+            }
+        }
+    }
+}

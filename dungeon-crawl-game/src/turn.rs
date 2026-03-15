@@ -56,7 +56,7 @@ pub fn enter_selecting(
 
     if let Some(ref mut players) = players {
         for info in &mut players.0 {
-            info.remaining_move = info.player.stats.speed;
+            info.remaining_move = (info.player.stats.speed + 1) / 2;
             info.destination = None;
             info.path.clear();
         }

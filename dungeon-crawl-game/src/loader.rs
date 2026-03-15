@@ -143,3 +143,59 @@ pub fn load_theme(path: impl AsRef<Path>) -> Result<Vec<GeneratorContext>, LoadE
     let themes: Vec<GeneratorContext> = serde_json::from_value(value)?;
     Ok(themes)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_refs_inlines_external() {
+        let mut resolver = HashMap::new();
+        resolver.insert(
+            "effect.json".to_string(),
+            serde_json::json!({
+                "definitions": {
+                    "Foo": { "type": "string" }
+                }
+            }),
+        );
+        let mut schema = serde_json::json!({
+            "properties": {
+                "x": { "$ref": "effect.json#/definitions/Foo" }
+            }
+        });
+        resolve_refs(&mut schema, &resolver);
+        assert_eq!(schema["properties"]["x"]["type"], "string");
+    }
+
+    #[test]
+    fn resolve_refs_no_ref_unchanged() {
+        let resolver = HashMap::new();
+        let mut schema = serde_json::json!({ "type": "string" });
+        let original = schema.clone();
+        resolve_refs(&mut schema, &resolver);
+        assert_eq!(schema, original);
+    }
+
+    #[test]
+    fn validate_valid_config() {
+        let data = serde_json::json!({ "model": "llama3" });
+        assert!(validate_against_schema(&data, SCHEMA_CONFIG).is_ok());
+    }
+
+    #[test]
+    fn validate_invalid_config_missing_model() {
+        let data = serde_json::json!({});
+        assert!(validate_against_schema(&data, SCHEMA_CONFIG).is_err());
+    }
+
+    #[test]
+    fn validate_valid_player() {
+        let data = serde_json::json!({
+            "name": "Test",
+            "description": "A test player",
+            "stats": { "strength": 10, "speed": 10, "intelligence": 10, "sanity": 10 }
+        });
+        assert!(validate_against_schema(&data, SCHEMA_PLAYER).is_ok());
+    }
+}

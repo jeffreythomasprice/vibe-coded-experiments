@@ -1,4 +1,5 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use bevy::prelude::*;
 use tracing_subscriber::EnvFilter;
@@ -34,10 +35,12 @@ fn main() {
     let config = loader::load_config("config.yaml").expect("Failed to load config");
     let themes = loader::load_theme("assets/theme.yaml").expect("Failed to load theme");
 
-    let queue = RoomQueue::new(config.clone(), themes.clone(), 3);
+    let llm: Arc<dyn generator::LlmClient> = Arc::new(generator::OllamaClient);
+    let queue = RoomQueue::new(config.clone(), themes.clone(), 3, llm.clone());
 
     let pending_players = Arc::new(Mutex::new(None));
     let pending_clone = pending_players.clone();
+    let llm_clone = llm.clone();
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
         use rand::SeedableRng;
@@ -46,7 +49,7 @@ fn main() {
             let mut generated = Vec::new();
             for _ in 0..4 {
                 let existing: Vec<String> = generated.iter().map(|p: &Player| p.name.clone()).collect();
-                match generator::generate_player(&mut rng, &themes, &config, &existing).await {
+                match generator::generate_player(&mut rng, &themes, &config, &existing, llm_clone.as_ref()).await {
                     Ok(p) => {
                         tracing::info!("Generated player: {}", p.name);
                         generated.push(p);
