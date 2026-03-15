@@ -3,11 +3,19 @@
   "definitions": {
     "Effect": {
       "type": "object",
-      "required": ["trigger_type", "result_type", "target"],
+      "required": [
+        "trigger_type",
+        "result_type",
+        "target"
+      ],
       "properties": {
         "trigger_type": {
           "type": "string",
-          "enum": ["stat_check", "always", "random_roll"]
+          "enum": [
+            "stat_check",
+            "always",
+            "random_roll"
+          ]
         },
         "trigger_stat": {
           "type": "string"
@@ -50,11 +58,19 @@
         },
         "target": {
           "type": "string",
-          "enum": ["self", "room", "all"]
+          "enum": [
+            "self",
+            "room",
+            "all"
+          ]
         },
         "timing_type": {
           "type": "string",
-          "enum": ["immediate", "duration", "delayed"],
+          "enum": [
+            "immediate",
+            "duration",
+            "delayed"
+          ],
           "default": "immediate"
         },
         "timing_turns": {

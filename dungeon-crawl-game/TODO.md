@@ -1,14 +1,11 @@
-figure out what I'm actually doing here
-rust? bun? python?
-strands?
+camera controls, let me zoom in and out and pan
 
-- random effect system
-	when generating random rooms, don't let it llm the effects, just the descriptions and any metadata we then use to do a more procedural effect generator
+sidebar, hover over room and get info on the right
 
-- generate players
+when placing rooms let me see an outline of the room to be placed and rotate through valid door matchups
 
-- generate items
+generate people
 
-- game state manager thing that holds a bunch of random rooms and events and stuff
+draw people in rooms
 
-- bevy renderer that draws players, rooms, etc.
+draw people icons at the top

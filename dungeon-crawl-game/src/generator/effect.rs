@@ -1,0 +1,97 @@
+use rand::prelude::*;
+
+use crate::schema_types::*;
+use super::{WeightTable, lerp, random_stat};
+
+fn result_type_table() -> WeightTable<EffectResultType> {
+    use EffectResultType::*;
+    WeightTable::new(&[
+        (ModifyStat,      30.0, 10.0),
+        (GainItem,         1.0, 10.0),
+        (LoseItem,         1.0, 10.0),
+        (PhysicalDamage,  30.0, 10.0),
+        (MentalDamage,    30.0, 10.0),
+        (Teleport,         1.0, 10.0),
+        (LoseTurn,         1.0, 10.0),
+        (ForcedMovement,   1.0, 10.0),
+        (ModifyItem,       1.0, 10.0),
+        (ModifyRoom,       1.0, 10.0),
+    ])
+}
+
+fn trigger_type_table() -> WeightTable<EffectTriggerType> {
+    use EffectTriggerType::*;
+    WeightTable::new(&[
+        (Always,     0.8, 0.2),
+        (StatCheck,  0.1, 0.4),
+        (RandomRoll, 0.1, 0.4),
+    ])
+}
+
+fn target_table() -> WeightTable<EffectTarget> {
+    use EffectTarget::*;
+    WeightTable::new(&[
+        (SelfKind, 0.8, 0.3),
+        (Room,     0.1, 0.35),
+        (All,      0.1, 0.35),
+    ])
+}
+
+fn timing_type_table() -> WeightTable<EffectTimingType> {
+    use EffectTimingType::*;
+    WeightTable::new(&[
+        (Immediate, 0.8, 0.3),
+        (Duration,  0.1, 0.35),
+        (Delayed,   0.1, 0.35),
+    ])
+}
+
+pub fn generate_effect(magnitude: f64, rng: &mut impl Rng) -> Effect {
+    let result_type = result_type_table().sample(magnitude, rng);
+    let trigger_type = trigger_type_table().sample(magnitude, rng);
+    let target = target_table().sample(magnitude, rng);
+    let timing_type = timing_type_table().sample(magnitude, rng);
+
+    let mut result_stat = None;
+    let mut result_amount = None;
+    let mut result_item_name = None;
+
+    match &result_type {
+        EffectResultType::ModifyStat => {
+            result_stat = Some(random_stat(rng));
+            result_amount = Some(lerp(1.0, 10.0, magnitude).round() as i64);
+        }
+        EffectResultType::PhysicalDamage | EffectResultType::MentalDamage => {
+            result_amount = Some(lerp(1.0, 15.0, magnitude).round() as i64);
+        }
+        EffectResultType::GainItem | EffectResultType::LoseItem => {
+            result_item_name = None; // filled by LLM
+        }
+        _ => {}
+    }
+
+    let trigger_stat = match &trigger_type {
+        EffectTriggerType::StatCheck => Some(random_stat(rng)),
+        _ => None,
+    };
+
+    let timing_turns = match &timing_type {
+        EffectTimingType::Duration | EffectTimingType::Delayed => {
+            Some(lerp(1.0, 5.0, magnitude).round() as i64)
+        }
+        _ => None,
+    };
+
+    Effect {
+        trigger_type,
+        result_type,
+        target,
+        trigger_stat,
+        trigger_outcomes: None,
+        result_stat,
+        result_amount,
+        result_item_name,
+        timing_type,
+        timing_turns,
+    }
+}

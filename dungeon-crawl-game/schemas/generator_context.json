@@ -3,7 +3,10 @@
   "title": "GeneratorContext",
   "description": "A collection of context entries used to guide LLM generation of game objects.",
   "type": "object",
-  "required": ["name", "entries"],
+  "required": [
+    "name",
+    "entries"
+  ],
   "properties": {
     "name": {
       "type": "string",
@@ -20,7 +23,9 @@
   "definitions": {
     "ContextEntry": {
       "type": "object",
-      "required": ["text"],
+      "required": [
+        "text"
+      ],
       "properties": {
         "text": {
           "type": "string",
@@ -28,7 +33,13 @@
         },
         "applies_to": {
           "type": "string",
-          "enum": ["all", "player", "room", "item", "event"],
+          "enum": [
+            "all",
+            "player",
+            "room",
+            "item",
+            "event"
+          ],
           "default": "all"
         }
       },

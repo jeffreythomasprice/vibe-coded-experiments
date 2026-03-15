@@ -2,10 +2,13 @@
   entries:
     - applies_to: all
       text: |
-        This is a haunted house. It's more of a large victorian, gothic mansion. There is a deep sense of forboding throughout the property.
-        
+        This is a haunted house.
+        It's more of a large victorian, gothic mansion.
+        The general theme is abandoned or decrepit.
+        In it's prime this was a respectable mansion.
+        There is a deep sense of forboding throughout the property.
+        Technology level should be early 1900s. e.g. electric lights and early telephones, but relatively little else.
         Stuck as you are inside, you have no choice by to explore.
-
     - applies_to: all
       text: In all cases the theme we're going for is spooky horror. Things not listed here are fine as long as they abide by the theme.
 
@@ -23,6 +26,12 @@
         - graveyard
         - courtyard
         - gradens
+
+        Names should be the sorts of things you would actually find in this setting:
+        - Good: The Kitchen's, The Ballroom
+        - Bad: The Corridor of Lost Steps
+
+        Descriptions can have more flavor text.
 
     - applies_to: player
       text: |
