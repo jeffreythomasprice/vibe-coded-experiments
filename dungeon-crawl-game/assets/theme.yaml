@@ -1,0 +1,59 @@
+- name: Haunted House
+  entries:
+    - applies_to: all
+      text: |
+        This is a haunted house. It's more of a large victorian, gothic mansion. There is a deep sense of forboding throughout the property.
+        
+        Stuck as you are inside, you have no choice by to explore.
+
+    - applies_to: all
+      text: In all cases the theme we're going for is spooky horror. Things not listed here are fine as long as they abide by the theme.
+
+    - applies_to: room
+      text: |
+        Inspiration:
+        - kitchen
+        - bedroom
+        - servant's quarters
+        - bathroom
+        - ball room
+        - corridor
+        - pantry
+        - billiard's room
+        - graveyard
+        - courtyard
+        - gradens
+
+    - applies_to: player
+      text: |
+        Inspiration:
+        - gentleman adventurer
+        - scientist
+        - occultist
+        - reporter
+        - lost kid
+
+    - applies_to: item
+      text: |
+        Inspiration:
+        - dagger
+        - athame
+        - monkey's paw
+        - potion
+        - crystal ball
+        - lockpicks
+        - candle
+        - bell
+        - book
+        - glass eye
+
+    - applies_to: event
+      text: |
+        Inspiration:
+        - ghosts
+        - skeletons
+        - collapsing floor
+        - blood seeping from the walls
+        - mysterious phone call
+        - panic attack
+        - visions

@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Player",
+  "description": "A player character with GURPS-style stats.",
+  "type": "object",
+  "required": ["name", "description", "stats"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "stats": {
+      "$ref": "#/definitions/PlayerStats"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "PlayerStats": {
+      "type": "object",
+      "required": ["strength", "dexterity", "intelligence", "health"],
+      "properties": {
+        "strength": {
+          "type": "integer",
+          "default": 10
+        },
+        "dexterity": {
+          "type": "integer",
+          "default": 10
+        },
+        "intelligence": {
+          "type": "integer",
+          "default": 10
+        },
+        "health": {
+          "type": "integer",
+          "default": 10
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

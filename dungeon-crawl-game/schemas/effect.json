@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Effect": {
+      "type": "object",
+      "required": ["trigger_type", "result_type", "target"],
+      "properties": {
+        "trigger_type": {
+          "type": "string",
+          "enum": ["stat_check", "always", "random_roll"]
+        },
+        "trigger_stat": {
+          "type": "string"
+        },
+        "trigger_outcomes": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "string"
+            },
+            "failure": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "result_type": {
+          "type": "string",
+          "enum": [
+            "modify_stat",
+            "gain_item",
+            "lose_item",
+            "physical_damage",
+            "mental_damage",
+            "teleport",
+            "lose_turn",
+            "forced_movement",
+            "modify_item",
+            "modify_room"
+          ]
+        },
+        "result_stat": {
+          "type": "string"
+        },
+        "result_amount": {
+          "type": "integer"
+        },
+        "result_item_name": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string",
+          "enum": ["self", "room", "all"]
+        },
+        "timing_type": {
+          "type": "string",
+          "enum": ["immediate", "duration", "delayed"],
+          "default": "immediate"
+        },
+        "timing_turns": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
