@@ -3,7 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use bevy::prelude::*;
 
-use crate::schema_types::{Effect, Player};
+use crate::effects::EffectSourceKind;
+use crate::schema_types::{Effect, Player, StatName};
 
 #[derive(Resource, Default)]
 pub struct HoveredRoom(pub Option<IVec2>);
@@ -32,6 +33,7 @@ pub enum GameState {
     Moving,
     RevealingRoom,
     Placing,
+    AllocatingDamage,
     ShowingEffectLog,
 }
 
@@ -76,6 +78,9 @@ pub const PLAYER_COLORS: [Color; 4] = [
 pub struct ActiveEffect {
     pub effect: Effect,
     pub source_room: IVec2,
+    pub source_kind: crate::effects::EffectSourceKind,
+    pub source_name: String,
+    pub source_description: String,
     pub remaining_turns: Option<u32>,
     pub delay_turns: Option<u32>,
 }
@@ -88,6 +93,7 @@ pub struct PlayerInfo {
     pub destination: Option<IVec2>,
     pub path: VecDeque<IVec2>,
     pub active_effects: Vec<ActiveEffect>,
+    pub inventory: Vec<crate::schema_types::Item>,
     pub dead: bool,
 }
 
@@ -102,6 +108,9 @@ pub struct PlayerHudSlot(pub usize);
 
 #[derive(Component)]
 pub struct PlayerHudName(pub usize);
+
+#[derive(Component)]
+pub struct PlayerHudStats(pub usize);
 
 #[derive(Component)]
 pub struct PlayerHudMove(pub usize);
@@ -155,10 +164,71 @@ pub struct ReachableMarker;
 pub struct PathPreviewMarker;
 
 #[derive(Component)]
+pub struct DestinationArrow;
+
+#[derive(Component)]
 pub struct SidebarEffects;
+
+#[derive(Component)]
+pub struct PlayerSidebarStats;
 
 #[derive(Component)]
 pub struct PlayerSidebarEffects;
 
 #[derive(Component)]
+pub struct PlayerSidebarInventory;
+
+#[derive(Component)]
 pub struct PlayerHudDead(pub usize);
+
+#[derive(Resource)]
+pub struct TickEffectsProgress(pub usize);
+
+#[derive(Debug, Clone)]
+pub struct PendingDamageAllocation {
+    pub player_idx: usize,
+    pub total: u32,
+    pub stat_a: StatName,
+    pub stat_b: StatName,
+    pub sign: i64,
+    pub source_kind: EffectSourceKind,
+    pub source_name: String,
+    pub source_description: String,
+}
+
+#[derive(Resource, Default)]
+pub struct DamageAllocationQueue(pub VecDeque<PendingDamageAllocation>);
+
+#[derive(Resource)]
+pub struct CurrentAllocation {
+    pub pending: PendingDamageAllocation,
+    pub stat_a_value: u32,
+    pub stat_b_value: u32,
+}
+
+#[derive(Component)]
+pub struct DamageAllocationPopup;
+
+#[derive(Component)]
+pub struct DamageStatAText;
+
+#[derive(Component)]
+pub struct DamageStatBText;
+
+#[derive(Component)]
+pub struct DamageTotalText;
+
+#[derive(Component)]
+pub struct DamageStatAUp;
+
+#[derive(Component)]
+pub struct DamageStatADown;
+
+#[derive(Component)]
+pub struct DamageStatBUp;
+
+#[derive(Component)]
+pub struct DamageStatBDown;
+
+#[derive(Component)]
+pub struct DamageConfirmButton;

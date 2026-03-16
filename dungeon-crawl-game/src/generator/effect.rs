@@ -7,14 +7,10 @@ fn result_type_table() -> WeightTable<EffectResultType> {
     use EffectResultType::*;
     WeightTable::new(&[
         (ModifyStat,      30.0, 10.0),
-        (GainItem,         1.0, 10.0),
-        (LoseItem,         1.0, 10.0),
         (PhysicalDamage,  30.0, 10.0),
         (MentalDamage,    30.0, 10.0),
         (Teleport,         1.0, 10.0),
         (LoseTurn,         1.0, 10.0),
-        (ModifyItem,       1.0, 10.0),
-        (ModifyRoom,       1.0, 10.0),
     ])
 }
 
@@ -36,6 +32,16 @@ fn target_table() -> WeightTable<EffectTarget> {
     ])
 }
 
+fn amount_table() -> WeightTable<i64> {
+    WeightTable::new(&[
+        (1, 100.0, 20.0),
+        (2,  10.0, 15.0),
+        (3,   1.0, 10.0),
+        (4,   0.1,  5.0),
+        (5,  0.01,  2.0),
+    ])
+}
+
 fn timing_type_table() -> WeightTable<EffectTimingType> {
     use EffectTimingType::*;
     WeightTable::new(&[
@@ -53,32 +59,28 @@ pub fn generate_effect(magnitude: f64, rng: &mut impl Rng) -> Effect {
 
     let mut result_stat = None;
     let mut result_amount = None;
-    let mut result_item_name = None;
 
     match &result_type {
         EffectResultType::ModifyStat => {
             result_stat = Some(random_stat(rng));
-            result_amount = Some(lerp(1.0, 10.0, magnitude).round() as i64);
+            result_amount = Some(amount_table().sample(magnitude, rng));
         }
         EffectResultType::PhysicalDamage | EffectResultType::MentalDamage => {
-            result_amount = Some(lerp(1.0, 15.0, magnitude).round() as i64);
+            result_amount = Some(amount_table().sample(magnitude, rng));
         }
-        EffectResultType::GainItem | EffectResultType::LoseItem => {
-            result_item_name = None; // filled by LLM
-        }
-        _ => {}
+        EffectResultType::Teleport | EffectResultType::LoseTurn => {}
     }
 
     let trigger_stat = match &trigger_type {
         EffectTriggerType::StatCheck => Some(random_stat(rng)),
-        _ => None,
+        EffectTriggerType::Always | EffectTriggerType::RandomRoll => None,
     };
 
     let timing_turns = match &timing_type {
         EffectTimingType::Duration | EffectTimingType::Delayed => {
             Some(lerp(1.0, 5.0, magnitude).round() as i64)
         }
-        _ => None,
+        EffectTimingType::Immediate => None,
     };
 
     Effect {
@@ -89,7 +91,6 @@ pub fn generate_effect(magnitude: f64, rng: &mut impl Rng) -> Effect {
         trigger_outcomes: None,
         result_stat,
         result_amount,
-        result_item_name,
         timing_type,
         timing_turns,
     }
@@ -106,7 +107,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(42);
         let effect = generate_effect(0.0, &mut rng);
         if let Some(amt) = effect.result_amount {
-            assert!(amt >= 1 && amt <= 15);
+            assert!(amt >= 1 && amt <= 5);
         }
     }
 
@@ -115,7 +116,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(42);
         let effect = generate_effect(1.0, &mut rng);
         if let Some(amt) = effect.result_amount {
-            assert!(amt >= 1 && amt <= 15);
+            assert!(amt >= 1 && amt <= 5);
         }
     }
 

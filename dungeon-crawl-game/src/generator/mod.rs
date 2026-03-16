@@ -17,6 +17,8 @@ use async_trait::async_trait;
 use rand::distr::weighted::WeightedIndex;
 use rand::prelude::*;
 
+use crate::schema_types::StatName;
+
 #[async_trait]
 pub trait LlmClient: Send + Sync {
     async fn complete(&self, model: &str, prompt: &str) -> Result<String>;
@@ -66,12 +68,15 @@ pub fn roll_effect_count(magnitude: f64, rng: &mut impl Rng) -> usize {
     table.sample(magnitude, rng)
 }
 
-const STAT_NAMES: &[&str] = &[
-    "strength", "speed", "intelligence", "sanity",
+const STAT_VARIANTS: &[StatName] = &[
+    StatName::Strength,
+    StatName::Speed,
+    StatName::Intelligence,
+    StatName::Sanity,
 ];
 
-pub fn random_stat(rng: &mut impl Rng) -> String {
-    STAT_NAMES.choose(rng).unwrap().to_string()
+pub fn random_stat(rng: &mut impl Rng) -> StatName {
+    STAT_VARIANTS.choose(rng).unwrap().clone()
 }
 
 #[cfg(test)]

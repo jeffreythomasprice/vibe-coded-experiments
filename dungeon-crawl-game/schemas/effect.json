@@ -1,6 +1,10 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
+    "StatName": {
+      "type": "string",
+      "enum": ["strength", "speed", "intelligence", "sanity"]
+    },
     "Effect": {
       "type": "object",
       "required": [
@@ -18,7 +22,7 @@
           ]
         },
         "trigger_stat": {
-          "type": "string"
+          "$ref": "#/definitions/StatName"
         },
         "trigger_outcomes": {
           "type": "object",
@@ -36,24 +40,17 @@
           "type": "string",
           "enum": [
             "modify_stat",
-            "gain_item",
-            "lose_item",
             "physical_damage",
             "mental_damage",
             "teleport",
-            "lose_turn",
-            "modify_item",
-            "modify_room"
+            "lose_turn"
           ]
         },
         "result_stat": {
-          "type": "string"
+          "$ref": "#/definitions/StatName"
         },
         "result_amount": {
           "type": "integer"
-        },
-        "result_item_name": {
-          "type": "string"
         },
         "target": {
           "type": "string",

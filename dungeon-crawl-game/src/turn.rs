@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use bevy::prelude::*;
+use rand::Rng;
 
 use crate::dungeon::{self, Dungeon};
 use crate::rendering;
@@ -43,20 +44,42 @@ pub fn enter_starting_turn(
     mut players: Option<ResMut<Players>>,
     dungeon: Res<Dungeon>,
     mut log_buffer: ResMut<EffectLogBuffer>,
+    progress: Option<Res<TickEffectsProgress>>,
 ) {
-    if let Some(ref mut players) = players {
-        let mut rng = rand::rngs::ThreadRng::default();
-        let logs = crate::effects::tick_effects(&mut players.0, &dungeon, &mut rng);
+    let Some(ref mut players) = players else {
+        next_state.set(GameState::SelectingDestinations);
+        return;
+    };
+
+    let start = progress.as_ref().map(|p| p.0).unwrap_or(0);
+    let mut rng = rand::rngs::ThreadRng::default();
+
+    for idx in start..players.0.len() {
+        let mut allocations = std::collections::VecDeque::new();
+        let logs = crate::effects::tick_effects_for_player(idx, &mut players.0, &dungeon, &mut rng, &mut allocations);
         for log in &logs {
             tracing::info!("Effect tick: {}", log.description);
         }
+        if !allocations.is_empty() {
+            if !logs.is_empty() {
+                log_buffer.0.extend(logs);
+            }
+            commands.insert_resource(DamageAllocationQueue(allocations));
+            commands.insert_resource(TickEffectsProgress(idx + 1));
+            commands.insert_resource(ResumeState(GameState::StartingTurn));
+            next_state.set(GameState::AllocatingDamage);
+            return;
+        }
         if !logs.is_empty() {
             log_buffer.0 = logs;
-            commands.insert_resource(ResumeState(GameState::SelectingDestinations));
+            commands.insert_resource(TickEffectsProgress(idx + 1));
+            commands.insert_resource(ResumeState(GameState::StartingTurn));
             next_state.set(GameState::ShowingEffectLog);
             return;
         }
     }
+
+    commands.remove_resource::<TickEffectsProgress>();
     next_state.set(GameState::SelectingDestinations);
 }
 
@@ -128,10 +151,11 @@ pub fn exit_selecting(
     mut commands: Commands,
     reachable: Query<Entity, With<ReachableMarker>>,
     previews: Query<Entity, With<PathPreviewMarker>>,
+    arrows: Query<Entity, With<DestinationArrow>>,
     status: Query<&Children, With<StatusText>>,
     mut texts: Query<&mut Text>,
 ) {
-    for entity in reachable.iter().chain(previews.iter()) {
+    for entity in reachable.iter().chain(previews.iter()).chain(arrows.iter()) {
         commands.entity(entity).despawn();
     }
     if let Ok(children) = status.single() {
@@ -328,17 +352,32 @@ pub fn advance_movement(
 
     let Some(ref mut players) = players else { return; };
 
-    for i in 0..players.0.len() {
-        let info = &players.0[i];
-        if info.dead || info.remaining_move <= 0 || info.path.is_empty() { continue; }
-        let next = info.path[0];
-        if !dungeon.grid.contains_key(&next) {
-            commands.insert_resource(RevealingPlayer(i));
-            commands.insert_resource(RevealCell(next));
-            next_state.set(GameState::RevealingRoom);
-            commands.remove_resource::<MoveTimer>();
-            return;
-        }
+    // Collect candidates whose next step is into an unrevealed cell
+    let candidates: Vec<(usize, i64, i64)> = players.0.iter().enumerate()
+        .filter(|(_, info)| !info.dead && info.remaining_move > 0 && !info.path.is_empty())
+        .filter(|(_, info)| !dungeon.grid.contains_key(&info.path[0]))
+        .map(|(i, info)| {
+            let distance = (info.player.stats.speed + 1) / 2 - info.remaining_move + 1;
+            (i, distance, info.player.stats.speed)
+        })
+        .collect();
+
+    if !candidates.is_empty() {
+        let mut rng = rand::rng();
+        let &(winner, _, _) = candidates.iter()
+            .min_by(|a, b| a.1.cmp(&b.1)
+                .then(b.2.cmp(&a.2))
+                .then_with(|| if rng.random_bool(0.5) {
+                    std::cmp::Ordering::Less
+                } else {
+                    std::cmp::Ordering::Greater
+                }))
+            .unwrap();
+        commands.insert_resource(RevealingPlayer(winner));
+        commands.insert_resource(RevealCell(players.0[winner].path[0]));
+        next_state.set(GameState::RevealingRoom);
+        commands.remove_resource::<MoveTimer>();
+        return;
     }
 
     let mut any_moved = false;

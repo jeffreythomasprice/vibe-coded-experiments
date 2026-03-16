@@ -77,6 +77,10 @@ fn emit_definitions(schema: &Value, all_schemas: &BTreeMap<String, Value>, outpu
             if def.get("properties").is_some() {
                 emit_inline_types(name, def, all_schemas, output);
                 emit_struct(name, def, all_schemas, output);
+            } else if def.get("type").and_then(|t| t.as_str()) == Some("string") {
+                if let Some(variants) = def.get("enum").and_then(|e| e.as_array()) {
+                    emit_enum(name, variants, def, output);
+                }
             }
         }
     }

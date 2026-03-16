@@ -1,13 +1,36 @@
+use std::collections::VecDeque;
+use std::fmt;
+
 use bevy::prelude::*;
 use rand::Rng;
 
 use crate::dungeon::Dungeon;
 use crate::schema_types::*;
-use crate::types::{ActiveEffect, PlayerInfo};
+use crate::types::{ActiveEffect, PendingDamageAllocation, PlayerInfo};
+
+impl fmt::Display for StatName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StatName::Strength => write!(f, "strength"),
+            StatName::Speed => write!(f, "speed"),
+            StatName::Intelligence => write!(f, "intelligence"),
+            StatName::Sanity => write!(f, "sanity"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EffectSourceKind {
+    Item,
+    Event,
+}
 
 #[derive(Debug, Clone)]
 pub struct EffectLog {
     pub player_idx: usize,
+    pub source_kind: EffectSourceKind,
+    pub source: String,
+    pub source_description: String,
     pub description: String,
 }
 
@@ -23,6 +46,10 @@ pub fn apply_effect(
     players: &mut Vec<PlayerInfo>,
     dungeon: &Dungeon,
     rng: &mut impl Rng,
+    source_kind: EffectSourceKind,
+    source_name: &str,
+    source_description: &str,
+    allocations: &mut VecDeque<PendingDamageAllocation>,
 ) -> Vec<EffectLog> {
     let mut logs = Vec::new();
 
@@ -36,7 +63,8 @@ pub fn apply_effect(
         }
         EffectTriggerType::StatCheck => {
             let threshold = effect.result_amount.unwrap_or(10);
-            let stat_val = get_stat_value(&players[trigger_player_idx], effect.trigger_stat.as_deref());
+            let stat_name = effect.trigger_stat.as_ref().unwrap_or(&StatName::Strength);
+            let stat_val = get_stat_value(&players[trigger_player_idx], stat_name);
             if stat_val < threshold {
                 return logs;
             }
@@ -56,28 +84,42 @@ pub fn apply_effect(
     for idx in &targets {
         match *timing {
             EffectTimingType::Delayed => {
+                let preview = format!(
+                    "Delayed effect ({} turns): Will {}",
+                    turns,
+                    format_effect_preview(effect),
+                );
                 players[*idx].active_effects.push(ActiveEffect {
                     effect: effect.clone(),
                     source_room: trigger_room_pos,
+                    source_kind,
+                    source_name: source_name.to_string(),
+                    source_description: source_description.to_string(),
                     remaining_turns: None,
                     delay_turns: Some(turns),
                 });
                 logs.push(EffectLog {
                     player_idx: *idx,
-                    description: format!("Delayed effect attached to {}", players[*idx].player.name),
+                    source_kind,
+                    source: source_name.to_string(),
+                    source_description: source_description.to_string(),
+                    description: preview,
                 });
             }
             EffectTimingType::Duration => {
-                apply_result(effect, *idx, players, dungeon, rng, &mut logs);
+                apply_result(effect, *idx, players, dungeon, rng, source_kind, source_name, source_description, &mut logs, allocations);
                 players[*idx].active_effects.push(ActiveEffect {
                     effect: effect.clone(),
                     source_room: trigger_room_pos,
+                    source_kind,
+                    source_name: source_name.to_string(),
+                    source_description: source_description.to_string(),
                     remaining_turns: Some(turns),
                     delay_turns: None,
                 });
             }
             EffectTimingType::Immediate => {
-                apply_result(effect, *idx, players, dungeon, rng, &mut logs);
+                apply_result(effect, *idx, players, dungeon, rng, source_kind, source_name, source_description, &mut logs, allocations);
             }
         }
 
@@ -86,7 +128,10 @@ pub fn apply_effect(
             players[*idx].remaining_move = 0;
             logs.push(EffectLog {
                 player_idx: *idx,
-                description: format!("{} has died!", players[*idx].player.name),
+                source_kind,
+                source: source_name.to_string(),
+                source_description: source_description.to_string(),
+                description: "Died!".to_string(),
             });
         }
     }
@@ -129,48 +174,95 @@ fn apply_result(
     players: &mut Vec<PlayerInfo>,
     dungeon: &Dungeon,
     rng: &mut impl Rng,
+    source_kind: EffectSourceKind,
+    source_name: &str,
+    source_description: &str,
     logs: &mut Vec<EffectLog>,
+    allocations: &mut VecDeque<PendingDamageAllocation>,
 ) {
     let amount = effect.result_amount.unwrap_or(0);
-    let name = players[player_idx].player.name.clone();
 
     match effect.result_type {
         EffectResultType::ModifyStat => {
-            let stat_name = effect.result_stat.as_deref().unwrap_or("strength");
+            let stat_name = effect.result_stat.as_ref().unwrap_or(&StatName::Strength);
             modify_stat(&mut players[player_idx], stat_name, amount);
+            let desc = if amount >= 0 {
+                format!("Gained {amount} {stat_name}")
+            } else {
+                format!("Lost {} {stat_name}", amount.abs())
+            };
             logs.push(EffectLog {
                 player_idx,
-                description: format!("{name}: {stat_name} modified by {amount}"),
+                source_kind,
+                source: source_name.to_string(),
+                source_description: source_description.to_string(),
+                description: desc,
             });
         }
         EffectResultType::PhysicalDamage => {
-            let (str_dmg, spd_dmg) = split_damage(amount.unsigned_abs() as u32, rng);
+            let total = amount.unsigned_abs() as u32;
             let sign = if amount < 0 { 1 } else { -1 };
-            modify_stat(&mut players[player_idx], "strength", sign * str_dmg as i64);
-            modify_stat(&mut players[player_idx], "speed", sign * spd_dmg as i64);
-            logs.push(EffectLog {
-                player_idx,
-                description: format!("{name}: physical damage {amount} (str:{str_dmg} spd:{spd_dmg})"),
-            });
+            if total == 0 {
+                logs.push(EffectLog {
+                    player_idx,
+                    source_kind,
+                    source: source_name.to_string(),
+                    source_description: source_description.to_string(),
+                    description: "Took 0 physical damage".to_string(),
+                });
+            } else {
+                allocations.push_back(PendingDamageAllocation {
+                    player_idx,
+                    total,
+                    stat_a: StatName::Strength,
+                    stat_b: StatName::Speed,
+                    sign,
+                    source_kind,
+                    source_name: source_name.to_string(),
+                    source_description: source_description.to_string(),
+                });
+            }
         }
         EffectResultType::MentalDamage => {
-            let (int_dmg, san_dmg) = split_damage(amount.unsigned_abs() as u32, rng);
+            let total = amount.unsigned_abs() as u32;
             let sign = if amount < 0 { 1 } else { -1 };
-            modify_stat(&mut players[player_idx], "intelligence", sign * int_dmg as i64);
-            modify_stat(&mut players[player_idx], "sanity", sign * san_dmg as i64);
-            logs.push(EffectLog {
-                player_idx,
-                description: format!("{name}: mental damage {amount} (int:{int_dmg} san:{san_dmg})"),
-            });
+            if total == 0 {
+                logs.push(EffectLog {
+                    player_idx,
+                    source_kind,
+                    source: source_name.to_string(),
+                    source_description: source_description.to_string(),
+                    description: "Took 0 mental damage".to_string(),
+                });
+            } else {
+                allocations.push_back(PendingDamageAllocation {
+                    player_idx,
+                    total,
+                    stat_a: StatName::Intelligence,
+                    stat_b: StatName::Sanity,
+                    sign,
+                    source_kind,
+                    source_name: source_name.to_string(),
+                    source_description: source_description.to_string(),
+                });
+            }
         }
         EffectResultType::Teleport => {
             let revealed: Vec<IVec2> = dungeon.grid.keys().copied().collect();
             if !revealed.is_empty() {
                 let dest = revealed[rng.random_range(0..revealed.len())];
                 players[player_idx].location = dest;
+                let room_name = dungeon
+                    .grid
+                    .get(&dest)
+                    .map(|r| r.room.name.as_str())
+                    .unwrap_or("unknown");
                 logs.push(EffectLog {
                     player_idx,
-                    description: format!("{name}: teleported to ({}, {})", dest.x, dest.y),
+                    source_kind,
+                    source: source_name.to_string(),
+                    source_description: source_description.to_string(),
+                    description: format!("Teleported to {room_name}"),
                 });
             }
         }
@@ -178,120 +270,165 @@ fn apply_result(
             players[player_idx].remaining_move = 0;
             logs.push(EffectLog {
                 player_idx,
-                description: format!("{name}: lost turn"),
+                source_kind,
+                source: source_name.to_string(),
+                source_description: source_description.to_string(),
+                description: "Lost turn".to_string(),
             });
         }
-        EffectResultType::GainItem
-        | EffectResultType::LoseItem
-        | EffectResultType::ModifyItem
-        | EffectResultType::ModifyRoom => {
-            // not yet implemented
+    }
+}
+
+fn format_effect_preview(effect: &Effect) -> String {
+    match effect.result_type {
+        EffectResultType::ModifyStat => {
+            let stat = effect.result_stat.as_ref().unwrap_or(&StatName::Strength);
+            let amt = effect.result_amount.unwrap_or(0);
+            if amt >= 0 {
+                format!("gain {amt} {stat}")
+            } else {
+                format!("lose {} {stat}", amt.abs())
+            }
         }
+        EffectResultType::PhysicalDamage => {
+            format!("take {} physical damage", effect.result_amount.unwrap_or(0))
+        }
+        EffectResultType::MentalDamage => {
+            format!("take {} mental damage", effect.result_amount.unwrap_or(0))
+        }
+        EffectResultType::Teleport => "teleport".to_string(),
+        EffectResultType::LoseTurn => "lose turn".to_string(),
     }
 }
 
-fn split_damage(total: u32, rng: &mut impl Rng) -> (u32, u32) {
-    if total == 0 {
-        return (0, 0);
-    }
-    let first = rng.random_range(0..=total);
-    (first, total - first)
-}
-
-fn get_stat_value(player: &PlayerInfo, stat_name: Option<&str>) -> i64 {
-    match stat_name.unwrap_or("strength") {
-        "strength" => player.player.stats.strength,
-        "speed" => player.player.stats.speed,
-        "intelligence" => player.player.stats.intelligence,
-        "sanity" => player.player.stats.sanity,
-        _ => 0,
+pub fn get_stat_value(player: &PlayerInfo, stat_name: &StatName) -> i64 {
+    match stat_name {
+        StatName::Strength => player.player.stats.strength,
+        StatName::Speed => player.player.stats.speed,
+        StatName::Intelligence => player.player.stats.intelligence,
+        StatName::Sanity => player.player.stats.sanity,
     }
 }
 
-fn modify_stat(player: &mut PlayerInfo, stat_name: &str, amount: i64) {
+pub fn modify_stat(player: &mut PlayerInfo, stat_name: &StatName, amount: i64) {
     let stat = match stat_name {
-        "strength" => &mut player.player.stats.strength,
-        "speed" => &mut player.player.stats.speed,
-        "intelligence" => &mut player.player.stats.intelligence,
-        "sanity" => &mut player.player.stats.sanity,
-        _ => return,
+        StatName::Strength => &mut player.player.stats.strength,
+        StatName::Speed => &mut player.player.stats.speed,
+        StatName::Intelligence => &mut player.player.stats.intelligence,
+        StatName::Sanity => &mut player.player.stats.sanity,
     };
     *stat = (*stat + amount).max(0);
 }
 
+pub fn tick_effects_for_player(
+    player_idx: usize,
+    players: &mut Vec<PlayerInfo>,
+    dungeon: &Dungeon,
+    rng: &mut impl Rng,
+    allocations: &mut VecDeque<PendingDamageAllocation>,
+) -> Vec<EffectLog> {
+    let mut logs = Vec::new();
+
+    if players[player_idx].dead {
+        return logs;
+    }
+
+    let mut i = 0;
+    while i < players[player_idx].active_effects.len() {
+        let ae = &mut players[player_idx].active_effects[i];
+
+        if let Some(ref mut delay) = ae.delay_turns {
+            if *delay > 0 {
+                *delay -= 1;
+                if *delay == 0 {
+                    let effect = ae.effect.clone();
+                    let kind = ae.source_kind;
+                    let source = ae.source_name.clone();
+                    let source_desc = ae.source_description.clone();
+                    players[player_idx].active_effects.remove(i);
+                    apply_result(&effect, player_idx, players, dungeon, rng, kind, &source, &source_desc, &mut logs, allocations);
+                    if check_player_death(&players[player_idx]) {
+                        players[player_idx].dead = true;
+                        players[player_idx].remaining_move = 0;
+                        logs.push(EffectLog {
+                            player_idx,
+                            source_kind: kind,
+                            source,
+                            source_description: source_desc,
+                            description: "Died!".to_string(),
+                        });
+                    }
+                    continue;
+                }
+            }
+            i += 1;
+            continue;
+        }
+
+        if let Some(ref mut remaining) = players[player_idx].active_effects[i].remaining_turns {
+            if *remaining > 0 {
+                *remaining -= 1;
+                if *remaining == 0 {
+                    let effect = players[player_idx].active_effects[i].effect.clone();
+                    let kind = players[player_idx].active_effects[i].source_kind;
+                    let source = players[player_idx].active_effects[i].source_name.clone();
+                    let source_desc = players[player_idx].active_effects[i].source_description.clone();
+                    players[player_idx].active_effects.remove(i);
+                    if effect.result_type == EffectResultType::ModifyStat {
+                        let amount = effect.result_amount.unwrap_or(0);
+                        let stat_name = effect.result_stat.as_ref().unwrap_or(&StatName::Strength);
+                        modify_stat(&mut players[player_idx], stat_name, -amount);
+                        logs.push(EffectLog {
+                            player_idx,
+                            source_kind: kind,
+                            source,
+                            source_description: source_desc,
+                            description: format!(
+                                "{stat_name} effect expired (reversed {})",
+                                amount.abs()
+                            ),
+                        });
+                    }
+                    continue;
+                }
+            }
+        }
+
+        i += 1;
+    }
+
+    // Remove inventory items whose active effects have all expired
+    let active_item_names: Vec<String> = players[player_idx]
+        .active_effects
+        .iter()
+        .filter(|ae| ae.source_kind == EffectSourceKind::Item)
+        .map(|ae| ae.source_name.clone())
+        .collect();
+    players[player_idx]
+        .inventory
+        .retain(|item| active_item_names.contains(&item.name));
+
+    logs
+}
+
+#[cfg(test)]
 pub fn tick_effects(
     players: &mut Vec<PlayerInfo>,
     dungeon: &Dungeon,
     rng: &mut impl Rng,
+    allocations: &mut VecDeque<PendingDamageAllocation>,
 ) -> Vec<EffectLog> {
     let mut logs = Vec::new();
-
     for player_idx in 0..players.len() {
-        if players[player_idx].dead {
-            continue;
-        }
-
-        let mut i = 0;
-        while i < players[player_idx].active_effects.len() {
-            let ae = &mut players[player_idx].active_effects[i];
-
-            if let Some(ref mut delay) = ae.delay_turns {
-                if *delay > 0 {
-                    *delay -= 1;
-                    if *delay == 0 {
-                        let effect = ae.effect.clone();
-                        players[player_idx].active_effects.remove(i);
-                        apply_result(&effect, player_idx, players, dungeon, rng, &mut logs);
-                        if check_player_death(&players[player_idx]) {
-                            players[player_idx].dead = true;
-                            players[player_idx].remaining_move = 0;
-                            logs.push(EffectLog {
-                                player_idx,
-                                description: format!("{} has died!", players[player_idx].player.name),
-                            });
-                        }
-                        continue;
-                    }
-                }
-                i += 1;
-                continue;
-            }
-
-            if let Some(ref mut remaining) = players[player_idx].active_effects[i].remaining_turns {
-                if *remaining > 0 {
-                    *remaining -= 1;
-                    if *remaining == 0 {
-                        let effect = players[player_idx].active_effects[i].effect.clone();
-                        players[player_idx].active_effects.remove(i);
-                        // Reverse the effect on expiry for ModifyStat
-                        if effect.result_type == EffectResultType::ModifyStat {
-                            let amount = effect.result_amount.unwrap_or(0);
-                            let stat_name = effect.result_stat.as_deref().unwrap_or("strength");
-                            modify_stat(&mut players[player_idx], stat_name, -amount);
-                            logs.push(EffectLog {
-                                player_idx,
-                                description: format!(
-                                    "{}: {} effect expired, reversed by {}",
-                                    players[player_idx].player.name, stat_name, amount
-                                ),
-                            });
-                        }
-                        continue;
-                    }
-                }
-            }
-
-            i += 1;
-        }
+        logs.extend(tick_effects_for_player(player_idx, players, dungeon, rng, allocations));
     }
-
     logs
 }
 
 pub fn format_effect_description(effect: &Effect) -> String {
     let result = match effect.result_type {
         EffectResultType::ModifyStat => {
-            let stat = effect.result_stat.as_deref().unwrap_or("?");
+            let stat = effect.result_stat.as_ref().unwrap_or(&StatName::Strength);
             let amt = effect.result_amount.unwrap_or(0);
             let sign = if amt >= 0 { "+" } else { "" };
             format!("{sign}{amt} {stat}")
@@ -304,7 +441,6 @@ pub fn format_effect_description(effect: &Effect) -> String {
         }
         EffectResultType::Teleport => "Teleport".to_string(),
         EffectResultType::LoseTurn => "Lose turn".to_string(),
-        _ => "Unknown".to_string(),
     };
 
     match effect.timing_type {
@@ -349,6 +485,7 @@ mod tests {
             destination: None,
             path: VecDeque::new(),
             active_effects: Vec::new(),
+            inventory: Vec::new(),
             dead: false,
         }
     }
@@ -359,9 +496,8 @@ mod tests {
             trigger_stat: None,
             trigger_outcomes: None,
             result_type,
-            result_stat: Some("strength".to_string()),
+            result_stat: Some(StatName::Strength),
             result_amount: Some(amount),
-            result_item_name: None,
             target: EffectTarget::SelfKind,
             timing_type: EffectTimingType::Immediate,
             timing_turns: None,
@@ -374,7 +510,7 @@ mod tests {
         let dungeon = Dungeon::default();
         let mut rng = rand::rngs::mock::StepRng::new(0, 1);
         let effect = make_effect(EffectResultType::ModifyStat, -3);
-        let logs = apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng);
+        let logs = apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng, EffectSourceKind::Item, "Test", "Test description", &mut VecDeque::new());
         assert_eq!(players[0].player.stats.strength, 7);
         assert!(!logs.is_empty());
     }
@@ -385,7 +521,7 @@ mod tests {
         let dungeon = Dungeon::default();
         let mut rng = rand::rngs::mock::StepRng::new(0, 1);
         let effect = make_effect(EffectResultType::ModifyStat, -5);
-        apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng);
+        apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng, EffectSourceKind::Item, "Test", "Test description", &mut VecDeque::new());
         assert_eq!(players[0].player.stats.strength, 0);
         assert!(players[0].dead);
     }
@@ -396,7 +532,7 @@ mod tests {
         let dungeon = Dungeon::default();
         let mut rng = rand::rngs::mock::StepRng::new(0, 1);
         let effect = make_effect(EffectResultType::ModifyStat, -1);
-        apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng);
+        apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng, EffectSourceKind::Item, "Test", "Test description", &mut VecDeque::new());
         assert!(players[0].dead);
         assert_eq!(players[0].remaining_move, 0);
     }
@@ -409,7 +545,7 @@ mod tests {
         let mut rng = rand::rngs::mock::StepRng::new(u64::MAX, 0);
         let mut effect = make_effect(EffectResultType::ModifyStat, -5);
         effect.trigger_type = EffectTriggerType::RandomRoll;
-        apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng);
+        apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng, EffectSourceKind::Item, "Test", "Test description", &mut VecDeque::new());
         assert_eq!(players[0].player.stats.strength, 10);
     }
 
@@ -419,7 +555,7 @@ mod tests {
         let dungeon = Dungeon::default();
         let mut rng = rand::rngs::mock::StepRng::new(0, 1);
         let effect = make_effect(EffectResultType::LoseTurn, 0);
-        apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng);
+        apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng, EffectSourceKind::Item, "Test", "Test description", &mut VecDeque::new());
         assert_eq!(players[0].remaining_move, 0);
     }
 
@@ -433,7 +569,7 @@ mod tests {
         let mut rng = rand::rngs::mock::StepRng::new(0, 1);
         let mut effect = make_effect(EffectResultType::ModifyStat, -2);
         effect.target = EffectTarget::All;
-        apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng);
+        apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng, EffectSourceKind::Item, "Test", "Test description", &mut VecDeque::new());
         assert_eq!(players[0].player.stats.strength, 8);
         assert_eq!(players[1].player.stats.strength, 8);
     }
@@ -449,7 +585,7 @@ mod tests {
         let mut rng = rand::rngs::mock::StepRng::new(0, 1);
         let mut effect = make_effect(EffectResultType::ModifyStat, -2);
         effect.target = EffectTarget::Room;
-        apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng);
+        apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng, EffectSourceKind::Item, "Test", "Test description", &mut VecDeque::new());
         assert_eq!(players[0].player.stats.strength, 8);
         assert_eq!(players[1].player.stats.strength, 10);
     }
@@ -462,13 +598,13 @@ mod tests {
         let mut effect = make_effect(EffectResultType::ModifyStat, -3);
         effect.timing_type = EffectTimingType::Delayed;
         effect.timing_turns = Some(2);
-        apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng);
+        apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng, EffectSourceKind::Item, "Test", "Test description", &mut VecDeque::new());
         assert_eq!(players[0].player.stats.strength, 10);
         assert_eq!(players[0].active_effects.len(), 1);
 
-        tick_effects(&mut players, &dungeon, &mut rng);
+        tick_effects(&mut players, &dungeon, &mut rng, &mut VecDeque::new());
         assert_eq!(players[0].player.stats.strength, 10); // delay=1
-        tick_effects(&mut players, &dungeon, &mut rng);
+        tick_effects(&mut players, &dungeon, &mut rng, &mut VecDeque::new());
         assert_eq!(players[0].player.stats.strength, 7); // applied
         assert!(players[0].active_effects.is_empty());
     }
@@ -481,12 +617,12 @@ mod tests {
         let mut effect = make_effect(EffectResultType::ModifyStat, 3);
         effect.timing_type = EffectTimingType::Duration;
         effect.timing_turns = Some(2);
-        apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng);
+        apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng, EffectSourceKind::Item, "Test", "Test description", &mut VecDeque::new());
         assert_eq!(players[0].player.stats.strength, 13);
 
-        tick_effects(&mut players, &dungeon, &mut rng); // remaining=1
+        tick_effects(&mut players, &dungeon, &mut rng, &mut VecDeque::new()); // remaining=1
         assert_eq!(players[0].player.stats.strength, 13);
-        tick_effects(&mut players, &dungeon, &mut rng); // remaining=0, reversed
+        tick_effects(&mut players, &dungeon, &mut rng, &mut VecDeque::new()); // remaining=0, reversed
         assert_eq!(players[0].player.stats.strength, 10);
         assert!(players[0].active_effects.is_empty());
     }
@@ -499,7 +635,7 @@ mod tests {
         let mut rng = rand::rngs::mock::StepRng::new(0, 1);
         let mut effect = make_effect(EffectResultType::ModifyStat, -5);
         effect.target = EffectTarget::All;
-        let logs = apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng);
+        let logs = apply_effect(&effect, 0, IVec2::ZERO, &mut players, &dungeon, &mut rng, EffectSourceKind::Item, "Test", "Test description", &mut VecDeque::new());
         assert_eq!(players[0].player.stats.strength, 10);
         assert!(logs.is_empty());
     }

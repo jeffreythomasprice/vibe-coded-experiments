@@ -202,7 +202,7 @@ impl Dungeon {
         let count = rotation_count(arrangement);
         for rot in 0..count {
             let doors = rotated_doors(arrangement, rot);
-            if doors.contains(&required_door) && self.is_valid_placement(pos, arrangement, rot) {
+            if doors.contains(&required_door) && self.is_safe_placement(pos, arrangement, rot) {
                 return Some(rot);
             }
         }
@@ -218,7 +218,7 @@ impl Dungeon {
         let count = rotation_count(arrangement);
         for i in 1..=count {
             let rot = (current + i) % count;
-            if self.is_valid_placement(pos, arrangement, rot) {
+            if self.is_safe_placement(pos, arrangement, rot) {
                 return Some(rot);
             }
         }
@@ -239,6 +239,45 @@ impl Dungeon {
                 .get(&neighbor_pos)
                 .is_some_and(|n| n.doors.contains(&dir.opposite()))
         })
+    }
+
+    pub fn has_open_door_after_placement(
+        &self,
+        pos: IVec2,
+        arrangement: &DoorConfigArrangement,
+        rotation: u8,
+    ) -> bool {
+        let new_doors = rotated_doors(arrangement, rotation);
+
+        // Check if the new room has any door facing an unoccupied cell
+        for dir in &new_doors {
+            let neighbor = pos + dir.offset();
+            if !self.grid.contains_key(&neighbor) {
+                return true;
+            }
+        }
+
+        // Check all existing rooms for open doors (treating pos as now occupied)
+        for (existing_pos, placed) in &self.grid {
+            for dir in &placed.doors {
+                let neighbor = *existing_pos + dir.offset();
+                if neighbor != pos && !self.grid.contains_key(&neighbor) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    pub fn is_safe_placement(
+        &self,
+        pos: IVec2,
+        arrangement: &DoorConfigArrangement,
+        rotation: u8,
+    ) -> bool {
+        self.is_valid_placement(pos, arrangement, rotation)
+            && self.has_open_door_after_placement(pos, arrangement, rotation)
     }
 }
 
@@ -440,5 +479,33 @@ mod tests {
             Direction::South,
         );
         assert!(rot.is_none());
+    }
+
+    #[test]
+    fn safe_placement_dead_ends_facing_seals() {
+        let mut dungeon = Dungeon::default();
+        // DeadEnd at origin with door facing North (rotation 2: South rotated 2 CW = North)
+        dungeon.place(IVec2::ZERO, make_room(DoorConfigArrangement::DeadEnd), 2);
+        // Another DeadEnd at (0,1) facing South (rotation 0) would connect but seal the dungeon
+        assert!(dungeon.is_valid_placement(IVec2::new(0, 1), &DoorConfigArrangement::DeadEnd, 0));
+        assert!(!dungeon.is_safe_placement(IVec2::new(0, 1), &DoorConfigArrangement::DeadEnd, 0));
+    }
+
+    #[test]
+    fn safe_placement_dead_end_into_t_intersection() {
+        let mut dungeon = Dungeon::default();
+        // T-intersection at origin: doors E, S, W (rotation 0)
+        dungeon.place(IVec2::ZERO, make_room(DoorConfigArrangement::TIntersection), 0);
+        // DeadEnd at (0,-1) facing North (rotation 2) connects via South door
+        // T still has E and W open → safe
+        assert!(dungeon.is_safe_placement(IVec2::new(0, -1), &DoorConfigArrangement::DeadEnd, 2));
+    }
+
+    #[test]
+    fn safe_placement_crossroads_never_seals() {
+        let mut dungeon = Dungeon::default();
+        dungeon.place(IVec2::ZERO, make_room(DoorConfigArrangement::Crossroads), 0);
+        // Crossroads at (0,1) always has spare doors
+        assert!(dungeon.is_safe_placement(IVec2::new(0, 1), &DoorConfigArrangement::Crossroads, 0));
     }
 }

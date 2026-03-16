@@ -87,6 +87,15 @@ impl RoomQueue {
         self.inner.lock().unwrap().rooms.pop_front()
     }
 
+    pub fn try_find<F: Fn(&Room) -> bool>(&self, predicate: F) -> Option<Room> {
+        let mut lock = self.inner.lock().unwrap();
+        if let Some(idx) = lock.rooms.iter().position(|r| predicate(r)) {
+            lock.rooms.remove(idx)
+        } else {
+            None
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.inner.lock().unwrap().rooms.len()
     }

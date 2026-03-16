@@ -111,8 +111,10 @@ pub fn update_player_sidebar(
     players: Option<Res<Players>>,
     mut panel: Query<&mut Node, With<PlayerSidebarPanel>>,
     mut name: Query<&mut Text, With<PlayerSidebarName>>,
-    mut desc: Query<&mut Text, (With<PlayerSidebarDescription>, Without<PlayerSidebarName>, Without<PlayerSidebarEffects>)>,
-    mut effects: Query<&mut Text, (With<PlayerSidebarEffects>, Without<PlayerSidebarName>, Without<PlayerSidebarDescription>)>,
+    mut desc: Query<&mut Text, (With<PlayerSidebarDescription>, Without<PlayerSidebarName>, Without<PlayerSidebarStats>, Without<PlayerSidebarEffects>, Without<PlayerSidebarInventory>)>,
+    mut stats: Query<&mut Text, (With<PlayerSidebarStats>, Without<PlayerSidebarName>, Without<PlayerSidebarDescription>, Without<PlayerSidebarEffects>, Without<PlayerSidebarInventory>)>,
+    mut effects: Query<&mut Text, (With<PlayerSidebarEffects>, Without<PlayerSidebarName>, Without<PlayerSidebarDescription>, Without<PlayerSidebarStats>, Without<PlayerSidebarInventory>)>,
+    mut inventory: Query<&mut Text, (With<PlayerSidebarInventory>, Without<PlayerSidebarName>, Without<PlayerSidebarDescription>, Without<PlayerSidebarStats>, Without<PlayerSidebarEffects>)>,
 ) {
     if !hovered.is_changed() {
         return;
@@ -120,7 +122,9 @@ pub fn update_player_sidebar(
     let Ok(mut panel_node) = panel.single_mut() else { return };
     let Ok(mut name_text) = name.single_mut() else { return };
     let Ok(mut desc_text) = desc.single_mut() else { return };
+    let Ok(mut stats_text) = stats.single_mut() else { return };
     let Ok(mut effects_text) = effects.single_mut() else { return };
+    let Ok(mut inventory_text) = inventory.single_mut() else { return };
 
     match hovered.0.and_then(|idx| players.as_ref().and_then(|p| p.0.get(idx))) {
         Some(info) => {
@@ -131,13 +135,41 @@ pub fn update_player_sidebar(
             };
             **desc_text = info.player.description.clone();
 
-            if info.active_effects.is_empty() {
+            let s = &info.player.stats;
+            **stats_text = format!(
+                "STR {}\nSPD {}\nINT {}\nSAN {}\nMove {}/turn",
+                s.strength, s.speed, s.intelligence, s.sanity, info.remaining_move
+            );
+
+            if info.inventory.is_empty() {
+                **inventory_text = String::new();
+            } else {
+                let mut item_effects: std::collections::HashMap<&str, Vec<String>> =
+                    std::collections::HashMap::new();
+                for ae in &info.active_effects {
+                    if ae.source_kind == crate::effects::EffectSourceKind::Item {
+                        item_effects.entry(ae.source_name.as_str())
+                            .or_default()
+                            .push(crate::effects::format_effect_description(&ae.effect));
+                    }
+                }
+                let lines: Vec<String> = info.inventory.iter().map(|item| {
+                    match item_effects.get(item.name.as_str()) {
+                        Some(effs) => format!("  {} - {}", item.name, effs.join(", ")),
+                        None => format!("  {}", item.name),
+                    }
+                }).collect();
+                **inventory_text = format!("Inventory:\n{}", lines.join("\n"));
+            }
+
+            let event_effects: Vec<String> = info.active_effects.iter()
+                .filter(|ae| ae.source_kind == crate::effects::EffectSourceKind::Event)
+                .map(|ae| crate::effects::format_effect_description(&ae.effect))
+                .collect();
+            if event_effects.is_empty() {
                 **effects_text = String::new();
             } else {
-                let descs: Vec<String> = info.active_effects.iter()
-                    .map(|ae| crate::effects::format_effect_description(&ae.effect))
-                    .collect();
-                **effects_text = format!("Effects: {}", descs.join(", "));
+                **effects_text = format!("Effects: {}", event_effects.join(", "));
             }
 
             panel_node.display = Display::Flex;

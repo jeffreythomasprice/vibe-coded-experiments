@@ -80,25 +80,32 @@ fn main() {
             Update,
             (
                 ui::update_room_count,
-                rendering::camera_keyboard_pan,
-                rendering::camera_zoom,
-                rendering::camera_drag_pan,
                 rendering::apply_camera,
-                ui::handle_reset_view,
-                sidebar::detect_hovered_room,
-                sidebar::update_sidebar,
                 players::check_pending_players,
                 players::update_player_hud,
                 players::update_player_dots,
                 players::update_selected_player_highlight,
                 players::update_dead_hud,
                 players::update_selected_hud_highlight,
-                sidebar::detect_player_hover,
-                sidebar::update_player_sidebar,
                 ui::update_turn_display,
                 ui::update_move_display,
+                ui::update_stats_hud,
                 ui::update_end_turn_visibility,
             ),
+        )
+        .add_systems(
+            Update,
+            (
+                rendering::camera_keyboard_pan,
+                rendering::camera_zoom,
+                rendering::camera_drag_pan,
+                ui::handle_reset_view,
+                sidebar::detect_hovered_room,
+                sidebar::update_sidebar,
+                sidebar::detect_player_hover,
+                sidebar::update_player_sidebar,
+            )
+                .run_if(not(in_state(GameState::ShowingEffectLog)).and(not(in_state(GameState::AllocatingDamage)))),
         )
         .add_systems(
             Update,
@@ -106,7 +113,7 @@ fn main() {
         )
         .add_systems(
             Update,
-            (turn::handle_player_selection, turn::handle_destination_click, turn::check_all_destinations_set, turn::update_reachable_highlights, turn::handle_end_turn)
+            (turn::handle_player_selection, turn::handle_destination_click, turn::check_all_destinations_set, turn::update_reachable_highlights, turn::handle_end_turn, players::update_destination_arrows)
                 .run_if(in_state(GameState::SelectingDestinations)),
         )
         .add_systems(
@@ -125,6 +132,13 @@ fn main() {
         .add_systems(OnEnter(GameState::RevealingRoom), placement::enter_revealing)
         .add_systems(OnEnter(GameState::Placing), placement::enter_placing)
         .add_systems(OnExit(GameState::Placing), placement::exit_placing)
+        .add_systems(OnEnter(GameState::AllocatingDamage), ui::enter_allocating_damage)
+        .add_systems(OnExit(GameState::AllocatingDamage), ui::despawn_damage_allocation_popup)
+        .add_systems(
+            Update,
+            (ui::handle_damage_allocation_input, ui::handle_damage_confirm)
+                .run_if(in_state(GameState::AllocatingDamage)),
+        )
         .add_systems(OnEnter(GameState::ShowingEffectLog), ui::spawn_effect_log_popup)
         .add_systems(OnExit(GameState::ShowingEffectLog), ui::despawn_effect_log_popup)
         .add_systems(Update, ui::handle_effect_log_dismiss.run_if(in_state(GameState::ShowingEffectLog)))

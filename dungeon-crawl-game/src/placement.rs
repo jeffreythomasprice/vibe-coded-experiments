@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use bevy::prelude::*;
 
 use crate::dungeon::{Direction, Dungeon, rotated_doors, rotation_count};
@@ -8,8 +10,9 @@ use crate::types::*;
 pub fn enter_revealing(
     mut commands: Commands,
     revealing: Res<RevealingPlayer>,
-    _reveal_cell: Res<RevealCell>,
+    reveal_cell: Res<RevealCell>,
     queue: Res<RoomQueue>,
+    dungeon: Res<Dungeon>,
     players: Option<Res<Players>>,
     mut next_state: ResMut<NextState<GameState>>,
     status: Query<&Children, With<StatusText>>,
@@ -29,12 +32,19 @@ pub fn enter_revealing(
         }
     }
 
-    if let Some(room) = queue.try_pop() {
+    let cell = reveal_cell.0;
+    let room = queue
+        .try_find(|room| {
+            let arrangement = &room.door_config.arrangement;
+            let count = rotation_count(arrangement);
+            (0..count).any(|rot| dungeon.is_safe_placement(cell, arrangement, rot))
+        })
+        .or_else(|| queue.try_pop());
+
+    if let Some(room) = room {
         commands.insert_resource(PendingRoom(room));
         next_state.set(GameState::Placing);
     } else {
-        if let Some(ref _players) = players {
-        }
         commands.remove_resource::<RevealingPlayer>();
         commands.remove_resource::<RevealCell>();
         next_state.set(GameState::Moving);
@@ -60,7 +70,7 @@ pub fn enter_placing(
         commands.insert_resource(GhostRotation(initial_rot));
         commands.insert_resource(HoveredCandidate(Some(cell.0)));
         let doors = rotated_doors(arrangement, initial_rot);
-        let valid = dungeon.is_valid_placement(cell.0, arrangement, initial_rot);
+        let valid = dungeon.is_safe_placement(cell.0, arrangement, initial_rot);
         rendering::spawn_active_ghost(&mut commands, cell.0, &doors, &pending.0.name, valid);
     } else {
         commands.insert_resource(GhostRotation::default());
@@ -94,7 +104,7 @@ pub fn update_ghost_preview(
         let arrangement = &pending.0.door_config.arrangement;
         let rot = rotation.0;
         let doors = rotated_doors(arrangement, rot);
-        let valid = dungeon.is_valid_placement(pos, arrangement, rot);
+        let valid = dungeon.is_safe_placement(pos, arrangement, rot);
         rendering::spawn_active_ghost(&mut commands, pos, &doors, &pending.0.name, valid);
         return;
     }
@@ -129,7 +139,7 @@ pub fn update_ghost_preview(
     if found != hovered.0 {
         if let Some(pos) = found {
             let arrangement = &pending.0.door_config.arrangement;
-            if !dungeon.is_valid_placement(pos, arrangement, rotation.0) {
+            if !dungeon.is_safe_placement(pos, arrangement, rotation.0) {
                 if let Some(valid_rot) = dungeon.find_next_valid_rotation(pos, arrangement, rotation.0) {
                     rotation.0 = valid_rot;
                 }
@@ -147,7 +157,7 @@ pub fn update_ghost_preview(
         let arrangement = &pending.0.door_config.arrangement;
         let rot = rotation.0;
         let doors = rotated_doors(arrangement, rot);
-        let valid = dungeon.is_valid_placement(pos, arrangement, rot);
+        let valid = dungeon.is_safe_placement(pos, arrangement, rot);
         rendering::spawn_active_ghost(&mut commands, pos, &doors, &pending.0.name, valid);
     }
 }
@@ -179,7 +189,7 @@ pub fn handle_rotation(
             Some(pos) => {
                 for i in 1..=count {
                     let rot = (current + count - i) % count;
-                    if dungeon.is_valid_placement(pos, arrangement, rot) {
+                    if dungeon.is_safe_placement(pos, arrangement, rot) {
                         return rot;
                     }
                 }
@@ -223,7 +233,7 @@ pub fn handle_ghost_click(
     let Some(pos) = hovered.0 else { return };
     let arrangement = &pending.0.door_config.arrangement;
 
-    if !dungeon.is_valid_placement(pos, arrangement, rotation.0) {
+    if !dungeon.is_safe_placement(pos, arrangement, rotation.0) {
         return;
     }
 
@@ -235,6 +245,9 @@ pub fn handle_ghost_click(
 
     if let Some(revealing) = revealing {
         let revealer_idx = revealing.0;
+        let mut effect_logs = Vec::new();
+        let mut allocations = VecDeque::new();
+
         if let Some(ref mut players) = players {
             if let Some(info) = players.0.get_mut(revealer_idx) {
                 info.location = pos;
@@ -242,7 +255,43 @@ pub fn handle_ghost_click(
                 info.path.clear();
                 info.destination = None;
             }
+
+            if let Some(placed) = dungeon.grid.get_mut(&pos) {
+                let room_name = placed.room.name.clone();
+                match placed.room.content.take() {
+                    Some(crate::schema_types::RoomContent::Item(item)) => {
+                        tracing::info!("Room '{}' at ({},{}) — picking up item: {:?}", room_name, pos.x, pos.y, item);
+                        let mut rng = rand::rngs::ThreadRng::default();
+                        for effect in &item.effects {
+                            let logs = crate::effects::apply_effect(
+                                effect, revealer_idx, pos, &mut players.0, &dungeon, &mut rng, crate::effects::EffectSourceKind::Item, &item.name, &item.description, &mut allocations,
+                            );
+                            effect_logs.extend(logs);
+                        }
+                        let has_ongoing = item.effects.iter().any(|e| {
+                            matches!(e.timing_type, crate::schema_types::EffectTimingType::Duration | crate::schema_types::EffectTimingType::Delayed)
+                        });
+                        if has_ongoing {
+                            if let Some(info) = players.0.get_mut(revealer_idx) {
+                                info.inventory.push(item);
+                            }
+                        }
+                    }
+                    Some(crate::schema_types::RoomContent::Event(event)) => {
+                        tracing::info!("Room '{}' at ({},{}) — triggering event: {:?}", room_name, pos.x, pos.y, event);
+                        let mut rng = rand::rngs::ThreadRng::default();
+                        for effect in &event.effects {
+                            let logs = crate::effects::apply_effect(
+                                effect, revealer_idx, pos, &mut players.0, &dungeon, &mut rng, crate::effects::EffectSourceKind::Event, &event.name, &event.description, &mut allocations,
+                            );
+                            effect_logs.extend(logs);
+                        }
+                    }
+                    None => {}
+                }
+            }
         }
+
         commands.remove_resource::<RevealingPlayer>();
         commands.remove_resource::<RevealCell>();
 
@@ -254,7 +303,20 @@ pub fn handle_ghost_click(
             }
         }
 
-        next_state.set(GameState::Moving);
+        if !allocations.is_empty() {
+            if !effect_logs.is_empty() {
+                commands.insert_resource(EffectLogBuffer(effect_logs));
+            }
+            commands.insert_resource(DamageAllocationQueue(allocations));
+            commands.insert_resource(ResumeState(GameState::Moving));
+            next_state.set(GameState::AllocatingDamage);
+        } else if !effect_logs.is_empty() {
+            commands.insert_resource(EffectLogBuffer(effect_logs));
+            commands.insert_resource(ResumeState(GameState::Moving));
+            next_state.set(GameState::ShowingEffectLog);
+        } else {
+            next_state.set(GameState::Moving);
+        }
     } else {
         next_state.set(GameState::WaitingForSetup);
     }
