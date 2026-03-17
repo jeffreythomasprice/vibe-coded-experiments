@@ -112,7 +112,7 @@ func (p *Puzzle) CanTurn90(axis Axis) bool {
 // Each cycle lists faces that rotate into each other.
 var cycles = [3][4]Face{
 	AxisX: {PosY, PosZ, NegY, NegZ},
-	AxisY: {PosX, NegZ, NegX, PosZ},
+	AxisY: {PosX, PosZ, NegX, NegZ},
 	AxisZ: {PosX, PosY, NegX, NegY},
 }
 

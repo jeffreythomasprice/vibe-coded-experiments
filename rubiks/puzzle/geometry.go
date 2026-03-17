@@ -92,8 +92,8 @@ func appendCubieFaces(tris []graphics.Triangle, c Cubie, ox, oy, oz, h float64) 
 			continue
 		}
 		tris = append(tris,
-			graphics.Triangle{P0: f.p0, P1: f.n1, P2: f.p1, ColorIdx: byte(col)},
-			graphics.Triangle{P0: f.p0, P1: f.p1, P2: f.n2, ColorIdx: byte(col)},
+			graphics.Triangle{P0: f.p0, P1: f.p1, P2: f.n1, ColorIdx: byte(col)},
+			graphics.Triangle{P0: f.p0, P1: f.n2, P2: f.p1, ColorIdx: byte(col)},
 		)
 	}
 	return tris

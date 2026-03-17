@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"math"
 	"math/rand/v2"
@@ -25,6 +26,24 @@ const (
 )
 
 func run() error {
+	sizeX := flag.Int("size-x", 3, "number of cubies along X axis (2-10)")
+	sizeY := flag.Int("size-y", 3, "number of cubies along Y axis (2-10)")
+	sizeZ := flag.Int("size-z", 3, "number of cubies along Z axis (2-10)")
+	flag.Parse()
+
+	for _, dim := range []struct {
+		name  string
+		value int
+	}{
+		{"size-x", *sizeX},
+		{"size-y", *sizeY},
+		{"size-z", *sizeZ},
+	} {
+		if dim.value < 2 || dim.value > 10 {
+			return fmt.Errorf("-%s must be between 2 and 10, got %d", dim.name, dim.value)
+		}
+	}
+
 	ts, err := GetTermSize(os.Stdout.Fd())
 	if err != nil {
 		return fmt.Errorf("getting terminal size: %w", err)
@@ -69,8 +88,7 @@ func run() error {
 		}
 	}()
 
-	const size = 3
-	p := puzzle.NewPuzzle(size, size, size)
+	p := puzzle.NewPuzzle(*sizeX, *sizeY, *sizeZ)
 
 	fb := graphics.NewFramebuffer(pixelW, pixelH)
 
@@ -86,7 +104,8 @@ func run() error {
 
 	aspect := float64(pixelW) / float64(pixelH)
 	proj := graphics.Perspective(math.Pi/4, aspect, 0.1, 100)
-	eye := graphics.Vec3{X: 0, Y: float64(size) * 1.5, Z: float64(size) * 2.5}
+	maxDim := float64(max(*sizeX, *sizeY, *sizeZ))
+	eye := graphics.Vec3{X: 0, Y: maxDim * 1.5, Z: maxDim * 2.5}
 	view := graphics.LookAt(
 		eye,
 		graphics.Vec3{},

@@ -7,8 +7,12 @@ Requires a sixel-capable terminal (foot, WezTerm, xterm, mlterm) and Kitty keybo
 ## Usage
 
 ```sh
-go run .   # press Escape to exit
+go run .                                   # default 3×3×3 cube
+go run . -size-x 4 -size-y 3 -size-z 2    # non-cubic puzzle
+go run . -size-x 5                         # 5×3×3
 ```
+
+Each dimension defaults to 3 and must be between 2 and 10. Press Escape to exit.
 
 ## Testing
 

@@ -51,7 +51,10 @@ func RotateAxis(axis Axis, angle float64) graphics.Mat4 {
 	case AxisX:
 		return graphics.RotateX(angle)
 	case AxisY:
-		return graphics.RotateY(angle)
+		// Standard RotateY has the opposite sign convention from RotateX/Z
+		// due to the cross product direction in the XZ plane. Negate to
+		// match Turn()'s rotation direction.
+		return graphics.RotateY(-angle)
 	case AxisZ:
 		return graphics.RotateZ(angle)
 	}
