@@ -8,3 +8,4 @@ while moving between rooms players should visibly move through the interveaning 
 help text that you can toggle to show all the key and mouse binds
 
 rimworld-style animated characters instead of circles
+https://rimworldwiki.com/wiki/Human
