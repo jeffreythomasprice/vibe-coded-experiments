@@ -198,7 +198,7 @@ func benchmarkFullPipeline(b *testing.B, width, height int) {
 	palette.Colors[2] = [3]byte{0, 255, 0}
 	palette.Colors[3] = [3]byte{0, 0, 255}
 
-	triangles := []Triangle{
+	triangles := []graphics.Triangle{
 		{
 			P0:       graphics.Vec3{X: 0, Y: 0.8, Z: 0},
 			P1:       graphics.Vec3{X: -0.8, Y: -0.6, Z: 0},

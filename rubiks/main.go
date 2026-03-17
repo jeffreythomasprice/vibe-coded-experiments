@@ -3,10 +3,13 @@ package main
 import (
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"os"
 	"time"
 
 	"experiment/graphics"
+	"experiment/puzzle"
+
 	"golang.org/x/term"
 )
 
@@ -17,7 +20,6 @@ const (
 	showCursor = "\x1b[?25h"
 	cursorHome = "\x1b[H"
 
-	// Kitty keyboard protocol: push mode with flags 1|2 (disambiguate + report event types)
 	kittyEnable  = "\x1b[>3u"
 	kittyDisable = "\x1b[<u"
 )
@@ -35,11 +37,9 @@ func run() error {
 	}
 	defer term.Restore(int(os.Stdin.Fd()), oldState)
 
-	// Hide cursor and enable Kitty keyboard protocol
 	os.Stdout.WriteString(hideCursor + kittyEnable)
 	defer os.Stdout.WriteString(kittyDisable + showCursor)
 
-	// Non-blocking keyboard input via goroutine
 	quit := make(chan struct{})
 	go func() {
 		buf := make([]byte, 256)
@@ -69,33 +69,36 @@ func run() error {
 		}
 	}()
 
+	const size = 3
+	p := puzzle.NewPuzzle(size, size, size)
+
 	fb := graphics.NewFramebuffer(pixelW, pixelH)
 
-	palette := Palette{Size: 4}
-	palette.Colors[0] = [3]byte{0, 0, 0}       // background (black)
-	palette.Colors[1] = [3]byte{255, 0, 0}     // red
-	palette.Colors[2] = [3]byte{0, 255, 0}     // green
-	palette.Colors[3] = [3]byte{0, 100, 255}   // blue
-
-	triangles := []Triangle{
-		{
-			P0:       graphics.Vec3{X: 0, Y: 0.8, Z: 0},
-			P1:       graphics.Vec3{X: -0.8, Y: -0.6, Z: 0},
-			P2:       graphics.Vec3{X: 0.8, Y: -0.6, Z: 0},
-			ColorIdx: 1,
-		},
-	}
+	palette := Palette{Size: 8}
+	palette.Colors[0] = [3]byte{0, 0, 0}       // Black
+	palette.Colors[1] = [3]byte{255, 255, 255}  // White
+	palette.Colors[2] = [3]byte{255, 0, 0}      // Red
+	palette.Colors[3] = [3]byte{255, 165, 0}    // Orange
+	palette.Colors[4] = [3]byte{0, 0, 255}      // Blue
+	palette.Colors[5] = [3]byte{0, 200, 0}      // Green
+	palette.Colors[6] = [3]byte{255, 255, 0}    // Yellow
+	palette.Colors[7] = [3]byte{40, 40, 40}     // DarkGray
 
 	aspect := float64(pixelW) / float64(pixelH)
 	proj := graphics.Perspective(math.Pi/4, aspect, 0.1, 100)
+	eye := graphics.Vec3{X: 0, Y: float64(size) * 1.5, Z: float64(size) * 2.5}
 	view := graphics.LookAt(
-		graphics.Vec3{X: 0, Y: 0, Z: 3},
-		graphics.Vec3{X: 0, Y: 0, Z: 0},
+		eye,
+		graphics.Vec3{},
 		graphics.Vec3{X: 0, Y: 1, Z: 0},
 	)
 
 	enc := NewEncoder(pixelW, pixelH)
-	startTime := time.Now()
+
+	var anim *puzzle.Animation
+	pauseRemaining := 0.5 // initial pause before first turn
+
+	lastFrame := time.Now()
 	const frameDuration = time.Second / 30
 
 	for {
@@ -105,8 +108,53 @@ func run() error {
 		default:
 		}
 
-		angle := time.Since(startTime).Seconds() * math.Pi / 4 // 45°/s
-		model := graphics.RotateY(angle)
+		now := time.Now()
+		dt := now.Sub(lastFrame).Seconds()
+		lastFrame = now
+
+		// Gentle orbit rotation
+		orbitAngle := now.Sub(time.Time{}).Seconds() * math.Pi / 8
+
+		if anim == nil {
+			pauseRemaining -= dt
+			if pauseRemaining <= 0 {
+				// Pick a random turn
+				axis := puzzle.Axis(rand.IntN(3))
+				maxLayer := p.Size[int(axis)] - 2 // don't turn beyond last layer
+				layer := rand.IntN(maxLayer + 1)
+				positive := rand.IntN(2) == 0
+				anim = puzzle.NewAnimation(p, axis, layer, positive, 0.4)
+			}
+		}
+
+		var triangles []graphics.Triangle
+
+		if anim != nil {
+			anim.Elapsed += dt
+
+			stationary, rotating := puzzle.GenerateTrianglesSplit(p, anim.Axis, anim.Layer)
+			angle := anim.CurrentAngle()
+			rotMat := puzzle.RotateAxis(anim.Axis, angle)
+
+			// Transform rotating vertices in model space
+			for i := range rotating {
+				rotating[i].P0 = rotMat.TransformPoint(rotating[i].P0)
+				rotating[i].P1 = rotMat.TransformPoint(rotating[i].P1)
+				rotating[i].P2 = rotMat.TransformPoint(rotating[i].P2)
+			}
+
+			triangles = append(stationary, rotating...)
+
+			if anim.Done() {
+				p.Turn(anim.Axis, anim.Layer, anim.Positive)
+				anim = nil
+				pauseRemaining = 0.3
+			}
+		} else {
+			triangles = puzzle.GenerateTriangles(p, 0.05)
+		}
+
+		model := graphics.RotateY(orbitAngle)
 		mvp := proj.Mul(view).Mul(model)
 
 		os.Stdout.WriteString(cursorHome)
@@ -114,7 +162,10 @@ func run() error {
 			return fmt.Errorf("encoding sixel: %w", err)
 		}
 
-		time.Sleep(frameDuration)
+		elapsed := time.Since(now)
+		if elapsed < frameDuration {
+			time.Sleep(frameDuration - elapsed)
+		}
 	}
 }
 

@@ -70,10 +70,12 @@ func (fb *Framebuffer) DrawTriangle(p0, p1, p2 Vec3, colorIdx byte, mvp Mat4) {
 		maxY = fb.Height
 	}
 
-	// Triangle area (2x) via cross product of edge vectors
+	// Triangle area (2x) via cross product of edge vectors.
+	// The viewport Y-flip reverses winding, so front-facing triangles
+	// have negative area in screen space.
 	area := edgeFn(sx0, sy0, sx1, sy1, sx2, sy2)
-	if area == 0 {
-		return // degenerate
+	if area >= 0 {
+		return // degenerate or back-facing
 	}
 	invArea := 1.0 / area
 
@@ -82,20 +84,13 @@ func (fb *Framebuffer) DrawTriangle(p0, p1, p2 Vec3, colorIdx byte, mvp Mat4) {
 			// Sample at pixel center
 			pcx, pcy := float64(px)+0.5, float64(py)+0.5
 
-			// Barycentric coordinates
+			// Barycentric coordinates (negative since area is negative)
 			b0 := edgeFn(sx1, sy1, sx2, sy2, pcx, pcy) * invArea
 			b1 := edgeFn(sx2, sy2, sx0, sy0, pcx, pcy) * invArea
 			b2 := edgeFn(sx0, sy0, sx1, sy1, pcx, pcy) * invArea
 
-			// Accept both winding orders
-			inside := (b0 >= 0 && b1 >= 0 && b2 >= 0) || (b0 <= 0 && b1 <= 0 && b2 <= 0)
-			if !inside {
+			if b0 < 0 || b1 < 0 || b2 < 0 {
 				continue
-			}
-
-			// Make barycentrics positive for interpolation
-			if b0 < 0 {
-				b0, b1, b2 = -b0, -b1, -b2
 			}
 
 			// Interpolate depth

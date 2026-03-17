@@ -68,6 +68,28 @@ func RotateY(angle float64) Mat4 {
 	return m
 }
 
+// RotateX returns a rotation matrix around the X axis by angle radians.
+func RotateX(angle float64) Mat4 {
+	c, s := math.Cos(angle), math.Sin(angle)
+	m := Identity()
+	m[5] = c
+	m[9] = -s
+	m[6] = s
+	m[10] = c
+	return m
+}
+
+// RotateZ returns a rotation matrix around the Z axis by angle radians.
+func RotateZ(angle float64) Mat4 {
+	c, s := math.Cos(angle), math.Sin(angle)
+	m := Identity()
+	m[0] = c
+	m[4] = -s
+	m[1] = s
+	m[5] = c
+	return m
+}
+
 // Perspective returns a perspective projection matrix.
 // fovY is vertical field of view in radians.
 func Perspective(fovY, aspect, near, far float64) Mat4 {

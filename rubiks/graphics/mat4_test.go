@@ -52,6 +52,20 @@ func TestPerspectiveFarPlane(t *testing.T) {
 	}
 }
 
+func TestRotateX90(t *testing.T) {
+	m := RotateX(math.Pi / 2)
+	// Rotating (0,1,0) 90 degrees around X should give approximately (0,0,1)
+	p := m.TransformPoint(Vec3{0, 1, 0})
+	assertVec3Near(t, p, Vec3{0, 0, 1})
+}
+
+func TestRotateZ90(t *testing.T) {
+	m := RotateZ(math.Pi / 2)
+	// Rotating (1,0,0) 90 degrees around Z should give approximately (0,1,0)
+	p := m.TransformPoint(Vec3{1, 0, 0})
+	assertVec3Near(t, p, Vec3{0, 1, 0})
+}
+
 // --- Benchmarks ---
 
 func BenchmarkMVPBuild(b *testing.B) {
