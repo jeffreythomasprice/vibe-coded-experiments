@@ -71,9 +71,20 @@ func run() error {
 
 	fb := graphics.NewFramebuffer(pixelW, pixelH)
 
-	v0 := graphics.Vertex{Pos: graphics.Vec3{X: 0, Y: 0.8, Z: 0}, Color: [4]float64{1, 0, 0, 1}}
-	v1 := graphics.Vertex{Pos: graphics.Vec3{X: -0.8, Y: -0.6, Z: 0}, Color: [4]float64{0, 1, 0, 1}}
-	v2 := graphics.Vertex{Pos: graphics.Vec3{X: 0.8, Y: -0.6, Z: 0}, Color: [4]float64{0, 0, 1, 1}}
+	palette := Palette{Size: 4}
+	palette.Colors[0] = [3]byte{0, 0, 0}       // background (black)
+	palette.Colors[1] = [3]byte{255, 0, 0}     // red
+	palette.Colors[2] = [3]byte{0, 255, 0}     // green
+	palette.Colors[3] = [3]byte{0, 100, 255}   // blue
+
+	triangles := []Triangle{
+		{
+			P0:       graphics.Vec3{X: 0, Y: 0.8, Z: 0},
+			P1:       graphics.Vec3{X: -0.8, Y: -0.6, Z: 0},
+			P2:       graphics.Vec3{X: 0.8, Y: -0.6, Z: 0},
+			ColorIdx: 1,
+		},
+	}
 
 	aspect := float64(pixelW) / float64(pixelH)
 	proj := graphics.Perspective(math.Pi/4, aspect, 0.1, 100)
@@ -98,9 +109,8 @@ func run() error {
 		model := graphics.RotateY(angle)
 		mvp := proj.Mul(view).Mul(model)
 
-		vertices := []graphics.Vertex{v0, v1, v2}
 		os.Stdout.WriteString(cursorHome)
-		if err := enc.RenderFrame(os.Stdout, fb, vertices, mvp, &QuantizeOptions{MaxColors: 64}); err != nil {
+		if err := enc.RenderFrame(os.Stdout, fb, triangles, mvp, palette); err != nil {
 			return fmt.Errorf("encoding sixel: %w", err)
 		}
 

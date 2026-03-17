@@ -2,8 +2,6 @@ package main
 
 import (
 	"bytes"
-	"image"
-	"image/color"
 	"math"
 	"strings"
 	"testing"
@@ -159,48 +157,6 @@ func TestEncodeRoundtrip(t *testing.T) {
 	}
 }
 
-func TestEncodeImageGradient(t *testing.T) {
-	// Create a small gradient image and ensure EncodeImage doesn't error.
-	img := image.NewRGBA(image.Rect(0, 0, 32, 32))
-	for y := range 32 {
-		for x := range 32 {
-			img.Set(x, y, color.RGBA{R: uint8(x * 8), G: uint8(y * 8), B: 128, A: 255})
-		}
-	}
-
-	enc := NewEncoder(32, 32)
-	var buf bytes.Buffer
-	err := enc.EncodeImage(&buf, img, &QuantizeOptions{MaxColors: 16})
-	if err != nil {
-		t.Fatal(err)
-	}
-	out := buf.String()
-	if !strings.HasPrefix(out, DCS) || !strings.HasSuffix(out, ST) {
-		t.Error("missing DCS/ST framing")
-	}
-}
-
-func TestMedianCutDistinctColors(t *testing.T) {
-	// 4 distinct colors quantized to 4 should preserve all of them.
-	pixels := [][3]byte{
-		{255, 0, 0},
-		{0, 255, 0},
-		{0, 0, 255},
-		{255, 255, 0},
-	}
-	// Repeat each to give median-cut something to work with.
-	expanded := make([][3]byte, 0, 400)
-	for _, p := range pixels {
-		for range 100 {
-			expanded = append(expanded, p)
-		}
-	}
-	pal := medianCut(expanded, 4)
-	if pal.Size != 4 {
-		t.Errorf("expected 4 colors, got %d", pal.Size)
-	}
-}
-
 // --- Benchmarks ---
 
 func benchmarkEncode(b *testing.B, width, height, colors int) {
@@ -230,62 +186,26 @@ func benchmarkEncode(b *testing.B, width, height, colors int) {
 func BenchmarkEncode800x600(b *testing.B)   { benchmarkEncode(b, 800, 600, 64) }
 func BenchmarkEncode1920x1080(b *testing.B) { benchmarkEncode(b, 1920, 1080, 64) }
 
-func benchmarkQuantize(b *testing.B, width, height int) {
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
-	for y := range height {
-		for x := range width {
-			img.SetRGBA(x, y, color.RGBA{
-				R: uint8(x % 256), G: uint8(y % 256), B: uint8((x + y) % 256), A: 255,
-			})
-		}
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
-	for range b.N {
-		ImageToPaletted(img, 64)
-	}
-	b.SetBytes(int64(width * height))
-}
-
-func BenchmarkQuantize800x600(b *testing.B)   { benchmarkQuantize(b, 800, 600) }
-func BenchmarkQuantize1920x1080(b *testing.B) { benchmarkQuantize(b, 1920, 1080) }
-
-func BenchmarkEncodeImage800x600(b *testing.B) {
-	img := image.NewRGBA(image.Rect(0, 0, 800, 600))
-	for y := range 600 {
-		for x := range 800 {
-			img.Set(x, y, color.RGBA{
-				R: uint8(x % 256), G: uint8(y % 256), B: uint8((x + y) % 256), A: 255,
-			})
-		}
-	}
-	enc := NewEncoder(800, 600)
-	var buf bytes.Buffer
-	buf.Grow(800 * 600 * 2)
-
-	b.ResetTimer()
-	b.ReportAllocs()
-	for range b.N {
-		buf.Reset()
-		if err := enc.EncodeImage(&buf, img, &QuantizeOptions{MaxColors: 64}); err != nil {
-			b.Fatal(err)
-		}
-	}
-	b.SetBytes(800 * 600)
-}
-
 func benchmarkFullPipeline(b *testing.B, width, height int) {
 	fb := graphics.NewFramebuffer(width, height)
 	enc := NewEncoder(width, height)
 	var buf bytes.Buffer
 	buf.Grow(width * height * 2)
 
-	vertices := []graphics.Vertex{
-		{Pos: graphics.Vec3{X: 0, Y: 0.8, Z: 0}, Color: [4]float64{1, 0, 0, 1}},
-		{Pos: graphics.Vec3{X: -0.8, Y: -0.6, Z: 0}, Color: [4]float64{0, 1, 0, 1}},
-		{Pos: graphics.Vec3{X: 0.8, Y: -0.6, Z: 0}, Color: [4]float64{0, 0, 1, 1}},
+	palette := Palette{Size: 4}
+	palette.Colors[0] = [3]byte{0, 0, 0}
+	palette.Colors[1] = [3]byte{255, 0, 0}
+	palette.Colors[2] = [3]byte{0, 255, 0}
+	palette.Colors[3] = [3]byte{0, 0, 255}
+
+	triangles := []Triangle{
+		{
+			P0:       graphics.Vec3{X: 0, Y: 0.8, Z: 0},
+			P1:       graphics.Vec3{X: -0.8, Y: -0.6, Z: 0},
+			P2:       graphics.Vec3{X: 0.8, Y: -0.6, Z: 0},
+			ColorIdx: 1,
+		},
 	}
-	opts := &QuantizeOptions{MaxColors: 64}
 
 	aspect := float64(width) / float64(height)
 	proj := graphics.Perspective(math.Pi/4, aspect, 0.1, 100)
@@ -301,7 +221,7 @@ func benchmarkFullPipeline(b *testing.B, width, height int) {
 	b.ReportAllocs()
 	for range b.N {
 		buf.Reset()
-		if err := enc.RenderFrame(&buf, fb, vertices, mvp, opts); err != nil {
+		if err := enc.RenderFrame(&buf, fb, triangles, mvp, palette); err != nil {
 			b.Fatal(err)
 		}
 	}

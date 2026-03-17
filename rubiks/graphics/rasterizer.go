@@ -1,22 +1,12 @@
 package graphics
 
-import (
-	"image"
-	"image/color"
-	"math"
-)
+import "math"
 
-// Vertex holds a position and RGBA color (each component 0–1).
-type Vertex struct {
-	Pos   Vec3
-	Color [4]float64
-}
-
-// Framebuffer holds an RGBA image and a depth buffer for software rendering.
+// Framebuffer holds an indexed pixel buffer and a depth buffer for software rendering.
 type Framebuffer struct {
 	Width, Height int
-	Image         *image.RGBA
-	Depth         []float64
+	Pixels        []byte    // indexed color buffer, each byte is a palette index
+	Depth         []float64 // depth buffer for z-testing
 }
 
 // NewFramebuffer allocates a framebuffer with depth initialized to +infinity.
@@ -24,18 +14,16 @@ func NewFramebuffer(w, h int) *Framebuffer {
 	fb := &Framebuffer{
 		Width:  w,
 		Height: h,
-		Image:  image.NewRGBA(image.Rect(0, 0, w, h)),
+		Pixels: make([]byte, w*h),
 		Depth:  make([]float64, w*h),
 	}
 	fb.clearDepth()
 	return fb
 }
 
-// Clear resets the color image to black and the depth buffer to +infinity.
+// Clear resets the pixel buffer to zero and the depth buffer to +infinity.
 func (fb *Framebuffer) Clear() {
-	for i := range fb.Image.Pix {
-		fb.Image.Pix[i] = 0
-	}
+	clear(fb.Pixels)
 	fb.clearDepth()
 }
 
@@ -45,13 +33,13 @@ func (fb *Framebuffer) clearDepth() {
 	}
 }
 
-// DrawTriangle transforms three vertices through mvp and rasterizes the triangle
-// with color interpolation and depth testing.
-func (fb *Framebuffer) DrawTriangle(v0, v1, v2 Vertex, mvp Mat4) {
+// DrawTriangle transforms three points through mvp and rasterizes the triangle
+// with a flat color index and depth testing.
+func (fb *Framebuffer) DrawTriangle(p0, p1, p2 Vec3, colorIdx byte, mvp Mat4) {
 	// Transform to clip space
-	ndc0, w0 := mvp.TransformPointW(v0.Pos)
-	ndc1, w1 := mvp.TransformPointW(v1.Pos)
-	ndc2, w2 := mvp.TransformPointW(v2.Pos)
+	ndc0, w0 := mvp.TransformPointW(p0)
+	ndc1, w1 := mvp.TransformPointW(p1)
+	ndc2, w2 := mvp.TransformPointW(p2)
 
 	// Discard if any vertex is behind the near plane
 	if w0 <= 0 || w1 <= 0 || w2 <= 0 {
@@ -118,19 +106,7 @@ func (fb *Framebuffer) DrawTriangle(v0, v1, v2 Vertex, mvp Mat4) {
 				continue
 			}
 			fb.Depth[idx] = z
-
-			// Interpolate color
-			r := b0*v0.Color[0] + b1*v1.Color[0] + b2*v2.Color[0]
-			g := b0*v0.Color[1] + b1*v1.Color[1] + b2*v2.Color[1]
-			b := b0*v0.Color[2] + b1*v1.Color[2] + b2*v2.Color[2]
-			a := b0*v0.Color[3] + b1*v1.Color[3] + b2*v2.Color[3]
-
-			fb.Image.SetRGBA(px, py, color.RGBA{
-				R: clamp8(r),
-				G: clamp8(g),
-				B: clamp8(b),
-				A: clamp8(a),
-			})
+			fb.Pixels[idx] = colorIdx
 		}
 	}
 }
@@ -146,14 +122,4 @@ func min3(a, b, c float64) float64 {
 
 func max3(a, b, c float64) float64 {
 	return math.Max(a, math.Max(b, c))
-}
-
-func clamp8(v float64) uint8 {
-	if v <= 0 {
-		return 0
-	}
-	if v >= 1 {
-		return 255
-	}
-	return uint8(v * 255)
 }
