@@ -46,6 +46,29 @@ func GenerateTrianglesSplit(p *Puzzle, axis Axis, layer int) (stationary, rotati
 	return
 }
 
+// GenerateTrianglesSplitSlice generates triangles partitioned by whether a
+// cubie's position on the given axis equals slicePos (rotating) or not (stationary).
+func GenerateTrianglesSplitSlice(p *Puzzle, axis Axis, slicePos int) (stationary, rotating []graphics.Triangle) {
+	cx := float64(p.Size[0]-1) / 2.0
+	cy := float64(p.Size[1]-1) / 2.0
+	cz := float64(p.Size[2]-1) / 2.0
+
+	h := 0.5 - 0.05 // default gap
+
+	for _, c := range p.Cubies {
+		ox := float64(c.Pos[0]) - cx
+		oy := float64(c.Pos[1]) - cy
+		oz := float64(c.Pos[2]) - cz
+
+		if c.Pos[int(axis)] == slicePos {
+			rotating = appendCubieFaces(rotating, c, ox, oy, oz, h)
+		} else {
+			stationary = appendCubieFaces(stationary, c, ox, oy, oz, h)
+		}
+	}
+	return
+}
+
 func appendCubieFaces(tris []graphics.Triangle, c Cubie, ox, oy, oz, h float64) []graphics.Triangle {
 	type faceVerts struct {
 		face    Face

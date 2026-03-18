@@ -187,3 +187,24 @@ func (p *Puzzle) Turn(axis Axis, layer int, positive bool) {
 		}
 	}
 }
+
+// SliceTurn rotates a single slice at the given position around the axis.
+// pos is 0-indexed: 0 is the first slice, Size[axis]-1 is the last.
+func (p *Puzzle) SliceTurn(axis Axis, pos int, positive bool) {
+	if pos == p.Size[int(axis)]-1 {
+		// Outermost slice: Turn(axis, pos-1) affects only this slice.
+		p.Turn(axis, pos-1, positive)
+		return
+	}
+	// Turn everything from pos onward, then undo everything from pos+1 onward.
+	p.Turn(axis, pos-1, positive)
+	p.Turn(axis, pos, !positive)
+}
+
+// Clone returns a deep copy of the puzzle.
+func (p *Puzzle) Clone() *Puzzle {
+	clone := &Puzzle{Size: p.Size}
+	clone.Cubies = make([]Cubie, len(p.Cubies))
+	copy(clone.Cubies, p.Cubies)
+	return clone
+}

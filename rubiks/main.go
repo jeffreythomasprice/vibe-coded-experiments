@@ -3,13 +3,14 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log/slog"
 	"math"
-	"math/rand/v2"
 	"os"
 	"time"
 
 	"experiment/graphics"
 	"experiment/puzzle"
+	"experiment/puzzle/solver"
 
 	"golang.org/x/term"
 )
@@ -88,6 +89,17 @@ func run() error {
 		}
 	}()
 
+	if err := os.MkdirAll("logs", 0o755); err != nil {
+		return fmt.Errorf("creating logs directory: %w", err)
+	}
+	logFile, err := os.Create("logs/rubiks.log")
+	if err != nil {
+		return fmt.Errorf("creating log file: %w", err)
+	}
+	defer logFile.Close()
+	logger := slog.New(slog.NewTextHandler(logFile, nil))
+	solver.SetLogWriter(logFile)
+
 	p := puzzle.NewPuzzle(*sizeX, *sizeY, *sizeZ)
 
 	fb := graphics.NewFramebuffer(pixelW, pixelH)
@@ -114,8 +126,9 @@ func run() error {
 
 	enc := NewEncoder(pixelW, pixelH)
 
+	state := puzzle.NewDemoState(p)
+	state.SetLogger(logger)
 	var anim *puzzle.Animation
-	pauseRemaining := 0.5 // initial pause before first turn
 
 	lastFrame := time.Now()
 	const frameDuration = time.Second / 30
@@ -135,15 +148,21 @@ func run() error {
 		orbitAngle := now.Sub(time.Time{}).Seconds() * math.Pi / 8
 
 		if anim == nil {
-			pauseRemaining -= dt
-			if pauseRemaining <= 0 {
-				// Pick a random turn
-				axis := puzzle.Axis(rand.IntN(3))
-				maxLayer := p.Size[int(axis)] - 2 // don't turn beyond last layer
-				layer := rand.IntN(maxLayer + 1)
-				positive := rand.IntN(2) == 0
-				anim = puzzle.NewAnimation(p, axis, layer, positive, 0.4)
+			if state.NeedsSolve() {
+				logger.Info("searching for solution")
+				solveStart := time.Now()
+				moves, err := solver.Solve(p)
+				if err != nil {
+					return fmt.Errorf("solving puzzle: %w", err)
+				}
+				logger.Info("solution found", "moves", len(moves), "elapsed", time.Since(solveStart))
+				sliceMoves := make([]puzzle.SliceMove, len(moves))
+				for i, m := range moves {
+					sliceMoves[i] = puzzle.SliceMove{Axis: m.Axis, Slice: m.Slice, Turns: m.Turns}
+				}
+				state.SetSolveMoves(sliceMoves)
 			}
+			anim = state.NextAnimation(p, dt)
 		}
 
 		var triangles []graphics.Triangle
@@ -151,11 +170,10 @@ func run() error {
 		if anim != nil {
 			anim.Elapsed += dt
 
-			stationary, rotating := puzzle.GenerateTrianglesSplit(p, anim.Axis, anim.Layer)
+			stationary, rotating := anim.SplitTriangles(p)
 			angle := anim.CurrentAngle()
 			rotMat := puzzle.RotateAxis(anim.Axis, angle)
 
-			// Transform rotating vertices in model space
 			for i := range rotating {
 				rotating[i].P0 = rotMat.TransformPoint(rotating[i].P0)
 				rotating[i].P1 = rotMat.TransformPoint(rotating[i].P1)
@@ -165,9 +183,9 @@ func run() error {
 			triangles = append(stationary, rotating...)
 
 			if anim.Done() {
-				p.Turn(anim.Axis, anim.Layer, anim.Positive)
+				anim.ApplyTurn(p)
+				state.AnimationDone()
 				anim = nil
-				pauseRemaining = 0.3
 			}
 		} else {
 			triangles = puzzle.GenerateTriangles(p, 0.05)

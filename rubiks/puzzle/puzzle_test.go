@@ -389,6 +389,90 @@ func TestAnimationMatchesTurn(t *testing.T) {
 	}
 }
 
+func TestSliceTurnOuterIdentity(t *testing.T) {
+	p := NewPuzzle(3, 3, 3)
+	original := p.Clone()
+
+	for range 4 {
+		p.SliceTurn(AxisY, 2, true)
+	}
+	if !cubiesEqual(original.Cubies, p.Cubies) {
+		t.Error("4x SliceTurn on outer slice did not return to identity")
+	}
+}
+
+func TestSliceTurnMiddleIdentity(t *testing.T) {
+	p := NewPuzzle(3, 3, 3)
+	original := p.Clone()
+
+	for range 4 {
+		p.SliceTurn(AxisY, 1, true)
+	}
+	if !cubiesEqual(original.Cubies, p.Cubies) {
+		t.Error("4x SliceTurn on middle slice did not return to identity")
+	}
+}
+
+func TestSliceTurnSlice0Identity(t *testing.T) {
+	p := NewPuzzle(3, 3, 3)
+	original := p.Clone()
+
+	for range 4 {
+		p.SliceTurn(AxisX, 0, true)
+	}
+	if !cubiesEqual(original.Cubies, p.Cubies) {
+		t.Error("4x SliceTurn on slice 0 did not return to identity")
+	}
+}
+
+func TestSliceTurnOnlyAffectsTargetSlice(t *testing.T) {
+	p := NewPuzzle(3, 3, 3)
+	original := p.Clone()
+
+	p.SliceTurn(AxisY, 1, true)
+
+	for _, c := range original.Cubies {
+		if c.Pos[1] == 1 {
+			continue
+		}
+		found := false
+		for _, c2 := range p.Cubies {
+			if c.Pos == c2.Pos && c.Colors == c2.Colors {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("cubie at %v was changed by middle slice turn", c.Pos)
+		}
+	}
+}
+
+func TestSliceTurn180Identity(t *testing.T) {
+	// 2x3x4: AxisY does 180° turns. Two 180° turns = identity.
+	p := NewPuzzle(2, 3, 4)
+	original := p.Clone()
+
+	p.SliceTurn(AxisY, 1, true)
+	p.SliceTurn(AxisY, 1, true)
+
+	if !cubiesEqual(original.Cubies, p.Cubies) {
+		t.Error("2x SliceTurn 180° did not return to identity")
+	}
+}
+
+func TestClone(t *testing.T) {
+	p := NewPuzzle(3, 3, 3)
+	clone := p.Clone()
+
+	p.Turn(AxisY, 0, true)
+
+	original := NewPuzzle(3, 3, 3)
+	if !cubiesEqual(clone.Cubies, original.Cubies) {
+		t.Error("clone was modified when original was turned")
+	}
+}
+
 // cubiesEqual compares two cubie slices ignoring order.
 func cubiesEqual(a, b []Cubie) bool {
 	if len(a) != len(b) {
