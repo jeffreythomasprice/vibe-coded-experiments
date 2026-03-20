@@ -8,6 +8,7 @@ mod sync;
 mod tui;
 
 use std::path::PathBuf;
+use std::time::SystemTime;
 
 use anyhow::Result;
 use clap::Parser;
@@ -38,9 +39,76 @@ struct Cli {
     #[arg(long)]
     dry_run: bool,
 
+    /// Directory for backup files
+    #[arg(long)]
+    backup_dir: Option<PathBuf>,
+
     /// Print status for every file, including those already in sync
     #[arg(long, short)]
     verbose: bool,
+}
+
+fn format_timestamp(time: SystemTime) -> String {
+    let dur = time
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = dur.as_secs();
+
+    // Calculate UTC date/time components
+    let days = secs / 86400;
+    let time_of_day = secs % 86400;
+    let hours = time_of_day / 3600;
+    let minutes = (time_of_day % 3600) / 60;
+    let seconds = time_of_day % 60;
+
+    // Days since epoch to year/month/day
+    let mut y = 1970i64;
+    let mut remaining_days = days as i64;
+    loop {
+        let year_days = if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) {
+            366
+        } else {
+            365
+        };
+        if remaining_days < year_days {
+            break;
+        }
+        remaining_days -= year_days;
+        y += 1;
+    }
+    let leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+    let month_days = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    let mut m = 0usize;
+    for md in &month_days {
+        if remaining_days < *md as i64 {
+            break;
+        }
+        remaining_days -= *md as i64;
+        m += 1;
+    }
+
+    format!(
+        "{:04}-{:02}-{:02}T{:02}-{:02}-{:02}Z",
+        y,
+        m + 1,
+        remaining_days + 1,
+        hours,
+        minutes,
+        seconds
+    )
 }
 
 fn main() -> Result<()> {
@@ -60,6 +128,15 @@ fn main() -> Result<()> {
     if cli.dry_run {
         info!("Running in dry-run mode");
     }
+
+    let backup_base = cli
+        .backup_dir
+        .or(config.backup_dir.clone())
+        .unwrap_or_else(|| PathBuf::from("/tmp/file-sync/backups"));
+    let timestamp = format_timestamp(SystemTime::now());
+    let backup_dir = backup_base.join(&timestamp);
+
+    info!("Backup directory: {}", backup_dir.display());
 
     let mut summary = Summary::new();
 
@@ -96,7 +173,7 @@ fn main() -> Result<()> {
         match resolved {
             ResolvedEntity::Files { groups } => {
                 for group in &groups {
-                    match sync_file_group(&entity.name, group, cli.dry_run, cli.verbose, &mut summary) {
+                    match sync_file_group(&entity.name, group, cli.dry_run, cli.verbose, &backup_dir, &mut summary) {
                         Ok(()) => {}
                         Err(e) => {
                             let msg = format!("{}", e);

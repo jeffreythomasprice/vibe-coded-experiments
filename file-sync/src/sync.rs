@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use tracing::{error, info, warn};
@@ -15,6 +15,7 @@ pub fn sync_file_group(
     group: &FileGroup,
     dry_run: bool,
     verbose: bool,
+    backup_dir: &Path,
     summary: &mut Summary,
 ) -> Result<()> {
     let existing: Vec<&PathBuf> = group.paths.iter().filter(|p| p.is_file()).collect();
@@ -60,7 +61,7 @@ pub fn sync_file_group(
                 }
             }
             for dst in &missing {
-                copy_file(src, dst, dry_run, summary)?;
+                copy_file(src, dst, dry_run, backup_dir, entity_name, summary)?;
             }
         }
         _ => {
@@ -111,7 +112,7 @@ pub fn sync_file_group(
                     );
                 }
                 for dst in &missing {
-                    copy_file(first, dst, dry_run, summary)?;
+                    copy_file(first, dst, dry_run, backup_dir, entity_name, summary)?;
                 }
             } else {
                 // Conflict: show diff dialog for each pair
@@ -142,11 +143,11 @@ pub fn sync_file_group(
 
                         // Overwrite losers
                         for dst in &losers {
-                            copy_file(winner, dst, dry_run, summary)?;
+                            copy_file(winner, dst, dry_run, backup_dir, entity_name, summary)?;
                         }
                         // Copy to missing
                         for dst in &missing {
-                            copy_file(winner, dst, dry_run, summary)?;
+                            copy_file(winner, dst, dry_run, backup_dir, entity_name, summary)?;
                         }
 
                         summary.record_conflict(entity_name, winner, losers);

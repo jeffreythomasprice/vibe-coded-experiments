@@ -1,5 +1,6 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::text::{Line, Span};
+use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 
@@ -41,13 +42,13 @@ fn draw_panes(frame: &mut Frame, area: Rect, app: &App) {
         draw_binary_pane(frame, pane_chunks[1], app, 1);
     } else {
         let left_title = app.pane_title(0);
-        let left_block = Block::default().borders(Borders::ALL).title(left_title);
-        let left_para = render_pane(&app.rows, app.scroll, true).block(left_block);
+        let left_block = Block::default().borders(Borders::ALL).title(left_title).style(Style::default().bg(Color::Reset));
+        let left_para = render_pane(&app.rows, app.scroll, true, app.word_wrap).block(left_block);
         frame.render_widget(left_para, pane_chunks[0]);
 
         let right_title = app.pane_title(1);
-        let right_block = Block::default().borders(Borders::ALL).title(right_title);
-        let right_para = render_pane(&app.rows, app.scroll, false).block(right_block);
+        let right_block = Block::default().borders(Borders::ALL).title(right_title).style(Style::default().bg(Color::Reset));
+        let right_para = render_pane(&app.rows, app.scroll, false, app.word_wrap).block(right_block);
         frame.render_widget(right_para, pane_chunks[1]);
     }
 }
@@ -73,7 +74,7 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &App) {
         )
     } else {
         format!(
-            " [1-{}] Keep copy  [s] Skip  [q] Quit  [↑↓/jk] Scroll",
+            " [1-{}] Keep copy  [s] Skip  [q] Quit  [↑↓/jk] Scroll  [w] Wrap",
             app.copy_info.len()
         )
     };

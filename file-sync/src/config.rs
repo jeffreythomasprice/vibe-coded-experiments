@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub log_dir: Option<PathBuf>,
+    pub backup_dir: Option<PathBuf>,
     pub sync: Vec<SyncEntity>,
 }
 
@@ -12,6 +13,8 @@ pub struct Config {
 pub struct SyncEntity {
     pub name: String,
     pub paths: Vec<String>,
+    #[serde(default)]
+    pub include: Vec<String>,
 }
 
 pub fn expand_tilde(path: &str) -> PathBuf {

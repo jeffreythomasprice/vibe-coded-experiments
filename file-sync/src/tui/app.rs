@@ -19,6 +19,7 @@ pub struct App {
     pub paths: Vec<String>,
     pub choice: Option<UserChoice>,
     pub num_copies: usize,
+    pub word_wrap: bool,
 }
 
 impl App {
@@ -50,6 +51,7 @@ impl App {
             num_copies: info.copies.len(),
             paths,
             choice: None,
+            word_wrap: false,
         }
     }
 
@@ -108,6 +110,7 @@ impl App {
                 KeyCode::Char('u') | KeyCode::PageUp => self.scroll_up(20),
                 KeyCode::Char('g') | KeyCode::Home => self.scroll_to_top(),
                 KeyCode::Char('G') | KeyCode::End => self.scroll_to_bottom(),
+                KeyCode::Char('w') => self.word_wrap = !self.word_wrap,
                 _ => {}
             }
         }

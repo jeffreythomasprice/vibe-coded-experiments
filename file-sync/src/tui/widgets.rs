@@ -1,11 +1,11 @@
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
+use ratatui::widgets::{Paragraph, Wrap};
 use similar::ChangeTag;
 
 use super::diff_model::DiffRow;
 use super::styles;
 
-pub fn render_pane(rows: &[DiffRow], scroll: usize, is_left: bool) -> Paragraph<'_> {
+pub fn render_pane(rows: &[DiffRow], scroll: usize, is_left: bool, word_wrap: bool) -> Paragraph<'_> {
     let lines: Vec<Line> = rows
         .iter()
         .skip(scroll)
@@ -31,10 +31,15 @@ pub fn render_pane(rows: &[DiffRow], scroll: usize, is_left: bool) -> Paragraph<
                         Span::styled(text, style),
                     ])
                 }
-                None => Line::from(Span::raw("")),
+                None => Line::from(Span::styled("", styles::EQUAL)),
             }
         })
         .collect();
 
-    Paragraph::new(lines)
+    let para = Paragraph::new(lines);
+    if word_wrap {
+        para.wrap(Wrap { trim: false })
+    } else {
+        para
+    }
 }

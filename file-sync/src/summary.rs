@@ -14,9 +14,17 @@ pub struct ConflictRecord {
     pub losers: Vec<PathBuf>,
 }
 
+#[derive(Debug)]
+pub struct BackupRecord {
+    pub original: PathBuf,
+    pub backup: PathBuf,
+    pub dry_run: bool,
+}
+
 #[derive(Debug, Default)]
 pub struct Summary {
     pub copies: Vec<CopyRecord>,
+    pub backups: Vec<BackupRecord>,
     pub conflicts: Vec<ConflictRecord>,
     pub errors: Vec<String>,
     pub skipped: Vec<String>,
@@ -32,6 +40,14 @@ impl Summary {
         self.copies.push(CopyRecord {
             src: src.to_path_buf(),
             dst: dst.to_path_buf(),
+            dry_run,
+        });
+    }
+
+    pub fn record_backup(&mut self, original: &Path, backup: &Path, dry_run: bool) {
+        self.backups.push(BackupRecord {
+            original: original.to_path_buf(),
+            backup: backup.to_path_buf(),
             dry_run,
         });
     }
@@ -58,6 +74,24 @@ impl Summary {
 
     pub fn print(&self) {
         println!("\n--- file-sync summary ---");
+
+        if !self.backups.is_empty() {
+            let dry_backups: Vec<_> = self.backups.iter().filter(|b| b.dry_run).collect();
+            let real_backups: Vec<_> = self.backups.iter().filter(|b| !b.dry_run).collect();
+
+            if !real_backups.is_empty() {
+                println!("Backups: {}", real_backups.len());
+                for b in &real_backups {
+                    println!("  {} -> {}", b.original.display(), b.backup.display());
+                }
+            }
+            if !dry_backups.is_empty() {
+                println!("Would back up (dry-run): {}", dry_backups.len());
+                for b in &dry_backups {
+                    println!("  {} -> {}", b.original.display(), b.backup.display());
+                }
+            }
+        }
 
         if !self.copies.is_empty() {
             let dry_copies: Vec<_> = self.copies.iter().filter(|c| c.dry_run).collect();
@@ -108,6 +142,7 @@ impl Summary {
         }
 
         if self.copies.is_empty()
+            && self.backups.is_empty()
             && self.conflicts.is_empty()
             && self.skipped.is_empty()
             && self.errors.is_empty()
