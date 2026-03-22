@@ -2,43 +2,49 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## Project overview
 
-Async fanfiction scraper that pulls threads/stories from forum and story-hosting sites (SpaceBattles, Sufficient Velocity, AO3) into a local SQLite cache. One concrete adapter exists (SpaceBattles/XenForo); no story-site adapters yet.
+CLI tool for scraping fanfic forums and story sites. Built with Bun + TypeScript. Currently supports SpaceBattles forums; story site adapters are defined but not yet implemented.
 
 ## Commands
 
-- **Run**: `uv run python main.py`
-- **Install deps**: `uv sync`
-- **Requires**: Python 3.14+, managed via uv
-
-No tests or linter configured yet.
-
-### CLI subcommands
-
 ```bash
-uv run python main.py sites                              # list registered sites
-uv run python main.py subforums spacebattles              # list subforums
-uv run python main.py threads spacebattles 18 --since 7d  # threads in subforum 18
+bun install                    # install deps
+bun start                     # run with default config.toml
+bun start -v                  # verbose (logs to stdout)
+bun start --no-cache          # skip HTTP cache
+bun start subforums spacebattles
+bun start threads spacebattles "Creative Writing"
+bun start posts spacebattles <thread-url>
+```
+
+No test runner or linter is configured yet.
+
+## Tooling
+
+Prefer `bunx` over `npx` for running package binaries (e.g. `bunx tsc --noEmit`).
+
+## Package management
+
+There's a global npmrc for a different project that requires auth. Always specify the default registry when installing packages:
+```bash
+bun i --registry=https://registry.npmjs.org <packageName>
 ```
 
 ## Architecture
 
-The codebase follows an adapter pattern with two site types:
+**Adapter pattern** — two adapter interfaces define how to scrape different site types:
+- `ForumAdapter` (`src/forums/base.ts`) — `getSubforums()`, `getThreadList()`, `getPosts()`. Implemented: `SpaceBattlesAdapter` (Cheerio-based XenForo scraper).
+- `StoryAdapter` (`src/stories/base.ts`) — `getStoryList()`, `getChapters()`, `getChapterContent()`. No implementations yet.
 
-- **ForumAdapter** (`src/fanfic_scraper/forums/base.py`): Abstract base for forum-style sites (SpaceBattles, SV). Implement `get_subforums()`, `get_thread_list()`, `get_posts()`. Override `identify_story_posts()` for site-specific story detection.
-- **StoryAdapter** (`src/fanfic_scraper/stories/base.py`): Abstract base for story sites (AO3). Implement `get_story_list()`, `get_story_posts()`. Optionally override `get_comments()`.
-- **SpaceBattlesAdapter** (`src/fanfic_scraper/forums/spacebattles.py`): Concrete XenForo-based forum adapter. Parses subforums, thread listings, and posts using BeautifulSoup + lxml. Uses threadmarks to identify story posts.
+Adapters are registered in `src/scraper.ts` (`FORUM_ADAPTERS` / `STORY_ADAPTERS` maps).
 
-Adapters are pure HTML parsers — they receive an `HttpClient` and return model dataclasses. New adapters must be registered in `sites.py` (`_FORUM_ADAPTERS` / `_STORY_ADAPTERS` dicts). The orchestration layer handles:
+**HTTP layer** (`src/http.ts`) — `HttpClient` with per-host concurrency limiting, rate limiting (min delay between requests), exponential backoff retries, and optional file cache integration.
 
-- **Scraper** (`scraper.py`): Main entry point. Uses `async with Scraper() as s:` pattern. Drives pagination, concurrency (via `TaskGroup`), and delegates to adapters.
-- **HttpClient** (`http.py`): Per-host throttling (semaphore + min delay), retry with backoff, 429 handling, transparent HTTP response caching via SQLite.
-- **Cache** (`cache.py`): SQLite persistence for both HTTP responses and parsed domain objects. Also serves as the read-side data store.
-- **QueryAPI** (`query.py`): Read-only async interface over cached data, exposed as `scraper.query`.
+**File cache** (`src/cache.ts`) — disk-based cache keyed by SHA-256 URL hash. Stores `.meta.json` + `.body` file pairs. TTL-based expiry.
 
-Scraping is configured via **ForumTarget** / **StoryTarget** dataclasses (`targets.py`) which pair an adapter with filters (subforum IDs, categories, tags, date range, page limits).
+**Config** (`src/config.ts`) — TOML config loaded from `./config.toml` or `~/.config/fanfic-scraper/config.toml`. Config keys use `snake_case` in TOML but `camelCase` in TypeScript interfaces. Duration strings parsed by `parseDuration()` (e.g. `"7d"`, `"1h"`).
 
-All domain models are plain dataclasses in `models.py`: `Subforum`, `Thread`, `Post`, `Story`, `Comment`.
+**CLI** (`src/index.ts`) — commander-based. Subcommands: `targets`, `subforums`, `threads`, `posts`.
 
-All I/O is async. Concurrency uses `asyncio.TaskGroup`. Structured JSON logging goes to `/tmp/fanfic-scraper-{date}.jsonl` by default (configured in `logging.py`).
+**Logger** (`src/logger.ts`) — JSON lines to daily log files, optional verbose console output.

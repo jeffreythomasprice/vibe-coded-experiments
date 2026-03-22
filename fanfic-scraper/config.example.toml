@@ -1,0 +1,22 @@
+[logging]
+dir = "/tmp/fanfic-scraper/logs"
+
+[cache]
+dir = "/tmp/fanfic-scraper/cache"
+ttl = "1h"
+
+[http]
+user_agent = "fanfic-scraper"
+max_concurrent_per_host = 2
+min_delay_ms = 1000
+max_retries = 3
+
+[subforums]
+max_pages = 100
+updated_within = "7d"
+
+[threads]
+max_pages = 1000
+
+[stories]
+updated_within = "7d"
