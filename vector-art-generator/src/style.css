@@ -1,0 +1,108 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: #16213e;
+  border-bottom: 1px solid #0f3460;
+}
+
+header h1 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #e94560;
+}
+
+#toolbar {
+  display: flex;
+  gap: 0.5rem;
+}
+
+button {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid #0f3460;
+  border-radius: 4px;
+  background: #16213e;
+  color: #e0e0e0;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+button:hover {
+  background: #0f3460;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+#grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 0.5rem;
+  padding: 0.5rem;
+}
+
+.cell {
+  background: #0f3460;
+  border: 3px solid transparent;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+.cell:hover {
+  border-color: #535bf2;
+}
+
+.cell.selected {
+  border-color: #e94560;
+  box-shadow: 0 0 12px rgba(233, 69, 96, 0.4);
+}
+
+.cell svg {
+  width: 100%;
+  height: 100%;
+}
+
+footer {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1rem;
+  background: #16213e;
+  border-top: 1px solid #0f3460;
+}
+
+#btn-breed {
+  background: #e94560;
+  border-color: #e94560;
+  font-weight: 600;
+}
+
+#btn-breed:hover:not(:disabled) {
+  background: #c73650;
+}

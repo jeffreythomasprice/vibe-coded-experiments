@@ -6,3 +6,7 @@ TUI interactive mode
 - open link in browser
 
 add lists.toml file to file-sync
+
+export a story to pdf
+
+story viewer app that I can use on my phone

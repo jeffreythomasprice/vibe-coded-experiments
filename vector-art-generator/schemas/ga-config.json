@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ga-config",
+  "title": "GaConfig",
+  "description": "Configuration parameters for the genetic algorithm",
+  "type": "object",
+  "properties": {
+    "population_size": {
+      "type": "integer",
+      "minimum": 4,
+      "maximum": 24,
+      "description": "Number of organisms per generation"
+    },
+    "elitism_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of top selections that survive unchanged"
+    },
+    "crossover_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Probability of crossover vs cloning"
+    },
+    "mutation_rates": {
+      "type": "object",
+      "properties": {
+        "composition": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "shape": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "path": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": ["composition", "shape", "path"],
+      "additionalProperties": false
+    },
+    "immigrant_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of random immigrants per generation"
+    }
+  },
+  "required": ["population_size", "elitism_count", "crossover_rate", "mutation_rates", "immigrant_count"],
+  "additionalProperties": false
+}
