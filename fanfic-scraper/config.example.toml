@@ -20,3 +20,22 @@ max_pages = 1000
 
 [stories]
 updated_within = "7d"
+
+[lists]
+file = "/tmp/fanfic-scraper/lists.toml"
+
+[search]
+updated_within = "7d"
+max_pages = 10
+
+# [[search.sources]]
+# site = "spacebattles"
+# query = "Creative Writing"
+
+# [[search.sources]]
+# site = "sufficientvelocity"
+# query = "Quests"
+
+# [[search.sources]]
+# site = "ao3"
+# query = "Parahumans Series - Wildbow"

@@ -1,0 +1,14 @@
+[lists]
+file = "~/.config/fanfic-scraper/lists.toml"
+
+[[search.sources]]
+site = "ao3"
+query = "Parahumans Series - Wildbow"
+
+[[search.sources]]
+site = "spacebattles"
+query = "Creative Writing"
+
+[[search.sources]]
+site = "sufficientvelocity"
+query = "User Fiction"

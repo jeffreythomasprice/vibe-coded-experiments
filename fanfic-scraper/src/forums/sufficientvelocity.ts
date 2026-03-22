@@ -1,10 +1,10 @@
 import { XenForoAdapter } from "./xenforo";
 
-export class SpaceBattlesAdapter extends XenForoAdapter {
+export class SufficientVelocityAdapter extends XenForoAdapter {
     constructor() {
         super({
-            siteName: "spacebattles",
-            baseUrl: "https://forums.spacebattles.com",
+            siteName: "sufficientvelocity",
+            baseUrl: "https://forums.sufficientvelocity.com",
             tagCategories: {
                 fandom: "tagItem--cat_4",
                 genre: "tagItem--cat_7",
