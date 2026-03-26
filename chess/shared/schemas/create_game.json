@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CreateGame",
+  "description": "Request to create a new chess game",
+  "type": "object",
+  "required": ["variant", "player_white", "player_black"],
+  "properties": {
+    "variant": {
+      "type": "string",
+      "enum": ["standard", "forced_capture_lose_all", "forced_capture_checkmate"]
+    },
+    "player_white": {
+      "$ref": "#/$defs/PlayerConfig"
+    },
+    "player_black": {
+      "$ref": "#/$defs/PlayerConfig"
+    }
+  },
+  "$defs": {
+    "PlayerConfig": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["human", "ai"]
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
