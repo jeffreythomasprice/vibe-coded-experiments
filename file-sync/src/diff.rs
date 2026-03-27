@@ -67,49 +67,41 @@ pub struct ConflictInfo {
     pub entity_name: String,
     pub copies: Vec<FileCopy>,
     pub is_binary: bool,
-    pub left_text: Option<String>,
-    pub right_text: Option<String>,
+    pub texts: Vec<Option<String>>,
+    pub group_sizes: Vec<usize>,
 }
 
-pub fn is_binary(path: &Path) -> Result<bool> {
-    let data = fs::read(path).with_context(|| format!("Failed to read {}", path.display()))?;
-    let check_len = data.len().min(8192);
-    Ok(data[..check_len].contains(&0))
-}
-
-pub fn build_conflict_info(
+pub fn build_conflict_info_multi(
     entity_name: &str,
-    left: &Path,
-    right: &Path,
+    paths: &[&Path],
+    contents: &[&[u8]],
+    group_sizes: &[usize],
 ) -> Result<ConflictInfo> {
-    let left_copy = FileCopy::from_path(left)?;
-    let right_copy = FileCopy::from_path(right)?;
+    let copies: Vec<FileCopy> = paths
+        .iter()
+        .map(|p| FileCopy::from_path(p))
+        .collect::<Result<Vec<_>>>()?;
 
-    let left_binary = is_binary(left)?;
-    let right_binary = is_binary(right)?;
-    let binary = left_binary || right_binary;
+    let binary = contents.iter().any(|data| {
+        let check_len = data.len().min(8192);
+        data[..check_len].contains(&0)
+    });
 
-    let (left_text, right_text) = if !binary {
-        let lt = fs::read_to_string(left)
-            .with_context(|| format!("Failed to read {}", left.display()))?;
-        let rt = fs::read_to_string(right)
-            .with_context(|| format!("Failed to read {}", right.display()))?;
-        (Some(lt), Some(rt))
+    let texts = if !binary {
+        contents
+            .iter()
+            .map(|data| std::str::from_utf8(data).ok().map(|s| s.to_string()))
+            .collect()
     } else {
-        (None, None)
+        vec![None; paths.len()]
     };
 
     Ok(ConflictInfo {
         entity_name: entity_name.to_string(),
-        copies: vec![left_copy, right_copy],
+        copies,
         is_binary: binary,
-        left_text,
-        right_text,
+        texts,
+        group_sizes: group_sizes.to_vec(),
     })
 }
 
-pub fn files_are_identical(a: &Path, b: &Path) -> Result<bool> {
-    let data_a = fs::read(a).with_context(|| format!("Failed to read {}", a.display()))?;
-    let data_b = fs::read(b).with_context(|| format!("Failed to read {}", b.display()))?;
-    Ok(data_a == data_b)
-}

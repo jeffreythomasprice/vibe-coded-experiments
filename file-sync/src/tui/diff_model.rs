@@ -9,8 +9,7 @@ pub struct DiffLine {
 
 #[derive(Debug, Clone)]
 pub struct DiffRow {
-    pub left: Option<DiffLine>,
-    pub right: Option<DiffLine>,
+    pub columns: Vec<Option<DiffLine>>,
 }
 
 pub fn build_side_by_side(left_text: &str, right_text: &str) -> Vec<DiffRow> {
@@ -24,16 +23,18 @@ pub fn build_side_by_side(left_text: &str, right_text: &str) -> Vec<DiffRow> {
                 similar::DiffTag::Equal => {
                     for change in diff.iter_changes(op) {
                         rows.push(DiffRow {
-                            left: Some(DiffLine {
-                                line_no: Some(left_line),
-                                text: change.to_string_lossy().to_string(),
-                                tag: ChangeTag::Equal,
-                            }),
-                            right: Some(DiffLine {
-                                line_no: Some(right_line),
-                                text: change.to_string_lossy().to_string(),
-                                tag: ChangeTag::Equal,
-                            }),
+                            columns: vec![
+                                Some(DiffLine {
+                                    line_no: Some(left_line),
+                                    text: change.to_string_lossy().to_string(),
+                                    tag: ChangeTag::Equal,
+                                }),
+                                Some(DiffLine {
+                                    line_no: Some(right_line),
+                                    text: change.to_string_lossy().to_string(),
+                                    tag: ChangeTag::Equal,
+                                }),
+                            ],
                         });
                         left_line += 1;
                         right_line += 1;
@@ -73,18 +74,20 @@ pub fn build_side_by_side(left_text: &str, right_text: &str) -> Vec<DiffRow> {
                         } else {
                             None
                         };
-                        rows.push(DiffRow { left, right });
+                        rows.push(DiffRow { columns: vec![left, right] });
                     }
                 }
                 similar::DiffTag::Delete => {
                     for change in diff.iter_changes(op) {
                         rows.push(DiffRow {
-                            left: Some(DiffLine {
-                                line_no: Some(left_line),
-                                text: change.to_string_lossy().to_string(),
-                                tag: ChangeTag::Delete,
-                            }),
-                            right: None,
+                            columns: vec![
+                                Some(DiffLine {
+                                    line_no: Some(left_line),
+                                    text: change.to_string_lossy().to_string(),
+                                    tag: ChangeTag::Delete,
+                                }),
+                                None,
+                            ],
                         });
                         left_line += 1;
                     }
@@ -92,12 +95,14 @@ pub fn build_side_by_side(left_text: &str, right_text: &str) -> Vec<DiffRow> {
                 similar::DiffTag::Insert => {
                     for change in diff.iter_changes(op) {
                         rows.push(DiffRow {
-                            left: None,
-                            right: Some(DiffLine {
-                                line_no: Some(right_line),
-                                text: change.to_string_lossy().to_string(),
-                                tag: ChangeTag::Insert,
-                            }),
+                            columns: vec![
+                                None,
+                                Some(DiffLine {
+                                    line_no: Some(right_line),
+                                    text: change.to_string_lossy().to_string(),
+                                    tag: ChangeTag::Insert,
+                                }),
+                            ],
                         });
                         right_line += 1;
                     }
@@ -105,6 +110,41 @@ pub fn build_side_by_side(left_text: &str, right_text: &str) -> Vec<DiffRow> {
             }
     }
 
+    rows
+}
+
+pub fn build_multi_column(texts: &[&str]) -> Vec<DiffRow> {
+    let line_vecs: Vec<Vec<&str>> = texts.iter().map(|t| t.lines().collect()).collect();
+    let max_lines = line_vecs.iter().map(|v| v.len()).max().unwrap_or(0);
+
+    let mut rows = Vec::with_capacity(max_lines);
+    for line_idx in 0..max_lines {
+        let ref_text = line_vecs.first().and_then(|lines| lines.get(line_idx).copied());
+        let all_same = line_vecs
+            .iter()
+            .all(|lines| lines.get(line_idx).copied() == ref_text);
+
+        let columns: Vec<Option<DiffLine>> = line_vecs
+            .iter()
+            .map(|lines| {
+                if line_idx < lines.len() {
+                    let tag = if all_same {
+                        ChangeTag::Equal
+                    } else {
+                        ChangeTag::Insert
+                    };
+                    Some(DiffLine {
+                        line_no: Some(line_idx + 1),
+                        text: format!("{}\n", lines[line_idx]),
+                        tag,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+        rows.push(DiffRow { columns });
+    }
     rows
 }
 
@@ -118,9 +158,9 @@ mod tests {
         let rows = build_side_by_side(text, text);
         assert_eq!(rows.len(), 2);
         for row in &rows {
-            assert!(row.left.is_some());
-            assert!(row.right.is_some());
-            assert_eq!(row.left.as_ref().unwrap().tag, ChangeTag::Equal);
+            assert!(row.columns[0].is_some());
+            assert!(row.columns[1].is_some());
+            assert_eq!(row.columns[0].as_ref().unwrap().tag, ChangeTag::Equal);
         }
     }
 
@@ -132,7 +172,7 @@ mod tests {
         let insert_rows: Vec<_> = rows
             .iter()
             .filter(|r| {
-                r.right
+                r.columns[1]
                     .as_ref()
                     .map(|d| d.tag == ChangeTag::Insert)
                     .unwrap_or(false)
@@ -149,7 +189,7 @@ mod tests {
         let delete_rows: Vec<_> = rows
             .iter()
             .filter(|r| {
-                r.left
+                r.columns[0]
                     .as_ref()
                     .map(|d| d.tag == ChangeTag::Delete)
                     .unwrap_or(false)
@@ -164,13 +204,12 @@ mod tests {
         let right = "goodbye world\n";
         let rows = build_side_by_side(left, right);
         assert!(!rows.is_empty());
-        // Should have a delete on left and insert on right
         let has_replace = rows.iter().any(|r| {
-            r.left
+            r.columns[0]
                 .as_ref()
                 .map(|d| d.tag == ChangeTag::Delete)
                 .unwrap_or(false)
-                && r.right
+                && r.columns[1]
                     .as_ref()
                     .map(|d| d.tag == ChangeTag::Insert)
                     .unwrap_or(false)
@@ -183,13 +222,36 @@ mod tests {
         let left = "a\nb\nc\n";
         let right = "a\nx\nc\n";
         let rows = build_side_by_side(left, right);
-        // Check that line numbers are sequential
         let left_nums: Vec<usize> = rows
             .iter()
-            .filter_map(|r| r.left.as_ref().and_then(|d| d.line_no))
+            .filter_map(|r| r.columns[0].as_ref().and_then(|d| d.line_no))
             .collect();
         for w in left_nums.windows(2) {
             assert!(w[1] >= w[0]);
         }
+    }
+
+    #[test]
+    fn test_multi_column_basic() {
+        let rows = build_multi_column(&["a\nb\n", "a\nc\n", "x\ny\nz\n"]);
+        assert_eq!(rows.len(), 3); // max lines across all texts
+        assert_eq!(rows[0].columns.len(), 3);
+        // First two texts have 2 lines, third has 3
+        assert!(rows[2].columns[0].is_none());
+        assert!(rows[2].columns[1].is_none());
+        assert!(rows[2].columns[2].is_some());
+        // Row 0: "a" vs "a" vs "x" — not all same, should be highlighted
+        assert_eq!(rows[0].columns[0].as_ref().unwrap().tag, ChangeTag::Insert);
+        // Row 1: "b" vs "c" vs "y" — not all same
+        assert_eq!(rows[1].columns[0].as_ref().unwrap().tag, ChangeTag::Insert);
+    }
+
+    #[test]
+    fn test_multi_column_equal_lines() {
+        let rows = build_multi_column(&["same\ndiff\n", "same\nother\n"]);
+        // Row 0: "same" vs "same" — equal
+        assert_eq!(rows[0].columns[0].as_ref().unwrap().tag, ChangeTag::Equal);
+        // Row 1: "diff" vs "other" — different
+        assert_eq!(rows[1].columns[0].as_ref().unwrap().tag, ChangeTag::Insert);
     }
 }

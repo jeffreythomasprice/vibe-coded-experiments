@@ -5,12 +5,12 @@ use similar::ChangeTag;
 use super::diff_model::DiffRow;
 use super::styles;
 
-pub fn render_pane(rows: &[DiffRow], scroll: usize, is_left: bool, word_wrap: bool) -> Paragraph<'_> {
+pub fn render_pane(rows: &[DiffRow], scroll: usize, column_index: usize, word_wrap: bool) -> Paragraph<'_> {
     let lines: Vec<Line> = rows
         .iter()
         .skip(scroll)
         .map(|row| {
-            let entry = if is_left { &row.left } else { &row.right };
+            let entry = row.columns.get(column_index).and_then(|c| c.as_ref());
             match entry {
                 Some(diff_line) => {
                     let line_no = diff_line

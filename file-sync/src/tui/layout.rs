@@ -32,24 +32,27 @@ fn draw_header(frame: &mut Frame, area: Rect, entity_name: &str) {
 }
 
 fn draw_panes(frame: &mut Frame, area: Rect, app: &App) {
+    let n = app.num_copies;
+    let constraints: Vec<Constraint> = (0..n)
+        .map(|_| Constraint::Ratio(1, n as u32))
+        .collect();
     let pane_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .constraints(constraints)
         .split(area);
 
-    if app.is_binary {
-        draw_binary_pane(frame, pane_chunks[0], app, 0);
-        draw_binary_pane(frame, pane_chunks[1], app, 1);
-    } else {
-        let left_title = app.pane_title(0);
-        let left_block = Block::default().borders(Borders::ALL).title(left_title).style(Style::default().bg(Color::Reset));
-        let left_para = render_pane(&app.rows, app.scroll, true, app.word_wrap).block(left_block);
-        frame.render_widget(left_para, pane_chunks[0]);
-
-        let right_title = app.pane_title(1);
-        let right_block = Block::default().borders(Borders::ALL).title(right_title).style(Style::default().bg(Color::Reset));
-        let right_para = render_pane(&app.rows, app.scroll, false, app.word_wrap).block(right_block);
-        frame.render_widget(right_para, pane_chunks[1]);
+    for i in 0..n {
+        if app.is_binary {
+            draw_binary_pane(frame, pane_chunks[i], app, i);
+        } else {
+            let title = app.pane_title(i);
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .title(title)
+                .style(Style::default().bg(Color::Reset));
+            let para = render_pane(&app.rows, app.scroll, i, app.word_wrap).block(block);
+            frame.render_widget(para, pane_chunks[i]);
+        }
     }
 }
 

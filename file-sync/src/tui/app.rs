@@ -1,6 +1,6 @@
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 
-use super::diff_model::{build_side_by_side, DiffRow};
+use super::diff_model::{build_multi_column, build_side_by_side, DiffRow};
 use crate::diff::ConflictInfo;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -20,14 +20,25 @@ pub struct App {
     pub choice: Option<UserChoice>,
     pub num_copies: usize,
     pub word_wrap: bool,
+    pub group_sizes: Vec<usize>,
 }
 
 impl App {
     pub fn new(info: &ConflictInfo) -> Self {
-        let rows = if let (Some(left), Some(right)) = (&info.left_text, &info.right_text) {
-            build_side_by_side(left, right)
-        } else {
+        let rows = if info.is_binary {
             Vec::new()
+        } else if info.texts.len() == 2 {
+            match (&info.texts[0], &info.texts[1]) {
+                (Some(l), Some(r)) => build_side_by_side(l, r),
+                _ => Vec::new(),
+            }
+        } else {
+            let text_refs: Vec<&str> = info
+                .texts
+                .iter()
+                .map(|t| t.as_deref().unwrap_or(""))
+                .collect();
+            build_multi_column(&text_refs)
         };
 
         let copy_info: Vec<(u64, String)> = info
@@ -52,14 +63,20 @@ impl App {
             paths,
             choice: None,
             word_wrap: false,
+            group_sizes: info.group_sizes.clone(),
         }
     }
 
     pub fn pane_title(&self, index: usize) -> String {
         if index < self.paths.len() && index < self.copy_info.len() {
+            let group_suffix = if index < self.group_sizes.len() && self.group_sizes[index] > 1 {
+                format!(" (+{} identical)", self.group_sizes[index] - 1)
+            } else {
+                String::new()
+            };
             format!(
-                " {} ({}) ",
-                self.paths[index], self.copy_info[index].1
+                " {} ({}){} ",
+                self.paths[index], self.copy_info[index].1, group_suffix
             )
         } else {
             String::new()
