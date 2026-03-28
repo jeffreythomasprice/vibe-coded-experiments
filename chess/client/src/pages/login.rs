@@ -9,6 +9,7 @@ pub fn LoginPage() -> impl IntoView {
     let (error, set_error) = signal(Option::<String>::None);
     let (loading, set_loading) = signal(false);
     let navigate = use_navigate();
+    let auth_state = expect_context::<crate::auth::AuthState>();
 
     let on_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
@@ -44,6 +45,7 @@ pub fn LoginPage() -> impl IntoView {
                     match resp.json::<chess_shared::LoginResponse>().await {
                         Ok(login_resp) => {
                             crate::auth::set_token(&login_resp.token);
+                            auth_state.set_authenticated(true);
                             navigate("/", Default::default());
                         }
                         Err(_) => {

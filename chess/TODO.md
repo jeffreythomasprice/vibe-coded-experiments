@@ -1,6 +1,4 @@
-don't show tabs at the top if not logged in
-
-if we are logged in the last item in the tab list should be Logout, which should clear the local storage
+server and client should both be in watch mode, readme
 
 convert plaintext passwords to hashes
 

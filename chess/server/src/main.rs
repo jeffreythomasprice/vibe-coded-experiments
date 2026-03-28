@@ -38,7 +38,7 @@ async fn main() {
     };
 
     let app = Router::new()
-        .route("/api/login", post(routes::login::login))
+        .route("/login", post(routes::login::login))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 

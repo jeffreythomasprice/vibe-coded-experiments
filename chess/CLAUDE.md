@@ -4,26 +4,30 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multiplayer chess application with multiple game variants (standard, forced-capture-lose-all, forced-capture-checkmate), AI opponents, and real-time play. Rust workspace with three crates: `shared`, `server`, `client`.
+Multiplayer chess application with multiple game variants, AI opponents, and real-time play. Rust workspace with three crates: `shared`, `server`, `client`. Early stage — auth works end-to-end but game engine, WebSocket, AI, and most UI are not yet implemented.
+
+### Game variants
+
+- **standard** — Normal chess rules.
+- **forced_capture_lose_all** — Must capture if possible; king is a normal piece; you win by losing all your pieces.
+- **forced_capture_checkmate** — Must capture if possible; normal checkmate rules still apply.
 
 ## Commands
 
 ```sh
-# Server
-cargo run -p chess-server                    # starts on 0.0.0.0:8001
-RUST_LOG=chess_server=trace,tower_http=debug cargo run -p chess-server
+# Full local dev (run all three in separate terminals)
+docker compose up -d                              # 1. start PostgreSQL
+cargo run -p chess-server                         # 2. server on 0.0.0.0:8001
+cd client && trunk serve                          # 3. client dev server on port 8000
 
-# Client (WASM via Trunk)
-cd client && trunk serve                     # dev server on port 8000
+RUST_LOG=chess_server=trace,tower_http=debug cargo run -p chess-server  # verbose server
+
 cd client && trunk build --release           # static build to client/dist/
 
-# Database
-docker compose up -d                              # start PostgreSQL
 docker compose down                               # stop PostgreSQL
 docker compose down -v                             # stop and wipe data
 
-# Build/check all crates
-cargo build
+cargo build                                       # build all crates
 cargo check --workspace
 cargo clippy --workspace
 ```
@@ -39,8 +43,8 @@ To add a new domain type: drop a JSON Schema file into `shared/schemas/` with a 
 ### Crate roles
 
 - **chess-shared** — Generated types + raw schema strings. Both server and client depend on this. Runtime deps include `regress` (for JSON Schema pattern validation) and `uuid`.
-- **chess-server** — Axum 0.8 + Tokio + sqlx (Postgres). Runs migrations on startup. `server/.env` must contain `DATABASE_URL`. Games are stored as JSONB.
-- **chess-client** — Leptos 0.7 (CSR mode), compiled to WASM via Trunk. Currently a skeleton. Shares types with server through `chess-shared`.
+- **chess-server** — Axum 0.8 + Tokio + sqlx (Postgres). Runs migrations on startup. `server/.env` must contain `DATABASE_URL`. Games are stored as JSONB. Only endpoint so far: `POST /api/login`.
+- **chess-client** — Leptos 0.7 (CSR mode), compiled to WASM via Trunk. Login page works; home page is a skeleton. Trunk proxies `/api/*` to `localhost:8001` (configured in `Trunk.toml`).
 
 ### Request validation
 
@@ -48,7 +52,13 @@ Incoming request bodies are validated at runtime against their JSON Schema using
 
 ### Authentication
 
-JWT-based auth via `AuthUser` extractor in `server/src/auth.rs`. Handlers that need authentication add `AuthUser` as a parameter — the extractor reads the `Authorization: Bearer <token>` header and validates the JWT. Login is via `POST /login`.
+JWT-based auth via `AuthUser` extractor in `server/src/auth.rs`. Handlers that need authentication add `AuthUser` as a parameter — the extractor reads the `Authorization: Bearer <token>` header and validates the JWT. Login is via `POST /api/login`.
+
+Client-side: JWT is stored in localStorage (`auth_token` key). Expiry is checked by manually decoding the JWT payload (no library) in `client/src/auth.rs`. `AuthGuard` component redirects unauthenticated users to `/login`.
+
+### Database
+
+PostgreSQL via Docker. Migration `0001_initial.sql` creates `users` and `games` tables. Games store full state as a single JSONB column. Seed user: `admin` / `admin` (plaintext — hashing is a TODO). Migrations run automatically on server startup.
 
 ## Secrets
 
@@ -65,3 +75,4 @@ This file is gitignored. The server will refuse to start without `JWT_SECRET`.
 - `wasm32-unknown-unknown` target is required (auto-installed via `rust-toolchain.toml`). Dependencies added to `shared` or `client` must be WASM-compatible.
 - Release profile uses `opt-level = "z"` + LTO for minimal WASM size.
 - Workspace dependencies (`serde`, `serde_json`, `tracing`) are declared in root `Cargo.toml` — use `{ workspace = true }` in member crates.
+- No tests exist yet.

@@ -1,6 +1,20 @@
+use leptos::prelude::*;
 use web_sys::window;
 
 const TOKEN_KEY: &str = "auth_token";
+
+#[derive(Clone, Copy)]
+pub struct AuthState(pub RwSignal<bool>);
+
+impl AuthState {
+    pub fn new() -> Self {
+        Self(RwSignal::new(is_authenticated()))
+    }
+
+    pub fn set_authenticated(&self, val: bool) {
+        self.0.set(val);
+    }
+}
 
 pub fn get_token() -> Option<String> {
     let storage = window()?.local_storage().ok()??;

@@ -17,11 +17,12 @@ fn main() {
 
 #[component]
 fn App() -> impl IntoView {
+    let auth_state = auth::AuthState::new();
+    provide_context(auth_state);
+
     view! {
         <Router>
-            <nav>
-                <a href="/">"Home"</a>" | "<a href="/login">"Login"</a>
-            </nav>
+            <NavBar />
             <main>
                 <Routes fallback=|| view! { <p>"Not found."</p> }>
                     <Route path=path!("/") view=ProtectedHome />
@@ -29,6 +30,33 @@ fn App() -> impl IntoView {
                 </Routes>
             </main>
         </Router>
+    }
+}
+
+#[component]
+fn NavBar() -> impl IntoView {
+    let auth_state = expect_context::<auth::AuthState>();
+
+    move || {
+        if !auth_state.0.get() {
+            return view! {}.into_any();
+        }
+
+        let navigate = leptos_router::hooks::use_navigate();
+        let on_logout = move |ev: leptos::ev::MouseEvent| {
+            ev.prevent_default();
+            auth::remove_token();
+            auth_state.set_authenticated(false);
+            navigate("/login", Default::default());
+        };
+
+        view! {
+            <nav>
+                <a href="/">"Home"</a>" | "
+                <a href="/login" on:click=on_logout>"Log Out"</a>
+            </nav>
+        }
+        .into_any()
     }
 }
 
