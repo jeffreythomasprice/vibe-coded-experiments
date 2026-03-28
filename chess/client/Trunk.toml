@@ -3,3 +3,7 @@ port = 8000
 
 [build]
 target = "index.html"
+
+[[proxy]]
+backend = "http://localhost:8001"
+rewrite = "/api/"

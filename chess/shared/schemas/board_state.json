@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BoardState",
+  "description": "The state of a chess board",
+  "type": "object",
+  "required": [
+    "pieces"
+  ],
+  "properties": {
+    "pieces": {
+      "type": "object",
+      "description": "Map from algebraic square (e.g. 'e4') to the piece occupying it. Empty squares are absent.",
+      "additionalProperties": {
+        "$ref": "#/definitions/Piece"
+      }
+    }
+  },
+  "definitions": {
+    "Piece": {
+      "type": "object",
+      "required": [
+        "piece_type",
+        "color"
+      ],
+      "properties": {
+        "piece_type": {
+          "$ref": "#/definitions/PieceType"
+        },
+        "color": {
+          "$ref": "#/definitions/PieceColor"
+        }
+      }
+    },
+    "PieceType": {
+      "type": "string",
+      "enum": [
+        "king",
+        "queen",
+        "rook",
+        "bishop",
+        "knight",
+        "pawn"
+      ]
+    },
+    "PieceColor": {
+      "type": "string",
+      "enum": [
+        "white",
+        "black"
+      ]
+    }
+  }
+}

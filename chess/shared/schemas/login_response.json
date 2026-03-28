@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LoginResponse",
+  "type": "object",
+  "required": ["token"],
+  "properties": {
+    "token": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

@@ -6,8 +6,29 @@ A multiplayer chess application with multiple game variants, AI opponents, and r
 
 - [Rust](https://rustup.rs/) (stable toolchain)
 - [Trunk](https://trunkrs.dev/) for building the frontend: `cargo install trunk`
+- Docker (for PostgreSQL)
 
 The `wasm32-unknown-unknown` target is installed automatically via `rust-toolchain.toml`.
+
+## Setup
+
+### Database
+
+```sh
+docker compose up -d
+```
+
+This starts PostgreSQL on port 5432. The server runs migrations automatically on startup.
+
+### Secrets
+
+Generate a JWT signing secret:
+
+```sh
+echo "JWT_SECRET=$(openssl rand -base64 32)" > server/.secrets
+```
+
+The server will refuse to start without this file.
 
 ## Running the server
 
@@ -34,6 +55,24 @@ trunk build --release
 ```
 
 Output goes to `client/dist/`.
+
+## API
+
+### POST /login
+
+Authenticate with username and password. Returns a JWT token.
+
+```sh
+curl -X POST http://localhost:8001/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"admin"}'
+```
+
+Use the returned token in subsequent requests:
+
+```
+Authorization: Bearer <token>
+```
 
 ## Adding schemas
 

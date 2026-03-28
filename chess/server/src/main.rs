@@ -1,9 +1,28 @@
-use axum::{extract::Json, http::StatusCode, response::IntoResponse, routing::get, Router};
+use axum::{routing::post, Router};
+use sqlx::PgPool;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
+mod auth;
+mod db;
+mod extractors;
+mod routes;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub db: PgPool,
+    pub jwt_secret: String,
+}
+
 #[tokio::main]
 async fn main() {
+    let server_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    dotenvy::from_path(server_dir.join(".env")).ok();
+    dotenvy::from_path(server_dir.join(".secrets")).ok();
+
+    let jwt_secret = std::env::var("JWT_SECRET")
+        .expect("JWT_SECRET must be set — see CLAUDE.md for generation instructions");
+
     tracing_subscriber::registry()
         .with(
             EnvFilter::try_from_default_env()
@@ -12,16 +31,19 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    let pool = db::init_pool().await;
+    let state = AppState {
+        db: pool,
+        jwt_secret,
+    };
+
     let app = Router::new()
-        .route("/health", get(health))
-        .layer(TraceLayer::new_for_http());
+        .route("/api/login", post(routes::login::login))
+        .layer(TraceLayer::new_for_http())
+        .with_state(state);
 
     let addr = "0.0.0.0:8001";
     tracing::info!("listening on {addr}");
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
-}
-
-async fn health() -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({"status": "ok"})))
 }

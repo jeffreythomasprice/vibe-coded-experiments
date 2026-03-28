@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Move",
+  "description": "A chess move from one square to another",
+  "type": "object",
+  "required": [
+    "from",
+    "to"
+  ],
+  "properties": {
+    "from": {
+      "type": "string",
+      "pattern": "^[a-h][1-8]$",
+      "description": "Source square in algebraic notation"
+    },
+    "to": {
+      "type": "string",
+      "pattern": "^[a-h][1-8]$",
+      "description": "Destination square in algebraic notation"
+    }
+  }
+}

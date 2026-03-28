@@ -1,3 +1,17 @@
+don't show tabs at the top if not logged in
+
+if we are logged in the last item in the tab list should be Logout, which should clear the local storage
+
+convert plaintext passwords to hashes
+
+api for games, moves
+
+conversations, messages, api and schema
+
+
+
+
+
 multiple kinds of gameplay:
 - normal chess
 - if you have a move that ends with you taking a piece, you must take such a move

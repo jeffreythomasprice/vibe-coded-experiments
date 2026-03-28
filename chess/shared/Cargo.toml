@@ -7,6 +7,8 @@ edition = "2021"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
+uuid = { version = "1", features = ["serde"] }
+regress = "0.10"
 
 [build-dependencies]
 typify = "0.6"

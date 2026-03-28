@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Game",
+  "description": "A chess game instance",
+  "type": "object",
+  "required": [
+    "id",
+    "variant",
+    "status",
+    "player_white",
+    "player_black",
+    "board"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "variant": {
+      "$ref": "#/definitions/GameVariant"
+    },
+    "status": {
+      "$ref": "#/definitions/GameStatus"
+    },
+    "player_white": {
+      "$ref": "#/definitions/Player"
+    },
+    "player_black": {
+      "$ref": "#/definitions/Player"
+    },
+    "board": {
+      "$ref": "#/definitions/BoardState"
+    },
+    "active_color": {
+      "$ref": "#/definitions/PieceColor"
+    },
+    "move_history": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Move"
+      }
+    }
+  },
+  "definitions": {
+    "GameVariant": {
+      "type": "string",
+      "enum": [
+        "standard",
+        "forced_capture_lose_all",
+        "forced_capture_checkmate"
+      ]
+    },
+    "GameStatus": {
+      "type": "string",
+      "enum": [
+        "waiting",
+        "active",
+        "check",
+        "checkmate",
+        "stalemate",
+        "draw",
+        "resigned",
+        "abandoned"
+      ]
+    }
+  }
+}
