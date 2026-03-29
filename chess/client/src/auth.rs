@@ -4,15 +4,33 @@ use web_sys::window;
 const TOKEN_KEY: &str = "auth_token";
 
 #[derive(Clone, Copy)]
-pub struct AuthState(pub RwSignal<bool>);
+pub struct AuthState {
+    pub authenticated: RwSignal<bool>,
+    pub is_admin: RwSignal<bool>,
+}
 
 impl AuthState {
     pub fn new() -> Self {
-        Self(RwSignal::new(is_authenticated()))
+        let claims = get_token().and_then(|t| decode_jwt_claims(&t));
+        let authenticated = claims.as_ref().map_or(false, |c| {
+            let now_secs = js_sys::Date::now() / 1000.0;
+            c.exp > now_secs
+        });
+        let is_admin = claims.map_or(false, |c| c.is_admin);
+        Self {
+            authenticated: RwSignal::new(authenticated),
+            is_admin: RwSignal::new(is_admin),
+        }
     }
 
     pub fn set_authenticated(&self, val: bool) {
-        self.0.set(val);
+        self.authenticated.set(val);
+        if val {
+            let claims = get_token().and_then(|t| decode_jwt_claims(&t));
+            self.is_admin.set(claims.map_or(false, |c| c.is_admin));
+        } else {
+            self.is_admin.set(false);
+        }
     }
 }
 
@@ -44,23 +62,24 @@ pub fn is_authenticated() -> bool {
         Some(t) => t,
         None => return false,
     };
-    match decode_jwt_exp(&token) {
-        Some(exp) => {
+    match decode_jwt_claims(&token) {
+        Some(claims) => {
             let now_secs = js_sys::Date::now() / 1000.0;
-            exp > now_secs
+            claims.exp > now_secs
         }
         None => false,
     }
 }
 
 #[derive(serde::Deserialize)]
-struct JwtPayload {
+struct JwtClaims {
     exp: f64,
+    #[serde(default)]
+    is_admin: bool,
 }
 
-fn decode_jwt_exp(token: &str) -> Option<f64> {
+fn decode_jwt_claims(token: &str) -> Option<JwtClaims> {
     let payload_b64url = token.split('.').nth(1)?;
-    // base64url -> standard base64
     let b64: String = payload_b64url
         .chars()
         .map(|c| match c {
@@ -75,6 +94,5 @@ fn decode_jwt_exp(token: &str) -> Option<f64> {
         _ => b64,
     };
     let decoded = window()?.atob(&padded).ok()?;
-    let payload: JwtPayload = serde_json::from_str(&decoded).ok()?;
-    Some(payload.exp)
+    serde_json::from_str(&decoded).ok()
 }

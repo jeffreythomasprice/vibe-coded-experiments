@@ -2,6 +2,7 @@ CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username TEXT NOT NULL UNIQUE,
     password TEXT NOT NULL,
+    is_admin BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -17,4 +18,4 @@ CREATE TABLE games (
 CREATE INDEX idx_games_status ON games (status);
 CREATE INDEX idx_games_variant ON games (variant);
 
-INSERT INTO users (username, password) VALUES ('admin', 'admin');
+INSERT INTO users (username, password, is_admin) VALUES ('admin', 'admin', true);

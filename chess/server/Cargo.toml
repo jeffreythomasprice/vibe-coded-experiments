@@ -12,8 +12,10 @@ axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["trace"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "json", "migrate"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "json", "migrate", "chrono"] }
+uuid = { version = "1", features = ["serde"] }
 dotenvy = "0.15"
 jsonwebtoken = "9"
 jsonschema = "0.29"
 chrono = { version = "0.4", features = ["serde"] }
+base64 = "0.22"

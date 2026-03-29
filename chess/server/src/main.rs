@@ -1,4 +1,5 @@
-use axum::{routing::post, Router};
+use axum::routing::{get, post};
+use axum::Router;
 use sqlx::PgPool;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
@@ -39,6 +40,16 @@ async fn main() {
 
     let app = Router::new()
         .route("/login", post(routes::login::login))
+        .route(
+            "/users",
+            post(routes::users::create_user).get(routes::users::list_users),
+        )
+        .route(
+            "/users/{username}",
+            get(routes::users::get_user)
+                .put(routes::users::update_user)
+                .delete(routes::users::delete_user),
+        )
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 

@@ -12,6 +12,7 @@ use crate::AppState;
 pub struct Claims {
     pub sub: String,
     pub username: String,
+    pub is_admin: bool,
     pub exp: i64,
     pub iat: i64,
 }
@@ -20,6 +21,7 @@ pub struct Claims {
 pub struct AuthUser {
     pub user_id: String,
     pub username: String,
+    pub is_admin: bool,
 }
 
 pub enum AuthError {
@@ -41,11 +43,12 @@ impl IntoResponse for AuthError {
     }
 }
 
-pub fn create_token(secret: &str, user_id: &str, username: &str) -> Result<String, jsonwebtoken::errors::Error> {
+pub fn create_token(secret: &str, user_id: &str, username: &str, is_admin: bool) -> Result<String, jsonwebtoken::errors::Error> {
     let now = Utc::now().timestamp();
     let claims = Claims {
         sub: user_id.to_string(),
         username: username.to_string(),
+        is_admin,
         iat: now,
         exp: now + 86400, // 24 hours
     };
@@ -83,6 +86,7 @@ impl FromRequestParts<AppState> for AuthUser {
         Ok(AuthUser {
             user_id: token_data.claims.sub,
             username: token_data.claims.username,
+            is_admin: token_data.claims.is_admin,
         })
     }
 }

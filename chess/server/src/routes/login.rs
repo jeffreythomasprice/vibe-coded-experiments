@@ -12,8 +12,8 @@ pub async fn login(
     State(state): State<AppState>,
     ValidatedJson(payload): ValidatedJson<LoginRequest>,
 ) -> Result<impl IntoResponse, impl IntoResponse> {
-    let row = sqlx::query_as::<_, (String, String)>(
-        "SELECT id::text, password FROM users WHERE username = $1",
+    let row = sqlx::query_as::<_, (String, String, bool)>(
+        "SELECT id::text, password, is_admin FROM users WHERE username = $1",
     )
     .bind(payload.username.as_str())
     .fetch_optional(&state.db)
@@ -25,7 +25,7 @@ pub async fn login(
         )
     })?;
 
-    let (user_id, stored_password) = row.ok_or_else(|| {
+    let (user_id, stored_password, is_admin) = row.ok_or_else(|| {
         (
             StatusCode::UNAUTHORIZED,
             Json(serde_json::json!({"error": "invalid_credentials"})),
@@ -39,7 +39,7 @@ pub async fn login(
         ));
     }
 
-    let token = auth::create_token(&state.jwt_secret, &user_id, &payload.username)
+    let token = auth::create_token(&state.jwt_secret, &user_id, &payload.username, is_admin)
         .map_err(|_| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,

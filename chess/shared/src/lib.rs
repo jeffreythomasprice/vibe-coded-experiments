@@ -7,4 +7,8 @@ pub mod schemas {
     pub const GAME: &str = include_str!("../schemas/game.json");
     pub const LOGIN_REQUEST: &str = include_str!("../schemas/login_request.json");
     pub const LOGIN_RESPONSE: &str = include_str!("../schemas/login_response.json");
+    pub const USER_SUMMARY: &str = include_str!("../schemas/user_summary.json");
+    pub const CREATE_USER_REQUEST: &str = include_str!("../schemas/create_user_request.json");
+    pub const UPDATE_USER_REQUEST: &str = include_str!("../schemas/update_user_request.json");
+    pub const LIST_USERS_RESPONSE: &str = include_str!("../schemas/list_users_response.json");
 }

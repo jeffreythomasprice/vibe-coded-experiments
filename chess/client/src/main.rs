@@ -2,6 +2,7 @@ use leptos::prelude::*;
 use leptos_router::components::{Route, Router, Routes};
 use leptos_router::path;
 
+mod api;
 mod auth;
 mod components;
 mod pages;
@@ -27,6 +28,7 @@ fn App() -> impl IntoView {
                 <Routes fallback=|| view! { <p>"Not found."</p> }>
                     <Route path=path!("/") view=ProtectedHome />
                     <Route path=path!("/login") view=pages::login::LoginPage />
+                    <Route path=path!("/users") view=ProtectedUsers />
                 </Routes>
             </main>
         </Router>
@@ -38,7 +40,7 @@ fn NavBar() -> impl IntoView {
     let auth_state = expect_context::<auth::AuthState>();
 
     move || {
-        if !auth_state.0.get() {
+        if !auth_state.authenticated.get() {
             return view! {}.into_any();
         }
 
@@ -50,9 +52,17 @@ fn NavBar() -> impl IntoView {
             navigate("/login", Default::default());
         };
 
+        let is_admin = auth_state.is_admin.get();
+
         view! {
             <nav>
-                <a href="/">"Home"</a>" | "
+                <a href="/">"Home"</a>
+                {if is_admin {
+                    Some(view! { " | "<a href="/users">"Users"</a> })
+                } else {
+                    None
+                }}
+                " | "
                 <a href="/login" on:click=on_logout>"Log Out"</a>
             </nav>
         }
@@ -65,6 +75,15 @@ fn ProtectedHome() -> impl IntoView {
     view! {
         <components::auth_guard::AuthGuard>
             <pages::home::HomePage />
+        </components::auth_guard::AuthGuard>
+    }
+}
+
+#[component]
+fn ProtectedUsers() -> impl IntoView {
+    view! {
+        <components::auth_guard::AuthGuard>
+            <pages::users::UsersPage />
         </components::auth_guard::AuthGuard>
     }
 }

@@ -1,22 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Recursively kill a process and all its descendants
-killtree() {
-    local pid=$1
-    # Kill children first (depth-first)
-    for child in $(pgrep -P "$pid" 2>/dev/null); do
-        killtree "$child"
-    done
-    kill "$pid" 2>/dev/null
-}
-
-PIDS=()
+SERVER_PID=""
+CLIENT_PID=""
 
 cleanup() {
-    for pid in "${PIDS[@]}"; do
-        killtree "$pid"
-    done
+    if [[ -n "$SERVER_PID" ]]; then
+        kill "$SERVER_PID" 2>/dev/null
+        SERVER_PID=""
+    fi
+    if [[ -n "$CLIENT_PID" ]]; then
+        kill "$CLIENT_PID" 2>/dev/null
+        CLIENT_PID=""
+    fi
     wait 2>/dev/null
 }
 trap cleanup EXIT INT TERM
@@ -24,9 +20,11 @@ trap cleanup EXIT INT TERM
 docker compose up -d
 
 cargo watch -x 'run -p chess-server' &
-PIDS+=($!)
+SERVER_PID=$!
 
-(cd client && trunk serve) &
-PIDS+=($!)
+pushd client
+trunk serve &
+CLIENT_PID=$!
+popd
 
 wait

@@ -9,6 +9,7 @@ serde_json = { workspace = true }
 tracing = { workspace = true }
 uuid = { version = "1", features = ["serde"] }
 regress = "0.10"
+chrono = { version = "0.4", features = ["serde"] }
 
 [build-dependencies]
 typify = "0.6"

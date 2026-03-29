@@ -1,4 +1,6 @@
-dev.sh doesn't successfully kill server
+when creating a user we should have an icon to show password
+
+when creating a user we should allow creating as admin checkbox
 
 convert plaintext passwords to hashes
 
