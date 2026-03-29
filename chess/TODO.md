@@ -1,4 +1,4 @@
-server and client should both be in watch mode, readme
+dev.sh doesn't successfully kill server
 
 convert plaintext passwords to hashes
 

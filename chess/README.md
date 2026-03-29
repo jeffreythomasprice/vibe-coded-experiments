@@ -36,9 +36,27 @@ The server will refuse to start without this file.
 cargo run -p chess-server
 ```
 
+With verbose logging:
+
 ```sh
 RUST_LOG=chess_server=trace,tower_http=debug cargo run -p chess-server
 ```
+
+### Watch mode
+
+Install [cargo-watch](https://github.com/watchexec/cargo-watch) to enable automatic recompilation:
+
+```sh
+cargo install cargo-watch
+```
+
+To run both the server and client in watch mode (Ctrl-C kills both):
+
+```sh
+./dev.sh
+```
+
+This starts PostgreSQL, the server (via `cargo watch`), and the Trunk dev server. All processes are cleaned up on exit.
 
 ## Running the client
 
