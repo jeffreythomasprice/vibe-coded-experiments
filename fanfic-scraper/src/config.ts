@@ -89,7 +89,7 @@ const DEFAULTS: ScraperConfig = {
     },
     search: {
         updatedWithin: "7d",
-        maxPages: 10,
+        maxPages: 1000,
         sources: [],
     },
 };
