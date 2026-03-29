@@ -26,8 +26,9 @@ fn App() -> impl IntoView {
             <NavBar />
             <main>
                 <Routes fallback=|| view! { <p>"Not found."</p> }>
-                    <Route path=path!("/") view=ProtectedHome />
+                    <Route path=path!("/") view=RedirectToGames />
                     <Route path=path!("/login") view=pages::login::LoginPage />
+                    <Route path=path!("/games") view=ProtectedGames />
                     <Route path=path!("/users") view=ProtectedUsers />
                 </Routes>
             </main>
@@ -56,7 +57,7 @@ fn NavBar() -> impl IntoView {
 
         view! {
             <nav>
-                <a href="/">"Home"</a>
+                <a href="/games">"Games"</a>
                 {if is_admin {
                     Some(view! { " | "<a href="/users">"Users"</a> })
                 } else {
@@ -71,10 +72,17 @@ fn NavBar() -> impl IntoView {
 }
 
 #[component]
-fn ProtectedHome() -> impl IntoView {
+fn RedirectToGames() -> impl IntoView {
+    let navigate = leptos_router::hooks::use_navigate();
+    navigate("/games", Default::default());
+    view! {}
+}
+
+#[component]
+fn ProtectedGames() -> impl IntoView {
     view! {
         <components::auth_guard::AuthGuard>
-            <pages::home::HomePage />
+            <pages::games::GamesPage />
         </components::auth_guard::AuthGuard>
     }
 }

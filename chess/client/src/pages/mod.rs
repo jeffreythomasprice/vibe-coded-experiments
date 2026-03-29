@@ -1,3 +1,3 @@
-pub mod home;
+pub mod games;
 pub mod login;
 pub mod users;

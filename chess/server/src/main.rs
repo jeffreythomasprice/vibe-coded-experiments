@@ -1,4 +1,4 @@
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::Router;
 use sqlx::PgPool;
 use tower_http::trace::TraceLayer;
@@ -49,6 +49,14 @@ async fn main() {
             get(routes::users::get_user)
                 .put(routes::users::update_user)
                 .delete(routes::users::delete_user),
+        )
+        .route(
+            "/games",
+            post(routes::games::create_game).get(routes::games::list_games),
+        )
+        .route(
+            "/games/{game_id}",
+            delete(routes::games::delete_game),
         )
         .layer(TraceLayer::new_for_http())
         .with_state(state);

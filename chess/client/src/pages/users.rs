@@ -210,7 +210,7 @@ fn UsersList(
                     <th>"Username"</th>
                     <th>"Admin"</th>
                     <th>"Created At"</th>
-                    {move || is_admin.get().then(|| view! { <th>"Actions"</th> })}
+                    <th>"Actions"</th>
                 </tr>
             </thead>
             <tbody>
@@ -233,29 +233,38 @@ fn UsersList(
                                 <td>{user_username}</td>
                                 <td>{if user_is_admin { "Yes" } else { "No" }}</td>
                                 <td>{user_created}</td>
-                                {move || is_admin.get().then(|| {
+                                {move || {
+                                    let show_edit = is_admin.get() || is_self;
+                                    let show_delete = is_admin.get() && !is_self;
+                                    if !show_edit && !show_delete {
+                                        return None;
+                                    }
                                     let on_edit = on_edit.clone();
                                     let username_for_edit = username_for_edit.clone();
                                     let username_for_delete = username_for_delete.clone();
-                                    view! {
+                                    Some(view! {
                                         <td>
-                                            <button on:click=move |_| {
-                                                on_edit(username_for_edit.clone());
-                                            }>"Edit"</button>
-                                            {if !is_self {
+                                            {show_edit.then(|| {
+                                                let on_edit = on_edit.clone();
+                                                let username_for_edit = username_for_edit.clone();
+                                                view! {
+                                                    <button on:click=move |_| {
+                                                        on_edit(username_for_edit.clone());
+                                                    }>"Edit"</button>
+                                                }
+                                            })}
+                                            {show_delete.then(|| {
                                                 let uname = username_for_delete.clone();
-                                                Some(view! {
+                                                view! {
                                                     " "
                                                     <button on:click=move |_| {
                                                         set_deleting.set(Some(uname.clone()));
                                                     }>"Delete"</button>
-                                                })
-                                            } else {
-                                                None
-                                            }}
+                                                }
+                                            })}
                                         </td>
-                                    }
-                                })}
+                                    })
+                                }}
                             </tr>
                         }
                     }
@@ -286,6 +295,8 @@ fn UsersList(
 fn CreateUserForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
     let (username, set_username) = signal(String::new());
     let (password, set_password) = signal(String::new());
+    let (is_admin, set_is_admin) = signal(false);
+    let (show_password, set_show_password) = signal(false);
     let (error, set_error) = signal(Option::<String>::None);
     let (loading, set_loading) = signal(false);
 
@@ -303,11 +314,13 @@ fn CreateUserForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
         set_loading.set(true);
         set_error.set(None);
 
+        let admin_val = is_admin.get_untracked();
         let on_done = on_done_clone.clone();
         leptos::task::spawn_local(async move {
             let body = serde_json::json!({
                 "username": username_val,
                 "password": password_val,
+                "is_admin": admin_val,
             });
 
             let result = crate::api::post("/api/users")
@@ -335,24 +348,44 @@ fn CreateUserForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
     view! {
         <h2>"New User"</h2>
         {move || error.get().map(|e| view! { <p style="color:red">{e}</p> })}
-        <form on:submit=on_submit>
+        <form on:submit=on_submit autocomplete="off">
             <div>
                 <label for="new-username">"Username: "</label>
                 <input
                     id="new-username"
                     type="text"
+                    autocomplete="off"
                     on:input=move |ev| set_username.set(event_target_value(&ev))
                     prop:value=username
                 />
             </div>
-            <div>
+            <div style="display:flex;align-items:center;gap:0.25em">
                 <label for="new-password">"Password: "</label>
                 <input
                     id="new-password"
-                    type="password"
+                    type=move || if show_password.get() { "text" } else { "password" }
+                    autocomplete="new-password"
                     on:input=move |ev| set_password.set(event_target_value(&ev))
                     prop:value=password
                 />
+                <button
+                    type="button"
+                    title="Toggle password visibility"
+                    style="background:none;border:none;cursor:pointer;padding:0;font-size:1.1em"
+                    on:click=move |_| set_show_password.update(|v| *v = !*v)
+                >
+                    {move || if show_password.get() { "\u{1F441}" } else { "\u{1F441}\u{200D}\u{1F5E8}" }}
+                </button>
+            </div>
+            <div>
+                <label>
+                    <input
+                        type="checkbox"
+                        prop:checked=is_admin
+                        on:change=move |ev| set_is_admin.set(event_target_checked(&ev))
+                    />
+                    " Admin"
+                </label>
             </div>
             <button type="submit" disabled=loading>"Create"</button>
             " "
@@ -363,12 +396,14 @@ fn CreateUserForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
 
 #[component]
 fn EditUserForm(username: String, on_done: impl Fn() + 'static + Clone) -> impl IntoView {
+    let auth_state = expect_context::<crate::auth::AuthState>();
     let (is_admin, set_is_admin) = signal(false);
+    let (password, set_password) = signal(String::new());
+    let (show_password, set_show_password) = signal(false);
     let (error, set_error) = signal(Option::<String>::None);
     let (loading, set_loading) = signal(true);
     let (saving, set_saving) = signal(false);
     let username_clone = username.clone();
-
     // Load current user data
     leptos::task::spawn_local({
         let username = username.clone();
@@ -399,12 +434,26 @@ fn EditUserForm(username: String, on_done: impl Fn() + 'static + Clone) -> impl 
 
         let username = username_clone.clone();
         let admin_val = is_admin.get_untracked();
+        let password_val = password.get_untracked();
+        let caller_is_admin = auth_state.is_admin.get_untracked();
         let on_done = on_done_clone.clone();
         leptos::task::spawn_local(async move {
-            let body = serde_json::json!({ "is_admin": admin_val });
+            let mut body = serde_json::Map::new();
+            if caller_is_admin {
+                body.insert("is_admin".into(), serde_json::json!(admin_val));
+            }
+            if !password_val.is_empty() {
+                body.insert("password".into(), serde_json::json!(password_val));
+            }
+
+            if body.is_empty() {
+                set_saving.set(false);
+                set_error.set(Some("No changes to save.".into()));
+                return;
+            }
 
             let result = crate::api::put(&format!("/api/users/{username}"))
-                .json(&body)
+                .json(&serde_json::Value::Object(body))
                 .unwrap()
                 .send()
                 .await;
@@ -426,20 +475,42 @@ fn EditUserForm(username: String, on_done: impl Fn() + 'static + Clone) -> impl 
     };
 
     let display_username = username.clone();
+    let caller_is_admin = auth_state.is_admin;
     view! {
         <h2>"Edit User: " {display_username}</h2>
         {move || loading.get().then(|| view! { <p>"Loading..."</p> })}
         {move || error.get().map(|e| view! { <p style="color:red">{e}</p> })}
-        <form on:submit=on_submit>
-            <div>
-                <label>
-                    <input
-                        type="checkbox"
-                        prop:checked=is_admin
-                        on:change=move |ev| set_is_admin.set(event_target_checked(&ev))
-                    />
-                    " Admin"
-                </label>
+        <form on:submit=on_submit autocomplete="off">
+            {move || caller_is_admin.get().then(|| view! {
+                <div>
+                    <label>
+                        <input
+                            type="checkbox"
+                            prop:checked=is_admin
+                            on:change=move |ev| set_is_admin.set(event_target_checked(&ev))
+                        />
+                        " Admin"
+                    </label>
+                </div>
+            })}
+            <div style="display:flex;align-items:center;gap:0.25em">
+                <label for="edit-password">"New Password: "</label>
+                <input
+                    id="edit-password"
+                    type=move || if show_password.get() { "text" } else { "password" }
+                    autocomplete="new-password"
+                    placeholder="Leave blank to keep current"
+                    on:input=move |ev| set_password.set(event_target_value(&ev))
+                    prop:value=password
+                />
+                <button
+                    type="button"
+                    title="Toggle password visibility"
+                    style="background:none;border:none;cursor:pointer;padding:0;font-size:1.1em"
+                    on:click=move |_| set_show_password.update(|v| *v = !*v)
+                >
+                    {move || if show_password.get() { "\u{1F441}" } else { "\u{1F441}\u{200D}\u{1F5E8}" }}
+                </button>
             </div>
             <button type="submit" disabled=move || loading.get() || saving.get()>"Save"</button>
             " "

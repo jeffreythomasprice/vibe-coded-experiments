@@ -11,4 +11,7 @@ pub mod schemas {
     pub const CREATE_USER_REQUEST: &str = include_str!("../schemas/create_user_request.json");
     pub const UPDATE_USER_REQUEST: &str = include_str!("../schemas/update_user_request.json");
     pub const LIST_USERS_RESPONSE: &str = include_str!("../schemas/list_users_response.json");
+    pub const CREATE_GAME_REQUEST: &str = include_str!("../schemas/create_game_request.json");
+    pub const GAME_SUMMARY: &str = include_str!("../schemas/game_summary.json");
+    pub const LIST_GAMES_RESPONSE: &str = include_str!("../schemas/list_games_response.json");
 }

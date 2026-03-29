@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GameSummary",
+  "description": "Lightweight game projection for listing",
+  "type": "object",
+  "required": [
+    "id",
+    "variant",
+    "status",
+    "player_white_name",
+    "player_white_kind",
+    "player_black_name",
+    "player_black_kind",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "variant": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "player_white_name": {
+      "type": "string"
+    },
+    "player_white_kind": {
+      "type": "string"
+    },
+    "player_black_name": {
+      "type": "string"
+    },
+    "player_black_kind": {
+      "type": "string"
+    },
+    "active_color": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

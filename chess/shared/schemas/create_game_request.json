@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CreateGameRequest",
+  "description": "Request to create a new game",
+  "type": "object",
+  "required": ["variant", "player_white", "player_black"],
+  "additionalProperties": false,
+  "properties": {
+    "variant": {
+      "type": "string",
+      "enum": ["standard", "forced_capture_lose_all", "forced_capture_checkmate"]
+    },
+    "player_white": {
+      "$ref": "#/definitions/ParticipantInput"
+    },
+    "player_black": {
+      "$ref": "#/definitions/ParticipantInput"
+    }
+  },
+  "definitions": {
+    "ParticipantInput": {
+      "type": "object",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["human", "ai"]
+        },
+        "username": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

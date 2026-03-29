@@ -2,10 +2,13 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "UpdateUserRequest",
   "type": "object",
-  "required": ["is_admin"],
   "properties": {
     "is_admin": {
       "type": "boolean"
+    },
+    "password": {
+      "type": "string",
+      "minLength": 1
     }
   },
   "additionalProperties": false

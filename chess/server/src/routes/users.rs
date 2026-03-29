@@ -55,10 +55,11 @@ pub async fn create_user(
     }
 
     let row = sqlx::query_as::<_, (Uuid, String, bool, DateTime<Utc>)>(
-        "INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id, username, is_admin, created_at",
+        "INSERT INTO users (username, password, is_admin) VALUES ($1, $2, $3) RETURNING id, username, is_admin, created_at",
     )
     .bind(payload.username.as_str())
     .bind(payload.password.as_str())
+    .bind(payload.is_admin)
     .fetch_one(&state.db)
     .await
     .map_err(|e| {
@@ -194,22 +195,59 @@ pub async fn update_user(
     Path(username): Path<String>,
     ValidatedJson(payload): ValidatedJson<UpdateUserRequest>,
 ) -> Result<impl IntoResponse, impl IntoResponse> {
-    if !auth_user.is_admin {
+    let is_self = auth_user.username == username;
+
+    if !auth_user.is_admin && !is_self {
         return Err(forbidden("admin_required"));
     }
 
-    if auth_user.username == username && !payload.is_admin {
+    // Non-admins can only change their own password
+    if !auth_user.is_admin && payload.is_admin.is_some() {
+        return Err(forbidden("admin_required"));
+    }
+
+    if is_self && payload.is_admin == Some(false) {
         return Err(forbidden("cannot_demote_self"));
     }
 
-    let row = sqlx::query_as::<_, (Uuid, String, bool, DateTime<Utc>)>(
-        "UPDATE users SET is_admin = $1 WHERE username = $2 RETURNING id, username, is_admin, created_at",
-    )
-    .bind(payload.is_admin)
-    .bind(&username)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| internal_error())?;
+    // Build dynamic UPDATE query
+    let mut set_clauses = Vec::new();
+    let mut param_index = 1u32;
+
+    if payload.is_admin.is_some() {
+        set_clauses.push(format!("is_admin = ${param_index}"));
+        param_index += 1;
+    }
+    if payload.password.is_some() {
+        set_clauses.push(format!("password = ${param_index}"));
+        param_index += 1;
+    }
+
+    if set_clauses.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "no_fields_to_update"})),
+        ));
+    }
+
+    let sql = format!(
+        "UPDATE users SET {} WHERE username = ${param_index} RETURNING id, username, is_admin, created_at",
+        set_clauses.join(", ")
+    );
+
+    let mut query = sqlx::query_as::<_, (Uuid, String, bool, DateTime<Utc>)>(&sql);
+    if let Some(is_admin) = payload.is_admin {
+        query = query.bind(is_admin);
+    }
+    if let Some(ref password) = payload.password {
+        query = query.bind(password.as_str());
+    }
+    query = query.bind(&username);
+
+    let row = query
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| internal_error())?;
 
     let (id, username, is_admin, created_at) = row.ok_or_else(not_found)?;
 

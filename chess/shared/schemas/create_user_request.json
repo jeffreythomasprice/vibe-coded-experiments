@@ -11,6 +11,10 @@
     "password": {
       "type": "string",
       "minLength": 1
+    },
+    "is_admin": {
+      "type": "boolean",
+      "default": false
     }
   },
   "additionalProperties": false
