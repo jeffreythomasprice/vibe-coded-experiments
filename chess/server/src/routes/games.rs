@@ -5,7 +5,7 @@ use axum::Json;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use chess_shared::{
     BoardState, CreateGameRequest, Game, GameStatus, GameSummary, GameVariant, ListGamesResponse,
-    ParticipantInputKind, Piece, PieceColor, PieceType, Player, PlayerKind,
+    Move, ParticipantInput, ParticipantInputKind, Piece, PieceColor, PieceType, Player, PlayerKind,
 };
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -252,14 +252,7 @@ pub async fn create_game(
         }
     }
 
-    // Resolve players
-    let player_white = resolve_player(&payload.player_white.kind, &payload.player_white.username, &state)
-        .await
-        .map_err(|e| e)?;
-    let player_black = resolve_player(&payload.player_black.kind, &payload.player_black.username, &state)
-        .await
-        .map_err(|e| e)?;
-
+    // Validate AI engine availability
     let variant = match payload.variant {
         chess_shared::CreateGameRequestVariant::Standard => GameVariant::Standard,
         chess_shared::CreateGameRequestVariant::ForcedCaptureLoseAll => {
@@ -270,6 +263,29 @@ pub async fn create_game(
         }
     };
 
+    for (label, p) in [("white", &payload.player_white), ("black", &payload.player_black)] {
+        if p.kind == ParticipantInputKind::Ai {
+            let engine_name = p.ai_engine.as_deref().unwrap_or("random");
+            let engine = state.ai_manager.registry.get(engine_name).ok_or_else(|| {
+                bad_request(&format!("unknown AI engine '{engine_name}' for {label}"))
+            })?;
+            if !engine.supports_variant(&variant) {
+                return Err(bad_request(&format!(
+                    "AI engine '{engine_name}' does not support variant '{}'",
+                    variant
+                )));
+            }
+        }
+    }
+
+    // Resolve players
+    let player_white = resolve_player(&payload.player_white, &state)
+        .await
+        .map_err(|e| e)?;
+    let player_black = resolve_player(&payload.player_black, &state)
+        .await
+        .map_err(|e| e)?;
+
     let game = Game {
         id: Uuid::new_v4(),
         variant,
@@ -279,6 +295,7 @@ pub async fn create_game(
         board: default_board(),
         active_color: Some(PieceColor::White),
         move_history: Vec::new(),
+        ai_thinking: Some(false),
     };
 
     let game_json =
@@ -297,7 +314,11 @@ pub async fn create_game(
     .await
     .map_err(|_| internal_error())?;
 
-    Ok((
+    // If white is AI, schedule the first move
+    let white_is_ai = player_white.kind == PlayerKind::Ai;
+    let game_id = game.id;
+
+    let response = (
         StatusCode::CREATED,
         Json(GameSummary {
             id: row.0,
@@ -311,7 +332,43 @@ pub async fn create_game(
             created_at: row.1,
             updated_at: row.2,
         }),
-    ))
+    );
+
+    if white_is_ai {
+        state.ai_manager.schedule_move(game_id);
+    }
+
+    Ok(response)
+}
+
+pub async fn get_game(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(game_id): Path<Uuid>,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let row: Option<(serde_json::Value, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT state, \
+         state->'player_white'->>'name', \
+         state->'player_black'->>'name' \
+         FROM games WHERE id = $1",
+    )
+    .bind(game_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| internal_error())?;
+
+    let (game_state, pw_name, pb_name) = row.ok_or_else(not_found)?;
+
+    if !auth_user.is_admin {
+        let is_participant = [pw_name.as_deref(), pb_name.as_deref()]
+            .iter()
+            .any(|name| *name == Some(&auth_user.username));
+        if !is_participant {
+            return Err(forbidden("not_authorized"));
+        }
+    }
+
+    Ok((StatusCode::OK, Json(game_state)))
 }
 
 pub async fn delete_game(
@@ -337,10 +394,11 @@ pub async fn delete_game(
 }
 
 async fn resolve_player(
-    kind: &ParticipantInputKind,
-    username: &Option<chess_shared::ParticipantInputUsername>,
+    input: &ParticipantInput,
     state: &AppState,
 ) -> Result<Player, (StatusCode, Json<serde_json::Value>)> {
+    let kind = &input.kind;
+    let username = &input.username;
     match kind {
         ParticipantInputKind::Human => {
             let uname = username.as_ref().unwrap();
@@ -366,12 +424,20 @@ async fn resolve_player(
                 id,
                 name,
                 kind: PlayerKind::Human,
+                ai_engine: None,
             })
         }
         ParticipantInputKind::Ai => Ok(Player {
             id: Uuid::new_v4(),
             name: "AI".to_string(),
             kind: PlayerKind::Ai,
+            ai_engine: Some(
+                input
+                    .ai_engine
+                    .as_deref()
+                    .unwrap_or("random")
+                    .to_string(),
+            ),
         }),
     }
 }
@@ -418,4 +484,135 @@ fn default_board() -> BoardState {
     }
 
     BoardState { pieces }
+}
+
+pub async fn make_move(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(game_id): Path<Uuid>,
+    ValidatedJson(payload): ValidatedJson<Move>,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    // Load game
+    let row: Option<(serde_json::Value,)> =
+        sqlx::query_as("SELECT state FROM games WHERE id = $1")
+            .bind(game_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| internal_error())?;
+
+    let (state_json,) = row.ok_or_else(not_found)?;
+    let mut game: Game =
+        serde_json::from_value(state_json).map_err(|_| internal_error())?;
+
+    // Check game is active
+    if !matches!(game.status, GameStatus::Active | GameStatus::Check) {
+        return Err(bad_request("game is not active"));
+    }
+
+    // Check if AI is thinking
+    if game.ai_thinking == Some(true) {
+        return Err(bad_request("AI is currently thinking"));
+    }
+
+    // Determine active player
+    let active_color = game
+        .active_color
+        .as_ref()
+        .ok_or_else(|| bad_request("no active color"))?;
+
+    let active_player = match active_color {
+        PieceColor::White => &game.player_white,
+        PieceColor::Black => &game.player_black,
+    };
+
+    // Must be the active player
+    if active_player.kind != PlayerKind::Human {
+        return Err(bad_request("it is the AI's turn"));
+    }
+    if active_player.name != auth_user.username {
+        return Err(forbidden("not_your_turn"));
+    }
+
+    // Validate move is legal
+    let legal = chess_engine::legal_moves(&game.board, active_color, &game.variant, &game.move_history);
+    if !legal.iter().any(|m| m.from == payload.from && m.to == payload.to && m.promotion == payload.promotion) {
+        return Err(bad_request("illegal move"));
+    }
+
+    // Apply move
+    chess_engine::apply_move(&mut game.board, &payload);
+    game.move_history.push(payload);
+
+    let next_color = match active_color {
+        PieceColor::White => PieceColor::Black,
+        PieceColor::Black => PieceColor::White,
+    };
+
+    let new_status = chess_engine::game_status(&game.board, &next_color, &game.variant, &game.move_history);
+    game.status = new_status.clone();
+    game.active_color = Some(next_color.clone());
+
+    // Save
+    let game_json = serde_json::to_value(&game).map_err(|_| internal_error())?;
+    let status_str = serde_json::to_value(&new_status)
+        .ok()
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or_else(|| "active".to_string());
+
+    sqlx::query("UPDATE games SET state = $1, status = $2, updated_at = now() WHERE id = $3")
+        .bind(&game_json)
+        .bind(&status_str)
+        .bind(game_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| internal_error())?;
+
+    // If next player is AI and game is still active, schedule AI move
+    if matches!(new_status, GameStatus::Active | GameStatus::Check) {
+        let next_player = match next_color {
+            PieceColor::White => &game.player_white,
+            PieceColor::Black => &game.player_black,
+        };
+        if next_player.kind == PlayerKind::Ai {
+            state.ai_manager.schedule_move(game_id);
+        }
+    }
+
+    Ok((StatusCode::OK, Json(game_json)))
+}
+
+pub async fn legal_moves(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(game_id): Path<Uuid>,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    // Load game
+    let row: Option<(serde_json::Value,)> =
+        sqlx::query_as("SELECT state FROM games WHERE id = $1")
+            .bind(game_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| internal_error())?;
+
+    let (state_json,) = row.ok_or_else(not_found)?;
+    let game: Game =
+        serde_json::from_value(state_json).map_err(|_| internal_error())?;
+
+    // Auth: must be admin or participant
+    if !auth_user.is_admin {
+        let is_participant = game.player_white.name == auth_user.username
+            || game.player_black.name == auth_user.username;
+        if !is_participant {
+            return Err(forbidden("not_participant"));
+        }
+    }
+
+    let active_color = game
+        .active_color
+        .as_ref()
+        .ok_or_else(|| bad_request("no active color"))?;
+
+    let moves = chess_engine::legal_moves(&game.board, active_color, &game.variant, &game.move_history);
+
+    Ok((StatusCode::OK, Json(moves)))
 }

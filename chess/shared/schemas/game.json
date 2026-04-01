@@ -39,6 +39,10 @@
       "items": {
         "$ref": "#/definitions/Move"
       }
+    },
+    "ai_thinking": {
+      "type": "boolean",
+      "description": "Whether an AI engine is currently computing a move"
     }
   },
   "definitions": {

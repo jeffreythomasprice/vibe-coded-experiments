@@ -17,6 +17,11 @@
       "type": "string",
       "pattern": "^[a-h][1-8]$",
       "description": "Destination square in algebraic notation"
+    },
+    "promotion": {
+      "type": "string",
+      "enum": ["queen", "rook", "bishop", "knight"],
+      "description": "Piece to promote to when a pawn reaches the back rank"
     }
   }
 }

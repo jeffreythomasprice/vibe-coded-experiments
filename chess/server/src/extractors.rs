@@ -32,6 +32,12 @@ impl HasSchema for chess_shared::CreateGameRequest {
     }
 }
 
+impl HasSchema for chess_shared::Move {
+    fn schema() -> &'static str {
+        chess_shared::schemas::MOVE
+    }
+}
+
 pub struct ValidatedJson<T>(pub T);
 
 pub enum ValidationError {

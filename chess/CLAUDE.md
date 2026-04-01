@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multiplayer chess application with multiple game variants, AI opponents, and real-time play. Rust workspace with three crates: `shared`, `server`, `client`. Early stage — auth works end-to-end but game engine, WebSocket, AI, and most UI are not yet implemented.
+Multiplayer chess application with multiple game variants, AI opponents, and real-time play. Rust workspace with four crates: `shared`, `engine`, `server`, `client`.
 
 ### Game variants
 
@@ -45,8 +45,9 @@ To add a new domain type: drop a JSON Schema file into `shared/schemas/` with a 
 ### Crate roles
 
 - **chess-shared** — Generated types + raw schema strings. Both server and client depend on this. Runtime deps include `regress` (for JSON Schema pattern validation) and `uuid`.
-- **chess-server** — Axum 0.8 + Tokio + sqlx (Postgres). Runs migrations on startup. `server/.env` must contain `DATABASE_URL`. Games are stored as JSONB. Endpoints: `POST /api/login`, full CRUD on `/api/users` (admin-gated create/update/delete, cursor-based pagination on list).
-- **chess-client** — Leptos 0.7 (CSR mode), compiled to WASM via Trunk. Trunk proxies `/api/*` to `localhost:8001` (configured in `Trunk.toml`). Pages: login, home (skeleton), users (CRUD with infinite scroll). `client/src/api.rs` provides request helpers that auto-attach the Bearer token.
+- **chess-engine** — Pure computation crate for chess rules: legal move generation, move application, game status detection. Supports all three game variants. WASM-compatible (no async, no IO). Used by the server for move validation and AI engines.
+- **chess-server** — Axum 0.8 + Tokio + sqlx (Postgres). Runs migrations on startup. `server/.env` must contain `DATABASE_URL`. Games are stored as JSONB. Includes AI engine system (`server/src/ai/`) with background task management and WebSocket notifications.
+- **chess-client** — Leptos 0.7 (CSR mode), compiled to WASM via Trunk. Trunk proxies `/api/*` to `localhost:8001` (configured in `Trunk.toml`). Pages: login, home (skeleton), users (CRUD with infinite scroll), game view with WebSocket for real-time AI updates. `client/src/api.rs` provides request helpers that auto-attach the Bearer token.
 
 ### Request validation
 
@@ -58,9 +59,33 @@ JWT-based auth via `AuthUser` extractor in `server/src/auth.rs`. Handlers that n
 
 Client-side: JWT is stored in localStorage (`auth_token` key). Expiry is checked by manually decoding the JWT payload (no library) in `client/src/auth.rs`. `AuthState` provides reactive signals (`authenticated`, `is_admin`) via Leptos context. `AuthGuard` component redirects unauthenticated users to `/login`. The `NavBar` conditionally shows admin-only links (e.g., Users) based on `is_admin`.
 
+### AI Engine System
+
+AI engines are defined by the `AiEngine` trait in `server/src/ai/mod.rs`. Each engine specifies which game variants it supports and implements `generate_move()`. Available engines are registered in `AiRegistry` at startup.
+
+Currently implemented: `random` — picks a uniformly random legal move. Supports all variants.
+
+The `AiManager` (`server/src/ai/manager.rs`) handles background move generation:
+- Uses `tokio::task::spawn_blocking` for CPU-bound computation
+- Broadcasts `GameEvent`s via `tokio::sync::broadcast` for WebSocket subscribers
+- Automatically chains AI moves in AI-vs-AI games (with 500ms delay)
+- Recovers from crashes by re-scheduling moves for games where `ai_thinking = true`
+
+Player records store their `ai_engine` name (e.g., `"random"`) in the JSONB game state. The `Game` schema has an `ai_thinking` boolean field.
+
+### WebSocket
+
+`GET /games/{game_id}/ws?token=<jwt>` upgrades to WebSocket. Receives game events as JSON:
+- `{ "type": "ai_thinking_started", "game_id": "..." }`
+- `{ "type": "move_made", "game_id": "...", "move": {...}, "status": "...", "board": {...}, "active_color": "..." }`
+- `{ "type": "ai_thinking_completed", "game_id": "..." }`
+- `{ "type": "ai_progress", "game_id": "...", "message": "..." }`
+
+Auth is via JWT in the `token` query parameter (browser WebSocket API can't set headers).
+
 ### Database
 
-PostgreSQL via Docker. Migration `0001_initial.sql` creates `users` and `games` tables. Games store full state as a single JSONB column. Seed user: `admin` / `admin` (plaintext — hashing is a TODO). Migrations run automatically on server startup.
+PostgreSQL via Docker. Migrations `0001_initial.sql` and `0002_ai_thinking.sql` create `users` and `games` tables. Games store full state as a single JSONB column. The `ai_thinking` column enables crash-recovery queries. Seed user: `admin` / `admin` (plaintext — hashing is a TODO). Migrations run automatically on server startup.
 
 ### Adding a new endpoint (end-to-end checklist)
 

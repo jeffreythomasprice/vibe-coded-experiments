@@ -16,6 +16,7 @@ use crate::AppState;
 pub struct ListUsersParams {
     pub page_size: Option<u32>,
     pub page_token: Option<String>,
+    pub search: Option<String>,
 }
 
 #[derive(Deserialize, serde::Serialize)]
@@ -105,29 +106,62 @@ pub async fn list_users(
         })
         .transpose()?;
 
-    let rows: Vec<(Uuid, String, bool, DateTime<Utc>)> = if let Some(cursor) = cursor {
-        sqlx::query_as(
-            "SELECT id, username, is_admin, created_at FROM users \
-             WHERE (created_at, id) > ($1, $2) \
-             ORDER BY created_at ASC, id ASC \
-             LIMIT $3",
-        )
-        .bind(cursor.created_at)
-        .bind(cursor.id)
-        .bind(fetch_limit)
-        .fetch_all(&state.db)
-        .await
-        .map_err(|_| internal_error())?
-    } else {
-        sqlx::query_as(
-            "SELECT id, username, is_admin, created_at FROM users \
-             ORDER BY created_at ASC, id ASC \
-             LIMIT $1",
-        )
-        .bind(fetch_limit)
-        .fetch_all(&state.db)
-        .await
-        .map_err(|_| internal_error())?
+    let search_pattern = params.search.as_deref().map(|s| format!("{s}%"));
+
+    let rows: Vec<(Uuid, String, bool, DateTime<Utc>)> = match (&cursor, &search_pattern) {
+        (Some(cursor), Some(pattern)) => {
+            sqlx::query_as(
+                "SELECT id, username, is_admin, created_at FROM users \
+                 WHERE (created_at, id) > ($1, $2) AND username ILIKE $3 \
+                 ORDER BY created_at ASC, id ASC \
+                 LIMIT $4",
+            )
+            .bind(cursor.created_at)
+            .bind(cursor.id)
+            .bind(pattern)
+            .bind(fetch_limit)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|_| internal_error())?
+        }
+        (Some(cursor), None) => {
+            sqlx::query_as(
+                "SELECT id, username, is_admin, created_at FROM users \
+                 WHERE (created_at, id) > ($1, $2) \
+                 ORDER BY created_at ASC, id ASC \
+                 LIMIT $3",
+            )
+            .bind(cursor.created_at)
+            .bind(cursor.id)
+            .bind(fetch_limit)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|_| internal_error())?
+        }
+        (None, Some(pattern)) => {
+            sqlx::query_as(
+                "SELECT id, username, is_admin, created_at FROM users \
+                 WHERE username ILIKE $1 \
+                 ORDER BY created_at ASC, id ASC \
+                 LIMIT $2",
+            )
+            .bind(pattern)
+            .bind(fetch_limit)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|_| internal_error())?
+        }
+        (None, None) => {
+            sqlx::query_as(
+                "SELECT id, username, is_admin, created_at FROM users \
+                 ORDER BY created_at ASC, id ASC \
+                 LIMIT $1",
+            )
+            .bind(fetch_limit)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|_| internal_error())?
+        }
     };
 
     let has_next = rows.len() as i64 > page_size;

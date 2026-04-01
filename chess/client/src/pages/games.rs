@@ -2,6 +2,8 @@ use leptos::prelude::*;
 use serde::Deserialize;
 use wasm_bindgen::JsCast;
 
+use crate::components::username_autocomplete::UsernameAutocomplete;
+
 #[derive(Clone, Debug, Deserialize)]
 struct GameSummary {
     id: String,
@@ -257,6 +259,7 @@ fn GamesList(
                         let created = game.created_at.clone();
                         let updated = game.updated_at.clone();
                         let game_id_for_delete = game.id.clone();
+                        let game_id_for_link = game.id.clone();
                         view! {
                             <tr>
                                 <td>{pw}</td>
@@ -266,9 +269,11 @@ fn GamesList(
                                 <td>{created}</td>
                                 <td>{updated}</td>
                                 <td>
+                                    <a href={format!("/game/{}", game_id_for_link)}>"View"</a>
                                     {move || is_admin.get().then(|| {
                                         let gid = game_id_for_delete.clone();
                                         view! {
+                                            " "
                                             <button on:click=move |_| {
                                                 set_deleting.set(Some(gid.clone()));
                                             }>"Delete"</button>
@@ -309,18 +314,19 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
 
     let (variant, set_variant) = signal("standard".to_string());
     let (white_kind, set_white_kind) = signal("human".to_string());
-    let (white_username, set_white_username) = signal(if is_admin {
+    let white_username = RwSignal::new(if is_admin {
         String::new()
     } else {
         current_username.clone()
     });
     let (black_kind, set_black_kind) = signal("human".to_string());
-    let (black_username, set_black_username) = signal(String::new());
+    let black_username = RwSignal::new(String::new());
     let (error, set_error) = signal(Option::<String>::None);
     let (loading, set_loading) = signal(false);
 
     let current_username_for_validate = current_username.clone();
     let on_done_clone = on_done.clone();
+    let navigate = leptos_router::hooks::use_navigate();
     let on_submit = move |ev: leptos::ev::SubmitEvent| {
         ev.prevent_default();
         let variant_val = variant.get_untracked();
@@ -353,6 +359,7 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
         set_error.set(None);
 
         let on_done = on_done_clone.clone();
+        let navigate = navigate.clone();
         leptos::task::spawn_local(async move {
             let mut pw = serde_json::json!({ "kind": wk });
             if wk == "human" {
@@ -379,6 +386,13 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
 
             match result {
                 Ok(resp) if resp.ok() => {
+                    if let Ok(body) = resp.json::<serde_json::Value>().await {
+                        if let Some(id) = body.get("id").and_then(|v| v.as_str()) {
+                            navigate(&format!("/game/{id}"), Default::default());
+                            return;
+                        }
+                    }
+                    // Fallback if we can't parse the ID
                     on_done();
                 }
                 Ok(resp) => {
@@ -406,9 +420,9 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
         let bk = black_kind.get_untracked();
         let bu = black_username.get_untracked();
         set_white_kind.set(bk);
-        set_white_username.set(bu);
+        white_username.set(bu);
         set_black_kind.set(wk);
-        set_black_username.set(wu);
+        black_username.set(wu);
     };
 
     view! {
@@ -438,7 +452,7 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
                             let val = event_target_value(&ev);
                             set_white_kind.set(val.clone());
                             if val == "ai" {
-                                set_white_username.set(String::new());
+                                white_username.set(String::new());
                             }
                         }
                         prop:value=white_kind
@@ -450,12 +464,7 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
                 {move || (white_kind.get() == "human").then(|| view! {
                     <div>
                         <label for="white-username">"Username: "</label>
-                        <input
-                            id="white-username"
-                            type="text"
-                            on:input=move |ev| set_white_username.set(event_target_value(&ev))
-                            prop:value=white_username
-                        />
+                        <UsernameAutocomplete value=white_username id="white-username" />
                     </div>
                 })}
             </fieldset>
@@ -474,7 +483,7 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
                             let val = event_target_value(&ev);
                             set_black_kind.set(val.clone());
                             if val == "ai" {
-                                set_black_username.set(String::new());
+                                black_username.set(String::new());
                             }
                         }
                         prop:value=black_kind
@@ -486,12 +495,7 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
                 {move || (black_kind.get() == "human").then(|| view! {
                     <div>
                         <label for="black-username">"Username: "</label>
-                        <input
-                            id="black-username"
-                            type="text"
-                            on:input=move |ev| set_black_username.set(event_target_value(&ev))
-                            prop:value=black_username
-                        />
+                        <UsernameAutocomplete value=black_username id="black-username" />
                     </div>
                 })}
             </fieldset>

@@ -18,6 +18,10 @@
     },
     "kind": {
       "$ref": "#/definitions/PlayerKind"
+    },
+    "ai_engine": {
+      "type": "string",
+      "description": "AI engine identifier. Only meaningful when kind is 'ai'."
     }
   },
   "definitions": {

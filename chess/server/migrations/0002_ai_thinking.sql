@@ -1,0 +1,1 @@
+ALTER TABLE games ADD COLUMN ai_thinking BOOLEAN NOT NULL DEFAULT false;

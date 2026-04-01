@@ -19,7 +19,7 @@ trap cleanup EXIT INT TERM
 
 docker compose up -d
 
-cargo watch -x 'run -p chess-server' &
+watchexec -r 'cargo run -p chess-server' &
 SERVER_PID=$!
 
 pushd client
