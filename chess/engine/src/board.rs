@@ -46,7 +46,7 @@ impl Square {
     pub fn offset(self, df: i8, dr: i8) -> Option<Self> {
         let f = self.file as i8 + df;
         let r = self.rank as i8 + dr;
-        if f < 0 || f > 7 || r < 0 || r > 7 {
+        if !(0..=7).contains(&f) || !(0..=7).contains(&r) {
             None
         } else {
             Some(Self {
@@ -100,11 +100,17 @@ pub struct Board {
     pub squares: [Option<Piece>; 64],
 }
 
-impl Board {
-    pub fn new() -> Self {
+impl Default for Board {
+    fn default() -> Self {
         Self {
             squares: [const { None }; 64],
         }
+    }
+}
+
+impl Board {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn get(&self, sq: Square) -> Option<&Piece> {

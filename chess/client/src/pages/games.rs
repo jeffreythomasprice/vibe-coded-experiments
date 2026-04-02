@@ -69,7 +69,6 @@ pub fn GamesPage() -> impl IntoView {
 
     move || match view_mode.get() {
         ViewMode::List => {
-            let set_view_mode = set_view_mode.clone();
             view! {
                 <GamesList
                     refresh_counter=refresh_counter
@@ -79,7 +78,7 @@ pub fn GamesPage() -> impl IntoView {
             .into_any()
         }
         ViewMode::Create => {
-            let on_back = on_back_to_list.clone();
+            let on_back = on_back_to_list;
             view! { <CreateGameForm on_done=move || on_back() /> }.into_any()
         }
     }
@@ -690,10 +689,10 @@ fn EngineParams(
         let name = engine_name.get();
         let engine = engines.get().into_iter().find(|e| e.name == name);
         let Some(engine) = engine else {
-            return view! {}.into_any();
+            return ().into_any();
         };
         if engine.parameters.is_empty() {
-            return view! {}.into_any();
+            return ().into_any();
         }
         let param_views = engine
             .parameters

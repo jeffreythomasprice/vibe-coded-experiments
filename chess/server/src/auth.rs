@@ -18,6 +18,7 @@ pub struct Claims {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct AuthUser {
     pub user_id: String,
     pub username: String,

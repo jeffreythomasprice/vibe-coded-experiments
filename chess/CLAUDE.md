@@ -63,7 +63,9 @@ Client-side: JWT is stored in localStorage (`auth_token` key). Expiry is checked
 
 AI engines are defined by the `AiEngine` trait in `server/src/ai/mod.rs`. Each engine specifies which game variants it supports and implements `generate_move()`. Available engines are registered in `AiRegistry` at startup.
 
-Currently implemented: `random` — picks a uniformly random legal move. Supports all variants.
+Currently implemented engines (both support all variants):
+- `random` — picks a uniformly random legal move.
+- `minimax` — alpha-beta minimax search via `chess_engine::best_move()`. Accepts a `depth` parameter (1–6, default 3).
 
 The `AiManager` (`server/src/ai/manager.rs`) handles background move generation:
 - Uses `tokio::task::spawn_blocking` for CPU-bound computation

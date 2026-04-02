@@ -84,11 +84,10 @@ impl AiManager {
         let game: Game =
             serde_json::from_value(state_json).map_err(|e| format!("Parse error: {e}"))?;
 
-        let active_color = game
+        let active_color = *game
             .active_color
             .as_ref()
-            .ok_or("No active color")?
-            .clone();
+            .ok_or("No active color")?;
 
         // Determine which player is active and get their engine
         let active_player = match active_color {
@@ -116,9 +115,9 @@ impl AiManager {
 
         // Generate move in a blocking thread
         let board = game.board.clone();
-        let variant = game.variant.clone();
+        let variant = game.variant;
         let history = game.move_history.clone();
-        let color = active_color.clone();
+        let color = active_color;
         let ai_params = active_player.ai_params.clone();
 
         let chess_move = tokio::task::spawn_blocking(move || {
@@ -148,15 +147,15 @@ impl AiManager {
             &updated_game.move_history,
         );
 
-        updated_game.status = new_status.clone();
-        updated_game.active_color = Some(next_color.clone());
+        updated_game.status = new_status;
+        updated_game.active_color = Some(next_color);
         updated_game.ai_thinking = Some(false);
 
         // Save to DB
         let state_json =
             serde_json::to_value(&updated_game).map_err(|e| format!("Serialize error: {e}"))?;
 
-        let status_str = serde_json::to_value(&new_status)
+        let status_str = serde_json::to_value(new_status)
             .ok()
             .and_then(|v| v.as_str().map(String::from))
             .unwrap_or_else(|| "active".to_string());
@@ -176,7 +175,7 @@ impl AiManager {
             chess_move,
             status: status_str.clone(),
             board: updated_game.board.clone(),
-            active_color: Some(next_color.clone()),
+            active_color: Some(next_color),
         });
         let _ = self
             .event_tx

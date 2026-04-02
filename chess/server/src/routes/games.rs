@@ -280,11 +280,9 @@ pub async fn create_game(
 
     // Resolve players
     let player_white = resolve_player(&payload.player_white, &state)
-        .await
-        .map_err(|e| e)?;
+        .await?;
     let player_black = resolve_player(&payload.player_black, &state)
-        .await
-        .map_err(|e| e)?;
+        .await?;
 
     let game = Game {
         id: Uuid::new_v4(),
@@ -551,12 +549,12 @@ pub async fn make_move(
     };
 
     let new_status = chess_engine::game_status(&game.board, &next_color, &game.variant, &game.move_history);
-    game.status = new_status.clone();
-    game.active_color = Some(next_color.clone());
+    game.status = new_status;
+    game.active_color = Some(next_color);
 
     // Save
     let game_json = serde_json::to_value(&game).map_err(|_| internal_error())?;
-    let status_str = serde_json::to_value(&new_status)
+    let status_str = serde_json::to_value(new_status)
         .ok()
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or_else(|| "active".to_string());

@@ -84,8 +84,8 @@ fn gen_pawn_moves(
         if let Some(to) = sq.offset(df, dir) {
             let is_capture = board
                 .get(to)
-                .map_or(false, |p| p.color != *color);
-            let is_ep = ep_target.map_or(false, |ep| ep == to);
+                .is_some_and(|p| p.color != *color);
+            let is_ep = ep_target == Some(to);
 
             if is_capture || is_ep {
                 if to.rank == promo_rank {
@@ -209,43 +209,43 @@ fn gen_king_moves(
     let enemy = opposite_color(color);
     match color {
         PieceColor::White => {
-            if castling.white_kingside && sq == Square::new(4, 0) {
-                if can_castle_kingside(board, 0, &enemy) {
-                    moves.push(InternalMove {
-                        from: sq,
-                        to: Square::new(6, 0),
-                        promotion: None,
-                    });
-                }
+            if castling.white_kingside && sq == Square::new(4, 0)
+                && can_castle_kingside(board, 0, &enemy)
+            {
+                moves.push(InternalMove {
+                    from: sq,
+                    to: Square::new(6, 0),
+                    promotion: None,
+                });
             }
-            if castling.white_queenside && sq == Square::new(4, 0) {
-                if can_castle_queenside(board, 0, &enemy) {
-                    moves.push(InternalMove {
-                        from: sq,
-                        to: Square::new(2, 0),
-                        promotion: None,
-                    });
-                }
+            if castling.white_queenside && sq == Square::new(4, 0)
+                && can_castle_queenside(board, 0, &enemy)
+            {
+                moves.push(InternalMove {
+                    from: sq,
+                    to: Square::new(2, 0),
+                    promotion: None,
+                });
             }
         }
         PieceColor::Black => {
-            if castling.black_kingside && sq == Square::new(4, 7) {
-                if can_castle_kingside(board, 7, &enemy) {
-                    moves.push(InternalMove {
-                        from: sq,
-                        to: Square::new(6, 7),
-                        promotion: None,
-                    });
-                }
+            if castling.black_kingside && sq == Square::new(4, 7)
+                && can_castle_kingside(board, 7, &enemy)
+            {
+                moves.push(InternalMove {
+                    from: sq,
+                    to: Square::new(6, 7),
+                    promotion: None,
+                });
             }
-            if castling.black_queenside && sq == Square::new(4, 7) {
-                if can_castle_queenside(board, 7, &enemy) {
-                    moves.push(InternalMove {
-                        from: sq,
-                        to: Square::new(2, 7),
-                        promotion: None,
-                    });
-                }
+            if castling.black_queenside && sq == Square::new(4, 7)
+                && can_castle_queenside(board, 7, &enemy)
+            {
+                moves.push(InternalMove {
+                    from: sq,
+                    to: Square::new(2, 7),
+                    promotion: None,
+                });
             }
         }
     }
@@ -338,7 +338,7 @@ pub fn apply_internal_move(board: &mut Board, m: &InternalMove) {
 
     // Handle promotion
     if let Some(promo_type) = &m.promotion {
-        piece.piece_type = promo_type.clone();
+        piece.piece_type = *promo_type;
     }
 
     board.set(m.from, None);

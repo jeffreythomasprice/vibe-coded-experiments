@@ -12,11 +12,11 @@ pub struct AuthState {
 impl AuthState {
     pub fn new() -> Self {
         let claims = get_token().and_then(|t| decode_jwt_claims(&t));
-        let authenticated = claims.as_ref().map_or(false, |c| {
+        let authenticated = claims.as_ref().is_some_and(|c| {
             let now_secs = js_sys::Date::now() / 1000.0;
             c.exp > now_secs
         });
-        let is_admin = claims.map_or(false, |c| c.is_admin);
+        let is_admin = claims.is_some_and(|c| c.is_admin);
         Self {
             authenticated: RwSignal::new(authenticated),
             is_admin: RwSignal::new(is_admin),
@@ -27,7 +27,7 @@ impl AuthState {
         self.authenticated.set(val);
         if val {
             let claims = get_token().and_then(|t| decode_jwt_claims(&t));
-            self.is_admin.set(claims.map_or(false, |c| c.is_admin));
+            self.is_admin.set(claims.is_some_and(|c| c.is_admin));
         } else {
             self.is_admin.set(false);
         }

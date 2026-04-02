@@ -1,4 +1,8 @@
-include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
+#[allow(clippy::derivable_impls)]
+mod codegen {
+    include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
+}
+pub use codegen::*;
 
 pub mod schemas {
     pub const PLAYER: &str = include_str!("../schemas/player.json");

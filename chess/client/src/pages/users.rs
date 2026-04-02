@@ -35,7 +35,6 @@ pub fn UsersPage() -> impl IntoView {
 
     move || match view_mode.get() {
         ViewMode::List => {
-            let set_view_mode = set_view_mode.clone();
             view! {
                 <UsersList
                     refresh_counter=refresh_counter
@@ -46,12 +45,12 @@ pub fn UsersPage() -> impl IntoView {
             .into_any()
         }
         ViewMode::Create => {
-            let on_back = on_back_to_list.clone();
+            let on_back = on_back_to_list;
             view! { <CreateUserForm on_done=move || on_back() /> }.into_any()
         }
         ViewMode::Edit(ref username) => {
             let username = username.clone();
-            let on_back = on_back_to_list.clone();
+            let on_back = on_back_to_list;
             view! { <EditUserForm username=username on_done=move || on_back() /> }.into_any()
         }
     }

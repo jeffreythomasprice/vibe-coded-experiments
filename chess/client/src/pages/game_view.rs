@@ -712,7 +712,8 @@ fn ChessBoard(
         let Some(ctx) = ctx else { return };
 
         let window = web_sys::window().unwrap();
-        let f: Rc<RefCell<Option<Closure<dyn FnMut()>>>> = Rc::new(RefCell::new(None));
+        type AnimCallback = Rc<RefCell<Option<Closure<dyn FnMut()>>>>;
+        let f: AnimCallback = Rc::new(RefCell::new(None));
         let g = f.clone();
 
         *g.borrow_mut() = Some(Closure::new(move || {
@@ -972,6 +973,7 @@ fn fetch_legal_moves(game_id: String, square: String, legal_moves: RwSignal<Vec<
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn send_move(
     game_id: String,
     from: String,

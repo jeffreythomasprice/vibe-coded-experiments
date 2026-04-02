@@ -80,7 +80,7 @@ fn NavBar() -> impl IntoView {
 
     move || {
         if !auth_state.authenticated.get() {
-            return view! {}.into_any();
+            return ().into_any();
         }
 
         let navigate = leptos_router::hooks::use_navigate();
@@ -113,8 +113,8 @@ fn NavBar() -> impl IntoView {
 fn RedirectToGames() -> impl IntoView {
     let navigate = leptos_router::hooks::use_navigate();
     navigate("/games", Default::default());
-    view! {}
 }
+
 
 #[component]
 fn ProtectedGames() -> impl IntoView {

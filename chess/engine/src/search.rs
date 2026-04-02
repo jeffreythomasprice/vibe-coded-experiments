@@ -11,7 +11,9 @@ pub struct SearchParams {
 
 pub struct SearchResult {
     pub best_move: Option<InternalMove>,
+    #[allow(dead_code)]
     pub score: i32,
+    #[allow(dead_code)]
     pub nodes_searched: u64,
 }
 
@@ -87,6 +89,7 @@ pub fn search(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn negamax(
     board: &Board,
     color: &PieceColor,
@@ -218,7 +221,7 @@ fn terminal_score(board: &Board, variant: &GameVariant, mover_color: &PieceColor
             let enemy = opposite_color(&next_color);
             let in_check = board
                 .find_king(&next_color)
-                .map_or(false, |ksq| board.is_attacked_by(ksq, &enemy));
+                .is_some_and(|ksq| board.is_attacked_by(ksq, &enemy));
 
             if in_check {
                 // Checkmate — mover wins
@@ -242,7 +245,7 @@ fn terminal_score_no_moves(board: &Board, variant: &GameVariant, color: &PieceCo
             let enemy = opposite_color(color);
             let in_check = board
                 .find_king(color)
-                .map_or(false, |ksq| board.is_attacked_by(ksq, &enemy));
+                .is_some_and(|ksq| board.is_attacked_by(ksq, &enemy));
 
             if in_check {
                 // We're checkmated
