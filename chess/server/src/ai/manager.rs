@@ -119,9 +119,10 @@ impl AiManager {
         let variant = game.variant.clone();
         let history = game.move_history.clone();
         let color = active_color.clone();
+        let ai_params = active_player.ai_params.clone();
 
         let chess_move = tokio::task::spawn_blocking(move || {
-            engine.generate_move(&board, &color, &variant, &history)
+            engine.generate_move(&board, &color, &variant, &history, &ai_params)
         })
         .await
         .map_err(|e| format!("Task join error: {e}"))?;

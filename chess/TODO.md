@@ -6,6 +6,10 @@ actually test all kinds of gameplay
 
 
 
+review for dead code, clippy
+
+when somebody wins the lose all game it shows as stalemate
+
 AI-vs-AI needs to work
 auto kick off the next move after a short delay
 

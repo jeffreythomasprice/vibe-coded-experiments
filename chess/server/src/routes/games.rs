@@ -425,6 +425,7 @@ async fn resolve_player(
                 name,
                 kind: PlayerKind::Human,
                 ai_engine: None,
+                ai_params: Default::default(),
             })
         }
         ParticipantInputKind::Ai => Ok(Player {
@@ -438,6 +439,7 @@ async fn resolve_player(
                     .unwrap_or("random")
                     .to_string(),
             ),
+            ai_params: input.ai_params.clone(),
         }),
     }
 }

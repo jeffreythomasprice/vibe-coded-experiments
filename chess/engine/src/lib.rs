@@ -1,9 +1,26 @@
 pub mod board;
+mod eval;
 pub mod movegen;
+mod search;
 pub mod status;
 pub mod variants;
 
 use chess_shared::*;
+
+/// Find the best move using alpha-beta minimax search.
+/// Returns None if no legal moves exist.
+pub fn best_move(
+    board_state: &BoardState,
+    color: &PieceColor,
+    variant: &GameVariant,
+    move_history: &[Move],
+    depth: u8,
+) -> Option<Move> {
+    let b = board::Board::from_board_state(board_state);
+    let params = search::SearchParams { max_depth: depth };
+    let result = search::search(&b, color, variant, move_history, &params);
+    result.best_move.map(|m| m.to_schema_move())
+}
 
 /// Returns all legal moves for the active color in the given position.
 pub fn legal_moves(

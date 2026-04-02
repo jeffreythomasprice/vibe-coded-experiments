@@ -34,6 +34,13 @@
         "ai_engine": {
           "type": "string",
           "description": "AI engine to use. Only valid when kind is 'ai'. Defaults to 'random'."
+        },
+        "ai_params": {
+          "type": "object",
+          "description": "Parameters for the AI engine. Keys are parameter names, values are string representations.",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     }

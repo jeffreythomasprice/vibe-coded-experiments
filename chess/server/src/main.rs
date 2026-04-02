@@ -83,6 +83,7 @@ async fn main() {
             "/games/{game_id}/ws",
             get(routes::ws::game_ws),
         )
+        .route("/ai-engines", get(routes::ai::list_engines))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chess_shared::*;
 use rand::Rng;
 
@@ -11,6 +13,10 @@ impl AiEngine for RandomEngine {
         "random"
     }
 
+    fn description(&self) -> &str {
+        "Picks a random legal move"
+    }
+
     fn supports_variant(&self, _variant: &GameVariant) -> bool {
         true
     }
@@ -21,6 +27,7 @@ impl AiEngine for RandomEngine {
         color: &PieceColor,
         variant: &GameVariant,
         move_history: &[Move],
+        _params: &HashMap<String, String>,
     ) -> Option<Move> {
         let moves = chess_engine::legal_moves(board, color, variant, move_history);
         if moves.is_empty() {

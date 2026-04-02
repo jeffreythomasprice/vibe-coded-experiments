@@ -1,8 +1,35 @@
+use std::collections::HashMap;
+
 use leptos::prelude::*;
 use serde::Deserialize;
 use wasm_bindgen::JsCast;
 
 use crate::components::username_autocomplete::UsernameAutocomplete;
+
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+struct AiEngineInfo {
+    name: String,
+    description: String,
+    supported_variants: Vec<String>,
+    parameters: Vec<AiParameterDef>,
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+struct AiParameterDef {
+    name: String,
+    label: String,
+    description: String,
+    #[allow(dead_code)]
+    param_type: String,
+    default_value: String,
+    min_value: Option<String>,
+    max_value: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct AiEnginesResponse {
+    engines: Vec<AiEngineInfo>,
+}
 
 #[derive(Clone, Debug, Deserialize)]
 struct GameSummary {
@@ -324,6 +351,51 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
     let (error, set_error) = signal(Option::<String>::None);
     let (loading, set_loading) = signal(false);
 
+    // AI engine selection
+    let engines = RwSignal::new(Vec::<AiEngineInfo>::new());
+    let white_engine = RwSignal::new("random".to_string());
+    let white_params = RwSignal::new(HashMap::<String, String>::new());
+    let black_engine = RwSignal::new("random".to_string());
+    let black_params = RwSignal::new(HashMap::<String, String>::new());
+
+    // Fetch available engines on mount
+    Effect::new(move |_| {
+        leptos::task::spawn_local(async move {
+            if let Ok(resp) = crate::api::get("/api/ai-engines").send().await {
+                if resp.ok() {
+                    if let Ok(data) = resp.json::<AiEnginesResponse>().await {
+                        engines.set(data.engines);
+                    }
+                }
+            }
+        });
+    });
+
+    // Filter engines by selected variant
+    let available_engines = Memo::new(move |_| {
+        let v = variant.get();
+        engines
+            .get()
+            .into_iter()
+            .filter(|e| e.supported_variants.contains(&v))
+            .collect::<Vec<_>>()
+    });
+
+    // Reset engine selection when variant changes and current engine is not supported
+    Effect::new(move |_| {
+        let avail = available_engines.get();
+        if !avail.is_empty() {
+            if !avail.iter().any(|e| e.name == white_engine.get_untracked()) {
+                white_engine.set("random".to_string());
+                white_params.set(HashMap::new());
+            }
+            if !avail.iter().any(|e| e.name == black_engine.get_untracked()) {
+                black_engine.set("random".to_string());
+                black_params.set(HashMap::new());
+            }
+        }
+    });
+
     let current_username_for_validate = current_username.clone();
     let on_done_clone = on_done.clone();
     let navigate = leptos_router::hooks::use_navigate();
@@ -360,14 +432,29 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
 
         let on_done = on_done_clone.clone();
         let navigate = navigate.clone();
+        let we = white_engine.get_untracked();
+        let wp = white_params.get_untracked();
+        let be_ = black_engine.get_untracked();
+        let bp = black_params.get_untracked();
+
         leptos::task::spawn_local(async move {
             let mut pw = serde_json::json!({ "kind": wk });
             if wk == "human" {
                 pw.as_object_mut().unwrap().insert("username".into(), serde_json::json!(wu));
+            } else {
+                pw.as_object_mut().unwrap().insert("ai_engine".into(), serde_json::json!(we));
+                if !wp.is_empty() {
+                    pw.as_object_mut().unwrap().insert("ai_params".into(), serde_json::json!(wp));
+                }
             }
             let mut pb = serde_json::json!({ "kind": bk });
             if bk == "human" {
                 pb.as_object_mut().unwrap().insert("username".into(), serde_json::json!(bu));
+            } else {
+                pb.as_object_mut().unwrap().insert("ai_engine".into(), serde_json::json!(be_));
+                if !bp.is_empty() {
+                    pb.as_object_mut().unwrap().insert("ai_params".into(), serde_json::json!(bp));
+                }
             }
 
             let body = serde_json::json!({
@@ -419,10 +506,18 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
         let wu = white_username.get_untracked();
         let bk = black_kind.get_untracked();
         let bu = black_username.get_untracked();
+        let we = white_engine.get_untracked();
+        let wp = white_params.get_untracked();
+        let be_ = black_engine.get_untracked();
+        let bp = black_params.get_untracked();
         set_white_kind.set(bk);
         white_username.set(bu);
+        white_engine.set(be_);
+        white_params.set(bp);
         set_black_kind.set(wk);
         black_username.set(wu);
+        black_engine.set(we);
+        black_params.set(wp);
     };
 
     view! {
@@ -461,12 +556,50 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
                         <option value="ai">"AI"</option>
                     </select>
                 </div>
-                {move || (white_kind.get() == "human").then(|| view! {
-                    <div>
-                        <label for="white-username">"Username: "</label>
-                        <UsernameAutocomplete value=white_username id="white-username" />
-                    </div>
-                })}
+                {move || if white_kind.get() == "human" {
+                    view! {
+                        <div>
+                            <label for="white-username">"Username: "</label>
+                            <UsernameAutocomplete value=white_username id="white-username" />
+                        </div>
+                    }.into_any()
+                } else {
+                    let avail = available_engines.get();
+                    view! {
+                        <div>
+                            <label for="white-engine">"Engine: "</label>
+                            <select
+                                id="white-engine"
+                                on:change=move |ev| {
+                                    let name = event_target_value(&ev);
+                                    white_engine.set(name.clone());
+                                    // Reset params to defaults for new engine
+                                    let mut defaults = HashMap::new();
+                                    for e in available_engines.get_untracked() {
+                                        if e.name == name {
+                                            for p in &e.parameters {
+                                                defaults.insert(p.name.clone(), p.default_value.clone());
+                                            }
+                                        }
+                                    }
+                                    white_params.set(defaults);
+                                }
+                                prop:value=white_engine
+                            >
+                                {avail.iter().map(|e| {
+                                    let name = e.name.clone();
+                                    let desc = e.description.clone();
+                                    view! { <option value={name.clone()}>{format!("{name} — {desc}")}</option> }
+                                }).collect_view()}
+                            </select>
+                        </div>
+                        <EngineParams
+                            engine_name=white_engine
+                            engines=available_engines
+                            params=white_params
+                        />
+                    }.into_any()
+                }}
             </fieldset>
 
             <div style="text-align: center; margin: 0.5em 0;">
@@ -492,12 +625,49 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
                         <option value="ai">"AI"</option>
                     </select>
                 </div>
-                {move || (black_kind.get() == "human").then(|| view! {
-                    <div>
-                        <label for="black-username">"Username: "</label>
-                        <UsernameAutocomplete value=black_username id="black-username" />
-                    </div>
-                })}
+                {move || if black_kind.get() == "human" {
+                    view! {
+                        <div>
+                            <label for="black-username">"Username: "</label>
+                            <UsernameAutocomplete value=black_username id="black-username" />
+                        </div>
+                    }.into_any()
+                } else {
+                    let avail = available_engines.get();
+                    view! {
+                        <div>
+                            <label for="black-engine">"Engine: "</label>
+                            <select
+                                id="black-engine"
+                                on:change=move |ev| {
+                                    let name = event_target_value(&ev);
+                                    black_engine.set(name.clone());
+                                    let mut defaults = HashMap::new();
+                                    for e in available_engines.get_untracked() {
+                                        if e.name == name {
+                                            for p in &e.parameters {
+                                                defaults.insert(p.name.clone(), p.default_value.clone());
+                                            }
+                                        }
+                                    }
+                                    black_params.set(defaults);
+                                }
+                                prop:value=black_engine
+                            >
+                                {avail.iter().map(|e| {
+                                    let name = e.name.clone();
+                                    let desc = e.description.clone();
+                                    view! { <option value={name.clone()}>{format!("{name} — {desc}")}</option> }
+                                }).collect_view()}
+                            </select>
+                        </div>
+                        <EngineParams
+                            engine_name=black_engine
+                            engines=available_engines
+                            params=black_params
+                        />
+                    }.into_any()
+                }}
             </fieldset>
 
             <div style="margin-top: 1em;">
@@ -506,6 +676,52 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
                 <button type="button" on:click=move |_| on_done()>"Cancel"</button>
             </div>
         </form>
+    }
+}
+
+/// Renders parameter inputs for the selected AI engine.
+#[component]
+fn EngineParams(
+    engine_name: RwSignal<String>,
+    engines: Memo<Vec<AiEngineInfo>>,
+    params: RwSignal<HashMap<String, String>>,
+) -> impl IntoView {
+    move || {
+        let name = engine_name.get();
+        let engine = engines.get().into_iter().find(|e| e.name == name);
+        let Some(engine) = engine else {
+            return view! {}.into_any();
+        };
+        if engine.parameters.is_empty() {
+            return view! {}.into_any();
+        }
+        let param_views = engine
+            .parameters
+            .into_iter()
+            .map(|p| {
+                let param_name = p.name.clone();
+                let current_val = params.get_untracked().get(&param_name).cloned().unwrap_or(p.default_value.clone());
+                let pn = param_name.clone();
+                view! {
+                    <div style="margin-top: 0.3em;">
+                        <label>{p.label.clone()}" "</label>
+                        <input
+                            type="number"
+                            value=current_val
+                            min=p.min_value.clone().unwrap_or_default()
+                            max=p.max_value.clone().unwrap_or_default()
+                            style="width: 4em;"
+                            on:change=move |ev| {
+                                let val = event_target_value(&ev);
+                                params.update(|m| { m.insert(pn.clone(), val); });
+                            }
+                        />
+                        <small style="margin-left: 0.5em; color: #666;">{p.description.clone()}</small>
+                    </div>
+                }
+            })
+            .collect_view();
+        view! { <div>{param_views}</div> }.into_any()
     }
 }
 
