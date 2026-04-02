@@ -459,12 +459,24 @@ pub fn GameViewPage() -> impl IntoView {
         if is_game_over(&g.status) {
             return match g.status.as_str() {
                 "checkmate" => {
-                    let winner = match g.active_color.as_deref() {
-                        Some("white") => &g.player_black.name,
-                        Some("black") => &g.player_white.name,
-                        _ => "Unknown",
+                    let winner = if g.variant == "forced_capture_lose_all" {
+                        // Winner is the player who lost all pieces
+                        let has_white = g.board.pieces.values().any(|p| p.color == "white");
+                        let has_black = g.board.pieces.values().any(|p| p.color == "black");
+                        match (has_white, has_black) {
+                            (true, false) => "Black",
+                            (false, true) => "White",
+                            _ => "Unknown",
+                        }
+                    } else {
+                        // Standard: active_color is in checkmate (loser)
+                        match g.active_color.as_deref() {
+                            Some("white") => "Black",
+                            Some("black") => "White",
+                            _ => "Unknown",
+                        }
                     };
-                    format!("Checkmate — {} wins!", winner)
+                    format!("{} wins!", winner)
                 }
                 "stalemate" => "Stalemate — Draw!".into(),
                 "draw" => "Draw!".into(),

@@ -50,11 +50,14 @@ fn standard_status(board: &Board, active_color: &PieceColor, move_history: &[Mov
 }
 
 fn lose_all_status(board: &Board, active_color: &PieceColor, move_history: &[Move]) -> GameStatus {
-    // Check if the previous player (who just moved) has lost all pieces — they win!
+    // In lose-all, the player who loses all their pieces wins.
+    // Check if either player has no pieces — that player wins.
+    // The most common case: the active player's last piece was just captured.
+    if variants::has_no_pieces(board, active_color) {
+        return GameStatus::Checkmate;
+    }
     let previous_color = opposite_color(active_color);
     if variants::has_no_pieces(board, &previous_color) {
-        // The player who lost all pieces wins. We represent this as checkmate
-        // (the previous player "checkmated" the active player by losing all pieces).
         return GameStatus::Checkmate;
     }
 

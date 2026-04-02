@@ -116,19 +116,18 @@ fn display_status(game: &GameSummary) -> String {
     match game.status.as_str() {
         "waiting" | "active" | "check" => "In Progress".to_string(),
         "checkmate" => {
-            // The player whose turn it is has been checkmated, so the other player wins
             let winner = match game.active_color.as_deref() {
-                Some("white") => &game.player_black_name,
-                _ => &game.player_white_name,
+                Some("white") => "Black",
+                _ => "White",
             };
-            format!("Victory for {winner}")
+            format!("{winner} wins!")
         }
         "resigned" => {
             let winner = match game.active_color.as_deref() {
-                Some("white") => &game.player_black_name,
-                _ => &game.player_white_name,
+                Some("white") => "Black",
+                _ => "White",
             };
-            format!("Victory for {winner}")
+            format!("{winner} wins!")
         }
         "stalemate" | "draw" => "Draw".to_string(),
         "abandoned" => "Abandoned".to_string(),
@@ -370,28 +369,60 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
         });
     });
 
-    // Filter engines by selected variant
+    // Filter engines by selected variant, sorted alphabetically
     let available_engines = Memo::new(move |_| {
         let v = variant.get();
-        engines
+        let mut list: Vec<_> = engines
             .get()
             .into_iter()
             .filter(|e| e.supported_variants.contains(&v))
-            .collect::<Vec<_>>()
+            .collect();
+        list.sort_by(|a, b| a.name.cmp(&b.name));
+        list
     });
+
+    // Helper: set engine to first available and populate default params
+    let init_engine =
+        move |avail: &[AiEngineInfo],
+              engine: RwSignal<String>,
+              params: RwSignal<HashMap<String, String>>| {
+            if let Some(first) = avail.first() {
+                engine.set(first.name.clone());
+                let defaults: HashMap<String, String> = first
+                    .parameters
+                    .iter()
+                    .map(|p| (p.name.clone(), p.default_value.clone()))
+                    .collect();
+                params.set(defaults);
+            }
+        };
 
     // Reset engine selection when variant changes and current engine is not supported
     Effect::new(move |_| {
         let avail = available_engines.get();
         if !avail.is_empty() {
             if !avail.iter().any(|e| e.name == white_engine.get_untracked()) {
-                white_engine.set("random".to_string());
-                white_params.set(HashMap::new());
+                init_engine(&avail, white_engine, white_params);
             }
             if !avail.iter().any(|e| e.name == black_engine.get_untracked()) {
-                black_engine.set("random".to_string());
-                black_params.set(HashMap::new());
+                init_engine(&avail, black_engine, black_params);
             }
+        }
+    });
+
+    // Initialize engine and params when a player is switched to AI
+    Effect::new(move |_| {
+        let avail = available_engines.get();
+        if white_kind.get() == "ai" && !avail.is_empty() && white_params.get_untracked().is_empty()
+        {
+            init_engine(&avail, white_engine, white_params);
+        }
+    });
+    Effect::new(move |_| {
+        let avail = available_engines.get();
+        if black_kind.get() == "ai" && !avail.is_empty() && black_params.get_untracked().is_empty()
+        {
+            init_engine(&avail, black_engine, black_params);
         }
     });
 

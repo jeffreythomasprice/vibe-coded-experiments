@@ -6,10 +6,7 @@ actually test all kinds of gameplay
 
 
 
-when somebody wins the lose all game it shows as stalemate
-
-AI-vs-AI needs to work
-auto kick off the next move after a short delay
+collect constants in one file for frontend and one for backend
 
 animation when a piece is taken
 

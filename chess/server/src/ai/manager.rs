@@ -11,6 +11,9 @@ use chess_shared::*;
 
 use super::registry::AiRegistry;
 
+/// Delay between consecutive AI moves in AI-vs-AI games.
+const AI_MOVE_DELAY_MS: u64 = 500;
+
 /// Events broadcast to WebSocket subscribers.
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -189,7 +192,7 @@ impl AiManager {
             };
             if next_player.kind == PlayerKind::Ai {
                 // Small delay for AI-vs-AI to avoid busy-spinning
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(AI_MOVE_DELAY_MS)).await;
                 self.schedule_move(game_id);
             }
         }
