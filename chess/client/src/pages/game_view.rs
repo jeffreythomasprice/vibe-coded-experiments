@@ -1,6 +1,8 @@
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
@@ -31,6 +33,8 @@ struct Game {
     active_color: Option<String>,
     #[serde(default)]
     ai_thinking: Option<bool>,
+    #[serde(default)]
+    move_history: Vec<ChessMove>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -49,7 +53,7 @@ enum GameEvent {
     MoveMade {
         game_id: String,
         #[serde(rename = "move")]
-        chess_move: serde_json::Value,
+        chess_move: ChessMove,
         status: String,
         board: BoardState,
         active_color: Option<String>,
@@ -64,6 +68,61 @@ const LIGHT_SQ: &str = "#f0d9b5";
 const DARK_SQ: &str = "#b58863";
 const SELECTED_COLOR: &str = "rgba(20, 85, 200, 0.4)";
 const LEGAL_MOVE_COLOR: &str = "rgba(20, 150, 50, 0.5)";
+const LAST_MOVE_HIGHLIGHT: &str = "rgba(255, 255, 0, 0.3)";
+const GHOST_ALPHA: f64 = 0.3;
+const ANIM_MS_PER_SQUARE: f64 = 500.0;
+
+fn now_ms() -> f64 {
+    web_sys::window()
+        .and_then(|w| w.performance())
+        .map(|p| p.now())
+        .unwrap_or(0.0)
+}
+
+#[derive(Clone, Debug)]
+struct AnimationState {
+    piece: Piece,
+    from_px: (f64, f64),
+    to_px: (f64, f64),
+    start_time: f64,
+    duration_ms: f64,
+    moving_to: String,
+}
+
+fn square_to_center_px(sq: &str) -> Option<(f64, f64)> {
+    let (file, rank) = parse_square(sq)?;
+    Some((
+        file as f64 * SQUARE_SIZE + SQUARE_SIZE / 2.0,
+        (7 - rank) as f64 * SQUARE_SIZE + SQUARE_SIZE / 2.0,
+    ))
+}
+
+fn animation_duration(from: &str, to: &str) -> f64 {
+    let Some((f1, r1)) = parse_square(from) else { return 0.0 };
+    let Some((f2, r2)) = parse_square(to) else { return 0.0 };
+    let dist = ((f2 as f64 - f1 as f64).powi(2) + (r2 as f64 - r1 as f64).powi(2)).sqrt();
+    dist * ANIM_MS_PER_SQUARE
+}
+
+fn draw_piece_at(ctx: &web_sys::CanvasRenderingContext2d, piece: &Piece, cx: f64, cy: f64) {
+    let radius = SQUARE_SIZE * 0.35;
+    let (fill, text_color) = if piece.color == "white" {
+        ("#ffffff", "#333333")
+    } else {
+        ("#333333", "#ffffff")
+    };
+
+    ctx.begin_path();
+    let _ = ctx.arc(cx, cy, radius, 0.0, std::f64::consts::TAU);
+    ctx.set_fill_style_str(fill);
+    ctx.fill();
+    ctx.set_stroke_style_str("#000000");
+    ctx.set_line_width(1.5);
+    ctx.stroke();
+
+    ctx.set_fill_style_str(text_color);
+    let _ = ctx.fill_text(piece_letter(&piece.piece_type), cx, cy);
+}
 
 fn parse_square(sq: &str) -> Option<(usize, usize)> {
     let mut chars = sq.chars();
@@ -107,6 +166,9 @@ fn draw_board(
     board: &BoardState,
     selected: Option<&str>,
     legal_targets: &HashSet<String>,
+    last_move: Option<&ChessMove>,
+    anim: Option<&AnimationState>,
+    now: f64,
 ) {
     // Draw squares
     for rank in 0..8usize {
@@ -116,6 +178,18 @@ fn draw_board(
             let x = file as f64 * SQUARE_SIZE;
             let y = (7 - rank) as f64 * SQUARE_SIZE;
             ctx.fill_rect(x, y, SQUARE_SIZE, SQUARE_SIZE);
+        }
+    }
+
+    // Highlight last move from/to squares
+    if let Some(lm) = last_move {
+        for sq in [&lm.from, &lm.to] {
+            if let Some((file, rank)) = parse_square(sq) {
+                ctx.set_fill_style_str(LAST_MOVE_HIGHLIGHT);
+                let x = file as f64 * SQUARE_SIZE;
+                let y = (7 - rank) as f64 * SQUARE_SIZE;
+                ctx.fill_rect(x, y, SQUARE_SIZE, SQUARE_SIZE);
+            }
         }
     }
 
@@ -148,37 +222,45 @@ fn draw_board(
         let _ = ctx.fill_text(&label, x, y);
     }
 
+    // Draw ghost piece at last move's origin square
+    if let Some(lm) = last_move {
+        if let Some(piece) = board.pieces.get(&lm.to) {
+            if let Some((cx, cy)) = square_to_center_px(&lm.from) {
+                ctx.set_font("bold 20px sans-serif");
+                ctx.set_text_align("center");
+                ctx.set_text_baseline("middle");
+                ctx.set_global_alpha(GHOST_ALPHA);
+                draw_piece_at(ctx, piece, cx, cy);
+                ctx.set_global_alpha(1.0);
+            }
+        }
+    }
+
     // Draw pieces
-    let radius = SQUARE_SIZE * 0.35;
     ctx.set_font("bold 20px sans-serif");
     ctx.set_text_align("center");
     ctx.set_text_baseline("middle");
 
+    let animating_sq = anim.as_ref().map(|a| a.moving_to.as_str());
     for (square, piece) in &board.pieces {
+        // Skip the piece being animated — it will be drawn at interpolated position
+        if animating_sq == Some(square.as_str()) {
+            continue;
+        }
         let Some((file, rank)) = parse_square(square) else {
             continue;
         };
         let cx = file as f64 * SQUARE_SIZE + SQUARE_SIZE / 2.0;
         let cy = (7 - rank) as f64 * SQUARE_SIZE + SQUARE_SIZE / 2.0;
+        draw_piece_at(ctx, piece, cx, cy);
+    }
 
-        // Circle fill
-        let (fill, text_color) = if piece.color == "white" {
-            ("#ffffff", "#333333")
-        } else {
-            ("#333333", "#ffffff")
-        };
-
-        ctx.begin_path();
-        let _ = ctx.arc(cx, cy, radius, 0.0, std::f64::consts::TAU);
-        ctx.set_fill_style_str(fill);
-        ctx.fill();
-        ctx.set_stroke_style_str("#000000");
-        ctx.set_line_width(1.5);
-        ctx.stroke();
-
-        // Letter
-        ctx.set_fill_style_str(text_color);
-        let _ = ctx.fill_text(piece_letter(&piece.piece_type), cx, cy);
+    // Draw animating piece at interpolated position
+    if let Some(a) = anim {
+        let t = ((now - a.start_time) / a.duration_ms).clamp(0.0, 1.0);
+        let cx = a.from_px.0 + (a.to_px.0 - a.from_px.0) * t;
+        let cy = a.from_px.1 + (a.to_px.1 - a.from_px.1) * t;
+        draw_piece_at(ctx, &a.piece, cx, cy);
     }
 
     // Draw legal move indicators (on top of pieces)
@@ -278,6 +360,7 @@ pub fn GameViewPage() -> impl IntoView {
     let legal_moves = RwSignal::new(Vec::<ChessMove>::new());
     let pending_promotion = RwSignal::new(Option::<(String, String)>::None);
     let move_in_progress = RwSignal::new(false);
+    let animation = RwSignal::new(Option::<AnimationState>::None);
     let game_id_signal = RwSignal::new(String::new());
 
     let current_username = get_current_username();
@@ -357,6 +440,8 @@ pub fn GameViewPage() -> impl IntoView {
                         set_ai_thinking,
                         selected_square,
                         legal_moves,
+                        game,
+                        animation,
                     );
                 }
                 Err(e) => {
@@ -448,7 +533,9 @@ pub fn GameViewPage() -> impl IntoView {
                         set_ai_thinking=set_ai_thinking
                         set_game=set_game
                         game_id=gid
+                        animation=animation
                     />
+                    <MoveHistoryTable move_history=g.move_history.clone() />
                 }
             })}
         </div>
@@ -488,6 +575,8 @@ fn connect_game_ws(
     set_ai_thinking: WriteSignal<bool>,
     selected_square: RwSignal<Option<String>>,
     legal_moves: RwSignal<Vec<ChessMove>>,
+    game: ReadSignal<Option<Game>>,
+    animation: RwSignal<Option<AnimationState>>,
 ) {
     let token = crate::auth::get_token().unwrap_or_default();
     let window = web_sys::window().unwrap();
@@ -518,9 +607,32 @@ fn connect_game_ws(
             GameEvent::AiThinkingStarted { .. } => {
                 set_ai_thinking.set(true);
             }
-            GameEvent::MoveMade { board, status, active_color, .. } => {
+            GameEvent::MoveMade { board, status, active_color, chess_move, .. } => {
+                // Capture piece at from-square before updating board for animation
+                if let Some(g) = game.get() {
+                    if let Some(piece) = g.board.pieces.get(&chess_move.from) {
+                        if let (Some(from_px), Some(to_px)) =
+                            (square_to_center_px(&chess_move.from), square_to_center_px(&chess_move.to))
+                        {
+                            let dur = animation_duration(&chess_move.from, &chess_move.to);
+                            let now = web_sys::window()
+                                .and_then(|w| w.performance())
+                                .map(|p| p.now())
+                                .unwrap_or(0.0);
+                            animation.set(Some(AnimationState {
+                                piece: piece.clone(),
+                                from_px,
+                                to_px,
+                                start_time: now,
+                                duration_ms: dur,
+                                moving_to: chess_move.to.clone(),
+                            }));
+                        }
+                    }
+                }
                 set_game.update(|g| {
                     if let Some(g) = g {
+                        g.move_history.push(chess_move);
                         g.board = board;
                         g.status = status;
                         g.active_color = active_color;
@@ -554,6 +666,7 @@ fn ChessBoard(
     set_ai_thinking: WriteSignal<bool>,
     set_game: WriteSignal<Option<Game>>,
     game_id: String,
+    animation: RwSignal<Option<AnimationState>>,
 ) -> impl IntoView {
     let canvas_ref = NodeRef::<leptos::html::Canvas>::new();
     let game_id_for_click = game_id.clone();
@@ -565,6 +678,8 @@ fn ChessBoard(
         let selected = selected_square.get();
         let moves = legal_moves.get();
         let targets: HashSet<String> = moves.iter().map(|m| m.to.clone()).collect();
+        let anim = animation.get();
+        let last_move = g.move_history.last();
 
         let Some(canvas) = canvas_ref.get() else { return };
         let canvas_el: &web_sys::HtmlCanvasElement = canvas.as_ref();
@@ -575,8 +690,68 @@ fn ChessBoard(
             .and_then(|obj| obj.dyn_into::<web_sys::CanvasRenderingContext2d>().ok());
 
         if let Some(ctx) = ctx {
-            draw_board(&ctx, &g.board, selected.as_deref(), &targets);
+            let now = now_ms();
+            draw_board(&ctx, &g.board, selected.as_deref(), &targets, last_move, anim.as_ref(), now);
         }
+    });
+
+    // Animation loop via requestAnimationFrame
+    Effect::new(move || {
+        let anim = animation.get();
+        if anim.is_none() {
+            return;
+        }
+
+        let Some(canvas) = canvas_ref.get() else { return };
+        let canvas_el: &web_sys::HtmlCanvasElement = canvas.as_ref();
+        let ctx = canvas_el
+            .get_context("2d")
+            .ok()
+            .flatten()
+            .and_then(|obj| obj.dyn_into::<web_sys::CanvasRenderingContext2d>().ok());
+        let Some(ctx) = ctx else { return };
+
+        let window = web_sys::window().unwrap();
+        let f: Rc<RefCell<Option<Closure<dyn FnMut()>>>> = Rc::new(RefCell::new(None));
+        let g = f.clone();
+
+        *g.borrow_mut() = Some(Closure::new(move || {
+            let now = now_ms();
+
+            let anim_state = animation.get_untracked();
+            let Some(ref a) = anim_state else {
+                // Animation was cleared externally
+                return;
+            };
+
+            let t = ((now - a.start_time) / a.duration_ms).clamp(0.0, 1.0);
+
+            // Redraw board with animation
+            let game_state = game.get_untracked();
+            if let Some(ref gs) = game_state {
+                let selected = selected_square.get_untracked();
+                let moves = legal_moves.get_untracked();
+                let targets: HashSet<String> = moves.iter().map(|m| m.to.clone()).collect();
+                let last_move = gs.move_history.last();
+                draw_board(&ctx, &gs.board, selected.as_deref(), &targets, last_move, anim_state.as_ref(), now);
+            }
+
+            if t >= 1.0 {
+                animation.set(None);
+                // Drop the closure
+                let _ = f.borrow_mut().take();
+                return;
+            }
+
+            // Request next frame
+            let _ = web_sys::window().unwrap().request_animation_frame(
+                f.borrow().as_ref().unwrap().as_ref().unchecked_ref(),
+            );
+        }));
+
+        let _ = window.request_animation_frame(
+            g.borrow().as_ref().unwrap().as_ref().unchecked_ref(),
+        );
     });
 
     let on_canvas_click = move |ev: web_sys::MouseEvent| {
@@ -617,10 +792,12 @@ fn ChessBoard(
                     let from = sel.clone();
                     let to = clicked_sq;
                     let gid = game_id_for_click.clone();
+                    let moving_piece = g.board.pieces.get(&from).cloned();
                     send_move(
                         gid, from, to, None,
                         set_game, selected_square, legal_moves,
                         move_in_progress, set_ai_thinking,
+                        moving_piece, animation,
                     );
                 }
                 return;
@@ -702,6 +879,8 @@ fn ChessBoard(
                                         <button
                                             on:click=move |_| {
                                                 pending_promotion.set(None);
+                                                let moving_piece = game.get()
+                                                    .and_then(|g| g.board.pieces.get(&from).cloned());
                                                 send_move(
                                                     gid.clone(),
                                                     from.clone(),
@@ -712,6 +891,8 @@ fn ChessBoard(
                                                     legal_moves,
                                                     move_in_progress,
                                                     set_ai_thinking,
+                                                    moving_piece,
+                                                    animation,
                                                 );
                                             }
                                             style="font-size: 1.5em; padding: 0.5em 0.75em; \
@@ -727,6 +908,50 @@ fn ChessBoard(
                     </div>
                 }
             })}
+        </div>
+    }
+}
+
+#[component]
+fn MoveHistoryTable(move_history: Vec<ChessMove>) -> impl IntoView {
+    let rows: Vec<_> = move_history
+        .iter()
+        .enumerate()
+        .rev()
+        .map(|(i, m)| {
+            let move_num = (i / 2) + 1;
+            let is_white = i % 2 == 0;
+            let color_label = if is_white { "W" } else { "B" };
+            let notation = match &m.promotion {
+                Some(p) => format!("{} \u{2192} {} ={}", m.from, m.to, p.chars().next().unwrap_or('?').to_uppercase()),
+                None => format!("{} \u{2192} {}", m.from, m.to),
+            };
+            let bg = if i % 2 == 0 { "#f8f8f8" } else { "#ffffff" };
+            view! {
+                <tr style=format!("background: {bg};")>
+                    <td style="padding: 2px 8px; text-align: right; color: #888;">{move_num}"."</td>
+                    <td style="padding: 2px 8px; font-weight: bold;">{color_label}</td>
+                    <td style="padding: 2px 8px; font-family: monospace;">{notation}</td>
+                </tr>
+            }
+        })
+        .collect();
+
+    view! {
+        <div style="max-height: 200px; overflow-y: auto; width: 480px; border: 1px solid #ccc; \
+                    border-radius: 4px; margin-top: 0.5em;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                <thead>
+                    <tr style="background: #e8e8e8; position: sticky; top: 0;">
+                        <th style="padding: 4px 8px; text-align: right;">"#"</th>
+                        <th style="padding: 4px 8px; text-align: left;">" "</th>
+                        <th style="padding: 4px 8px; text-align: left;">"Move"</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows}
+                </tbody>
+            </table>
         </div>
     }
 }
@@ -757,7 +982,24 @@ fn send_move(
     legal_moves: RwSignal<Vec<ChessMove>>,
     move_in_progress: RwSignal<bool>,
     set_ai_thinking: WriteSignal<bool>,
+    moving_piece: Option<Piece>,
+    animation: RwSignal<Option<AnimationState>>,
 ) {
+    // Start animation before the async request
+    if let Some(piece) = moving_piece {
+        if let (Some(from_px), Some(to_px)) = (square_to_center_px(&from), square_to_center_px(&to)) {
+            let dur = animation_duration(&from, &to);
+            let now = now_ms();
+            animation.set(Some(AnimationState {
+                piece,
+                from_px,
+                to_px,
+                start_time: now,
+                duration_ms: dur,
+                moving_to: to.clone(),
+            }));
+        }
+    }
     move_in_progress.set(true);
     selected_square.set(None);
     legal_moves.set(vec![]);

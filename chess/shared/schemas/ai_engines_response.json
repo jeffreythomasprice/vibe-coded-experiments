@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AiEnginesResponse",
+  "description": "Response listing all available AI engines",
+  "type": "object",
+  "required": ["engines"],
+  "additionalProperties": false,
+  "properties": {
+    "engines": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/AiEngineInfo" },
+      "description": "Available AI engines"
+    }
+  },
+  "definitions": {
+    "AiEngineInfo": {
+      "type": "object",
+      "required": ["name", "description", "supported_variants", "parameters"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "supported_variants": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "parameters": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/AiParameterDef" }
+        }
+      }
+    },
+    "AiParameterDef": {
+      "type": "object",
+      "required": ["name", "label", "description", "param_type", "default_value"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "label": { "type": "string" },
+        "description": { "type": "string" },
+        "param_type": {
+          "type": "string",
+          "enum": ["integer", "string", "boolean"]
+        },
+        "default_value": { "type": "string" },
+        "min_value": { "type": "string" },
+        "max_value": { "type": "string" }
+        }
+    }
+  }
+}
