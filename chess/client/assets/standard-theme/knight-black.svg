@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Black Knight -->
+  <defs>
+    <linearGradient id="bn-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4a4a4a"/>
+      <stop offset="100%" stop-color="#1a1a1a"/>
+    </linearGradient>
+    <linearGradient id="bn-shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3a3a3a"/>
+      <stop offset="100%" stop-color="#111"/>
+    </linearGradient>
+  </defs>
+  <!-- Base -->
+  <ellipse cx="50" cy="88" rx="26" ry="7" fill="url(#bn-shade)" stroke="#222" stroke-width="1.5"/>
+  <ellipse cx="50" cy="86" rx="26" ry="7" fill="url(#bn-body)" stroke="#222" stroke-width="1.5"/>
+  <!-- Pedestal -->
+  <path d="M34 86 Q33 75 36 65 L64 65 Q67 75 66 86 Z" fill="url(#bn-body)" stroke="#222" stroke-width="1.5"/>
+  <!-- Collar -->
+  <ellipse cx="50" cy="65" rx="15" ry="4.5" fill="url(#bn-shade)" stroke="#222" stroke-width="1.2"/>
+  <!-- Horse head and neck -->
+  <path d="M38 65 L35 50 Q33 40 36 32 Q38 26 42 22 L46 18 Q48 16 50 17 L52 20 Q54 22 52 24 L48 26 Q55 28 60 34 Q66 42 65 52 L63 65 Z" fill="url(#bn-body)" stroke="#222" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Ear -->
+  <path d="M44 20 L40 12 L46 17" fill="url(#bn-body)" stroke="#222" stroke-width="1.2" stroke-linejoin="round"/>
+  <!-- Eye -->
+  <circle cx="48" cy="30" r="2" fill="#888"/>
+  <!-- Nostril -->
+  <circle cx="52" cy="22" r="1" fill="#888"/>
+  <!-- Mane -->
+  <path d="M36 32 Q33 36 35 42 Q34 46 35 50" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Highlight -->
+  <path d="M42 60 Q40 50 42 38" stroke="#666" stroke-width="1.5" fill="none" opacity="0.5" stroke-linecap="round"/>
+</svg>

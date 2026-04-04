@@ -410,19 +410,28 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
         }
     });
 
-    // Initialize engine and params when a player is switched to AI
+    // Track whether each player's AI settings have been initialized
+    let white_ai_initialized = RwSignal::new(false);
+    let black_ai_initialized = RwSignal::new(false);
+
+    // Initialize engine and params when a player is first switched to AI.
+    // The initialized flag prevents re-initialization after a swap.
     Effect::new(move |_| {
         let avail = available_engines.get();
-        if white_kind.get() == "ai" && !avail.is_empty() && white_params.get_untracked().is_empty()
-        {
+        if white_kind.get() == "ai" && !avail.is_empty() && !white_ai_initialized.get_untracked() {
             init_engine(&avail, white_engine, white_params);
+            white_ai_initialized.set(true);
+        } else if white_kind.get() != "ai" {
+            white_ai_initialized.set(false);
         }
     });
     Effect::new(move |_| {
         let avail = available_engines.get();
-        if black_kind.get() == "ai" && !avail.is_empty() && black_params.get_untracked().is_empty()
-        {
+        if black_kind.get() == "ai" && !avail.is_empty() && !black_ai_initialized.get_untracked() {
             init_engine(&avail, black_engine, black_params);
+            black_ai_initialized.set(true);
+        } else if black_kind.get() != "ai" {
+            black_ai_initialized.set(false);
         }
     });
 
@@ -540,14 +549,18 @@ fn CreateGameForm(on_done: impl Fn() + 'static + Clone) -> impl IntoView {
         let wp = white_params.get_untracked();
         let be_ = black_engine.get_untracked();
         let bp = black_params.get_untracked();
-        set_white_kind.set(bk);
-        white_username.set(bu);
+        // Set engine/params and mark as initialized before changing kind,
+        // so the "initialize AI" effects don't reset the swapped values.
         white_engine.set(be_);
         white_params.set(bp);
-        set_black_kind.set(wk);
-        black_username.set(wu);
+        white_ai_initialized.set(bk == "ai");
         black_engine.set(we);
         black_params.set(wp);
+        black_ai_initialized.set(wk == "ai");
+        set_white_kind.set(bk);
+        white_username.set(bu);
+        set_black_kind.set(wk);
+        black_username.set(wu);
     };
 
     view! {

@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- White Queen -->
+  <defs>
+    <linearGradient id="wq-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="100%" stop-color="#d4d4d4"/>
+    </linearGradient>
+    <linearGradient id="wq-shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e8e8e8"/>
+      <stop offset="100%" stop-color="#a0a0a0"/>
+    </linearGradient>
+  </defs>
+  <!-- Base -->
+  <ellipse cx="50" cy="88" rx="28" ry="7" fill="url(#wq-shade)" stroke="#555" stroke-width="1.5"/>
+  <ellipse cx="50" cy="86" rx="28" ry="7" fill="url(#wq-body)" stroke="#555" stroke-width="1.5"/>
+  <!-- Stem -->
+  <path d="M34 86 Q32 70 36 55 L64 55 Q68 70 66 86 Z" fill="url(#wq-body)" stroke="#555" stroke-width="1.5"/>
+  <!-- Collar -->
+  <ellipse cx="50" cy="55" rx="16" ry="5" fill="url(#wq-shade)" stroke="#555" stroke-width="1.2"/>
+  <!-- Upper body -->
+  <path d="M38 55 Q35 42 39 32 L61 32 Q65 42 62 55 Z" fill="url(#wq-body)" stroke="#555" stroke-width="1.5"/>
+  <!-- Crown rim -->
+  <rect x="36" y="30" width="28" height="4" rx="2" fill="url(#wq-shade)" stroke="#555" stroke-width="1.2"/>
+  <!-- Crown spikes with balls -->
+  <path d="M38 30 L35 18 M43 30 L41 16 M50 30 L50 13 M57 30 L59 16 M62 30 L65 18" stroke="#555" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <circle cx="35" cy="17" r="3" fill="url(#wq-body)" stroke="#555" stroke-width="1"/>
+  <circle cx="41" cy="15" r="3" fill="url(#wq-body)" stroke="#555" stroke-width="1"/>
+  <circle cx="50" cy="12" r="3.5" fill="url(#wq-body)" stroke="#555" stroke-width="1"/>
+  <circle cx="59" cy="15" r="3" fill="url(#wq-body)" stroke="#555" stroke-width="1"/>
+  <circle cx="65" cy="17" r="3" fill="url(#wq-body)" stroke="#555" stroke-width="1"/>
+  <!-- Highlight -->
+  <path d="M44 60 Q43 50 45 38" stroke="#fff" stroke-width="1.5" fill="none" opacity="0.6" stroke-linecap="round"/>
+</svg>

@@ -18,8 +18,32 @@ pub fn best_move(
 ) -> Option<Move> {
     let b = board::Board::from_board_state(board_state);
     let params = search::SearchParams { max_depth: depth };
-    let result = search::search(&b, color, variant, move_history, &params);
+    let position_keys = board::build_position_keys(move_history);
+    let result = search::search(&b, color, variant, move_history, &params, &position_keys);
     result.best_move.map(|m| m.to_schema_move())
+}
+
+/// Build position keys from move history for repetition detection.
+pub fn build_position_keys(move_history: &[Move]) -> Vec<board::PositionKey> {
+    board::build_position_keys(move_history)
+}
+
+/// Check if applying a move would lead to a position that already appeared in the game.
+pub fn would_repeat(
+    board_state: &BoardState,
+    chess_move: &Move,
+    active_color: &PieceColor,
+    move_history: &[Move],
+    position_keys: &[board::PositionKey],
+) -> bool {
+    let mut b = board::Board::from_board_state(board_state);
+    let im = board::InternalMove::from_schema_move(chess_move);
+    movegen::apply_internal_move(&mut b, &im);
+    let next_color = board::opposite_color(active_color);
+    let mut extended_history = move_history.to_vec();
+    extended_history.push(chess_move.clone());
+    let key = board::PositionKey::from_board(&b, &next_color, &extended_history);
+    position_keys.contains(&key)
 }
 
 /// Returns all legal moves for the active color in the given position.

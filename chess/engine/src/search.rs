@@ -5,6 +5,10 @@ use crate::eval;
 use crate::movegen;
 use crate::variants;
 
+/// Base penalty in centipawns for moves that lead to a repeated position.
+/// Scaled by repetition count: 1st repeat = 100cp, 2nd = 200cp, etc.
+const REPETITION_PENALTY_BASE: i32 = 100;
+
 pub struct SearchParams {
     pub max_depth: u8,
 }
@@ -27,6 +31,7 @@ pub fn search(
     variant: &GameVariant,
     move_history: &[Move],
     params: &SearchParams,
+    position_keys: &[PositionKey],
 ) -> SearchResult {
     let mut nodes = 0u64;
     let legal = generate_legal_moves(board, color, variant, move_history);
@@ -55,8 +60,25 @@ pub fn search(
 
         let opponent = opposite_color(color);
 
+        // Check for repetition
+        let new_key = PositionKey::from_board(&new_board, &opponent, &new_history);
+        let rep_count = count_repetitions(&new_key, position_keys);
+        if rep_count >= 2 {
+            // This would be threefold repetition — forced draw
+            let score = 0;
+            nodes += 1;
+            if score > best_score {
+                best_score = score;
+                best_move = Some(m.clone());
+            }
+            continue;
+        }
+
+        let mut new_keys = position_keys.to_vec();
+        new_keys.push(new_key);
+
         // Check terminal state before recursing
-        let score = if is_terminal_after_move(&new_board, &opponent, variant, color, &new_history) {
+        let mut score = if is_terminal_after_move(&new_board, &opponent, variant, color, &new_history) {
             terminal_score(&new_board, variant, color, params.max_depth)
         } else {
             -negamax(
@@ -68,8 +90,14 @@ pub fn search(
                 -beta,
                 -alpha,
                 &mut nodes,
+                &new_keys,
             )
         };
+
+        // Penalize moves that lead to repeated positions, scaling with repetition count
+        if rep_count >= 1 {
+            score -= REPETITION_PENALTY_BASE * (rep_count as i32);
+        }
 
         nodes += 1;
 
@@ -99,6 +127,7 @@ fn negamax(
     mut alpha: i32,
     beta: i32,
     nodes: &mut u64,
+    position_keys: &[PositionKey],
 ) -> i32 {
     if depth == 0 {
         *nodes += 1;
@@ -124,7 +153,29 @@ fn negamax(
 
         let opponent = opposite_color(color);
 
-        let score = if is_terminal_after_move(&new_board, &opponent, variant, color, &new_history) {
+        // Check for repetition
+        let new_key = PositionKey::from_board(&new_board, &opponent, &new_history);
+        let rep_count = count_repetitions(&new_key, position_keys);
+        if rep_count >= 2 {
+            // Threefold repetition — draw
+            let score = 0;
+            *nodes += 1;
+            if score > best_score {
+                best_score = score;
+            }
+            if score > alpha {
+                alpha = score;
+            }
+            if alpha >= beta {
+                break;
+            }
+            continue;
+        }
+
+        let mut new_keys = position_keys.to_vec();
+        new_keys.push(new_key);
+
+        let mut score = if is_terminal_after_move(&new_board, &opponent, variant, color, &new_history) {
             terminal_score(&new_board, variant, color, depth)
         } else {
             -negamax(
@@ -136,8 +187,13 @@ fn negamax(
                 -beta,
                 -alpha,
                 nodes,
+                &new_keys,
             )
         };
+
+        if rep_count >= 1 {
+            score -= REPETITION_PENALTY_BASE * (rep_count as i32);
+        }
 
         *nodes += 1;
 

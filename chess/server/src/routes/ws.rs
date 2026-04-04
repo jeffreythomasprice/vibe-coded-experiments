@@ -48,6 +48,8 @@ async fn handle_socket(mut socket: WebSocket, game_id: Uuid, state: AppState) {
                             crate::ai::manager::GameEvent::MoveMade { game_id, .. } => *game_id,
                             crate::ai::manager::GameEvent::AiThinkingCompleted { game_id } => *game_id,
                             crate::ai::manager::GameEvent::AiProgress { game_id, .. } => *game_id,
+                            crate::ai::manager::GameEvent::GameAbandoned { game_id } => *game_id,
+                            crate::ai::manager::GameEvent::GameResigned { game_id, .. } => *game_id,
                         };
 
                         if event_game_id != game_id {

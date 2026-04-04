@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Theme",
+  "description": "User theme configuration for board colors and piece rendering",
+  "type": "object",
+  "required": ["name", "board", "pieces"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "board": {
+      "$ref": "#/definitions/BoardColors"
+    },
+    "pieces": {
+      "$ref": "#/definitions/PieceStyle"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "BoardColors": {
+      "type": "object",
+      "required": ["light_square", "dark_square"],
+      "properties": {
+        "light_square": {
+          "type": "string",
+          "description": "CSS color for light squares"
+        },
+        "dark_square": {
+          "type": "string",
+          "description": "CSS color for dark squares"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PieceStyle": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["circle", "svg"],
+          "description": "Rendering mode: colored circles with letters or SVG graphics"
+        },
+        "white_fill": {
+          "type": "string",
+          "description": "Circle mode: fill color for white pieces"
+        },
+        "black_fill": {
+          "type": "string",
+          "description": "Circle mode: fill color for black pieces"
+        },
+        "white_text": {
+          "type": "string",
+          "description": "Circle mode: text color for white pieces"
+        },
+        "black_text": {
+          "type": "string",
+          "description": "Circle mode: text color for black pieces"
+        },
+        "svg_base_path": {
+          "type": "string",
+          "description": "SVG mode: URL prefix for piece SVGs (e.g. /standard-theme)"
+        },
+        "white_tint": {
+          "type": "string",
+          "description": "SVG mode: tint color applied to white pieces"
+        },
+        "black_tint": {
+          "type": "string",
+          "description": "SVG mode: tint color applied to black pieces"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

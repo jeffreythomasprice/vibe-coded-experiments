@@ -19,4 +19,5 @@ pub mod schemas {
     pub const GAME_SUMMARY: &str = include_str!("../schemas/game_summary.json");
     pub const LIST_GAMES_RESPONSE: &str = include_str!("../schemas/list_games_response.json");
     pub const AI_ENGINES_RESPONSE: &str = include_str!("../schemas/ai_engines_response.json");
+    pub const THEME: &str = include_str!("../schemas/theme.json");
 }

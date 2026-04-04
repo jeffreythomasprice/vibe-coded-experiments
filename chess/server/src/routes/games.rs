@@ -284,6 +284,8 @@ pub async fn create_game(
     let player_black = resolve_player(&payload.player_black, &state)
         .await?;
 
+    let creator_id = Uuid::parse_str(&auth_user.user_id).map_err(|_| internal_error())?;
+
     let game = Game {
         id: Uuid::new_v4(),
         variant,
@@ -294,20 +296,23 @@ pub async fn create_game(
         active_color: Some(PieceColor::White),
         move_history: Vec::new(),
         ai_thinking: Some(false),
+        resigned_by: None,
+        created_by: Some(creator_id),
     };
 
     let game_json =
         serde_json::to_value(&game).map_err(|_| internal_error())?;
 
     let row = sqlx::query_as::<_, (Uuid, DateTime<Utc>, DateTime<Utc>)>(
-        "INSERT INTO games (id, variant, status, state, created_at, updated_at) \
-         VALUES ($1, $2, $3, $4, now(), now()) \
+        "INSERT INTO games (id, variant, status, state, created_by, created_at, updated_at) \
+         VALUES ($1, $2, $3, $4, $5, now(), now()) \
          RETURNING id, created_at, updated_at",
     )
     .bind(game.id)
     .bind(game.variant.to_string())
     .bind(game.status.to_string())
     .bind(&game_json)
+    .bind(creator_id)
     .fetch_one(&state.db)
     .await
     .map_err(|_| internal_error())?;
@@ -615,4 +620,134 @@ pub async fn legal_moves(
     let moves = chess_engine::legal_moves(&game.board, active_color, &game.variant, &game.move_history);
 
     Ok((StatusCode::OK, Json(moves)))
+}
+
+pub async fn abandon_game(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(game_id): Path<Uuid>,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let row: Option<(serde_json::Value, Option<Uuid>)> =
+        sqlx::query_as("SELECT state, created_by FROM games WHERE id = $1")
+            .bind(game_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| internal_error())?;
+
+    let (state_json, created_by) = row.ok_or_else(not_found)?;
+    let mut game: Game =
+        serde_json::from_value(state_json).map_err(|_| internal_error())?;
+
+    if !matches!(game.status, GameStatus::Active | GameStatus::Check) {
+        return Err(bad_request("game is not active"));
+    }
+
+    let user_id = Uuid::parse_str(&auth_user.user_id).map_err(|_| internal_error())?;
+    let is_ai_vs_ai =
+        game.player_white.kind == PlayerKind::Ai && game.player_black.kind == PlayerKind::Ai;
+    let is_human_player = game.player_white.name == auth_user.username
+        && game.player_white.kind == PlayerKind::Human
+        || game.player_black.name == auth_user.username
+            && game.player_black.kind == PlayerKind::Human;
+
+    if !auth_user.is_admin {
+        let allowed = if is_ai_vs_ai {
+            created_by == Some(user_id)
+        } else {
+            is_human_player
+        };
+        if !allowed {
+            return Err(forbidden("not_authorized"));
+        }
+    }
+
+    // Cancel AI tasks
+    state.ai_manager.cancel_game(game_id);
+
+    game.status = GameStatus::Abandoned;
+    game.ai_thinking = Some(false);
+
+    let game_json = serde_json::to_value(&game).map_err(|_| internal_error())?;
+
+    sqlx::query(
+        "UPDATE games SET state = $1, status = 'abandoned', ai_thinking = false, updated_at = now() WHERE id = $2",
+    )
+    .bind(&game_json)
+    .bind(game_id)
+    .execute(&state.db)
+    .await
+    .map_err(|_| internal_error())?;
+
+    let _ = state
+        .ai_manager
+        .event_tx()
+        .send(crate::ai::manager::GameEvent::GameAbandoned { game_id });
+
+    Ok((StatusCode::OK, Json(game_json)))
+}
+
+pub async fn surrender_game(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(game_id): Path<Uuid>,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let row: Option<(serde_json::Value,)> =
+        sqlx::query_as("SELECT state FROM games WHERE id = $1")
+            .bind(game_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| internal_error())?;
+
+    let (state_json,) = row.ok_or_else(not_found)?;
+    let mut game: Game =
+        serde_json::from_value(state_json).map_err(|_| internal_error())?;
+
+    if !matches!(game.status, GameStatus::Active | GameStatus::Check) {
+        return Err(bad_request("game is not active"));
+    }
+
+    // Determine which color the user is
+    let user_color = if game.player_white.name == auth_user.username
+        && game.player_white.kind == PlayerKind::Human
+    {
+        "white"
+    } else if game.player_black.name == auth_user.username
+        && game.player_black.kind == PlayerKind::Human
+    {
+        "black"
+    } else {
+        return Err(forbidden("not_participant"));
+    };
+
+    // Cancel AI tasks
+    state.ai_manager.cancel_game(game_id);
+
+    game.status = GameStatus::Resigned;
+    game.ai_thinking = Some(false);
+    game.resigned_by = Some(match user_color {
+        "white" => PieceColor::White,
+        _ => PieceColor::Black,
+    });
+
+    let game_json = serde_json::to_value(&game).map_err(|_| internal_error())?;
+
+    sqlx::query(
+        "UPDATE games SET state = $1, status = 'resigned', ai_thinking = false, updated_at = now() WHERE id = $2",
+    )
+    .bind(&game_json)
+    .bind(game_id)
+    .execute(&state.db)
+    .await
+    .map_err(|_| internal_error())?;
+
+    let _ = state
+        .ai_manager
+        .event_tx()
+        .send(crate::ai::manager::GameEvent::GameResigned {
+            game_id,
+            status: "resigned".to_string(),
+            resigned_by: user_color.to_string(),
+        });
+
+    Ok((StatusCode::OK, Json(game_json)))
 }

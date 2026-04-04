@@ -6,6 +6,7 @@ mod api;
 mod auth;
 mod components;
 mod pages;
+pub mod theme;
 
 fn main() {
     console_error_panic_hook::set_once();
@@ -57,6 +58,9 @@ fn App() -> impl IntoView {
     };
     provide_context(toast_state);
 
+    let theme_state = theme::ThemeState::new();
+    provide_context(theme_state);
+
     view! {
         <Router>
             <Toast />
@@ -68,6 +72,7 @@ fn App() -> impl IntoView {
                     <Route path=path!("/games") view=ProtectedGames />
                     <Route path=path!("/game/:id") view=ProtectedGameView />
                     <Route path=path!("/users") view=ProtectedUsers />
+                    <Route path=path!("/settings") view=ProtectedSettings />
                 </Routes>
             </main>
         </Router>
@@ -87,6 +92,7 @@ fn NavBar() -> impl IntoView {
         let on_logout = move |ev: leptos::ev::MouseEvent| {
             ev.prevent_default();
             auth::remove_token();
+            theme::clear_storage();
             auth_state.set_authenticated(false);
             navigate("/login", Default::default());
         };
@@ -101,6 +107,8 @@ fn NavBar() -> impl IntoView {
                 } else {
                     None
                 }}
+                " | "
+                <a href="/settings">"Settings"</a>
                 " | "
                 <a href="/login" on:click=on_logout>"Log Out"</a>
             </nav>
@@ -139,6 +147,15 @@ fn ProtectedUsers() -> impl IntoView {
     view! {
         <components::auth_guard::AuthGuard>
             <pages::users::UsersPage />
+        </components::auth_guard::AuthGuard>
+    }
+}
+
+#[component]
+fn ProtectedSettings() -> impl IntoView {
+    view! {
+        <components::auth_guard::AuthGuard>
+            <pages::settings::SettingsPage />
         </components::auth_guard::AuthGuard>
     }
 }

@@ -6,6 +6,9 @@ actually test all kinds of gameplay
 
 
 
+
+replay, go replay previous moves in an animation
+
 collect constants in one file for frontend and one for backend
 
 animation when a piece is taken

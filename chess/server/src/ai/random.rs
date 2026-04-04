@@ -33,7 +33,21 @@ impl AiEngine for RandomEngine {
         if moves.is_empty() {
             return None;
         }
-        let idx = rand::thread_rng().gen_range(0..moves.len());
-        Some(moves.into_iter().nth(idx).unwrap())
+
+        // Prefer moves that don't lead to repeated positions
+        let position_keys = chess_engine::build_position_keys(move_history);
+        let non_repeating: Vec<&Move> = moves
+            .iter()
+            .filter(|m| !chess_engine::would_repeat(board, m, color, move_history, &position_keys))
+            .collect();
+
+        let mut rng = rand::thread_rng();
+        if non_repeating.is_empty() {
+            let idx = rng.gen_range(0..moves.len());
+            Some(moves.into_iter().nth(idx).unwrap())
+        } else {
+            let idx = rng.gen_range(0..non_repeating.len());
+            Some(non_repeating[idx].clone())
+        }
     }
 }

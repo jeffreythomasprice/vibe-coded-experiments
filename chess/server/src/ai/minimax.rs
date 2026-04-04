@@ -26,7 +26,7 @@ impl AiEngine for MinimaxEngine {
             label: "Search Depth".into(),
             description: "How many moves ahead to search (higher = stronger but slower)".into(),
             param_type: AiParameterDefParamType::Integer,
-            default_value: "3".into(),
+            default_value: "6".into(),
             min_value: Some("1".into()),
             max_value: Some("6".into()),
         }]

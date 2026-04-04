@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use serde::Serialize;
 use sqlx::PgPool;
 use tokio::sync::broadcast;
@@ -36,6 +36,14 @@ pub enum GameEvent {
         game_id: Uuid,
         message: String,
     },
+    GameAbandoned {
+        game_id: Uuid,
+    },
+    GameResigned {
+        game_id: Uuid,
+        status: String,
+        resigned_by: String,
+    },
 }
 
 /// Manages background AI move generation tasks.
@@ -43,6 +51,7 @@ pub struct AiManager {
     pub registry: Arc<AiRegistry>,
     db: PgPool,
     active_tasks: Arc<DashMap<Uuid, JoinHandle<()>>>,
+    cancelled_games: Arc<DashSet<Uuid>>,
     event_tx: broadcast::Sender<GameEvent>,
 }
 
@@ -53,6 +62,7 @@ impl AiManager {
             registry,
             db,
             active_tasks: Arc::new(DashMap::new()),
+            cancelled_games: Arc::new(DashSet::new()),
             event_tx,
         }
     }
@@ -64,6 +74,9 @@ impl AiManager {
 
     /// Schedule AI move generation for a game.
     pub fn schedule_move(self: &Arc<Self>, game_id: Uuid) {
+        if self.cancelled_games.contains(&game_id) {
+            return;
+        }
         let manager = Arc::clone(self);
         let handle = tokio::spawn(async move {
             if let Err(e) = manager.execute_move(game_id).await {
@@ -185,7 +198,7 @@ impl AiManager {
             .send(GameEvent::AiThinkingCompleted { game_id });
 
         // If the game is still active and the next player is also AI, schedule another move
-        if is_game_active(&new_status) {
+        if is_game_active(&new_status) && !self.cancelled_games.contains(&game_id) {
             let next_player = match next_color {
                 PieceColor::White => &updated_game.player_white,
                 PieceColor::Black => &updated_game.player_black,
@@ -220,6 +233,19 @@ impl AiManager {
             .map_err(|e| format!("DB update error: {e}"))?;
 
         Ok(())
+    }
+
+    /// Cancel any active AI task for a game and prevent future scheduling.
+    pub fn cancel_game(&self, game_id: Uuid) {
+        self.cancelled_games.insert(game_id);
+        if let Some((_, handle)) = self.active_tasks.remove(&game_id) {
+            handle.abort();
+        }
+    }
+
+    /// Get a reference to the event sender for broadcasting events.
+    pub fn event_tx(&self) -> &broadcast::Sender<GameEvent> {
+        &self.event_tx
     }
 
     /// Re-schedule AI moves for games that were thinking when the server stopped.

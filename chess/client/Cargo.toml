@@ -18,6 +18,8 @@ web-sys = { version = "0.3", features = [
     "WebSocket", "MessageEvent",
     "MouseEvent", "HtmlElement", "DomRect",
     "Performance",
+    "HtmlImageElement",
+    "Document", "HtmlCanvasElement",
 ] }
 gloo-timers = "0.3"
 wasm-bindgen = "0.2"

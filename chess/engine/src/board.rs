@@ -1,6 +1,8 @@
 use chess_shared::*;
 use std::collections::HashMap;
 
+use crate::movegen;
+
 /// Internal square representation (file 0-7, rank 0-7).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Square {
@@ -332,4 +334,153 @@ pub fn opposite_color(color: &PieceColor) -> PieceColor {
         PieceColor::White => PieceColor::Black,
         PieceColor::Black => PieceColor::White,
     }
+}
+
+/// A hashable representation of a chess position for repetition detection.
+/// Two positions are the same if pieces, active color, castling rights, and en passant match.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PositionKey {
+    squares: [u8; 64],
+    active_color: u8,
+    castling: u8,
+    en_passant_file: u8, // 0xFF = no en passant
+}
+
+fn encode_piece(piece: &Piece) -> u8 {
+    let type_val = match piece.piece_type {
+        PieceType::Pawn => 1,
+        PieceType::Knight => 2,
+        PieceType::Bishop => 3,
+        PieceType::Rook => 4,
+        PieceType::Queen => 5,
+        PieceType::King => 6,
+    };
+    match piece.color {
+        PieceColor::White => type_val,
+        PieceColor::Black => type_val + 6,
+    }
+}
+
+impl PositionKey {
+    pub fn from_board(board: &Board, active_color: &PieceColor, move_history: &[Move]) -> Self {
+        let mut squares = [0u8; 64];
+        for (idx, sq) in board.squares.iter().enumerate() {
+            if let Some(piece) = sq {
+                squares[idx] = encode_piece(piece);
+            }
+        }
+
+        let rights = CastlingRights::from_history(move_history);
+        let castling = (rights.white_kingside as u8)
+            | ((rights.white_queenside as u8) << 1)
+            | ((rights.black_kingside as u8) << 2)
+            | ((rights.black_queenside as u8) << 3);
+
+        let en_passant_file = en_passant_target(move_history)
+            .map(|sq| sq.file)
+            .unwrap_or(0xFF);
+
+        Self {
+            squares,
+            active_color: match active_color {
+                PieceColor::White => 0,
+                PieceColor::Black => 1,
+            },
+            castling,
+            en_passant_file,
+        }
+    }
+}
+
+/// Build the standard initial board position.
+pub fn initial_board() -> Board {
+    let mut board = Board::new();
+    // White pieces
+    board.set(Square::new(0, 0), Some(Piece { color: PieceColor::White, piece_type: PieceType::Rook }));
+    board.set(Square::new(1, 0), Some(Piece { color: PieceColor::White, piece_type: PieceType::Knight }));
+    board.set(Square::new(2, 0), Some(Piece { color: PieceColor::White, piece_type: PieceType::Bishop }));
+    board.set(Square::new(3, 0), Some(Piece { color: PieceColor::White, piece_type: PieceType::Queen }));
+    board.set(Square::new(4, 0), Some(Piece { color: PieceColor::White, piece_type: PieceType::King }));
+    board.set(Square::new(5, 0), Some(Piece { color: PieceColor::White, piece_type: PieceType::Bishop }));
+    board.set(Square::new(6, 0), Some(Piece { color: PieceColor::White, piece_type: PieceType::Knight }));
+    board.set(Square::new(7, 0), Some(Piece { color: PieceColor::White, piece_type: PieceType::Rook }));
+    for file in 0..8 {
+        board.set(Square::new(file, 1), Some(Piece { color: PieceColor::White, piece_type: PieceType::Pawn }));
+    }
+    // Black pieces
+    board.set(Square::new(0, 7), Some(Piece { color: PieceColor::Black, piece_type: PieceType::Rook }));
+    board.set(Square::new(1, 7), Some(Piece { color: PieceColor::Black, piece_type: PieceType::Knight }));
+    board.set(Square::new(2, 7), Some(Piece { color: PieceColor::Black, piece_type: PieceType::Bishop }));
+    board.set(Square::new(3, 7), Some(Piece { color: PieceColor::Black, piece_type: PieceType::Queen }));
+    board.set(Square::new(4, 7), Some(Piece { color: PieceColor::Black, piece_type: PieceType::King }));
+    board.set(Square::new(5, 7), Some(Piece { color: PieceColor::Black, piece_type: PieceType::Bishop }));
+    board.set(Square::new(6, 7), Some(Piece { color: PieceColor::Black, piece_type: PieceType::Knight }));
+    board.set(Square::new(7, 7), Some(Piece { color: PieceColor::Black, piece_type: PieceType::Rook }));
+    for file in 0..8 {
+        board.set(Square::new(file, 6), Some(Piece { color: PieceColor::Black, piece_type: PieceType::Pawn }));
+    }
+    board
+}
+
+/// Replay move history from the initial position and collect a PositionKey at each step.
+/// Returns keys for positions 0 through N (initial position + after each move).
+pub fn build_position_keys(move_history: &[Move]) -> Vec<PositionKey> {
+    let mut board = initial_board();
+    let mut keys = Vec::with_capacity(move_history.len() + 1);
+    let mut color = PieceColor::White;
+
+    // Initial position key
+    keys.push(PositionKey::from_board(&board, &color, &[]));
+
+    for (i, m) in move_history.iter().enumerate() {
+        let im = InternalMove::from_schema_move(m);
+        movegen::apply_internal_move(&mut board, &im);
+        color = opposite_color(&color);
+        keys.push(PositionKey::from_board(&board, &color, &move_history[..=i]));
+    }
+
+    keys
+}
+
+/// Check if the current position (after all moves) has occurred 3+ times.
+pub fn is_threefold_repetition(move_history: &[Move]) -> bool {
+    let keys = build_position_keys(move_history);
+    let Some(current) = keys.last() else {
+        return false;
+    };
+    keys.iter().filter(|k| *k == current).count() >= 3
+}
+
+/// Count how many times a position key appears in the given history.
+pub fn count_repetitions(key: &PositionKey, position_keys: &[PositionKey]) -> usize {
+    position_keys.iter().filter(|k| *k == key).count()
+}
+
+/// Check if the 50-move rule applies: 100 half-moves (50 per side) without a pawn move or capture.
+pub fn is_fifty_move_draw(move_history: &[Move]) -> bool {
+    if move_history.len() < 100 {
+        return false;
+    }
+
+    let mut board = initial_board();
+    let mut halfmove_clock: usize = 0;
+
+    for m in move_history {
+        let im = InternalMove::from_schema_move(m);
+        let moving_piece = board.get(im.from);
+        let is_pawn = moving_piece.is_some_and(|p| p.piece_type == PieceType::Pawn);
+        let is_capture = board.get(im.to).is_some();
+        // Also check en passant: pawn moving diagonally to empty square
+        let is_en_passant = is_pawn && im.from.file != im.to.file && board.get(im.to).is_none();
+
+        movegen::apply_internal_move(&mut board, &im);
+
+        if is_pawn || is_capture || is_en_passant {
+            halfmove_clock = 0;
+        } else {
+            halfmove_clock += 1;
+        }
+    }
+
+    halfmove_clock >= 100
 }

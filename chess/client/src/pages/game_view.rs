@@ -35,6 +35,10 @@ struct Game {
     ai_thinking: Option<bool>,
     #[serde(default)]
     move_history: Vec<ChessMove>,
+    #[serde(default)]
+    resigned_by: Option<String>,
+    #[serde(default)]
+    created_by: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -60,12 +64,14 @@ enum GameEvent {
     },
     AiThinkingCompleted { game_id: String },
     AiProgress { game_id: String, message: String },
+    GameAbandoned { game_id: String },
+    GameResigned { game_id: String, status: String, resigned_by: String },
 }
+
+use chess_shared::{PieceStyleMode, Theme};
 
 const SQUARE_SIZE: f64 = 60.0;
 const BOARD_PX: f64 = SQUARE_SIZE * 8.0;
-const LIGHT_SQ: &str = "#f0d9b5";
-const DARK_SQ: &str = "#b58863";
 const SELECTED_COLOR: &str = "rgba(20, 85, 200, 0.4)";
 const LEGAL_MOVE_COLOR: &str = "rgba(20, 150, 50, 0.5)";
 const LAST_MOVE_HIGHLIGHT: &str = "rgba(255, 255, 0, 0.3)";
@@ -104,12 +110,67 @@ fn animation_duration(from: &str, to: &str) -> f64 {
     dist * ANIM_MS_PER_SQUARE
 }
 
-fn draw_piece_at(ctx: &web_sys::CanvasRenderingContext2d, piece: &Piece, cx: f64, cy: f64) {
+fn draw_piece_at(
+    ctx: &web_sys::CanvasRenderingContext2d,
+    piece: &Piece,
+    cx: f64,
+    cy: f64,
+    theme: &Theme,
+    images: &HashMap<String, web_sys::HtmlImageElement>,
+) {
+    match theme.pieces.mode {
+        PieceStyleMode::Svg => {
+            let key = format!("{}-{}", piece.piece_type, piece.color);
+            if let Some(img) = images.get(&key) {
+                let size = SQUARE_SIZE * 0.8;
+                let x = cx - size / 2.0;
+                let y = cy - size / 2.0;
+
+                // Get tint color for this piece color
+                let tint = if piece.color == "white" {
+                    theme.pieces.white_tint.as_deref()
+                } else {
+                    theme.pieces.black_tint.as_deref()
+                };
+
+                if let Some(tint_color) = tint.filter(|s| !s.is_empty()) {
+                    // Draw with tint using offscreen canvas compositing
+                    draw_tinted_image(ctx, img, x, y, size, tint_color);
+                } else {
+                    // Draw SVG as-is
+                    let _ = ctx.draw_image_with_html_image_element_and_dw_and_dh(
+                        img, x, y, size, size,
+                    );
+                }
+            } else {
+                // Fallback to circle while images load
+                draw_piece_circle(ctx, piece, cx, cy, theme);
+            }
+        }
+        PieceStyleMode::Circle => {
+            draw_piece_circle(ctx, piece, cx, cy, theme);
+        }
+    }
+}
+
+fn draw_piece_circle(
+    ctx: &web_sys::CanvasRenderingContext2d,
+    piece: &Piece,
+    cx: f64,
+    cy: f64,
+    theme: &Theme,
+) {
     let radius = SQUARE_SIZE * 0.35;
     let (fill, text_color) = if piece.color == "white" {
-        ("#ffffff", "#333333")
+        (
+            theme.pieces.white_fill.as_deref().unwrap_or("#ffffff"),
+            theme.pieces.white_text.as_deref().unwrap_or("#333333"),
+        )
     } else {
-        ("#333333", "#ffffff")
+        (
+            theme.pieces.black_fill.as_deref().unwrap_or("#333333"),
+            theme.pieces.black_text.as_deref().unwrap_or("#ffffff"),
+        )
     };
 
     ctx.begin_path();
@@ -122,6 +183,46 @@ fn draw_piece_at(ctx: &web_sys::CanvasRenderingContext2d, piece: &Piece, cx: f64
 
     ctx.set_fill_style_str(text_color);
     let _ = ctx.fill_text(piece_letter(&piece.piece_type), cx, cy);
+}
+
+fn draw_tinted_image(
+    ctx: &web_sys::CanvasRenderingContext2d,
+    img: &web_sys::HtmlImageElement,
+    x: f64,
+    y: f64,
+    size: f64,
+    tint_color: &str,
+) {
+    // Use an offscreen canvas to apply tint via compositing
+    let document = web_sys::window().unwrap().document().unwrap();
+    let offscreen = document
+        .create_element("canvas")
+        .unwrap()
+        .dyn_into::<web_sys::HtmlCanvasElement>()
+        .unwrap();
+    let s = size.ceil() as u32;
+    offscreen.set_width(s);
+    offscreen.set_height(s);
+    let off_ctx = offscreen
+        .get_context("2d")
+        .ok()
+        .flatten()
+        .unwrap()
+        .dyn_into::<web_sys::CanvasRenderingContext2d>()
+        .unwrap();
+
+    // 1. Draw the original image
+    let _ = off_ctx.draw_image_with_html_image_element_and_dw_and_dh(img, 0.0, 0.0, size, size);
+    // 2. Multiply with tint color (darkens/colorizes)
+    off_ctx.set_global_composite_operation("multiply").unwrap();
+    off_ctx.set_fill_style_str(tint_color);
+    off_ctx.fill_rect(0.0, 0.0, size, size);
+    // 3. Restore original alpha mask
+    off_ctx.set_global_composite_operation("destination-in").unwrap();
+    let _ = off_ctx.draw_image_with_html_image_element_and_dw_and_dh(img, 0.0, 0.0, size, size);
+
+    // Draw the result onto the main canvas
+    let _ = ctx.draw_image_with_html_canvas_element(&offscreen, x, y);
 }
 
 fn parse_square(sq: &str) -> Option<(usize, usize)> {
@@ -161,6 +262,7 @@ fn piece_letter(piece_type: &str) -> &str {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_board(
     ctx: &web_sys::CanvasRenderingContext2d,
     board: &BoardState,
@@ -169,12 +271,17 @@ fn draw_board(
     last_move: Option<&ChessMove>,
     anim: Option<&AnimationState>,
     now: f64,
+    theme: &Theme,
+    images: &HashMap<String, web_sys::HtmlImageElement>,
 ) {
+    let light_sq = &theme.board.light_square;
+    let dark_sq = &theme.board.dark_square;
+
     // Draw squares
     for rank in 0..8usize {
         for file in 0..8usize {
             let is_light = (rank + file) % 2 == 0;
-            ctx.set_fill_style_str(if is_light { LIGHT_SQ } else { DARK_SQ });
+            ctx.set_fill_style_str(if is_light { light_sq } else { dark_sq });
             let x = file as f64 * SQUARE_SIZE;
             let y = (7 - rank) as f64 * SQUARE_SIZE;
             ctx.fill_rect(x, y, SQUARE_SIZE, SQUARE_SIZE);
@@ -210,7 +317,7 @@ fn draw_board(
         let x = file as f64 * SQUARE_SIZE + SQUARE_SIZE - 10.0;
         let y = BOARD_PX - 3.0;
         let is_light = file % 2 == 0;
-        ctx.set_fill_style_str(if is_light { DARK_SQ } else { LIGHT_SQ });
+        ctx.set_fill_style_str(if is_light { dark_sq } else { light_sq });
         let _ = ctx.fill_text(&label, x, y);
     }
     for rank in 0..8 {
@@ -218,7 +325,7 @@ fn draw_board(
         let x = 2.0;
         let y = (7 - rank) as f64 * SQUARE_SIZE + 12.0;
         let is_light = rank % 2 == 0;
-        ctx.set_fill_style_str(if is_light { DARK_SQ } else { LIGHT_SQ });
+        ctx.set_fill_style_str(if is_light { dark_sq } else { light_sq });
         let _ = ctx.fill_text(&label, x, y);
     }
 
@@ -230,7 +337,7 @@ fn draw_board(
                 ctx.set_text_align("center");
                 ctx.set_text_baseline("middle");
                 ctx.set_global_alpha(GHOST_ALPHA);
-                draw_piece_at(ctx, piece, cx, cy);
+                draw_piece_at(ctx, piece, cx, cy, theme, images);
                 ctx.set_global_alpha(1.0);
             }
         }
@@ -252,7 +359,7 @@ fn draw_board(
         };
         let cx = file as f64 * SQUARE_SIZE + SQUARE_SIZE / 2.0;
         let cy = (7 - rank) as f64 * SQUARE_SIZE + SQUARE_SIZE / 2.0;
-        draw_piece_at(ctx, piece, cx, cy);
+        draw_piece_at(ctx, piece, cx, cy, theme, images);
     }
 
     // Draw animating piece at interpolated position
@@ -260,7 +367,7 @@ fn draw_board(
         let t = ((now - a.start_time) / a.duration_ms).clamp(0.0, 1.0);
         let cx = a.from_px.0 + (a.to_px.0 - a.from_px.0) * t;
         let cy = a.from_px.1 + (a.to_px.1 - a.from_px.1) * t;
-        draw_piece_at(ctx, &a.piece, cx, cy);
+        draw_piece_at(ctx, &a.piece, cx, cy, theme, images);
     }
 
     // Draw legal move indicators (on top of pieces)
@@ -342,6 +449,35 @@ fn get_current_username() -> String {
         .unwrap_or_default()
 }
 
+fn get_current_user_id() -> String {
+    crate::auth::get_token()
+        .and_then(|t| {
+            #[derive(Deserialize)]
+            struct Claims {
+                sub: String,
+            }
+            let payload_b64url = t.split('.').nth(1)?;
+            let b64: String = payload_b64url
+                .chars()
+                .map(|c| match c {
+                    '-' => '+',
+                    '_' => '/',
+                    other => other,
+                })
+                .collect();
+            let padded = match b64.len() % 4 {
+                2 => format!("{b64}=="),
+                3 => format!("{b64}="),
+                _ => b64,
+            };
+            let decoded = web_sys::window()?.atob(&padded).ok()?;
+            serde_json::from_str::<Claims>(&decoded)
+                .ok()
+                .map(|c| c.sub)
+        })
+        .unwrap_or_default()
+}
+
 fn is_game_over(status: &str) -> bool {
     matches!(
         status,
@@ -365,6 +501,9 @@ pub fn GameViewPage() -> impl IntoView {
 
     let current_username = get_current_username();
     let current_username_for_turn = current_username.clone();
+    let current_user_id = get_current_user_id();
+    let auth_state = expect_context::<crate::auth::AuthState>();
+    let confirm_action = RwSignal::new(Option::<&'static str>::None); // "abandon" or "surrender"
 
     let is_my_turn = Memo::new(move |_| {
         let Some(g) = game.get() else {
@@ -480,13 +619,24 @@ pub fn GameViewPage() -> impl IntoView {
                 }
                 "stalemate" => "Stalemate — Draw!".into(),
                 "draw" => "Draw!".into(),
-                "resigned" => "Game resigned.".into(),
-                "abandoned" => "Game abandoned.".into(),
+                "resigned" => {
+                    match g.resigned_by.as_deref() {
+                        Some("white") => format!("{} surrendered.", g.player_white.name),
+                        Some("black") => format!("{} surrendered.", g.player_black.name),
+                        _ => "Game resigned.".into(),
+                    }
+                }
+                "abandoned" => "Game was abandoned.".into(),
                 _ => display_status(&g.status).to_string(),
             };
         }
         if ai_thinking.get() {
-            return "AI is thinking...".into();
+            let color_label = match g.active_color.as_deref() {
+                Some("white") => "White",
+                Some("black") => "Black",
+                _ => "",
+            };
+            return format!("AI ({color_label}) is thinking...");
         }
         if is_my_turn.get() {
             return "Your turn".into();
@@ -500,7 +650,12 @@ pub fn GameViewPage() -> impl IntoView {
             _ => return String::new(),
         };
         if opponent.kind == "ai" {
-            "AI is thinking...".into()
+            let color_label = match active.as_str() {
+                "white" => "White",
+                "black" => "Black",
+                _ => "",
+            };
+            format!("AI ({color_label}) is thinking...")
         } else {
             format!("Waiting for {}...", opponent.name)
         }
@@ -521,19 +676,104 @@ pub fn GameViewPage() -> impl IntoView {
                 let pw = format!("{} ({})", g.player_white.name, g.player_white.kind);
                 let pb = format!("{} ({})", g.player_black.name, g.player_black.kind);
                 let gid = game_id_signal.get();
+
+                let game_active = !is_game_over(&g.status);
+                let is_admin = auth_state.is_admin.get();
+                let is_ai_vs_ai = g.player_white.kind == "ai" && g.player_black.kind == "ai";
+                let is_human_player =
+                    (g.player_white.name == current_username && g.player_white.kind == "human")
+                    || (g.player_black.name == current_username && g.player_black.kind == "human");
+                let is_creator = g.created_by.as_deref() == Some(current_user_id.as_str());
+
+                let can_abandon = game_active && (is_admin || (is_ai_vs_ai && is_creator) || is_human_player);
+                let can_surrender = game_active && is_human_player;
+
+                let gid_abandon = game_id_signal.get();
+                let gid_surrender = game_id_signal.get();
+
                 view! {
                     <div style="margin-bottom: 1em;">
                         <h2>{info_line}</h2>
                         <p><strong>"White: "</strong>{pw}" vs "<strong>"Black: "</strong>{pb}</p>
                     </div>
-                    <div style="margin-bottom: 0.5em;">
+                    <div style="margin-bottom: 0.5em; display: flex; gap: 0.5em; align-items: center;">
                         <TurnIndicator
                             text=turn_status()
                             is_my_turn=is_my_turn.get()
                             ai_thinking=ai_thinking.get()
                             game_over=is_game_over(&g.status)
                         />
+                        {can_abandon.then(|| view! {
+                            <button
+                                on:click=move |_| { confirm_action.set(Some("abandon")); }
+                                style="padding: 0.5em 1em; background: #dc3545; color: white; \
+                                       border: none; border-radius: 4px; cursor: pointer; font-weight: bold;"
+                            >
+                                "Abandon"
+                            </button>
+                        })}
+                        {can_surrender.then(|| view! {
+                            <button
+                                on:click=move |_| { confirm_action.set(Some("surrender")); }
+                                style="padding: 0.5em 1em; background: #ffc107; color: #333; \
+                                       border: none; border-radius: 4px; cursor: pointer; font-weight: bold;"
+                            >
+                                "Surrender"
+                            </button>
+                        })}
                     </div>
+                    // Confirmation modal
+                    {move || confirm_action.get().map(|action| {
+                        let title = if action == "abandon" { "Abandon Game" } else { "Surrender" };
+                        let message = if action == "abandon" {
+                            "Are you sure you want to abandon this game? This cannot be undone."
+                        } else {
+                            "Are you sure you want to surrender? This cannot be undone."
+                        };
+                        let confirm_label = if action == "abandon" { "Abandon" } else { "Surrender" };
+                        let confirm_bg = if action == "abandon" { "#dc3545" } else { "#ffc107" };
+                        let confirm_color = if action == "abandon" { "white" } else { "#333" };
+                        let gid_a = gid_abandon.clone();
+                        let gid_s = gid_surrender.clone();
+                        view! {
+                            <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; \
+                                        background: rgba(0,0,0,0.5); display: flex; align-items: center; \
+                                        justify-content: center; z-index: 100;">
+                                <div style="background: white; border-radius: 8px; padding: 1.5em; \
+                                            max-width: 400px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                                    <h3 style="margin-top: 0;">{title}</h3>
+                                    <p>{message}</p>
+                                    <div style="display: flex; gap: 0.5em; justify-content: flex-end;">
+                                        <button
+                                            on:click=move |_| { confirm_action.set(None); }
+                                            style="padding: 0.5em 1em; background: #6c757d; color: white; \
+                                                   border: none; border-radius: 4px; cursor: pointer;"
+                                        >
+                                            "Cancel"
+                                        </button>
+                                        <button
+                                            on:click=move |_| {
+                                                confirm_action.set(None);
+                                                if action == "abandon" {
+                                                    let url = format!("/api/games/{}/abandon", gid_a);
+                                                    send_game_action(url, set_game, set_ai_thinking);
+                                                } else {
+                                                    let url = format!("/api/games/{}/surrender", gid_s);
+                                                    send_game_action(url, set_game, set_ai_thinking);
+                                                }
+                                            }
+                                            style=format!(
+                                                "padding: 0.5em 1em; background: {confirm_bg}; color: {confirm_color}; \
+                                                 border: none; border-radius: 4px; cursor: pointer; font-weight: bold;"
+                                            )
+                                        >
+                                            {confirm_label}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    })}
                     <ChessBoard
                         game=game
                         selected_square=selected_square
@@ -659,6 +899,25 @@ fn connect_game_ws(
                 set_ai_thinking.set(false);
             }
             GameEvent::AiProgress { .. } => {}
+            GameEvent::GameAbandoned { .. } => {
+                set_ai_thinking.set(false);
+                set_game.update(|g| {
+                    if let Some(g) = g {
+                        g.status = "abandoned".into();
+                        g.ai_thinking = Some(false);
+                    }
+                });
+            }
+            GameEvent::GameResigned { resigned_by, .. } => {
+                set_ai_thinking.set(false);
+                set_game.update(|g| {
+                    if let Some(g) = g {
+                        g.status = "resigned".into();
+                        g.ai_thinking = Some(false);
+                        g.resigned_by = Some(resigned_by.clone());
+                    }
+                });
+            }
         }
     });
 
@@ -684,88 +943,138 @@ fn ChessBoard(
     let game_id_for_click = game_id.clone();
     let game_id_for_promo = game_id.clone();
 
+    let theme_state = expect_context::<crate::theme::ThemeState>();
+    let svg_images: Rc<RefCell<HashMap<String, web_sys::HtmlImageElement>>> =
+        Rc::new(RefCell::new(HashMap::new()));
+    let images_loaded = RwSignal::new(0u32); // triggers redraw when images load
+
+    // SVG image preloading effect
+    {
+        let svg_images = svg_images.clone();
+        Effect::new(move || {
+            let theme = theme_state.theme.get();
+            if theme.pieces.mode != PieceStyleMode::Svg {
+                return;
+            }
+            let base_path = theme.pieces.svg_base_path.as_deref().unwrap_or("/standard-theme");
+            let pieces = ["pawn", "knight", "bishop", "rook", "queen", "king"];
+            let colors = ["white", "black"];
+
+            for piece_type in &pieces {
+                for color in &colors {
+                    let key = format!("{piece_type}-{color}");
+                    // Skip if already loaded
+                    if svg_images.borrow().contains_key(&key) {
+                        continue;
+                    }
+                    let url = format!("{base_path}/{key}.svg");
+                    let img = web_sys::HtmlImageElement::new().unwrap();
+                    let onload = Closure::<dyn FnMut()>::new(move || {
+                        images_loaded.update(|n| *n += 1);
+                    });
+                    img.set_onload(Some(onload.as_ref().unchecked_ref()));
+                    onload.forget();
+                    img.set_src(&url);
+                    svg_images.borrow_mut().insert(key, img);
+                }
+            }
+        });
+    }
+
     // Redraw effect
-    Effect::new(move || {
-        let Some(g) = game.get() else { return };
-        let selected = selected_square.get();
-        let moves = legal_moves.get();
-        let targets: HashSet<String> = moves.iter().map(|m| m.to.clone()).collect();
-        let anim = animation.get();
-        let last_move = g.move_history.last();
+    {
+        let svg_images = svg_images.clone();
+        Effect::new(move || {
+            let Some(g) = game.get() else { return };
+            let selected = selected_square.get();
+            let moves = legal_moves.get();
+            let targets: HashSet<String> = moves.iter().map(|m| m.to.clone()).collect();
+            let anim = animation.get();
+            let last_move = g.move_history.last();
+            let theme = theme_state.theme.get();
+            let _loaded = images_loaded.get(); // subscribe to image load changes
 
-        let Some(canvas) = canvas_ref.get() else { return };
-        let canvas_el: &web_sys::HtmlCanvasElement = canvas.as_ref();
-        let ctx = canvas_el
-            .get_context("2d")
-            .ok()
-            .flatten()
-            .and_then(|obj| obj.dyn_into::<web_sys::CanvasRenderingContext2d>().ok());
+            let Some(canvas) = canvas_ref.get() else { return };
+            let canvas_el: &web_sys::HtmlCanvasElement = canvas.as_ref();
+            let ctx = canvas_el
+                .get_context("2d")
+                .ok()
+                .flatten()
+                .and_then(|obj| obj.dyn_into::<web_sys::CanvasRenderingContext2d>().ok());
 
-        if let Some(ctx) = ctx {
-            let now = now_ms();
-            draw_board(&ctx, &g.board, selected.as_deref(), &targets, last_move, anim.as_ref(), now);
-        }
-    });
+            if let Some(ctx) = ctx {
+                let now = now_ms();
+                let imgs = svg_images.borrow();
+                draw_board(&ctx, &g.board, selected.as_deref(), &targets, last_move, anim.as_ref(), now, &theme, &imgs);
+            }
+        });
+    }
 
     // Animation loop via requestAnimationFrame
-    Effect::new(move || {
-        let anim = animation.get();
-        if anim.is_none() {
-            return;
-        }
-
-        let Some(canvas) = canvas_ref.get() else { return };
-        let canvas_el: &web_sys::HtmlCanvasElement = canvas.as_ref();
-        let ctx = canvas_el
-            .get_context("2d")
-            .ok()
-            .flatten()
-            .and_then(|obj| obj.dyn_into::<web_sys::CanvasRenderingContext2d>().ok());
-        let Some(ctx) = ctx else { return };
-
-        let window = web_sys::window().unwrap();
-        type AnimCallback = Rc<RefCell<Option<Closure<dyn FnMut()>>>>;
-        let f: AnimCallback = Rc::new(RefCell::new(None));
-        let g = f.clone();
-
-        *g.borrow_mut() = Some(Closure::new(move || {
-            let now = now_ms();
-
-            let anim_state = animation.get_untracked();
-            let Some(ref a) = anim_state else {
-                // Animation was cleared externally
-                return;
-            };
-
-            let t = ((now - a.start_time) / a.duration_ms).clamp(0.0, 1.0);
-
-            // Redraw board with animation
-            let game_state = game.get_untracked();
-            if let Some(ref gs) = game_state {
-                let selected = selected_square.get_untracked();
-                let moves = legal_moves.get_untracked();
-                let targets: HashSet<String> = moves.iter().map(|m| m.to.clone()).collect();
-                let last_move = gs.move_history.last();
-                draw_board(&ctx, &gs.board, selected.as_deref(), &targets, last_move, anim_state.as_ref(), now);
-            }
-
-            if t >= 1.0 {
-                animation.set(None);
-                // Drop the closure
-                let _ = f.borrow_mut().take();
+    {
+        let svg_images = svg_images.clone();
+        Effect::new(move || {
+            let anim = animation.get();
+            if anim.is_none() {
                 return;
             }
 
-            // Request next frame
-            let _ = web_sys::window().unwrap().request_animation_frame(
-                f.borrow().as_ref().unwrap().as_ref().unchecked_ref(),
+            let Some(canvas) = canvas_ref.get() else { return };
+            let canvas_el: &web_sys::HtmlCanvasElement = canvas.as_ref();
+            let ctx = canvas_el
+                .get_context("2d")
+                .ok()
+                .flatten()
+                .and_then(|obj| obj.dyn_into::<web_sys::CanvasRenderingContext2d>().ok());
+            let Some(ctx) = ctx else { return };
+
+            let window = web_sys::window().unwrap();
+            type AnimCallback = Rc<RefCell<Option<Closure<dyn FnMut()>>>>;
+            let f: AnimCallback = Rc::new(RefCell::new(None));
+            let g = f.clone();
+            let svg_images = svg_images.clone();
+
+            *g.borrow_mut() = Some(Closure::new(move || {
+                let now = now_ms();
+
+                let anim_state = animation.get_untracked();
+                let Some(ref a) = anim_state else {
+                    // Animation was cleared externally
+                    return;
+                };
+
+                let t = ((now - a.start_time) / a.duration_ms).clamp(0.0, 1.0);
+
+                // Redraw board with animation
+                let game_state = game.get_untracked();
+                if let Some(ref gs) = game_state {
+                    let selected = selected_square.get_untracked();
+                    let moves = legal_moves.get_untracked();
+                    let targets: HashSet<String> = moves.iter().map(|m| m.to.clone()).collect();
+                    let last_move = gs.move_history.last();
+                    let theme = theme_state.theme.get_untracked();
+                    let imgs = svg_images.borrow();
+                    draw_board(&ctx, &gs.board, selected.as_deref(), &targets, last_move, anim_state.as_ref(), now, &theme, &imgs);
+                }
+
+                if t >= 1.0 {
+                    animation.set(None);
+                    // Drop the closure
+                    let _ = f.borrow_mut().take();
+                    return;
+                }
+
+                // Request next frame
+                let _ = web_sys::window().unwrap().request_animation_frame(
+                    f.borrow().as_ref().unwrap().as_ref().unchecked_ref(),
+                );
+            }));
+
+            let _ = window.request_animation_frame(
+                g.borrow().as_ref().unwrap().as_ref().unchecked_ref(),
             );
-        }));
-
-        let _ = window.request_animation_frame(
-            g.borrow().as_ref().unwrap().as_ref().unchecked_ref(),
-        );
-    });
+        });
+    }
 
     let on_canvas_click = move |ev: web_sys::MouseEvent| {
         if !is_my_turn.get() || move_in_progress.get() || ai_thinking.get() {
@@ -967,6 +1276,28 @@ fn MoveHistoryTable(move_history: Vec<ChessMove>) -> impl IntoView {
             </table>
         </div>
     }
+}
+
+fn send_game_action(
+    url: String,
+    set_game: WriteSignal<Option<Game>>,
+    set_ai_thinking: WriteSignal<bool>,
+) {
+    leptos::task::spawn_local(async move {
+        let result = crate::api::post(&url)
+            .send()
+            .await;
+
+        match result {
+            Ok(resp) if resp.ok() => {
+                if let Ok(updated_game) = resp.json::<Game>().await {
+                    set_ai_thinking.set(updated_game.ai_thinking.unwrap_or(false));
+                    set_game.set(Some(updated_game));
+                }
+            }
+            _ => {}
+        }
+    });
 }
 
 fn fetch_legal_moves(game_id: String, square: String, legal_moves: RwSignal<Vec<ChessMove>>) {

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- White Pawn -->
+  <defs>
+    <linearGradient id="wp-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="100%" stop-color="#d4d4d4"/>
+    </linearGradient>
+    <linearGradient id="wp-shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e8e8e8"/>
+      <stop offset="100%" stop-color="#a0a0a0"/>
+    </linearGradient>
+  </defs>
+  <!-- Base -->
+  <ellipse cx="50" cy="88" rx="24" ry="7" fill="url(#wp-shade)" stroke="#555" stroke-width="1.5"/>
+  <ellipse cx="50" cy="86" rx="24" ry="7" fill="url(#wp-body)" stroke="#555" stroke-width="1.5"/>
+  <!-- Stem -->
+  <path d="M36 86 Q34 74 39 62 L61 62 Q66 74 64 86 Z" fill="url(#wp-body)" stroke="#555" stroke-width="1.5"/>
+  <!-- Collar -->
+  <ellipse cx="50" cy="62" rx="12" ry="4" fill="url(#wp-shade)" stroke="#555" stroke-width="1.2"/>
+  <!-- Neck -->
+  <path d="M42 62 Q40 52 43 44 L57 44 Q60 52 58 62 Z" fill="url(#wp-body)" stroke="#555" stroke-width="1.5"/>
+  <!-- Head -->
+  <circle cx="50" cy="35" r="13" fill="url(#wp-body)" stroke="#555" stroke-width="1.5"/>
+  <!-- Highlight -->
+  <path d="M43 30 Q42 34 43 38" stroke="#fff" stroke-width="1.5" fill="none" opacity="0.6" stroke-linecap="round"/>
+</svg>

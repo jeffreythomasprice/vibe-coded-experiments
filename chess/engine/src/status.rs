@@ -26,6 +26,11 @@ pub fn compute_status(
 }
 
 fn standard_status(board: &Board, active_color: &PieceColor, move_history: &[Move]) -> GameStatus {
+    // Check for threefold repetition or 50-move rule
+    if is_threefold_repetition(move_history) || is_fifty_move_draw(move_history) {
+        return GameStatus::Draw;
+    }
+
     let enemy = opposite_color(active_color);
     let pseudo = generate_pseudo_legal_moves(board, active_color, move_history);
     let legal = filter_legal_moves(board, active_color, pseudo);
@@ -50,6 +55,11 @@ fn standard_status(board: &Board, active_color: &PieceColor, move_history: &[Mov
 }
 
 fn lose_all_status(board: &Board, active_color: &PieceColor, move_history: &[Move]) -> GameStatus {
+    // Check for threefold repetition or 50-move rule
+    if is_threefold_repetition(move_history) || is_fifty_move_draw(move_history) {
+        return GameStatus::Draw;
+    }
+
     // In lose-all, the player who loses all their pieces wins.
     // Check if either player has no pieces — that player wins.
     // The most common case: the active player's last piece was just captured.

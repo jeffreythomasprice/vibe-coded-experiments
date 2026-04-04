@@ -43,6 +43,15 @@
     "ai_thinking": {
       "type": "boolean",
       "description": "Whether an AI engine is currently computing a move"
+    },
+    "resigned_by": {
+      "$ref": "#/definitions/PieceColor",
+      "description": "The color that surrendered, if status is resigned"
+    },
+    "created_by": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The user ID of whoever created this game"
     }
   },
   "definitions": {

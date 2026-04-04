@@ -6,6 +6,9 @@
   "properties": {
     "token": {
       "type": "string"
+    },
+    "theme": {
+      "$ref": "#/definitions/Theme"
     }
   },
   "additionalProperties": false

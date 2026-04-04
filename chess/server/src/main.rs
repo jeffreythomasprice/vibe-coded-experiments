@@ -80,8 +80,20 @@ async fn main() {
             get(routes::games::legal_moves),
         )
         .route(
+            "/games/{game_id}/abandon",
+            post(routes::games::abandon_game),
+        )
+        .route(
+            "/games/{game_id}/surrender",
+            post(routes::games::surrender_game),
+        )
+        .route(
             "/games/{game_id}/ws",
             get(routes::ws::game_ws),
+        )
+        .route(
+            "/me/theme",
+            get(routes::theme::get_my_theme).put(routes::theme::update_my_theme),
         )
         .route("/ai-engines", get(routes::ai::list_engines))
         .layer(TraceLayer::new_for_http())
