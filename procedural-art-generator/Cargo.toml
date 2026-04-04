@@ -1,0 +1,15 @@
+[package]
+name = "procedural-art-generator"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+winit = "0.30"
+wgpu = "24"
+pollster = "0.4"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+glam = { version = "0.32.1", features = ["bytemuck"] }
+bytemuck = { version = "1.25.0", features = ["derive"] }
+lyon = "1"
+fontdue = "0.9"
