@@ -501,6 +501,11 @@ program
     .option("-p, --pages <n>", "max pages per source (default: from config)")
     .option("--show-ignored", "include ignored items")
     .option("--favorites-only", "only show favorites")
+    .option(
+        "--sort-mode <mode>",
+        "mixed (interleave by date) or separate (group by source)",
+        "mixed",
+    )
     .option("-l, --show-urls", "show item URLs")
     .action(
         async (
@@ -513,6 +518,7 @@ program
                 fetchContent?: boolean;
                 updatedWithin?: string;
                 pages?: string;
+                sortMode: string;
                 showIgnored?: boolean;
                 favoritesOnly?: boolean;
                 showUrls?: boolean;
@@ -557,6 +563,7 @@ program
                     showIgnored: cmdOpts.showIgnored ?? false,
                     favoritesOnly: cmdOpts.favoritesOnly ?? false,
                     maxPages: cmdOpts.pages ? parseInt(cmdOpts.pages, 10) : config.search.maxPages,
+                    sortMode: cmdOpts.sortMode as "mixed" | "separate",
                 },
                 logger,
             );

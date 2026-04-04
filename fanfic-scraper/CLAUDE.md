@@ -71,6 +71,10 @@ bun start search --keywords "taylor" --fetch-content
 # Combine filters
 bun start search --tags worm --keywords taylor --favorites-only -u 30d
 
+# Sort mode: mixed (default, interleave by date) or separate (group by source)
+bun start search --sort-mode mixed
+bun start search --sort-mode separate
+
 # Filter to specific sites from configured sources
 bun start search --sites ao3
 ```

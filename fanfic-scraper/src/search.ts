@@ -8,8 +8,8 @@ import type { HttpClient } from "./http";
 import type { Logger } from "./logger";
 
 export type SearchResultItem =
-    | { kind: "thread"; data: Thread; contentPreview?: string }
-    | { kind: "story"; data: Story; contentPreview?: string };
+    | { kind: "thread"; data: Thread; contentPreview?: string; sourceIndex?: number }
+    | { kind: "story"; data: Story; contentPreview?: string; sourceIndex?: number };
 
 export interface ScoredSearchResult {
     item: SearchResultItem;
@@ -34,6 +34,7 @@ export interface SearchOptions {
     showIgnored: boolean;
     favoritesOnly: boolean;
     maxPages: number;
+    sortMode: "mixed" | "separate";
 }
 
 export function parseSourceArg(arg: string): SearchSource {
@@ -162,6 +163,89 @@ function stripHtml(html: string): string {
         .trim();
 }
 
+async function collectFromSource(
+    http: HttpClient,
+    source: SearchSource,
+    cutoff: Date | null,
+    options: SearchOptions,
+    logger?: Logger,
+): Promise<SearchResultItem[]> {
+    const siteType = getSiteType(source.site);
+    if (!siteType) {
+        logger?.warn("Unknown site in search source, skipping", { site: source.site });
+        return [];
+    }
+
+    const items: SearchResultItem[] = [];
+
+    if (siteType === "forum") {
+        const adapter = getAdapter(source.site);
+        const allSubforums = await adapter.getSubforums(http);
+        const subforum = allSubforums.find(
+            (sf) =>
+                sf.subforumId === source.query ||
+                sf.name.toLowerCase() === source.query.toLowerCase(),
+        );
+
+        if (!subforum) {
+            logger?.warn("Subforum not found for search source", {
+                site: source.site,
+                query: source.query,
+                available: allSubforums.map((sf) => sf.name),
+            });
+            return [];
+        }
+
+        logger?.info("Searching forum source", {
+            site: source.site,
+            subforum: subforum.name,
+        });
+
+        for (let page = 1; page <= options.maxPages; page++) {
+            logger?.debug("Fetching thread list page", { subforum: subforum.name, page });
+            const { threads, hasNext } = await adapter.getThreadList(http, subforum, page);
+
+            let pagePastCutoff = false;
+
+            for (const t of threads) {
+                if (!t.isSticky && cutoff && t.lastUpdated && t.lastUpdated < cutoff) {
+                    pagePastCutoff = true;
+                    continue;
+                }
+                items.push({ kind: "thread", data: t });
+            }
+
+            if (pagePastCutoff || !hasNext) break;
+        }
+    } else {
+        const adapter = getStoryAdapter(source.site);
+
+        logger?.info("Searching story source", {
+            site: source.site,
+            tag: source.query,
+        });
+
+        for (let page = 1; page <= options.maxPages; page++) {
+            logger?.debug("Fetching story list page", { tag: source.query, page });
+            const { stories, hasNext } = await adapter.getStoryList(http, source.query, page);
+
+            let pagePastCutoff = false;
+
+            for (const s of stories) {
+                if (cutoff && s.lastUpdated && s.lastUpdated < cutoff) {
+                    pagePastCutoff = true;
+                    continue;
+                }
+                items.push({ kind: "story", data: s });
+            }
+
+            if (pagePastCutoff || !hasNext) break;
+        }
+    }
+
+    return items;
+}
+
 async function collectItems(
     http: HttpClient,
     sources: SearchSource[],
@@ -172,82 +256,18 @@ async function collectItems(
         ? new Date(Date.now() - parseDuration(options.updatedWithin))
         : null;
 
-    const items: SearchResultItem[] = [];
+    const perSourceResults = await Promise.all(
+        sources.map((source) => collectFromSource(http, source, cutoff, options, logger)),
+    );
 
-    for (const source of sources) {
-        const siteType = getSiteType(source.site);
-        if (!siteType) {
-            logger?.warn("Unknown site in search source, skipping", { site: source.site });
-            continue;
-        }
-
-        if (siteType === "forum") {
-            const adapter = getAdapter(source.site);
-            const allSubforums = await adapter.getSubforums(http);
-            const subforum = allSubforums.find(
-                (sf) =>
-                    sf.subforumId === source.query ||
-                    sf.name.toLowerCase() === source.query.toLowerCase(),
-            );
-
-            if (!subforum) {
-                logger?.warn("Subforum not found for search source", {
-                    site: source.site,
-                    query: source.query,
-                    available: allSubforums.map((sf) => sf.name),
-                });
-                continue;
-            }
-
-            logger?.info("Searching forum source", {
-                site: source.site,
-                subforum: subforum.name,
-            });
-
-            for (let page = 1; page <= options.maxPages; page++) {
-                logger?.debug("Fetching thread list page", { subforum: subforum.name, page });
-                const { threads, hasNext } = await adapter.getThreadList(http, subforum, page);
-
-                let pagePastCutoff = false;
-
-                for (const t of threads) {
-                    if (!t.isSticky && cutoff && t.lastUpdated && t.lastUpdated < cutoff) {
-                        pagePastCutoff = true;
-                        continue;
-                    }
-                    items.push({ kind: "thread", data: t });
-                }
-
-                if (pagePastCutoff || !hasNext) break;
-            }
-        } else {
-            const adapter = getStoryAdapter(source.site);
-
-            logger?.info("Searching story source", {
-                site: source.site,
-                tag: source.query,
-            });
-
-            for (let page = 1; page <= options.maxPages; page++) {
-                logger?.debug("Fetching story list page", { tag: source.query, page });
-                const { stories, hasNext } = await adapter.getStoryList(http, source.query, page);
-
-                let pagePastCutoff = false;
-
-                for (const s of stories) {
-                    if (cutoff && s.lastUpdated && s.lastUpdated < cutoff) {
-                        pagePastCutoff = true;
-                        continue;
-                    }
-                    items.push({ kind: "story", data: s });
-                }
-
-                if (pagePastCutoff || !hasNext) break;
-            }
+    // Tag each item with its source index for "separate" sort mode
+    for (let i = 0; i < perSourceResults.length; i++) {
+        for (const item of perSourceResults[i]!) {
+            item.sourceIndex = i;
         }
     }
 
-    return items;
+    return perSourceResults.flat();
 }
 
 async function fetchFirstContent(
@@ -347,8 +367,25 @@ export async function executeSearch(
         });
     }
 
-    // Sort by combined score descending
-    results.sort((a, b) => b.tagScore + b.keywordScore - (a.tagScore + a.keywordScore));
+    // Sort results based on sort mode
+    if (options.sortMode === "separate") {
+        // Group by source, then by date within each group
+        results.sort((a, b) => {
+            const si = (a.item.sourceIndex ?? 0) - (b.item.sourceIndex ?? 0);
+            if (si !== 0) return si;
+            const dateA = a.item.data.lastUpdated?.getTime() ?? 0;
+            const dateB = b.item.data.lastUpdated?.getTime() ?? 0;
+            return dateB - dateA;
+        });
+    } else {
+        // "mixed" — interleave all results by date, score as tiebreaker
+        results.sort((a, b) => {
+            const dateA = a.item.data.lastUpdated?.getTime() ?? 0;
+            const dateB = b.item.data.lastUpdated?.getTime() ?? 0;
+            if (dateB !== dateA) return dateB - dateA;
+            return b.tagScore + b.keywordScore - (a.tagScore + a.keywordScore);
+        });
+    }
 
     logger?.info("Search complete", { results: results.length });
     return results;
@@ -373,6 +410,8 @@ export function formatSearchResult(result: ScoredSearchResult, showUrls?: boolea
     const tagStr = allTags.length > 0 ? `[${allTags.join(", ")}]` : "";
 
     const url = showUrls ? item.data.url : "";
-    const parts = [prefix + kind, site, id, updated, title, author, extra, tagStr, url].filter(Boolean);
+    const parts = [prefix + kind, site, id, updated, title, author, extra, tagStr, url].filter(
+        Boolean,
+    );
     return parts.join("\t");
 }
