@@ -101,7 +101,7 @@ impl TextureAtlasFont {
     }
 
     pub fn material<'a, 'f>(&'a self, frame: &'f mut Frame<'a>) -> FontMaterialGuard<'a, 'f> {
-        let guard = frame.texture_material(&self.atlas.texture, Color::WHITE);
+        let guard = frame.texture_material(&self.atlas.texture, Color::WHITE, glam::Mat4::IDENTITY);
         FontMaterialGuard { font: self, guard }
     }
 
@@ -120,11 +120,10 @@ impl TextureAtlasFont {
         let mut width = 0.0f32;
         let mut prev: Option<char> = None;
         for ch in line.chars() {
-            if let Some(prev_ch) = prev {
-                if let Some(kern) = self.font.horizontal_kern(prev_ch, ch, self.font_size) {
+            if let Some(prev_ch) = prev
+                && let Some(kern) = self.font.horizontal_kern(prev_ch, ch, self.font_size) {
                     width += kern;
                 }
-            }
             if let Some(glyph) = self.glyphs.get(&ch) {
                 width += glyph.metrics.advance_width;
             }
@@ -167,17 +166,16 @@ impl TextureAtlasFont {
             let mut prev: Option<char> = None;
 
             for ch in line.chars() {
-                if let Some(prev_ch) = prev {
-                    if let Some(kern) = self.font.horizontal_kern(prev_ch, ch, self.font_size) {
+                if let Some(prev_ch) = prev
+                    && let Some(kern) = self.font.horizontal_kern(prev_ch, ch, self.font_size) {
                         cursor_x += kern;
                     }
-                }
 
                 if let Some(glyph) = self.glyphs.get(&ch) {
                     let m = &glyph.metrics;
 
-                    if m.width > 0 && m.height > 0 {
-                        if let Some(entry) = self.atlas.get(&ch.to_string()) {
+                    if m.width > 0 && m.height > 0
+                        && let Some(entry) = self.atlas.get(&ch.to_string()) {
                             let glyph_x = cursor_x + m.xmin as f32;
                             let glyph_y = baseline_y - m.height as f32 - m.ymin as f32;
                             let glyph_w = m.width as f32;
@@ -215,7 +213,6 @@ impl TextureAtlasFont {
                                 base + 3,
                             ]);
                         }
-                    }
 
                     cursor_x += m.advance_width;
                 }

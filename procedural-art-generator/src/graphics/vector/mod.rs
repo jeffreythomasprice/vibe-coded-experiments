@@ -7,8 +7,7 @@ use lyon::path::Path;
 
 use super::immediate::{Color, ColorVertex2D};
 
-pub use lyon::lyon_tessellation::{FillOptions, FillRule, LineCap, LineJoin, StrokeOptions};
-pub use lyon::path;
+pub use lyon::lyon_tessellation::{FillOptions, LineCap, StrokeOptions};
 
 // ---------------------------------------------------------------------------
 // Mesh output
@@ -63,6 +62,11 @@ impl PathBuilder {
 
     pub fn close(&mut self) -> &mut Self {
         self.inner.close();
+        self
+    }
+
+    pub fn end(&mut self) -> &mut Self {
+        self.inner.end(false);
         self
     }
 

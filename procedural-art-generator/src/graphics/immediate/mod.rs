@@ -2,6 +2,8 @@ mod vertex;
 
 pub use vertex::{Color, ColorVertex2D, TextureVertex2D};
 
+use glam::Mat4;
+
 use super::wgpu_utils::{Buffer, Texture};
 
 // ---------------------------------------------------------------------------
@@ -57,6 +59,16 @@ impl ImmediateRenderer {
                         },
                         count: None,
                     },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
                 ],
             });
 
@@ -102,6 +114,16 @@ impl ImmediateRenderer {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 2,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
                             sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -111,7 +133,7 @@ impl ImmediateRenderer {
                         count: None,
                     },
                     wgpu::BindGroupLayoutEntry {
-                        binding: 3,
+                        binding: 4,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
@@ -293,9 +315,14 @@ pub struct Frame<'a> {
 }
 
 impl<'a> Frame<'a> {
-    pub fn color_material(&mut self, color: Color) -> ColorMaterialGuard<'a, '_> {
+    pub fn color_material(&mut self, color: Color, transform: Mat4) -> ColorMaterialGuard<'a, '_> {
         let material_buffer =
             Buffer::uniform(self.device, "immediate_material_color", bytemuck::bytes_of(&color));
+        let modelview_buffer = Buffer::uniform(
+            self.device,
+            "immediate_modelview",
+            bytemuck::bytes_of(&transform),
+        );
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("immediate_color_bind_group"),
             layout: &self.renderer.color_bind_group_layout,
@@ -307,6 +334,10 @@ impl<'a> Frame<'a> {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: material_buffer.raw.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: modelview_buffer.raw.as_entire_binding(),
                 },
             ],
         });
@@ -321,9 +352,15 @@ impl<'a> Frame<'a> {
         &mut self,
         texture: &'a Texture,
         color: Color,
+        transform: Mat4,
     ) -> TextureMaterialGuard<'a, '_> {
         let material_buffer =
             Buffer::uniform(self.device, "immediate_material_color", bytemuck::bytes_of(&color));
+        let modelview_buffer = Buffer::uniform(
+            self.device,
+            "immediate_modelview",
+            bytemuck::bytes_of(&transform),
+        );
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("immediate_texture_bind_group"),
             layout: &self.renderer.texture_bind_group_layout,
@@ -338,10 +375,14 @@ impl<'a> Frame<'a> {
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&texture.view),
+                    resource: modelview_buffer.raw.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
+                    resource: wgpu::BindingResource::TextureView(&texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
                     resource: wgpu::BindingResource::Sampler(&texture.sampler),
                 },
             ],
@@ -609,7 +650,7 @@ impl ColorMaterialGuard<'_, '_> {
 
     pub fn triangle_list(&mut self, vertices: &[ColorVertex2D]) {
         assert!(
-            vertices.len() % 3 == 0,
+            vertices.len().is_multiple_of(3),
             "triangle_list requires a multiple of 3 vertices"
         );
         for v in vertices {
@@ -684,7 +725,7 @@ impl TextureMaterialGuard<'_, '_> {
 
     pub fn triangle_list(&mut self, vertices: &[TextureVertex2D]) {
         assert!(
-            vertices.len() % 3 == 0,
+            vertices.len().is_multiple_of(3),
             "triangle_list requires a multiple of 3 vertices"
         );
         for v in vertices {

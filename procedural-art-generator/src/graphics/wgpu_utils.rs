@@ -82,7 +82,9 @@ impl Buffer {
     /// Write data into the buffer. If data exceeds current capacity the buffer
     /// is recreated with 2x the required size.
     pub fn write(&mut self, device: &Device, queue: &Queue, data: &[u8]) {
-        let needed = data.len() as u64;
+        let align = wgpu::COPY_BUFFER_ALIGNMENT as usize;
+        let padded_len = (data.len() + align - 1) & !(align - 1);
+        let needed = padded_len as u64;
         if needed > self.size {
             let new_size = needed.next_power_of_two();
             self.raw = device.create_buffer(&wgpu::BufferDescriptor {
@@ -93,7 +95,13 @@ impl Buffer {
             });
             self.size = new_size;
         }
-        queue.write_buffer(&self.raw, 0, data);
+        if padded_len == data.len() {
+            queue.write_buffer(&self.raw, 0, data);
+        } else {
+            let mut padded = vec![0u8; padded_len];
+            padded[..data.len()].copy_from_slice(data);
+            queue.write_buffer(&self.raw, 0, &padded);
+        }
     }
 }
 

@@ -7,8 +7,13 @@ struct MaterialUniforms {
     color: vec4<f32>,
 }
 
+struct ModelView {
+    transform: mat4x4<f32>,
+}
+
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var<uniform> material: MaterialUniforms;
+@group(0) @binding(2) var<uniform> modelview: ModelView;
 
 struct VertexInput {
     @location(0) position: vec2<f32>,
@@ -23,8 +28,9 @@ struct VertexOutput {
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    let ndc_x = ((in.position.x - uniforms.camera_min.x) / uniforms.camera_size.x) * 2.0 - 1.0;
-    let ndc_y = 1.0 - ((in.position.y - uniforms.camera_min.y) / uniforms.camera_size.y) * 2.0;
+    let world_pos = (modelview.transform * vec4<f32>(in.position, 0.0, 1.0)).xy;
+    let ndc_x = ((world_pos.x - uniforms.camera_min.x) / uniforms.camera_size.x) * 2.0 - 1.0;
+    let ndc_y = 1.0 - ((world_pos.y - uniforms.camera_min.y) / uniforms.camera_size.y) * 2.0;
     out.clip_position = vec4<f32>(ndc_x, ndc_y, 0.0, 1.0);
     out.color = in.color;
     return out;

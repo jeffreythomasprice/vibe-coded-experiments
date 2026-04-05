@@ -13,7 +13,7 @@ use camera::{Camera2D, Rect};
 use fps::FpsCounter;
 use graphics::font::{HAlign, TextureAtlasFont, VAlign};
 use graphics::immediate::Color;
-use parameterized_grid::{ArtGrid, HueCircle};
+use parameterized_grid::{GridParamMapping, HueCircle, ParamValue, ParameterizedGraphicsGrid};
 use state::{
     AppState, EventContext, InitContext, InputState, RenderContext, StateTransition, UpdateContext,
 };
@@ -26,7 +26,17 @@ fn main() {
         let font = TextureAtlasFont::from_ascii(ctx.device, ctx.queue, font_data, 24.0);
         let aspect = ctx.viewport_size.0 as f32 / ctx.viewport_size.1 as f32;
         let world_bounds = Rect::new(Vec2::new(-200.0, -200.0), Vec2::new(200.0, 200.0));
-        let grid = ArtGrid::new(HueCircle, 8, 4, world_bounds, 2.0);
+        let grid = ParameterizedGraphicsGrid::new(
+            HueCircle,
+            8,
+            4,
+            world_bounds,
+            2.0,
+            GridParamMapping::One(0),
+            vec![ParamValue::F32(0.5)],
+            ctx.device,
+            ctx.queue,
+        );
         let camera = Camera2D::new(world_bounds, world_bounds, 50.0, aspect);
         Box::new(DemoState {
             camera,
@@ -43,7 +53,7 @@ struct DemoState {
     font: TextureAtlasFont,
     fps: FpsCounter,
     input: InputState,
-    grid: ArtGrid<HueCircle>,
+    grid: ParameterizedGraphicsGrid<HueCircle>,
 }
 
 impl AppState for DemoState {
@@ -120,6 +130,9 @@ impl AppState for DemoState {
         let world_pos = self.camera.screen_to_world(self.input.cursor_pos, viewport_size);
         self.grid.update_hover(world_pos);
 
+        self.grid.update_time(dt);
+        self.grid.poll_inits();
+
         self.input.end_frame();
         StateTransition::Continue
     }
@@ -137,10 +150,9 @@ impl AppState for DemoState {
                 Some(Color::CORNFLOWER_BLUE.into()),
             );
 
-            let cells_mesh = self.grid.draw_cells();
-            let mut mat = frame.color_material(Color::WHITE);
-            mat.indexed_triangle_list(&cells_mesh.vertices, &cells_mesh.indices);
+            self.grid.render_cells(&mut frame);
             if let Some(outline) = self.grid.draw_hover_outline() {
+                let mut mat = frame.color_material(Color::WHITE, glam::Mat4::IDENTITY);
                 mat.indexed_triangle_list(&outline.vertices, &outline.indices);
             }
         }

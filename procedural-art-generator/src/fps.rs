@@ -5,6 +5,12 @@ pub struct FpsCounter {
     timestamps: VecDeque<Instant>,
 }
 
+impl Default for FpsCounter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FpsCounter {
     pub fn new() -> Self {
         Self {

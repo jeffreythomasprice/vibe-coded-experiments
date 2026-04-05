@@ -1,26 +1,43 @@
 mod hue_circle;
+mod param;
 
 pub use hue_circle::HueCircle;
+pub use param::*;
 
-use glam::Vec2;
+use std::sync::mpsc::{self, Receiver};
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread;
+
+use glam::{Mat4, Vec2};
 
 use crate::camera::Rect;
-use crate::graphics::immediate::{Color, ColorVertex2D};
-use crate::graphics::vector::{self, Mesh, PathBuilder, StrokeOptions};
+use crate::graphics::immediate::{Color, ColorVertex2D, Frame};
+use crate::graphics::vector::{self, LineCap, Mesh, PathBuilder, StrokeOptions};
+
+const MAX_CONCURRENT_INITS: usize = 5;
 
 pub struct ParamDescription {
     pub name: String,
     pub value: String,
 }
 
-pub trait GridArt {
-    fn param_count(&self) -> usize;
-    fn describe(&self, params: &[f32]) -> Vec<ParamDescription>;
-    fn cell_mesh(&self, cell_rect: Rect, params: &[f32]) -> Mesh<ColorVertex2D>;
+pub trait ParameterizedGraphics {
+    type Params;
+    type Instance;
+
+    fn param_defs(&self) -> Vec<ParamDef>;
+    fn build_params(&self, values: &[ParamValue]) -> Self::Params;
+    fn init(&self, params: &Self::Params, device: &wgpu::Device, queue: &wgpu::Queue) -> Self::Instance;
+    fn render(&self, instance: &Self::Instance, cell_rect: Rect, frame: &mut Frame<'_>);
 }
 
-pub struct ArtGrid<A: GridArt> {
-    art: A,
+pub enum GridParamMapping {
+    One(usize),
+    Two(usize, usize),
+}
+
+pub struct ParameterizedGraphicsGrid<A: ParameterizedGraphics> {
+    art: Arc<A>,
     cols: usize,
     rows: usize,
     bounds: Rect,
@@ -28,14 +45,54 @@ pub struct ArtGrid<A: GridArt> {
     cell_height: f32,
     gap: f32,
     hovered: Option<(usize, usize)>,
+    grid_params: GridParamMapping,
+    fixed_values: Vec<ParamValue>,
+    instances: Vec<Option<A::Instance>>,
+    receiver: Option<Receiver<(usize, A::Instance)>>,
+    pending_count: usize,
+    elapsed_time: f32,
 }
 
-impl<A: GridArt> ArtGrid<A> {
-    pub fn new(art: A, cols: usize, rows: usize, bounds: Rect, gap: f32) -> Self {
+impl<A> ParameterizedGraphicsGrid<A>
+where
+    A: ParameterizedGraphics + Send + Sync + 'static,
+    A::Params: Send + 'static,
+    A::Instance: Send + 'static,
+{
+    pub fn new(
+        art: A,
+        cols: usize,
+        rows: usize,
+        bounds: Rect,
+        gap: f32,
+        grid_params: GridParamMapping,
+        fixed_values: Vec<ParamValue>,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Self {
+        let param_count = art.param_defs().len();
+        assert_eq!(
+            fixed_values.len(),
+            param_count,
+            "fixed_values length must match param_defs count"
+        );
+        match &grid_params {
+            GridParamMapping::One(idx) => {
+                assert!(*idx < param_count, "grid param index out of range");
+            }
+            GridParamMapping::Two(x, y) => {
+                assert!(*x < param_count && *y < param_count, "grid param index out of range");
+                assert!(x != y, "grid param indices must be different");
+            }
+        }
+
         let cell_width = bounds.width() / cols as f32;
         let cell_height = bounds.height() / rows as f32;
-        Self {
-            art,
+        let art = Arc::new(art);
+        let total = cols * rows;
+
+        let mut grid = Self {
+            art: art.clone(),
             cols,
             rows,
             bounds,
@@ -43,7 +100,72 @@ impl<A: GridArt> ArtGrid<A> {
             cell_height,
             gap,
             hovered: None,
+            grid_params,
+            fixed_values,
+            instances: (0..total).map(|_| None).collect(),
+            receiver: None,
+            pending_count: total,
+            elapsed_time: 0.0,
+        };
+
+        let (tx, rx) = mpsc::channel();
+        let semaphore = Arc::new((Mutex::new(0usize), Condvar::new()));
+        let device = device.clone();
+        let queue = queue.clone();
+
+        for row in 0..rows {
+            for col in 0..cols {
+                let idx = row * cols + col;
+                let values = grid.params_for(col, row);
+                let params = grid.art.build_params(&values);
+
+                let art = art.clone();
+                let tx = tx.clone();
+                let sem = semaphore.clone();
+                let device = device.clone();
+                let queue = queue.clone();
+
+                thread::spawn(move || {
+                    {
+                        let (lock, cvar) = &*sem;
+                        let mut count = lock.lock().unwrap();
+                        while *count >= MAX_CONCURRENT_INITS {
+                            count = cvar.wait(count).unwrap();
+                        }
+                        *count += 1;
+                    }
+
+                    let instance = art.init(&params, &device, &queue);
+                    let _ = tx.send((idx, instance));
+
+                    {
+                        let (lock, cvar) = &*sem;
+                        let mut count = lock.lock().unwrap();
+                        *count -= 1;
+                        cvar.notify_one();
+                    }
+                });
+            }
         }
+
+        grid.receiver = Some(rx);
+        grid
+    }
+
+    pub fn poll_inits(&mut self) {
+        if let Some(rx) = &self.receiver {
+            while let Ok((idx, instance)) = rx.try_recv() {
+                self.instances[idx] = Some(instance);
+                self.pending_count -= 1;
+            }
+            if self.pending_count == 0 {
+                self.receiver = None;
+            }
+        }
+    }
+
+    pub fn update_time(&mut self, dt: f32) {
+        self.elapsed_time += dt;
     }
 
     pub fn bounds(&self) -> Rect {
@@ -51,7 +173,8 @@ impl<A: GridArt> ArtGrid<A> {
     }
 
     fn cell_outer_rect(&self, col: usize, row: usize) -> Rect {
-        let min = self.bounds.min + Vec2::new(col as f32 * self.cell_width, row as f32 * self.cell_height);
+        let min =
+            self.bounds.min + Vec2::new(col as f32 * self.cell_width, row as f32 * self.cell_height);
         Rect::new(min, min + Vec2::new(self.cell_width, self.cell_height))
     }
 
@@ -63,17 +186,38 @@ impl<A: GridArt> ArtGrid<A> {
         )
     }
 
-    fn params_for(&self, col: usize, row: usize) -> Vec<f32> {
-        if self.art.param_count() == 1 {
-            let total = self.cols * self.rows;
-            let index = row * self.cols + col;
-            let t = if total <= 1 { 0.0 } else { index as f32 / (total - 1) as f32 };
-            vec![t]
-        } else {
-            let tx = if self.cols <= 1 { 0.0 } else { col as f32 / (self.cols - 1) as f32 };
-            let ty = if self.rows <= 1 { 0.0 } else { row as f32 / (self.rows - 1) as f32 };
-            vec![tx, ty]
+    fn params_for(&self, col: usize, row: usize) -> Vec<ParamValue> {
+        let defs = self.art.param_defs();
+        let mut values = self.fixed_values.clone();
+
+        match self.grid_params {
+            GridParamMapping::One(idx) => {
+                let total = self.cols * self.rows;
+                let index = row * self.cols + col;
+                let t = if total <= 1 {
+                    0.0
+                } else {
+                    index as f32 / (total - 1) as f32
+                };
+                values[idx] = defs[idx].range.lerp(t);
+            }
+            GridParamMapping::Two(x_idx, y_idx) => {
+                let tx = if self.cols <= 1 {
+                    0.0
+                } else {
+                    col as f32 / (self.cols - 1) as f32
+                };
+                let ty = if self.rows <= 1 {
+                    0.0
+                } else {
+                    row as f32 / (self.rows - 1) as f32
+                };
+                values[x_idx] = defs[x_idx].range.lerp(tx);
+                values[y_idx] = defs[y_idx].range.lerp(ty);
+            }
         }
+
+        values
     }
 
     fn hit_test(&self, world_pos: Vec2) -> Option<(usize, usize)> {
@@ -94,23 +238,49 @@ impl<A: GridArt> ArtGrid<A> {
         self.hovered = self.hit_test(world_pos);
     }
 
-    pub fn draw_cells(&self) -> Mesh<ColorVertex2D> {
-        let mut vertices = Vec::new();
-        let mut indices = Vec::new();
-
+    pub fn render_cells(&self, frame: &mut Frame<'_>) {
         for row in 0..self.rows {
             for col in 0..self.cols {
-                let params = self.params_for(col, row);
+                let idx = row * self.cols + col;
                 let inner = self.cell_inner_rect(col, row);
-                let mesh = self.art.cell_mesh(inner, &params);
-
-                let base = vertices.len() as u16;
-                vertices.extend_from_slice(&mesh.vertices);
-                indices.extend(mesh.indices.iter().map(|i| i + base));
+                match &self.instances[idx] {
+                    Some(instance) => self.art.render(instance, inner, frame),
+                    None => Self::render_spinner(inner, self.elapsed_time, frame),
+                }
             }
         }
+    }
 
-        Mesh { vertices, indices }
+    fn render_spinner(cell_rect: Rect, elapsed: f32, frame: &mut Frame<'_>) {
+        let center = cell_rect.center();
+        let radius = cell_rect.width().min(cell_rect.height()) * 0.3;
+        let rotation_speed = 2.0;
+        let base_angle = elapsed * rotation_speed;
+        let arc_sweep = std::f32::consts::TAU * 0.9;
+        let segments = 32u32;
+        let spinner_color = Color::rgba(0.8, 0.8, 0.8, 0.6);
+        let stroke_width = radius * 0.15;
+
+        let mut builder = PathBuilder::new();
+        for i in 0..=segments {
+            let t = i as f32 / segments as f32;
+            let angle = base_angle + t * arc_sweep;
+            let p = center + Vec2::new(angle.cos(), angle.sin()) * radius;
+            if i == 0 {
+                builder.move_to(p);
+            } else {
+                builder.line_to(p);
+            }
+        }
+        builder.end();
+        let arc_path = builder.build();
+        let options = StrokeOptions::default()
+            .with_line_width(stroke_width)
+            .with_line_cap(LineCap::Butt);
+        let arc_mesh = vector::stroke(&arc_path, spinner_color, &options);
+
+        let mut mat = frame.color_material(Color::WHITE, Mat4::IDENTITY);
+        mat.indexed_triangle_list(&arc_mesh.vertices, &arc_mesh.indices);
     }
 
     pub fn draw_hover_outline(&self) -> Option<Mesh<ColorVertex2D>> {
@@ -125,7 +295,17 @@ impl<A: GridArt> ArtGrid<A> {
 
     pub fn hover_description(&self) -> Option<Vec<ParamDescription>> {
         let (col, row) = self.hovered?;
-        let params = self.params_for(col, row);
-        Some(self.art.describe(&params))
+        let values = self.params_for(col, row);
+        let defs = self.art.param_defs();
+
+        Some(
+            defs.iter()
+                .zip(values.iter())
+                .map(|(def, val)| ParamDescription {
+                    name: def.description.clone(),
+                    value: def.format_value(val),
+                })
+                .collect(),
+        )
     }
 }
