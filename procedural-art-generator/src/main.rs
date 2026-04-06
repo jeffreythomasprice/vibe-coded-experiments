@@ -12,6 +12,7 @@ use fps::FpsCounter;
 use glam::Vec2;
 use graphics::font::{HAlign, TextureAtlasFont, VAlign};
 use graphics::immediate::Color;
+use menu::MenuState;
 use parameterized_grid::{
     GridParamMapping, HueCircle, ParamValue, ParameterizedGraphics, ParameterizedGraphicsGrid,
 };
@@ -36,9 +37,11 @@ fn main() {
             2.0,
             GridParamMapping::One(0),
             vec![ParamValue::F32(0.5)],
+            None,
             ctx.device,
             ctx.queue,
         );
+        let menu_state = MenuState::new(grid.rows(), grid.cols(), grid.param_ranges());
         let camera = Camera2D::new(world_bounds, world_bounds, 50.0, aspect);
         Box::new(DemoState {
             camera,
@@ -46,6 +49,7 @@ fn main() {
             fps: FpsCounter::new(),
             input: InputState::new(),
             grid,
+            menu_state,
         })
     });
 }
@@ -56,6 +60,7 @@ struct DemoState {
     fps: FpsCounter,
     input: InputState,
     grid: ParameterizedGraphicsGrid<HueCircle>,
+    menu_state: MenuState,
 }
 
 impl AppState for DemoState {
@@ -76,6 +81,24 @@ impl AppState for DemoState {
     }
 
     fn update(&mut self, ctx: &UpdateContext) -> StateTransition {
+        if self.menu_state.needs_regenerate {
+            self.menu_state.needs_regenerate = false;
+            let bounds = self.grid.bounds();
+            let ranges = self.menu_state.pending_ranges.clone();
+            self.grid = ParameterizedGraphicsGrid::new(
+                HueCircle,
+                self.menu_state.pending_cols,
+                self.menu_state.pending_rows,
+                bounds,
+                2.0,
+                GridParamMapping::One(0),
+                vec![ParamValue::F32(0.5)],
+                Some(ranges),
+                ctx.device,
+                ctx.queue,
+            );
+        }
+
         let dt = ctx.dt;
         let h = ctx.viewport_size.1 as f32;
 
@@ -206,8 +229,8 @@ impl AppState for DemoState {
     }
 
     fn overlay_ui(&mut self, ctx: &egui::Context) {
-        let art = self.grid.art();
-        menu::draw_parameterized_graphics_info_panel(ctx, art.description(), &art.param_defs());
+        let defs = self.grid.art().param_defs();
+        menu::draw_menu(ctx, &mut self.menu_state, &defs);
     }
 }
 

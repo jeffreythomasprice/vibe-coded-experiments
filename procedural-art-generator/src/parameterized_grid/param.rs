@@ -92,6 +92,48 @@ pub enum ParamRange {
 }
 
 impl ParamRange {
+    pub fn is_integer(&self) -> bool {
+        !matches!(self, Self::F32 { .. } | Self::F64 { .. })
+    }
+
+    pub fn min_f32(&self) -> f32 {
+        self.min_value().as_f32()
+    }
+
+    pub fn max_f32(&self) -> f32 {
+        self.max_value().as_f32()
+    }
+
+    pub fn with_min_f32(&self, v: f32) -> Self {
+        match *self {
+            Self::F32 { max, .. } => Self::F32 { min: v, max },
+            Self::F64 { max, .. } => Self::F64 { min: v as f64, max },
+            Self::U8 { max, .. } => Self::U8 { min: v.round() as u8, max },
+            Self::I8 { max, .. } => Self::I8 { min: v.round() as i8, max },
+            Self::U16 { max, .. } => Self::U16 { min: v.round() as u16, max },
+            Self::I16 { max, .. } => Self::I16 { min: v.round() as i16, max },
+            Self::U32 { max, .. } => Self::U32 { min: v.round() as u32, max },
+            Self::I32 { max, .. } => Self::I32 { min: v.round() as i32, max },
+            Self::U64 { max, .. } => Self::U64 { min: v.round() as u64, max },
+            Self::I64 { max, .. } => Self::I64 { min: v.round() as i64, max },
+        }
+    }
+
+    pub fn with_max_f32(&self, v: f32) -> Self {
+        match *self {
+            Self::F32 { min, .. } => Self::F32 { min, max: v },
+            Self::F64 { min, .. } => Self::F64 { min, max: v as f64 },
+            Self::U8 { min, .. } => Self::U8 { min, max: v.round() as u8 },
+            Self::I8 { min, .. } => Self::I8 { min, max: v.round() as i8 },
+            Self::U16 { min, .. } => Self::U16 { min, max: v.round() as u16 },
+            Self::I16 { min, .. } => Self::I16 { min, max: v.round() as i16 },
+            Self::U32 { min, .. } => Self::U32 { min, max: v.round() as u32 },
+            Self::I32 { min, .. } => Self::I32 { min, max: v.round() as i32 },
+            Self::U64 { min, .. } => Self::U64 { min, max: v.round() as u64 },
+            Self::I64 { min, .. } => Self::I64 { min, max: v.round() as i64 },
+        }
+    }
+
     pub fn full(kind: ParamKind) -> Self {
         match kind {
             ParamKind::F32 => Self::F32 { min: f32::MIN, max: f32::MAX },

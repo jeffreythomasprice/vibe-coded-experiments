@@ -1,6 +1,4 @@
-multiple kinds of ParameterizedGraphics
-menu system should let you pick which kind of graphics
-within each graphics should let you select which parameters are being iterated over
+when dragging sliders around we should show a preview of that value if it can be turned into a color
 
 noise textures
 

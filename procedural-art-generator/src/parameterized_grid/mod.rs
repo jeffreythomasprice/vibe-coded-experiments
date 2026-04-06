@@ -48,6 +48,7 @@ pub struct ParameterizedGraphicsGrid<A: ParameterizedGraphics> {
     hovered: Option<(usize, usize)>,
     grid_params: GridParamMapping,
     fixed_values: Vec<ParamValue>,
+    param_ranges: Vec<ParamRange>,
     instances: Vec<Option<A::Instance>>,
     receiver: Option<Receiver<(usize, A::Instance)>>,
     pending_count: usize,
@@ -68,10 +69,12 @@ where
         gap: f32,
         grid_params: GridParamMapping,
         fixed_values: Vec<ParamValue>,
+        param_ranges: Option<Vec<ParamRange>>,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Self {
-        let param_count = art.param_defs().len();
+        let defs = art.param_defs();
+        let param_count = defs.len();
         assert_eq!(
             fixed_values.len(),
             param_count,
@@ -86,6 +89,9 @@ where
                 assert!(x != y, "grid param indices must be different");
             }
         }
+
+        let param_ranges = param_ranges
+            .unwrap_or_else(|| defs.iter().map(|d| d.range).collect());
 
         let cell_width = bounds.width() / cols as f32;
         let cell_height = bounds.height() / rows as f32;
@@ -103,6 +109,7 @@ where
             hovered: None,
             grid_params,
             fixed_values,
+            param_ranges,
             instances: (0..total).map(|_| None).collect(),
             receiver: None,
             pending_count: total,
@@ -177,6 +184,18 @@ where
         self.bounds
     }
 
+    pub fn cols(&self) -> usize {
+        self.cols
+    }
+
+    pub fn rows(&self) -> usize {
+        self.rows
+    }
+
+    pub fn param_ranges(&self) -> &[ParamRange] {
+        &self.param_ranges
+    }
+
     fn cell_outer_rect(&self, col: usize, row: usize) -> Rect {
         let min =
             self.bounds.min + Vec2::new(col as f32 * self.cell_width, row as f32 * self.cell_height);
@@ -192,7 +211,6 @@ where
     }
 
     fn params_for(&self, col: usize, row: usize) -> Vec<ParamValue> {
-        let defs = self.art.param_defs();
         let mut values = self.fixed_values.clone();
 
         match self.grid_params {
@@ -204,7 +222,7 @@ where
                 } else {
                     index as f32 / (total - 1) as f32
                 };
-                values[idx] = defs[idx].range.lerp(t);
+                values[idx] = self.param_ranges[idx].lerp(t);
             }
             GridParamMapping::Two(x_idx, y_idx) => {
                 let tx = if self.cols <= 1 {
@@ -217,8 +235,8 @@ where
                 } else {
                     row as f32 / (self.rows - 1) as f32
                 };
-                values[x_idx] = defs[x_idx].range.lerp(tx);
-                values[y_idx] = defs[y_idx].range.lerp(ty);
+                values[x_idx] = self.param_ranges[x_idx].lerp(tx);
+                values[y_idx] = self.param_ranges[y_idx].lerp(ty);
             }
         }
 
