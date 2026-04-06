@@ -13,9 +13,7 @@ use glam::Vec2;
 use graphics::font::{HAlign, TextureAtlasFont, VAlign};
 use graphics::immediate::Color;
 use menu::MenuState;
-use parameterized_grid::{
-    GridParamMapping, HueCircle, ParamValue, ParameterizedGraphics, ParameterizedGraphicsGrid,
-};
+use parameterized_grid::ArtGeneratorGrid;
 use state::{
     AppState, EventContext, InitContext, InputState, RenderContext, StateTransition, UpdateContext,
 };
@@ -29,19 +27,17 @@ fn main() {
         let font = TextureAtlasFont::from_ascii(ctx.device, ctx.queue, font_data, 24.0);
         let aspect = ctx.viewport_size.0 as f32 / ctx.viewport_size.1 as f32;
         let world_bounds = Rect::new(Vec2::new(-200.0, -200.0), Vec2::new(200.0, 200.0));
-        let grid = ParameterizedGraphicsGrid::new(
-            HueCircle,
+        let grid = ArtGeneratorGrid::new(
+            0,
             8,
             4,
             world_bounds,
             2.0,
-            GridParamMapping::One(0),
-            vec![ParamValue::F32(0.5)],
             None,
             ctx.device,
             ctx.queue,
         );
-        let menu_state = MenuState::new(grid.rows(), grid.cols(), grid.param_ranges());
+        let menu_state = MenuState::new(grid.rows(), grid.cols(), &grid.param_ranges());
         let camera = Camera2D::new(world_bounds, world_bounds, 50.0, aspect);
         Box::new(DemoState {
             camera,
@@ -59,7 +55,7 @@ struct DemoState {
     font: TextureAtlasFont,
     fps: FpsCounter,
     input: InputState,
-    grid: ParameterizedGraphicsGrid<HueCircle>,
+    grid: ArtGeneratorGrid,
     menu_state: MenuState,
 }
 
@@ -81,18 +77,31 @@ impl AppState for DemoState {
     }
 
     fn update(&mut self, ctx: &UpdateContext) -> StateTransition {
-        if self.menu_state.needs_regenerate {
+        if self.menu_state.needs_generator_switch {
+            self.menu_state.needs_generator_switch = false;
             self.menu_state.needs_regenerate = false;
             let bounds = self.grid.bounds();
-            let ranges = self.menu_state.pending_ranges.clone();
-            self.grid = ParameterizedGraphicsGrid::new(
-                HueCircle,
+            self.grid = ArtGeneratorGrid::new(
+                self.menu_state.selected_generator,
                 self.menu_state.pending_cols,
                 self.menu_state.pending_rows,
                 bounds,
                 2.0,
-                GridParamMapping::One(0),
-                vec![ParamValue::F32(0.5)],
+                None,
+                ctx.device,
+                ctx.queue,
+            );
+            self.menu_state.pending_ranges = self.grid.param_ranges();
+        } else if self.menu_state.needs_regenerate {
+            self.menu_state.needs_regenerate = false;
+            let bounds = self.grid.bounds();
+            let ranges = self.menu_state.pending_ranges.clone();
+            self.grid = ArtGeneratorGrid::new(
+                self.menu_state.selected_generator,
+                self.menu_state.pending_cols,
+                self.menu_state.pending_rows,
+                bounds,
+                2.0,
                 Some(ranges),
                 ctx.device,
                 ctx.queue,
@@ -229,7 +238,7 @@ impl AppState for DemoState {
     }
 
     fn overlay_ui(&mut self, ctx: &egui::Context) {
-        let defs = self.grid.art().param_defs();
+        let defs = self.grid.param_defs();
         menu::draw_menu(ctx, &mut self.menu_state, &defs);
     }
 }

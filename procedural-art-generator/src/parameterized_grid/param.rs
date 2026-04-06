@@ -44,6 +44,21 @@ impl ParamValue {
         }
     }
 
+    pub fn as_u32(&self) -> u32 {
+        match *self {
+            Self::F32(v) => v as u32,
+            Self::F64(v) => v as u32,
+            Self::U8(v) => v as u32,
+            Self::I8(v) => v as u32,
+            Self::U16(v) => v as u32,
+            Self::I16(v) => v as u32,
+            Self::U32(v) => v,
+            Self::I32(v) => v as u32,
+            Self::U64(v) => v as u32,
+            Self::I64(v) => v as u32,
+        }
+    }
+
     pub fn kind(&self) -> ParamKind {
         match self {
             Self::F32(_) => ParamKind::F32,

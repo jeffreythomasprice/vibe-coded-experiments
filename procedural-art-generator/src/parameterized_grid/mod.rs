@@ -1,9 +1,14 @@
+mod generator_enum;
 mod hue_circle;
 mod param;
+mod perlin_noise;
 
+pub use generator_enum::ArtGeneratorGrid;
 pub use hue_circle::HueCircle;
 pub use param::*;
+pub use perlin_noise::PerlinNoise;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
@@ -29,7 +34,7 @@ pub trait ParameterizedGraphics {
     fn param_defs(&self) -> Vec<ParamDef>;
     fn build_params(&self, values: &[ParamValue]) -> Self::Params;
     fn init(&self, params: &Self::Params, device: &wgpu::Device, queue: &wgpu::Queue) -> Self::Instance;
-    fn render(&self, instance: &Self::Instance, cell_rect: Rect, frame: &mut Frame<'_>);
+    fn render<'a>(&self, instance: &'a Self::Instance, cell_rect: Rect, frame: &mut Frame<'a>);
 }
 
 pub enum GridParamMapping {
@@ -53,6 +58,7 @@ pub struct ParameterizedGraphicsGrid<A: ParameterizedGraphics> {
     receiver: Option<Receiver<(usize, A::Instance)>>,
     pending_count: usize,
     elapsed_time: f32,
+    cancelled: Arc<AtomicBool>,
 }
 
 impl<A> ParameterizedGraphicsGrid<A>
@@ -98,6 +104,8 @@ where
         let art = Arc::new(art);
         let total = cols * rows;
 
+        let cancelled = Arc::new(AtomicBool::new(false));
+
         let mut grid = Self {
             art: art.clone(),
             cols,
@@ -114,6 +122,7 @@ where
             receiver: None,
             pending_count: total,
             elapsed_time: 0.0,
+            cancelled: cancelled.clone(),
         };
 
         let (tx, rx) = mpsc::channel();
@@ -132,15 +141,31 @@ where
                 let sem = semaphore.clone();
                 let device = device.clone();
                 let queue = queue.clone();
+                let cancelled = cancelled.clone();
 
                 thread::spawn(move || {
+                    if cancelled.load(Ordering::Relaxed) {
+                        return;
+                    }
+
                     {
                         let (lock, cvar) = &*sem;
                         let mut count = lock.lock().unwrap();
                         while *count >= MAX_CONCURRENT_INITS {
+                            if cancelled.load(Ordering::Relaxed) {
+                                return;
+                            }
                             count = cvar.wait(count).unwrap();
                         }
                         *count += 1;
+                    }
+
+                    if cancelled.load(Ordering::Relaxed) {
+                        let (lock, cvar) = &*sem;
+                        let mut count = lock.lock().unwrap();
+                        *count -= 1;
+                        cvar.notify_one();
+                        return;
                     }
 
                     let instance = art.init(&params, &device, &queue);
@@ -261,7 +286,7 @@ where
         self.hovered = self.hit_test(world_pos);
     }
 
-    pub fn render_cells(&self, frame: &mut Frame<'_>) {
+    pub fn render_cells<'a>(&'a self, frame: &mut Frame<'a>) {
         for row in 0..self.rows {
             for col in 0..self.cols {
                 let idx = row * self.cols + col;
@@ -330,5 +355,11 @@ where
                 })
                 .collect(),
         )
+    }
+}
+
+impl<A: ParameterizedGraphics> Drop for ParameterizedGraphicsGrid<A> {
+    fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Relaxed);
     }
 }

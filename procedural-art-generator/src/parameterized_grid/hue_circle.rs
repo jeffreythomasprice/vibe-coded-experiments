@@ -49,7 +49,7 @@ impl ParameterizedGraphics for HueCircle {
         HueCircleInstance { mesh }
     }
 
-    fn render(&self, instance: &HueCircleInstance, cell_rect: Rect, frame: &mut Frame<'_>) {
+    fn render<'a>(&self, instance: &'a HueCircleInstance, cell_rect: Rect, frame: &mut Frame<'a>) {
         let center = cell_rect.center();
         let radius = cell_rect.width().min(cell_rect.height()) / 2.0;
         let transform = Mat4::from_translation(Vec3::new(center.x, center.y, 0.0))

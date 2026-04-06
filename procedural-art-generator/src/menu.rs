@@ -27,7 +27,7 @@ impl OverlayState {
     }
 }
 
-pub const GENERATOR_NAMES: &[&str] = &["HueCircle"];
+pub const GENERATOR_NAMES: &[&str] = &["HueCircle", "PerlinNoise"];
 
 pub struct MenuState {
     pub panel: MenuPanel,
@@ -35,6 +35,7 @@ pub struct MenuState {
     pub pending_cols: usize,
     pub pending_ranges: Vec<ParamRange>,
     pub needs_regenerate: bool,
+    pub needs_generator_switch: bool,
     pub selected_generator: usize,
 }
 
@@ -46,6 +47,7 @@ impl MenuState {
             pending_cols: cols,
             pending_ranges: param_ranges.to_vec(),
             needs_regenerate: false,
+            needs_generator_switch: false,
             selected_generator: 0,
         }
     }
@@ -126,8 +128,11 @@ fn draw_select_generator_panel(ui: &mut egui::Ui, state: &mut MenuState) {
             name.to_string()
         };
         if ui.button(label).clicked() {
-            state.selected_generator = i;
-            state.panel = MenuPanel::Parameters;
+            if state.selected_generator != i {
+                state.selected_generator = i;
+                state.needs_generator_switch = true;
+            }
+            state.panel = MenuPanel::Main;
         }
     }
 }
