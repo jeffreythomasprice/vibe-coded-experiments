@@ -136,6 +136,36 @@ impl ParamRange {
         }
     }
 
+    pub fn min_value(&self) -> ParamValue {
+        match *self {
+            Self::F32 { min, .. } => ParamValue::F32(min),
+            Self::F64 { min, .. } => ParamValue::F64(min),
+            Self::U8 { min, .. } => ParamValue::U8(min),
+            Self::I8 { min, .. } => ParamValue::I8(min),
+            Self::U16 { min, .. } => ParamValue::U16(min),
+            Self::I16 { min, .. } => ParamValue::I16(min),
+            Self::U32 { min, .. } => ParamValue::U32(min),
+            Self::I32 { min, .. } => ParamValue::I32(min),
+            Self::U64 { min, .. } => ParamValue::U64(min),
+            Self::I64 { min, .. } => ParamValue::I64(min),
+        }
+    }
+
+    pub fn max_value(&self) -> ParamValue {
+        match *self {
+            Self::F32 { max, .. } => ParamValue::F32(max),
+            Self::F64 { max, .. } => ParamValue::F64(max),
+            Self::U8 { max, .. } => ParamValue::U8(max),
+            Self::I8 { max, .. } => ParamValue::I8(max),
+            Self::U16 { max, .. } => ParamValue::U16(max),
+            Self::I16 { max, .. } => ParamValue::I16(max),
+            Self::U32 { max, .. } => ParamValue::U32(max),
+            Self::I32 { max, .. } => ParamValue::I32(max),
+            Self::U64 { max, .. } => ParamValue::U64(max),
+            Self::I64 { max, .. } => ParamValue::I64(max),
+        }
+    }
+
     pub fn lerp(&self, t: f32) -> ParamValue {
         let t = t.clamp(0.0, 1.0);
         match *self {
@@ -166,6 +196,12 @@ impl ParamRange {
                 ParamValue::I64(min + (t * (max - min) as f32).round() as i64)
             }
         }
+    }
+}
+
+impl fmt::Display for ParamRange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} .. {}", self.min_value(), self.max_value())
     }
 }
 

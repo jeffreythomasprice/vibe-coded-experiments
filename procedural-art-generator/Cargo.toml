@@ -14,3 +14,6 @@ bytemuck = { version = "1.25.0", features = ["derive"] }
 lyon = "1"
 fontdue = "0.9"
 rand = "0.9"
+egui = "0.31"
+egui-wgpu = "0.31"
+egui-winit = "0.31"

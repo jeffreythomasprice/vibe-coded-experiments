@@ -42,6 +42,7 @@ pub trait AppState {
     fn event(&mut self, ctx: &EventContext, event: &WindowEvent) -> StateTransition;
     fn update(&mut self, ctx: &UpdateContext) -> StateTransition;
     fn render(&mut self, ctx: &mut RenderContext);
+    fn overlay_ui(&mut self, _ctx: &egui::Context) {}
 }
 
 pub struct InputState {

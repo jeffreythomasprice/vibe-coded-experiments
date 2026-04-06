@@ -1,22 +1,24 @@
 pub mod camera;
+mod egui_integration;
 pub mod fps;
 pub(crate) mod graphics;
+mod menu;
 pub mod parameterized_grid;
 pub mod state;
 mod windowing;
 
-use glam::Vec2;
-use winit::event::WindowEvent;
-use winit::keyboard::{Key, NamedKey};
-
 use camera::{Camera2D, Rect};
 use fps::FpsCounter;
+use glam::Vec2;
 use graphics::font::{HAlign, TextureAtlasFont, VAlign};
 use graphics::immediate::Color;
-use parameterized_grid::{GridParamMapping, HueCircle, ParamValue, ParameterizedGraphicsGrid};
+use parameterized_grid::{
+    GridParamMapping, HueCircle, ParamValue, ParameterizedGraphics, ParameterizedGraphicsGrid,
+};
 use state::{
     AppState, EventContext, InitContext, InputState, RenderContext, StateTransition, UpdateContext,
 };
+use winit::event::WindowEvent;
 
 fn main() {
     init_tracing();
@@ -61,11 +63,6 @@ impl AppState for DemoState {
         self.input.handle_event(event);
 
         match event {
-            WindowEvent::KeyboardInput { event, .. } => {
-                if event.logical_key == Key::Named(NamedKey::Escape) && event.state.is_pressed() {
-                    return StateTransition::Quit;
-                }
-            }
             WindowEvent::Resized(new_size) => {
                 if new_size.width > 0 && new_size.height > 0 {
                     self.camera
@@ -127,7 +124,9 @@ impl AppState for DemoState {
         }
 
         let viewport_size = Vec2::new(ctx.viewport_size.0 as f32, ctx.viewport_size.1 as f32);
-        let world_pos = self.camera.screen_to_world(self.input.cursor_pos, viewport_size);
+        let world_pos = self
+            .camera
+            .screen_to_world(self.input.cursor_pos, viewport_size);
         self.grid.update_hover(world_pos);
 
         self.grid.update_time(dt);
@@ -205,6 +204,11 @@ impl AppState for DemoState {
             }
         }
     }
+
+    fn overlay_ui(&mut self, ctx: &egui::Context) {
+        let art = self.grid.art();
+        menu::draw_parameterized_graphics_info_panel(ctx, art.description(), &art.param_defs());
+    }
 }
 
 fn init_tracing() {
@@ -213,9 +217,8 @@ fn init_tracing() {
     let pkg_name = env!("CARGO_PKG_NAME").replace('-', "_");
     let default_filter = format!("warn,{pkg_name}=trace");
 
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        EnvFilter::new(&default_filter)
-    });
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&default_filter));
 
     tracing_subscriber::fmt().with_env_filter(filter).init();
 }

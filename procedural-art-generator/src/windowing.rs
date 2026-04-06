@@ -5,11 +5,14 @@ use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
     event_loop::{ActiveEventLoop, EventLoop},
+    keyboard::{Key, NamedKey},
     window::{Window, WindowAttributes, WindowId},
 };
 
+use crate::egui_integration::EguiIntegration;
 use crate::graphics::immediate::ImmediateRenderer;
 use crate::graphics::wgpu_utils::GpuState;
+use crate::menu::OverlayState;
 use crate::state::{AppState, EventContext, InitContext, RenderContext, StateTransition, UpdateContext};
 
 struct App {
@@ -19,6 +22,8 @@ struct App {
     state: Option<Box<dyn AppState>>,
     state_factory: Option<Box<dyn FnOnce(&InitContext) -> Box<dyn AppState>>>,
     last_frame_time: Option<Instant>,
+    egui: Option<EguiIntegration>,
+    overlay_state: OverlayState,
 }
 
 impl App {
@@ -30,6 +35,8 @@ impl App {
             state: None,
             state_factory: Some(factory),
             last_frame_time: None,
+            egui: None,
+            overlay_state: OverlayState::Hidden,
         }
     }
 
@@ -44,6 +51,20 @@ impl App {
             }
         }
     }
+}
+
+fn is_escape_press(event: &WindowEvent) -> bool {
+    matches!(
+        event,
+        WindowEvent::KeyboardInput {
+            event: winit::event::KeyEvent {
+                logical_key: Key::Named(NamedKey::Escape),
+                state: winit::event::ElementState::Pressed,
+                ..
+            },
+            ..
+        }
+    )
 }
 
 impl ApplicationHandler for App {
@@ -64,6 +85,7 @@ impl ApplicationHandler for App {
         tracing::info!("Initializing GPU state");
         let gpu = GpuState::new(window.clone());
         let renderer = ImmediateRenderer::new(&gpu.device, &gpu.queue, gpu.config.format);
+        let egui = EguiIntegration::new(&window, &gpu.device, gpu.config.format);
 
         if let Some(factory) = self.state_factory.take() {
             let init_ctx = InitContext {
@@ -78,6 +100,7 @@ impl ApplicationHandler for App {
         self.window = Some(window);
         self.renderer = Some(renderer);
         self.gpu = Some(gpu);
+        self.egui = Some(egui);
         tracing::info!("Application ready");
     }
 
@@ -165,17 +188,47 @@ impl ApplicationHandler for App {
                 };
                 state.render(&mut render_ctx);
 
+                if self.overlay_state.is_visible() {
+                    if let Some(egui) = &mut self.egui {
+                        let window = self.window.as_ref().unwrap();
+                        egui.render(
+                            window,
+                            &gpu.device,
+                            &gpu.queue,
+                            &view,
+                            gpu.config.width,
+                            gpu.config.height,
+                            |ctx| state.overlay_ui(ctx),
+                        );
+                    }
+                }
+
                 surface_texture.present();
             }
             other => {
-                if let Some(state) = &mut self.state {
-                    let gpu = self.gpu.as_ref();
-                    let viewport_size = gpu
-                        .map(|g| (g.config.width, g.config.height))
-                        .unwrap_or((0, 0));
-                    let ctx = EventContext { viewport_size };
-                    let transition = state.event(&ctx, &other);
-                    self.apply_transition(transition, event_loop);
+                if is_escape_press(&other) {
+                    self.overlay_state.toggle();
+                    return;
+                }
+
+                let egui_consumed = if let Some(egui) = &mut self.egui {
+                    let window = self.window.as_ref().unwrap();
+                    let response = egui.handle_event(window, &other);
+                    response.consumed && self.overlay_state.is_visible()
+                } else {
+                    false
+                };
+
+                if !egui_consumed {
+                    if let Some(state) = &mut self.state {
+                        let gpu = self.gpu.as_ref();
+                        let viewport_size = gpu
+                            .map(|g| (g.config.width, g.config.height))
+                            .unwrap_or((0, 0));
+                        let ctx = EventContext { viewport_size };
+                        let transition = state.event(&ctx, &other);
+                        self.apply_transition(transition, event_loop);
+                    }
                 }
             }
         }

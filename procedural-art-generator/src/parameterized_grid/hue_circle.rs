@@ -17,6 +17,10 @@ impl ParameterizedGraphics for HueCircle {
     type Params = Color;
     type Instance = HueCircleInstance;
 
+    fn description(&self) -> &str {
+        "A test demonstrating a single parameterized value"
+    }
+
     fn param_defs(&self) -> Vec<ParamDef> {
         vec![ParamDef {
             description: "Hue".into(),

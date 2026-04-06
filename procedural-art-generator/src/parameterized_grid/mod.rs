@@ -25,6 +25,7 @@ pub trait ParameterizedGraphics {
     type Params;
     type Instance;
 
+    fn description(&self) -> &str;
     fn param_defs(&self) -> Vec<ParamDef>;
     fn build_params(&self, values: &[ParamValue]) -> Self::Params;
     fn init(&self, params: &Self::Params, device: &wgpu::Device, queue: &wgpu::Queue) -> Self::Instance;
@@ -166,6 +167,10 @@ where
 
     pub fn update_time(&mut self, dt: f32) {
         self.elapsed_time += dt;
+    }
+
+    pub fn art(&self) -> &A {
+        &self.art
     }
 
     pub fn bounds(&self) -> Rect {

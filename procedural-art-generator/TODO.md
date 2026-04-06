@@ -1,10 +1,6 @@
-/init
-
-menu system
-
 multiple kinds of ParameterizedGraphics
-list what ParameterizedGraphics are available, and a description of their parameters
-list what we're parameterizing over right now in this grid, and what params are fixed
+menu system should let you pick which kind of graphics
+within each graphics should let you select which parameters are being iterated over
 
 noise textures
 
