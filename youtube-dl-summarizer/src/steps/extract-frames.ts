@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { CACHE_FILES, cacheRead } from "../cache.ts";
 import { ensureBinary, run } from "../utils/subprocess.ts";
+import { ProgressBar } from "../utils/progress.ts";
 
 const MAX_FRAMES = 15;
 
@@ -48,6 +49,7 @@ export async function extractFrames(
   const videoPath = join(cacheDir, CACHE_FILES.video);
   const frameMap = new Map<string, string>();
   const total = timestamps.length;
+  const bar = new ProgressBar({ label: "Extracting frames", total });
 
   for (let i = 0; i < total; i++) {
     const ts = timestamps[i];
@@ -56,16 +58,15 @@ export async function extractFrames(
     const outputPath = join(snapshotsDir, filename);
     const relativePath = `${CACHE_FILES.snapshotsDir}/${filename}`;
 
+    bar.update(i + 1);
+
     // Skip if already extracted
     const file = Bun.file(outputPath);
     if (await file.exists() && file.size > 0) {
-      if (verbose) console.error(`[extract-frames] ${ts} already cached`);
+      if (verbose) console.error(`\n[extract-frames] ${ts} already cached`);
       frameMap.set(ts, relativePath);
-      process.stderr.write(`\rExtracting frames [${i + 1}/${total}]`);
       continue;
     }
-
-    process.stderr.write(`\rExtracting frames [${i + 1}/${total}]`);
 
     try {
       await run([
@@ -85,7 +86,6 @@ export async function extractFrames(
     }
   }
 
-  // Clear the \r line and print final count
-  console.error(`\rExtracting frames [${total}/${total}]... done`);
+  bar.done("done");
   return frameMap;
 }

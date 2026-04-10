@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { CACHE_FILES, cacheExists } from "../cache.ts";
 import { ensureBinary, run } from "../utils/subprocess.ts";
+import { ProgressBar } from "../utils/progress.ts";
 import { Glob } from "bun";
 
 const INSTALL_HINT = "https://github.com/yt-dlp/yt-dlp#installation";
@@ -16,7 +17,27 @@ export async function downloadVideo(
   }
 
   const bin = ensureBinary("yt-dlp", INSTALL_HINT);
-  console.error("Downloading video...");
+  const bar = new ProgressBar({ label: "Downloading video" });
+  bar.updatePercent(0);
+
+  // yt-dlp outputs progress on stderr with \r separators
+  let stderrBuf = "";
+  // yt-dlp writes progress to stdout
+  let buf = "";
+  const onStdout = (chunk: string) => {
+    buf += chunk;
+    const lines = buf.split(/[\r\n]/);
+    buf = lines.pop() ?? "";
+    for (const line of lines) {
+      const match = line.match(/\[download\]\s+([\d.]+)%/);
+      if (match) {
+        const percent = parseFloat(match[1]);
+        const extra = line.match(/at\s+(\S+)\s+ETA\s+(\S+)/);
+        const suffix = extra ? `${extra[1]}  ETA ${extra[2]}` : undefined;
+        bar.updatePercent(percent, suffix);
+      }
+    }
+  };
 
   await run(
     [
@@ -26,10 +47,13 @@ export async function downloadVideo(
       "-o",
       join(cacheDir, CACHE_FILES.video),
       "--no-playlist",
+      "--newline",
       url,
     ],
-    { streamStderr: true },
+    { onStdout },
   );
+
+  bar.done("done");
 }
 
 export async function downloadCaptions(

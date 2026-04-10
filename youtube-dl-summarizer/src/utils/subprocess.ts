@@ -19,32 +19,59 @@ export interface RunResult {
 
 export async function run(
   command: string[],
-  opts?: { cwd?: string; stdin?: string; streamStderr?: boolean },
+  opts?: {
+    cwd?: string;
+    stdin?: string;
+    streamStderr?: boolean;
+    onStderr?: (chunk: string) => void;
+    onStdout?: (chunk: string) => void;
+  },
 ): Promise<RunResult> {
+  const streamingStderr = opts?.streamStderr || opts?.onStderr;
+  const streamingStdout = opts?.onStdout;
+
   const proc = Bun.spawn(command, {
     cwd: opts?.cwd,
     stdin: opts?.stdin ? new TextEncoder().encode(opts.stdin) : "ignore",
     stdout: "pipe",
-    stderr: opts?.streamStderr ? "pipe" : "pipe",
+    stderr: "pipe",
   });
 
-  let stderrText: string;
-  if (opts?.streamStderr && proc.stderr) {
-    // Tee stderr to process.stderr while capturing it
+  // Read stdout and stderr concurrently to avoid pipe deadlocks
+  async function readStream(
+    stream: ReadableStream<Uint8Array> | null,
+    callback?: (chunk: string) => void,
+    teeToStderr?: boolean,
+  ): Promise<string> {
+    if (!stream) return "";
+    if (!callback && !teeToStderr) {
+      return new Response(stream).text();
+    }
     const chunks: Uint8Array[] = [];
-    const reader = proc.stderr.getReader();
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       chunks.push(value);
-      process.stderr.write(value);
+      if (callback) {
+        callback(decoder.decode(value, { stream: true }));
+      } else if (teeToStderr) {
+        process.stderr.write(value);
+      }
     }
-    stderrText = new TextDecoder().decode(Buffer.concat(chunks));
-  } else {
-    stderrText = await new Response(proc.stderr).text();
+    return new TextDecoder().decode(Buffer.concat(chunks));
   }
 
-  const stdout = await new Response(proc.stdout).text();
+  const [stdout, stderrText] = await Promise.all([
+    readStream(proc.stdout, streamingStdout ? opts!.onStdout : undefined),
+    readStream(
+      proc.stderr,
+      streamingStderr ? opts?.onStderr : undefined,
+      streamingStderr && !opts?.onStderr,
+    ),
+  ]);
+
   const exitCode = await proc.exited;
 
   if (exitCode !== 0) {
