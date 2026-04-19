@@ -1,0 +1,605 @@
+{
+  "version": 5,
+  "id": "cVader500xJxvbPTS",
+  "total_points": 500,
+  "points_record": [
+    {"when": "2026-04-19T00:00:00-04:00", "points": 500, "reason": "Initial points"}
+  ],
+  "profile": {
+    "name": "Darth Vader",
+    "player_name": "NPC",
+    "tech_level": "10^",
+    "age": "45",
+    "eyes": "Yellow (Sith)",
+    "hair": "None",
+    "skin": "Pale, scarred",
+    "handedness": "Right",
+    "gender": "Male",
+    "height": "6'8\"",
+    "weight": "300 lb",
+    "title": "Dark Lord of the Sith",
+    "religion": "Dark Side of the Force"
+  },
+  "settings": {
+    "page": {
+      "paper_size": "letter",
+      "orientation": "portrait",
+      "top_margin": "0.25 in",
+      "left_margin": "0.25 in",
+      "bottom_margin": "0.25 in",
+      "right_margin": "0.25 in"
+    },
+    "block_layout": [
+      "reactions conditional_modifiers",
+      "melee",
+      "ranged",
+      "traits skills",
+      "spells",
+      "equipment",
+      "other_equipment",
+      "notes"
+    ],
+    "attributes": [
+      {"id": "st", "type": "integer", "name": "ST", "full_name": "Strength", "attribute_base": "10", "cost_per_point": 10, "cost_adj_percent_per_sm": 10},
+      {"id": "dx", "type": "integer", "name": "DX", "full_name": "Dexterity", "attribute_base": "10", "cost_per_point": 20},
+      {"id": "iq", "type": "integer", "name": "IQ", "full_name": "Intelligence", "attribute_base": "10", "cost_per_point": 20},
+      {"id": "ht", "type": "integer", "name": "HT", "full_name": "Health", "attribute_base": "10", "cost_per_point": 10},
+      {"id": "will", "type": "integer", "name": "Will", "attribute_base": "$iq", "cost_per_point": 5},
+      {"id": "fright_check", "type": "integer", "name": "Fright Check", "attribute_base": "$will", "cost_per_point": 2},
+      {"id": "per", "type": "integer", "name": "Per", "full_name": "Perception", "attribute_base": "$iq", "cost_per_point": 5},
+      {"id": "vision", "type": "integer", "name": "Vision", "attribute_base": "$per", "cost_per_point": 2},
+      {"id": "hearing", "type": "integer", "name": "Hearing", "attribute_base": "$per", "cost_per_point": 2},
+      {"id": "taste_smell", "type": "integer", "name": "Taste & Smell", "attribute_base": "$per", "cost_per_point": 2},
+      {"id": "touch", "type": "integer", "name": "Touch", "attribute_base": "$per", "cost_per_point": 2},
+      {"id": "basic_speed", "type": "decimal", "name": "Basic Speed", "attribute_base": "($dx+$ht)/4", "cost_per_point": 20},
+      {"id": "basic_move", "type": "integer", "name": "Basic Move", "attribute_base": "floor($basic_speed)", "cost_per_point": 5},
+      {
+        "id": "fp", "type": "pool", "name": "FP", "full_name": "Fatigue Points",
+        "attribute_base": "$ht", "cost_per_point": 3,
+        "thresholds": [
+          {"state": "Unconscious", "expression": "-$fp", "ops": ["halve_move", "halve_dodge", "halve_st"]},
+          {"state": "Collapse", "expression": "0", "explanation": "Roll vs. Will to do anything besides talk or rest; failure causes unconsciousness\nEach FP you lose below 0 also causes 1 HP of injury\nMove, Dodge and ST are halved (B426)", "ops": ["halve_move", "halve_dodge", "halve_st"]},
+          {"state": "Tired", "expression": "round($fp/3)", "explanation": "Move, Dodge and ST are halved (B426)", "ops": ["halve_move", "halve_dodge", "halve_st"]},
+          {"state": "Tiring", "expression": "$fp-1"},
+          {"state": "Rested", "expression": "$fp"}
+        ]
+      },
+      {
+        "id": "hp", "type": "pool", "name": "HP", "full_name": "Hit Points",
+        "attribute_base": "$st", "cost_per_point": 2, "cost_adj_percent_per_sm": 10,
+        "thresholds": [
+          {"state": "Dead", "expression": "round(-$hp*5)", "ops": ["halve_move", "halve_dodge"]},
+          {"state": "Dying #4", "expression": "round(-$hp*4)", "explanation": "Roll vs. HT to avoid death\nRoll vs. HT-4 every second to avoid unconsciousness\nMove and Dodge halved (B419)", "ops": ["halve_move", "halve_dodge"]},
+          {"state": "Dying #3", "expression": "round(-$hp*3)", "explanation": "Roll vs. HT to avoid death\nRoll vs. HT-3 every second to avoid unconsciousness\nMove and Dodge halved (B419)", "ops": ["halve_move", "halve_dodge"]},
+          {"state": "Dying #2", "expression": "round(-$hp*2)", "explanation": "Roll vs. HT to avoid death\nRoll vs. HT-2 every second to avoid unconsciousness\nMove and Dodge halved (B419)", "ops": ["halve_move", "halve_dodge"]},
+          {"state": "Dying #1", "expression": "-$hp", "explanation": "Roll vs. HT to avoid death\nRoll vs. HT-1 every second to avoid unconsciousness\nMove and Dodge halved (B419)", "ops": ["halve_move", "halve_dodge"]},
+          {"state": "Collapse", "expression": "0", "explanation": "Roll vs. HT every second to avoid unconsciousness\nMove and Dodge halved (B419)", "ops": ["halve_move", "halve_dodge"]},
+          {"state": "Reeling", "expression": "round($hp/3)", "explanation": "Move and Dodge halved (B419)", "ops": ["halve_move", "halve_dodge"]},
+          {"state": "Wounded", "expression": "$hp-1"},
+          {"state": "Healthy", "expression": "$hp"}
+        ]
+      }
+    ],
+    "body_type": {
+      "name": "Humanoid",
+      "roll": "3d",
+      "locations": [
+        {"id": "eye", "choice_name": "Eyes", "table_name": "Eyes", "hit_penalty": -9, "description": "An attack that misses by 1 hits the torso. Only impaling, piercing, and tight-beam burning can target eyes — and only from front or sides. Injury over HP/10 blinds the eye.", "calc": {"roll_range": "-", "dr": {"all": 0}}},
+        {"id": "skull", "choice_name": "Skull", "table_name": "Skull", "slots": 2, "hit_penalty": -7, "dr_bonus": 2, "description": "Miss-by-1 hits torso. Wounding x4. Knockdown rolls at -10. Critical hits use Critical Head Blow Table (B556).", "calc": {"roll_range": "3-4", "dr": {"all": 2}}},
+        {"id": "face", "choice_name": "Face", "table_name": "Face", "slots": 1, "hit_penalty": -5, "description": "Miss-by-1 hits torso. Knockdown at -5. Critical hits use Critical Head Blow Table (B556). Corrosion gets x1.5 wounding.", "calc": {"roll_range": "5", "dr": {"all": 0}}},
+        {"id": "leg", "choice_name": "Leg", "table_name": "Right Leg", "slots": 2, "hit_penalty": -2, "description": "Reduce pi+/pi++/imp wound multiplier to x1. Any major wound cripples the limb.", "calc": {"roll_range": "6-7", "dr": {"all": 0}}},
+        {"id": "arm", "choice_name": "Arm", "table_name": "Right Arm", "slots": 1, "hit_penalty": -2, "description": "Reduce pi+/pi++/imp wound multiplier to x1. Any major wound cripples the limb. -4 if holding a shield.", "calc": {"roll_range": "8", "dr": {"all": 0}}},
+        {"id": "torso", "choice_name": "Torso", "table_name": "Torso", "slots": 2, "calc": {"roll_range": "9-10", "dr": {"all": 0}}},
+        {"id": "groin", "choice_name": "Groin", "table_name": "Groin", "slots": 1, "hit_penalty": -3, "description": "Miss-by-1 hits torso. Males suffer double shock from cr, -5 to knockdown rolls.", "calc": {"roll_range": "11", "dr": {"all": 0}}},
+        {"id": "arm", "choice_name": "Arm", "table_name": "Left Arm", "slots": 1, "hit_penalty": -2, "description": "See Right Arm.", "calc": {"roll_range": "12", "dr": {"all": 0}}},
+        {"id": "leg", "choice_name": "Leg", "table_name": "Left Leg", "slots": 2, "hit_penalty": -2, "description": "See Right Leg.", "calc": {"roll_range": "13-14", "dr": {"all": 0}}},
+        {"id": "hand", "choice_name": "Hand", "table_name": "Hand", "slots": 1, "hit_penalty": -4, "description": "Reduce pi+/pi++/imp wound multiplier to x1. Major wound cripples.", "calc": {"roll_range": "15", "dr": {"all": 0}}},
+        {"id": "foot", "choice_name": "Foot", "table_name": "Foot", "slots": 1, "hit_penalty": -4, "description": "Reduce pi+/pi++/imp wound multiplier to x1. Major wound cripples.", "calc": {"roll_range": "16", "dr": {"all": 0}}},
+        {"id": "neck", "choice_name": "Neck", "table_name": "Neck", "slots": 2, "hit_penalty": -5, "description": "x2 wounding for crushing and cutting damage; cutting damage over half the victim's HP decapitates.", "calc": {"roll_range": "17-18", "dr": {"all": 0}}},
+        {"id": "vitals", "choice_name": "Vitals", "table_name": "Vitals", "hit_penalty": -3, "description": "Imp and pi attacks get x3 wounding. Tight-beam burn gets x2. Other damage is treated as torso.", "calc": {"roll_range": "-", "dr": {"all": 0}}}
+      ]
+    },
+    "damage_progression": "basic_set",
+    "default_length_units": "ft_in",
+    "default_weight_units": "lb"
+  },
+  "attributes": [
+    {"attr_id": "st", "adj": 4, "calc": {"value": 14, "points": 40}},
+    {"attr_id": "dx", "adj": 4, "calc": {"value": 14, "points": 80}},
+    {"attr_id": "iq", "adj": 3, "calc": {"value": 13, "points": 60}},
+    {"attr_id": "ht", "adj": 2, "calc": {"value": 12, "points": 20}},
+    {"attr_id": "will", "adj": 3, "calc": {"value": 16, "points": 15}},
+    {"attr_id": "fright_check", "adj": 0, "calc": {"value": 16, "points": 0}},
+    {"attr_id": "per", "adj": 0, "calc": {"value": 13, "points": 0}},
+    {"attr_id": "vision", "adj": 0, "calc": {"value": 13, "points": 0}},
+    {"attr_id": "hearing", "adj": 0, "calc": {"value": 13, "points": 0}},
+    {"attr_id": "taste_smell", "adj": 0, "calc": {"value": 13, "points": 0}},
+    {"attr_id": "touch", "adj": 0, "calc": {"value": 13, "points": 0}},
+    {"attr_id": "basic_speed", "adj": 0, "calc": {"value": 6.5, "points": 0}},
+    {"attr_id": "basic_move", "adj": 0, "calc": {"value": 6, "points": 0}},
+    {"attr_id": "fp", "adj": 0, "calc": {"value": 12, "current": 12, "points": 0}},
+    {"attr_id": "hp", "adj": 4, "calc": {"value": 18, "current": 18, "points": 8}}
+  ],
+  "traits": [
+    {
+      "id": "tv_advantages_container",
+      "type": "trait_container",
+      "name": "Advantages",
+      "children": [
+        {
+          "id": "tv_combat_reflexes",
+          "type": "trait",
+          "name": "Combat Reflexes",
+          "reference": "B43",
+          "local_notes": "Never freeze; +6 on all IQ rolls to wake up or to recover from surprise or mental stun; Your side gets +1 to initiative rolls (+2 if you're the leader)",
+          "tags": ["Advantage", "Mental"],
+          "base_points": 15,
+          "features": [
+            {"type": "skill_bonus", "selection_type": "skills_with_name", "name": {"compare": "starts_with", "qualifier": "fast-draw"}, "amount": 1},
+            {"type": "attribute_bonus", "attribute": "dodge", "amount": 1},
+            {"type": "attribute_bonus", "attribute": "parry", "amount": 1},
+            {"type": "attribute_bonus", "attribute": "block", "amount": 1},
+            {"type": "attribute_bonus", "attribute": "fright_check", "amount": 2}
+          ],
+          "calc": {"points": 15}
+        },
+        {
+          "id": "tv_high_pain_threshold",
+          "type": "trait",
+          "name": "High Pain Threshold",
+          "reference": "B59",
+          "local_notes": "Never suffer shock penalties when injured; +3 on all HT rolls to avoid knockdown and stunning; +3 to resist torture",
+          "tags": ["Advantage", "Physical"],
+          "base_points": 10,
+          "calc": {"points": 10}
+        },
+        {
+          "id": "tv_danger_sense",
+          "type": "trait",
+          "name": "Danger Sense (The Force)",
+          "reference": "B47",
+          "local_notes": "The Force warns of ambush or impending harm. Make a free Per roll before danger strikes; success grants a round to react.",
+          "tags": ["Advantage", "Mental"],
+          "base_points": 15,
+          "calc": {"points": 15}
+        },
+        {
+          "id": "tv_fearlessness",
+          "type": "trait",
+          "name": "Fearlessness",
+          "reference": "B55",
+          "tags": ["Advantage", "Mental"],
+          "can_level": true,
+          "points_per_level": 2,
+          "levels": 3,
+          "features": [
+            {"type": "attribute_bonus", "attribute": "fright_check", "amount": 1, "per_level": true}
+          ],
+          "calc": {"points": 6}
+        },
+        {
+          "id": "tv_single_minded",
+          "type": "trait",
+          "name": "Single-Minded",
+          "reference": "B85",
+          "tags": ["Advantage", "Mental"],
+          "base_points": 5,
+          "calc": {"points": 5}
+        },
+        {
+          "id": "tv_damage_resistance",
+          "type": "trait",
+          "name": "Damage Resistance (Cybernetic Armor Suit)",
+          "reference": "B46",
+          "local_notes": "Heavy powered body armor built into the life-support suit.",
+          "tags": ["Advantage", "Exotic", "Physical"],
+          "can_level": true,
+          "points_per_level": 5,
+          "levels": 8,
+          "features": [
+            {"type": "dr_bonus", "locations": ["torso", "vitals", "arm", "leg", "hand", "foot", "groin", "neck"], "amount": 8}
+          ],
+          "calc": {"points": 40}
+        },
+        {
+          "id": "tv_telekinesis",
+          "type": "trait",
+          "name": "Telekinesis (The Force)",
+          "reference": "B92",
+          "local_notes": "Force choke, Force push, pull objects, hurl debris. Each level gives +1 ST for mental lifting/throwing at range.",
+          "tags": ["Advantage", "Exotic", "Mental", "Physical"],
+          "can_level": true,
+          "points_per_level": 5,
+          "levels": 15,
+          "calc": {"points": 75}
+        },
+        {
+          "id": "tv_weapon_master",
+          "type": "trait",
+          "name": "Weapon Master (Force Sword)",
+          "reference": "B99",
+          "local_notes": "One weapon: +1/die damage with Force Sword. Full bonuses to Parry, Fast-Draw, Feints.",
+          "tags": ["Advantage", "Mental"],
+          "base_points": 20,
+          "features": [
+            {"type": "weapon_bonus", "selection_type": "weapons_with_required_skill", "name": {"compare": "is", "qualifier": "force sword"}, "amount": 1, "per_die": true, "level": {"compare": "at_least", "qualifier": 0}}
+          ],
+          "calc": {"points": 20}
+        },
+        {
+          "id": "tv_trained_by_master",
+          "type": "trait",
+          "name": "Trained by a Master (Sith)",
+          "reference": "B93",
+          "local_notes": "Trained by Darth Sidious. Buy Cinematic skills at normal cost; get +1/die from Weapon Master doesn't stack, but can learn cinematic combat techniques.",
+          "tags": ["Advantage", "Mental"],
+          "base_points": 30,
+          "calc": {"points": 30}
+        },
+        {
+          "id": "tv_military_rank",
+          "type": "trait",
+          "name": "Military Rank (Supreme Commander)",
+          "reference": "B29",
+          "local_notes": "Supreme Commander of the Imperial Navy; speaks with the Emperor's authority.",
+          "tags": ["Advantage", "Social"],
+          "can_level": true,
+          "points_per_level": 5,
+          "levels": 6,
+          "calc": {"points": 30}
+        },
+        {
+          "id": "tv_security_clearance",
+          "type": "trait",
+          "name": "Security Clearance (Imperial; Broad)",
+          "reference": "B82",
+          "local_notes": "Full access to all Imperial classified matters.",
+          "tags": ["Advantage", "Social"],
+          "base_points": 15,
+          "calc": {"points": 15}
+        }
+      ]
+    },
+    {
+      "id": "tv_disadvantages_container",
+      "type": "trait_container",
+      "name": "Disadvantages",
+      "children": [
+        {
+          "id": "tv_dependency",
+          "type": "trait",
+          "name": "Dependency (Cybernetic Life-Support Suit)",
+          "reference": "B130",
+          "local_notes": "Without the suit's respiration and bio-support, Vader takes 1d injury per minute. Suit is rare to repair/replace (only Imperial medical bays) and must be worn constantly.",
+          "tags": ["Disadvantage", "Exotic", "Physical"],
+          "base_points": -15,
+          "calc": {"points": -15}
+        },
+        {
+          "id": "tv_lame",
+          "type": "trait",
+          "name": "Lame (Crippled Legs)",
+          "reference": "B141",
+          "local_notes": "Prosthetic legs. Basic Move reduced to half Basic Speed (round down). -3 to skills requiring legs (melee included).",
+          "tags": ["Disadvantage", "Physical"],
+          "base_points": -10,
+          "features": [
+            {"type": "conditional_modifier", "situation": "to use any skill that requires the use of your legs, including all Melee Weapon and unarmed combat skills (but not ranged combat skills)", "amount": -3}
+          ],
+          "calc": {"points": -10}
+        },
+        {
+          "id": "tv_disturbing_voice",
+          "type": "trait",
+          "name": "Disturbing Voice",
+          "reference": "B132",
+          "local_notes": "Suit-filtered mechanical breathing rasp. -2 to Diplomacy, Fast-Talk, Public Speaking, Sex Appeal, Singing.",
+          "tags": ["Disadvantage", "Physical"],
+          "base_points": -10,
+          "calc": {"points": -10}
+        },
+        {
+          "id": "tv_bloodlust",
+          "type": "trait",
+          "name": "Bloodlust",
+          "reference": "B125",
+          "local_notes": "Make a self-control roll to accept a surrender, take a prisoner, or spare a defeated foe.",
+          "tags": ["Disadvantage", "Mental"],
+          "cr": 12,
+          "base_points": -10,
+          "calc": {"points": -10}
+        },
+        {
+          "id": "tv_bad_temper",
+          "type": "trait",
+          "name": "Bad Temper",
+          "reference": "B124",
+          "local_notes": "Anger boils up when plans go awry. Famously lethal to subordinates via telekinetic choke.",
+          "tags": ["Disadvantage", "Mental"],
+          "cr": 12,
+          "base_points": -10,
+          "calc": {"points": -10}
+        },
+        {
+          "id": "tv_sense_of_duty",
+          "type": "trait",
+          "name": "Sense of Duty (Emperor Palpatine)",
+          "reference": "B153",
+          "local_notes": "Loyalty to his master (one individual).",
+          "tags": ["Disadvantage", "Mental"],
+          "base_points": -5,
+          "calc": {"points": -5}
+        },
+        {
+          "id": "tv_secret",
+          "type": "trait",
+          "name": "Secret (Identity as Anakin Skywalker)",
+          "reference": "B152",
+          "local_notes": "Revelation would undermine the Emperor's authority and turn the galaxy against him. Serious embarrassment.",
+          "tags": ["Disadvantage", "Social"],
+          "base_points": -10,
+          "calc": {"points": -10}
+        }
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "sv_force_sword",
+      "type": "skill",
+      "name": "Force Sword",
+      "reference": "B208",
+      "tags": ["Combat", "Melee Combat", "Weapon"],
+      "difficulty": "dx/a",
+      "points": 20,
+      "defaults": [
+        {"type": "skill", "name": "Broadsword", "modifier": -3},
+        {"type": "skill", "name": "Shortsword", "modifier": -3},
+        {"type": "skill", "name": "Two-Handed Sword", "modifier": -3},
+        {"type": "dx", "modifier": -5}
+      ]
+    },
+    {
+      "id": "sv_broadsword",
+      "type": "skill",
+      "name": "Broadsword",
+      "reference": "B208",
+      "tags": ["Combat", "Melee Combat", "Weapon"],
+      "difficulty": "dx/a",
+      "points": 4,
+      "defaults": [
+        {"type": "skill", "name": "Force Sword", "modifier": -4},
+        {"type": "skill", "name": "Shortsword", "modifier": -2},
+        {"type": "skill", "name": "Two-Handed Sword", "modifier": -4},
+        {"type": "dx", "modifier": -5}
+      ]
+    },
+    {
+      "id": "sv_two_handed_sword",
+      "type": "skill",
+      "name": "Two-Handed Sword",
+      "reference": "B209",
+      "tags": ["Combat", "Melee Combat", "Weapon"],
+      "difficulty": "dx/a",
+      "points": 4,
+      "defaults": [
+        {"type": "skill", "name": "Broadsword", "modifier": -4},
+        {"type": "skill", "name": "Force Sword", "modifier": -4},
+        {"type": "dx", "modifier": -5}
+      ]
+    },
+    {
+      "id": "sv_fast_draw_fs",
+      "type": "skill",
+      "name": "Fast-Draw",
+      "specialization": "Force Sword",
+      "reference": "B194",
+      "tags": ["Combat", "Melee Combat", "Weapon"],
+      "difficulty": "dx/e",
+      "points": 4
+    },
+    {
+      "id": "sv_intimidation",
+      "type": "skill",
+      "name": "Intimidation",
+      "reference": "B202",
+      "tags": ["Social"],
+      "difficulty": "will/a",
+      "points": 8,
+      "defaults": [
+        {"type": "per", "modifier": -5},
+        {"type": "skill", "name": "Acting", "modifier": -3}
+      ]
+    },
+    {
+      "id": "sv_leadership",
+      "type": "skill",
+      "name": "Leadership",
+      "reference": "B204",
+      "tags": ["Military", "Social"],
+      "difficulty": "iq/a",
+      "points": 8,
+      "defaults": [
+        {"type": "iq", "modifier": -5}
+      ]
+    },
+    {
+      "id": "sv_tactics",
+      "type": "skill",
+      "name": "Tactics",
+      "reference": "B224",
+      "tags": ["Military"],
+      "difficulty": "iq/h",
+      "points": 12,
+      "defaults": [
+        {"type": "iq", "modifier": -6},
+        {"type": "skill", "name": "Strategy", "modifier": -6}
+      ]
+    },
+    {
+      "id": "sv_strategy_space",
+      "type": "skill",
+      "name": "Strategy",
+      "specialization": "Space",
+      "reference": "B222",
+      "tags": ["Military"],
+      "difficulty": "iq/h",
+      "points": 2,
+      "defaults": [
+        {"type": "iq", "modifier": -6},
+        {"type": "skill", "name": "Tactics", "modifier": -6}
+      ]
+    },
+    {
+      "id": "sv_piloting_aerospace",
+      "type": "skill",
+      "name": "Piloting",
+      "specialization": "Aerospace",
+      "reference": "B214",
+      "tech_level": "10",
+      "tags": ["Vehicle"],
+      "difficulty": "dx/a",
+      "points": 12,
+      "defaults": [
+        {"type": "iq", "modifier": -6},
+        {"type": "skill", "name": "Piloting", "specialization": "High-Performance Airplane", "modifier": -2}
+      ]
+    },
+    {
+      "id": "sv_interrogation",
+      "type": "skill",
+      "name": "Interrogation",
+      "reference": "B202",
+      "tags": ["Military", "Police", "Spy"],
+      "difficulty": "iq/a",
+      "points": 4,
+      "defaults": [
+        {"type": "iq", "modifier": -5},
+        {"type": "skill", "name": "Intimidation", "modifier": -3}
+      ]
+    },
+    {
+      "id": "sv_stealth",
+      "type": "skill",
+      "name": "Stealth",
+      "reference": "B222",
+      "tags": ["Criminal", "Police", "Spy"],
+      "difficulty": "dx/a",
+      "points": 2,
+      "defaults": [
+        {"type": "dx", "modifier": -5},
+        {"type": "iq", "modifier": -5}
+      ]
+    },
+    {
+      "id": "sv_throwing",
+      "type": "skill",
+      "name": "Throwing",
+      "reference": "B226",
+      "tags": ["Athletic", "Combat", "Ranged Combat"],
+      "difficulty": "dx/a",
+      "points": 4,
+      "defaults": [
+        {"type": "dx", "modifier": -3}
+      ]
+    },
+    {
+      "id": "sv_computer_op",
+      "type": "skill",
+      "name": "Computer Operation",
+      "reference": "B184",
+      "tech_level": "10",
+      "tags": ["Scientific"],
+      "difficulty": "iq/e",
+      "points": 1,
+      "defaults": [
+        {"type": "iq", "modifier": -4}
+      ]
+    },
+    {
+      "id": "sv_first_aid",
+      "type": "skill",
+      "name": "First Aid",
+      "reference": "B195",
+      "tech_level": "10",
+      "tags": ["Everyman", "Medical"],
+      "difficulty": "iq/e",
+      "points": 1,
+      "defaults": [
+        {"type": "iq", "modifier": -4}
+      ]
+    }
+  ],
+  "equipment": [
+    {
+      "id": "ev_force_sword",
+      "description": "Force Sword (Lightsaber)",
+      "reference": "B272",
+      "tech_level": "^",
+      "legality_class": "2",
+      "tags": ["Melee Weapon"],
+      "base_value": "10000",
+      "base_weight": "2 lb",
+      "quantity": 1,
+      "equipped": true,
+      "weapons": [
+        {
+          "id": "wv_force_sword_swung",
+          "damage": {"type": "burn", "base": "8d", "armor_divisor": 5},
+          "strength": "3",
+          "usage": "Swung",
+          "reach": "1-2",
+          "parry": "0",
+          "defaults": [
+            {"type": "dx", "modifier": -5},
+            {"type": "skill", "name": "Broadsword", "modifier": -3},
+            {"type": "skill", "name": "Force Sword"},
+            {"type": "skill", "name": "Saber", "modifier": -3},
+            {"type": "skill", "name": "Shortsword", "modifier": -3},
+            {"type": "skill", "name": "Smallsword", "modifier": -3},
+            {"type": "skill", "name": "Two-Handed Sword", "modifier": -3}
+          ]
+        }
+      ],
+      "calc": {
+        "value": 10000,
+        "extended_value": 10000,
+        "weight": "2 lb",
+        "extended_weight": "2 lb"
+      }
+    },
+    {
+      "id": "ev_suit",
+      "description": "Cybernetic Life-Support Suit",
+      "reference": "B130",
+      "tech_level": "10",
+      "tags": ["Armor"],
+      "base_value": "100000",
+      "base_weight": "40 lb",
+      "quantity": 1,
+      "equipped": true,
+      "calc": {
+        "value": 100000,
+        "extended_value": 100000,
+        "weight": "40 lb",
+        "extended_weight": "40 lb"
+      }
+    }
+  ],
+  "notes": [
+    {
+      "id": "nv_concept",
+      "type": "note",
+      "text": "**Concept:** Post-Mustafar Darth Vader, Dark Lord of the Sith, Supreme Commander of the Imperial Navy. Cybernetically kept alive inside a pressurized armored suit. Master of Form V (Djem So) lightsaber combat. Uses telekinesis for Force choke, push, and pulling weapons from distance.\n\n**Power level:** 500 pts (super-heroic).\n\n**Signature moves:**\n- Telekinetic Force Choke — Quick Contest of TK ST (25) vs. victim's HT/ST.\n- Force Push — throw objects or people using TK ST 25.\n- Lightsaber throw — Throwing skill at lvl 15, guided home telekinetically.\n- Saber duel — Force Sword 19, parry 13 (+1 from CR, +3 from Weapon Master is via damage bonus, not parry).\n\n**Lightsaber damage:** 8d(5) burn base. With Weapon Master (Force Sword) add +1/die = 8d+8(5) burn. Average ~36 injury after ×1 burn multiplier, shredding any normal DR."
+    }
+  ],
+  "created_date": "2026-04-19T00:00:00-04:00",
+  "modified_date": "2026-04-19T00:00:00-04:00",
+  "calc": {
+    "swing": "2d",
+    "thrust": "1d",
+    "basic_lift": "39 lb",
+    "move": [6, 4, 3, 2, 1],
+    "dodge": [10, 9, 8, 7, 6]
+  }
+}
