@@ -1,0 +1,8 @@
+/target
+secrets.toml
+
+# Local Turso/libSQL database files.
+local.db
+local.db-wal
+local.db-shm
+local.db-journal

@@ -1,0 +1,38 @@
+# Seconds the server remains idle (no active connections) before self-terminating.
+server_idle_timeout_secs = 10
+
+# Seconds the client waits for a response from the server before giving up.
+client_request_timeout_secs = 30
+
+# Directory containing the llm-rag unix socket file. The socket filename within
+# this directory includes the current user's username (e.g. llm-rag-jeff.sock).
+socket_dir = "/tmp/llm-rag/sock"
+
+# Directory where the tracing logger writes structured JSON logs
+# (file: llm-rag.log). Created on startup if missing.
+log_dir = "/tmp/llm-rag/logs"
+
+# Path to the local Turso/libSQL database file. Relative paths are resolved
+# against the directory of the config file that was loaded — so this entry
+# places the DB next to this config file (e.g. the repo root, or
+# ~/.config/llm-rag/). Absolute paths are used as-is.
+db_path = "./local.db"
+
+# --- LLM chat provider: pick exactly one. ---
+# Ollama variant (local; no API key needed):
+[llm.chat]
+provider = "ollama"
+url = "http://localhost:11434"
+model = "llama3.2:3b"
+
+# Anthropic variant (cloud; requires `anthropic_api_key` in secrets.toml):
+# [llm.chat]
+# provider = "anthropic"
+# model = "claude-sonnet-4-5"
+
+# --- LLM embeddings provider: ollama is the only option today. ---
+[llm.embeddings]
+provider = "ollama"
+url = "http://localhost:11434"
+model = "nomic-embed-text"
+dimensions = 768
