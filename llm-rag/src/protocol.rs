@@ -3,21 +3,84 @@ use serde::{Serialize, de::DeserializeOwned};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
+use crate::db::{MessageMetadata, MessageRole};
 use crate::error::ProtocolError;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
 pub enum Request {
     Ping,
-    Chat { message: String },
+    Chat {
+        conversation_id: Option<String>,
+        message: String,
+    },
+    ConversationList {
+        tags: Vec<String>,
+        text_query: Option<String>,
+        limit: Option<usize>,
+    },
+    ConversationGet {
+        id: String,
+    },
+    ConversationDelete {
+        id: String,
+    },
+    ConversationAddTag {
+        id: String,
+        tag: String,
+    },
+    ConversationRemoveTag {
+        id: String,
+        tag: String,
+    },
+    ConversationTags {
+        id: String,
+    },
+    TagList,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
 pub enum Response {
     Pong,
-    Chat { reply: String },
-    Error { message: String },
+    Chat {
+        conversation_id: String,
+        reply: String,
+        messages_appended: Vec<WireMessage>,
+    },
+    ConversationList {
+        items: Vec<ConversationSummary>,
+    },
+    ConversationGet {
+        conversation: ConversationSummary,
+        messages: Vec<WireMessage>,
+    },
+    ConversationTags {
+        tags: Vec<String>,
+    },
+    TagList {
+        tags: Vec<String>,
+    },
+    Ok,
+    Error {
+        message: String,
+    },
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ConversationSummary {
+    pub id: String,
+    pub title: Option<String>,
+    pub updated_at: String,
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WireMessage {
+    pub role: MessageRole,
+    pub content: String,
+    pub metadata: Option<MessageMetadata>,
+    pub created_at: String,
 }
 
 /// Wrap a stream with a u32 big-endian length prefix codec.

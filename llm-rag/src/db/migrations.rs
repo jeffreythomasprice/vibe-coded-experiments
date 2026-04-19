@@ -18,6 +18,11 @@ const MIGRATIONS: &[(u32, &str, &str)] = &[
         "embedding_model_dimensions",
         include_str!("migrations/0002_embedding_model_dimensions.sql"),
     ),
+    (
+        3,
+        "conversations",
+        include_str!("migrations/0003_conversations.sql"),
+    ),
 ];
 
 /// Ensure `_schema_migrations` exists, then apply any migrations whose

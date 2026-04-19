@@ -29,6 +29,9 @@ pub enum DbError {
     #[error("{kind} with id {id} not found")]
     NotFound { kind: &'static str, id: i64 },
 
+    #[error("invalid stored message ({reason})")]
+    InvalidMessage { reason: String },
+
     /// A probe call to the embeddings provider failed during bootstrap. This
     /// happens on a cold cache (no row in `embedding_model_dimensions` for the
     /// configured model) when we couldn't reach the model to ask for its

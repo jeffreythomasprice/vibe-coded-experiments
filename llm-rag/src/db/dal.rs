@@ -91,6 +91,103 @@ pub struct ChunkMatch {
     pub distance: f32,
 }
 
+/// A stored conversation header. `id` is a hyphenated UUID (minted by the
+/// handler layer).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Conversation {
+    pub id: String,
+    pub title: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Role of a single row in `conversation_messages`. The on-wire / on-disk
+/// string form is snake_case; enforced by [`MessageRole::from_db`] on read
+/// and [`Dal::append_message`] on write since turso 0.4 has no CHECK support.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MessageRole {
+    System,
+    User,
+    Assistant,
+    ToolUse,
+    Tool,
+}
+
+impl MessageRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            MessageRole::System => "system",
+            MessageRole::User => "user",
+            MessageRole::Assistant => "assistant",
+            MessageRole::ToolUse => "tool_use",
+            MessageRole::Tool => "tool",
+        }
+    }
+
+    pub fn from_db(s: &str) -> Result<Self, DbError> {
+        match s {
+            "system" => Ok(MessageRole::System),
+            "user" => Ok(MessageRole::User),
+            "assistant" => Ok(MessageRole::Assistant),
+            "tool_use" => Ok(MessageRole::ToolUse),
+            "tool" => Ok(MessageRole::Tool),
+            other => Err(DbError::InvalidMessage {
+                reason: format!("unknown role {other:?}"),
+            }),
+        }
+    }
+}
+
+/// Strict, per-role metadata for a stored message. Serialized to JSON and
+/// kept in the `metadata` TEXT column. `kind` disambiguates the variant so a
+/// row's metadata is self-describing even if read without its `role`.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum MessageMetadata {
+    ToolUse {
+        tool_call_id: String,
+        name: String,
+        // Tool-call arguments are an open-ended JSON object defined by each
+        // tool's schema; no stricter Rust type is meaningful here.
+        arguments: serde_json::Value,
+    },
+    Tool {
+        tool_call_id: String,
+    },
+}
+
+impl MessageMetadata {
+    fn matches_role(&self, role: MessageRole) -> bool {
+        matches!(
+            (self, role),
+            (MessageMetadata::ToolUse { .. }, MessageRole::ToolUse)
+                | (MessageMetadata::Tool { .. }, MessageRole::Tool)
+        )
+    }
+}
+
+/// One row in `conversation_messages`, ready for use by callers. `metadata`
+/// is only populated for `ToolUse` / `Tool` rows.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct StoredMessage {
+    pub id: i64,
+    pub conversation_id: String,
+    pub role: MessageRole,
+    pub content: String,
+    pub metadata: Option<MessageMetadata>,
+    pub created_at: String,
+}
+
+/// Filter passed to [`Dal::list_conversations`]. `tags` applies ALL-of
+/// semantics — a conversation matches only when every listed tag is present.
+#[derive(Debug, Clone, Default)]
+pub struct ConversationFilter<'a> {
+    pub tags: &'a [&'a str],
+    pub text_query: Option<&'a str>,
+    pub limit: Option<usize>,
+}
+
 pub struct Dal {
     conn: Connection,
     model: EmbeddingModelInfo,
@@ -663,6 +760,477 @@ impl Dal {
         }
         Ok(out)
     }
+
+    // ---- Conversations ----------------------------------------------------
+
+    pub async fn create_conversation(&self, id: &str, title: Option<&str>) -> Result<(), DbError> {
+        self.conn
+            .execute(
+                "INSERT INTO conversations (id, title) VALUES (?, ?)",
+                (
+                    id.to_string(),
+                    title
+                        .map(|t| Value::Text(t.to_string()))
+                        .unwrap_or(Value::Null),
+                ),
+            )
+            .await
+            .map_err(|source| DbError::Query {
+                op: "create_conversation",
+                source,
+            })?;
+        Ok(())
+    }
+
+    pub async fn get_conversation(&self, id: &str) -> Result<Option<Conversation>, DbError> {
+        let mut rows = self
+            .conn
+            .query(
+                "SELECT id, title, created_at, updated_at FROM conversations WHERE id = ?",
+                (id.to_string(),),
+            )
+            .await
+            .map_err(|source| DbError::Query {
+                op: "get_conversation",
+                source,
+            })?;
+        match rows.next().await.map_err(|source| DbError::Query {
+            op: "get_conversation.next",
+            source,
+        })? {
+            Some(row) => Ok(Some(row_to_conversation(&row)?)),
+            None => Ok(None),
+        }
+    }
+
+    pub async fn list_conversations(
+        &self,
+        filter: &ConversationFilter<'_>,
+    ) -> Result<Vec<Conversation>, DbError> {
+        // Build SQL progressively. Turso 0.4 doesn't support `IN (subquery)`,
+        // but `GROUP BY ... HAVING COUNT(DISTINCT ...) = N` works and gives
+        // us ALL-of tag semantics in a single statement.
+        let mut sql =
+            String::from("SELECT c.id, c.title, c.created_at, c.updated_at FROM conversations c");
+        let mut params: Vec<Value> = Vec::new();
+
+        if !filter.tags.is_empty() {
+            sql.push_str(
+                " INNER JOIN conversation_tags ct ON ct.conversation_id = c.id\
+                 \n INNER JOIN tags t ON t.id = ct.tag_id",
+            );
+        }
+
+        if filter.text_query.is_some() {
+            sql.push_str(" INNER JOIN conversation_messages cm ON cm.conversation_id = c.id");
+        }
+
+        let mut where_clauses: Vec<String> = Vec::new();
+
+        if !filter.tags.is_empty() {
+            let placeholders = vec!["?"; filter.tags.len()].join(", ");
+            where_clauses.push(format!("t.name IN ({placeholders})"));
+            for tag in filter.tags {
+                params.push(Value::Text((*tag).to_string()));
+            }
+        }
+
+        if let Some(q) = filter.text_query {
+            let escaped = q
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_");
+            let pattern = format!("%{escaped}%");
+            where_clauses.push("cm.content LIKE ? ESCAPE '\\'".to_string());
+            params.push(Value::Text(pattern));
+        }
+
+        if !where_clauses.is_empty() {
+            sql.push_str(" WHERE ");
+            sql.push_str(&where_clauses.join(" AND "));
+        }
+
+        sql.push_str(" GROUP BY c.id, c.title, c.created_at, c.updated_at");
+
+        if !filter.tags.is_empty() {
+            sql.push_str(" HAVING COUNT(DISTINCT t.id) = ?");
+            params.push(Value::Integer(filter.tags.len() as i64));
+        }
+
+        sql.push_str(" ORDER BY c.updated_at DESC");
+
+        if let Some(limit) = filter.limit {
+            sql.push_str(" LIMIT ?");
+            params.push(Value::Integer(limit as i64));
+        }
+
+        let mut rows = self
+            .conn
+            .query(&sql, turso::params::Params::Positional(params))
+            .await
+            .map_err(|source| DbError::Query {
+                op: "list_conversations",
+                source,
+            })?;
+        let mut out = Vec::new();
+        while let Some(row) = rows.next().await.map_err(|source| DbError::Query {
+            op: "list_conversations.next",
+            source,
+        })? {
+            out.push(row_to_conversation(&row)?);
+        }
+        Ok(out)
+    }
+
+    pub async fn delete_conversation(&self, id: &str) -> Result<(), DbError> {
+        let affected = self
+            .conn
+            .execute("DELETE FROM conversations WHERE id = ?", (id.to_string(),))
+            .await
+            .map_err(|source| DbError::Query {
+                op: "delete_conversation",
+                source,
+            })?;
+        if affected == 0 {
+            return Err(DbError::NotFound {
+                kind: "conversation",
+                id: 0,
+            });
+        }
+        Ok(())
+    }
+
+    pub async fn touch_conversation(&self, id: &str) -> Result<(), DbError> {
+        self.conn
+            .execute(
+                "UPDATE conversations SET updated_at = datetime('now') WHERE id = ?",
+                (id.to_string(),),
+            )
+            .await
+            .map_err(|source| DbError::Query {
+                op: "touch_conversation",
+                source,
+            })?;
+        Ok(())
+    }
+
+    pub async fn set_conversation_title(
+        &self,
+        id: &str,
+        title: Option<&str>,
+    ) -> Result<(), DbError> {
+        let affected = self
+            .conn
+            .execute(
+                "UPDATE conversations SET title = ?, updated_at = datetime('now') WHERE id = ?",
+                (
+                    title
+                        .map(|t| Value::Text(t.to_string()))
+                        .unwrap_or(Value::Null),
+                    Value::Text(id.to_string()),
+                ),
+            )
+            .await
+            .map_err(|source| DbError::Query {
+                op: "set_conversation_title",
+                source,
+            })?;
+        if affected == 0 {
+            return Err(DbError::NotFound {
+                kind: "conversation",
+                id: 0,
+            });
+        }
+        Ok(())
+    }
+
+    pub async fn add_conversation_tag(&self, conv_id: &str, tag: &str) -> Result<(), DbError> {
+        let tag_id = self.upsert_tag(tag).await?;
+        self.conn
+            .execute(
+                "INSERT OR IGNORE INTO conversation_tags (conversation_id, tag_id) VALUES (?, ?)",
+                (conv_id.to_string(), tag_id),
+            )
+            .await
+            .map_err(|source| DbError::Query {
+                op: "add_conversation_tag.link",
+                source,
+            })?;
+        Ok(())
+    }
+
+    pub async fn remove_conversation_tag(&self, conv_id: &str, tag: &str) -> Result<(), DbError> {
+        // Two-query: turso 0.4 has no `IN (subquery)`. Missing tag is a no-op.
+        let mut rows = self
+            .conn
+            .query("SELECT id FROM tags WHERE name = ?", (tag.to_string(),))
+            .await
+            .map_err(|source| DbError::Query {
+                op: "remove_conversation_tag.select_tag",
+                source,
+            })?;
+        let tag_id: Option<i64> = match rows.next().await.map_err(|source| DbError::Query {
+            op: "remove_conversation_tag.select_tag.next",
+            source,
+        })? {
+            Some(row) => Some(row.get(0).map_err(|source| DbError::Query {
+                op: "remove_conversation_tag.select_tag.get",
+                source,
+            })?),
+            None => None,
+        };
+        let Some(tag_id) = tag_id else {
+            return Ok(());
+        };
+        self.conn
+            .execute(
+                "DELETE FROM conversation_tags WHERE conversation_id = ? AND tag_id = ?",
+                (conv_id.to_string(), tag_id),
+            )
+            .await
+            .map_err(|source| DbError::Query {
+                op: "remove_conversation_tag.delete",
+                source,
+            })?;
+        Ok(())
+    }
+
+    pub async fn tags_for_conversation(&self, conv_id: &str) -> Result<Vec<String>, DbError> {
+        let mut rows = self
+            .conn
+            .query(
+                "SELECT t.name
+                 FROM tags t
+                 INNER JOIN conversation_tags ct ON ct.tag_id = t.id
+                 WHERE ct.conversation_id = ?
+                 ORDER BY t.name",
+                (conv_id.to_string(),),
+            )
+            .await
+            .map_err(|source| DbError::Query {
+                op: "tags_for_conversation",
+                source,
+            })?;
+        let mut out = Vec::new();
+        while let Some(row) = rows.next().await.map_err(|source| DbError::Query {
+            op: "tags_for_conversation.next",
+            source,
+        })? {
+            let name: String = row.get(0).map_err(|source| DbError::Query {
+                op: "tags_for_conversation.get",
+                source,
+            })?;
+            out.push(name);
+        }
+        Ok(out)
+    }
+
+    /// All tag names across the whole database, alphabetically. Used by the
+    /// TUI tag editor's autocomplete.
+    pub async fn list_all_tags(&self) -> Result<Vec<String>, DbError> {
+        let mut rows = self
+            .conn
+            .query("SELECT name FROM tags ORDER BY name", ())
+            .await
+            .map_err(|source| DbError::Query {
+                op: "list_all_tags",
+                source,
+            })?;
+        let mut out = Vec::new();
+        while let Some(row) = rows.next().await.map_err(|source| DbError::Query {
+            op: "list_all_tags.next",
+            source,
+        })? {
+            let name: String = row.get(0).map_err(|source| DbError::Query {
+                op: "list_all_tags.get",
+                source,
+            })?;
+            out.push(name);
+        }
+        Ok(out)
+    }
+
+    /// Append a message to a conversation and bump `updated_at` so the list
+    /// screen sees the conversation move to the top. Role / metadata
+    /// invariants are enforced here so bad pairings never land on disk.
+    pub async fn append_message(
+        &self,
+        conv_id: &str,
+        role: MessageRole,
+        content: &str,
+        metadata: Option<&MessageMetadata>,
+    ) -> Result<i64, DbError> {
+        match (role, metadata) {
+            (MessageRole::ToolUse, Some(m)) | (MessageRole::Tool, Some(m))
+                if !m.matches_role(role) =>
+            {
+                return Err(DbError::InvalidMessage {
+                    reason: format!("metadata variant does not match role {:?}", role.as_str()),
+                });
+            }
+            (MessageRole::ToolUse, None) => {
+                return Err(DbError::InvalidMessage {
+                    reason: "tool_use rows require ToolUse metadata".into(),
+                });
+            }
+            (MessageRole::Tool, None) => {
+                return Err(DbError::InvalidMessage {
+                    reason: "tool rows require Tool metadata".into(),
+                });
+            }
+            (MessageRole::System | MessageRole::User | MessageRole::Assistant, Some(_)) => {
+                return Err(DbError::InvalidMessage {
+                    reason: format!("role {} does not accept metadata", role.as_str()),
+                });
+            }
+            _ => {}
+        }
+
+        let metadata_json = match metadata {
+            Some(m) => {
+                Value::Text(
+                    serde_json::to_string(m).map_err(|e| DbError::InvalidMessage {
+                        reason: format!("metadata serialization failed: {e}"),
+                    })?,
+                )
+            }
+            None => Value::Null,
+        };
+
+        self.conn
+            .execute(
+                "INSERT INTO conversation_messages (conversation_id, role, content, metadata)
+                 VALUES (?, ?, ?, ?)",
+                turso::params::Params::Positional(vec![
+                    Value::Text(conv_id.to_string()),
+                    Value::Text(role.as_str().to_string()),
+                    Value::Text(content.to_string()),
+                    metadata_json,
+                ]),
+            )
+            .await
+            .map_err(|source| DbError::Query {
+                op: "append_message",
+                source,
+            })?;
+        let id = self.conn.last_insert_rowid();
+
+        self.touch_conversation(conv_id).await?;
+        Ok(id)
+    }
+
+    pub async fn messages_for_conversation(
+        &self,
+        conv_id: &str,
+    ) -> Result<Vec<StoredMessage>, DbError> {
+        let mut rows = self
+            .conn
+            .query(
+                "SELECT id, conversation_id, role, content, metadata, created_at
+                 FROM conversation_messages
+                 WHERE conversation_id = ?
+                 ORDER BY id",
+                (conv_id.to_string(),),
+            )
+            .await
+            .map_err(|source| DbError::Query {
+                op: "messages_for_conversation",
+                source,
+            })?;
+        let mut out = Vec::new();
+        while let Some(row) = rows.next().await.map_err(|source| DbError::Query {
+            op: "messages_for_conversation.next",
+            source,
+        })? {
+            out.push(row_to_message(&row)?);
+        }
+        Ok(out)
+    }
+}
+
+fn row_to_conversation(row: &turso::Row) -> Result<Conversation, DbError> {
+    let title: Option<String> = match row.get_value(1).map_err(|source| DbError::Query {
+        op: "row_to_conversation.title",
+        source,
+    })? {
+        Value::Text(t) => Some(t),
+        Value::Null => None,
+        other => {
+            return Err(DbError::InvalidMessage {
+                reason: format!("unexpected type for conversations.title: {other:?}"),
+            });
+        }
+    };
+    Ok(Conversation {
+        id: row.get(0).map_err(|source| DbError::Query {
+            op: "row_to_conversation.id",
+            source,
+        })?,
+        title,
+        created_at: row.get(2).map_err(|source| DbError::Query {
+            op: "row_to_conversation.created_at",
+            source,
+        })?,
+        updated_at: row.get(3).map_err(|source| DbError::Query {
+            op: "row_to_conversation.updated_at",
+            source,
+        })?,
+    })
+}
+
+fn row_to_message(row: &turso::Row) -> Result<StoredMessage, DbError> {
+    let role_str: String = row.get(2).map_err(|source| DbError::Query {
+        op: "row_to_message.role",
+        source,
+    })?;
+    let role = MessageRole::from_db(&role_str)?;
+    let metadata_json: Option<String> = match row.get_value(4).map_err(|source| DbError::Query {
+        op: "row_to_message.metadata",
+        source,
+    })? {
+        Value::Text(t) => Some(t),
+        Value::Null => None,
+        other => {
+            return Err(DbError::InvalidMessage {
+                reason: format!("unexpected type for metadata: {other:?}"),
+            });
+        }
+    };
+    let metadata = match metadata_json {
+        Some(s) => Some(serde_json::from_str::<MessageMetadata>(&s).map_err(|e| {
+            DbError::InvalidMessage {
+                reason: format!("metadata deserialization failed: {e}"),
+            }
+        })?),
+        None => None,
+    };
+    if let Some(ref m) = metadata
+        && !m.matches_role(role)
+    {
+        return Err(DbError::InvalidMessage {
+            reason: format!("stored metadata variant does not match role {role_str:?}"),
+        });
+    }
+    Ok(StoredMessage {
+        id: row.get(0).map_err(|source| DbError::Query {
+            op: "row_to_message.id",
+            source,
+        })?,
+        conversation_id: row.get(1).map_err(|source| DbError::Query {
+            op: "row_to_message.conversation_id",
+            source,
+        })?,
+        role,
+        content: row.get(3).map_err(|source| DbError::Query {
+            op: "row_to_message.content",
+            source,
+        })?,
+        metadata,
+        created_at: row.get(5).map_err(|source| DbError::Query {
+            op: "row_to_message.created_at",
+            source,
+        })?,
+    })
 }
 
 fn row_to_document(row: &turso::Row) -> Result<Document, DbError> {
@@ -1045,5 +1613,265 @@ mod tests {
             .unwrap();
         assert_eq!(hits_4.len(), 1);
         assert_eq!(hits_4[0].chunk_id, chunk_4);
+    }
+
+    // ---- Conversations -----------------------------------------------------
+
+    fn uuid() -> String {
+        uuid::Uuid::now_v7().hyphenated().to_string()
+    }
+
+    #[tokio::test]
+    async fn conversation_create_get_delete() {
+        let dal = mem_dal(4).await;
+        let id = uuid();
+        dal.create_conversation(&id, Some("first")).await.unwrap();
+        let got = dal.get_conversation(&id).await.unwrap().unwrap();
+        assert_eq!(got.id, id);
+        assert_eq!(got.title.as_deref(), Some("first"));
+
+        dal.delete_conversation(&id).await.unwrap();
+        assert!(dal.get_conversation(&id).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn conversation_list_orders_by_updated_at_desc() {
+        let dal = mem_dal(4).await;
+        let a = uuid();
+        let b = uuid();
+        dal.create_conversation(&a, None).await.unwrap();
+        // Force a > b ordering via an explicit touch after creating b.
+        dal.create_conversation(&b, None).await.unwrap();
+        // Sleep-free ordering: append a message to `a` last so its
+        // updated_at is strictly later.
+        dal.append_message(&a, MessageRole::User, "hello", None)
+            .await
+            .unwrap();
+
+        let list = dal
+            .list_conversations(&ConversationFilter::default())
+            .await
+            .unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].id, a);
+        assert_eq!(list[1].id, b);
+    }
+
+    #[tokio::test]
+    async fn conversation_tag_and_filter_all_of() {
+        let dal = mem_dal(4).await;
+        let a = uuid();
+        let b = uuid();
+        let c = uuid();
+        dal.create_conversation(&a, None).await.unwrap();
+        dal.create_conversation(&b, None).await.unwrap();
+        dal.create_conversation(&c, None).await.unwrap();
+
+        dal.add_conversation_tag(&a, "work").await.unwrap();
+        dal.add_conversation_tag(&a, "urgent").await.unwrap();
+        dal.add_conversation_tag(&b, "work").await.unwrap();
+        dal.add_conversation_tag(&c, "urgent").await.unwrap();
+
+        // Only `a` has both.
+        let both = dal
+            .list_conversations(&ConversationFilter {
+                tags: &["work", "urgent"],
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        let ids: Vec<String> = both.into_iter().map(|c| c.id).collect();
+        assert_eq!(ids, vec![a.clone()]);
+
+        // `work` alone: a and b.
+        let mut work_ids: Vec<String> = dal
+            .list_conversations(&ConversationFilter {
+                tags: &["work"],
+                ..Default::default()
+            })
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|c| c.id)
+            .collect();
+        work_ids.sort();
+        let mut expected = vec![a.clone(), b.clone()];
+        expected.sort();
+        assert_eq!(work_ids, expected);
+    }
+
+    #[tokio::test]
+    async fn conversation_tag_add_idempotent_and_remove_missing_is_noop() {
+        let dal = mem_dal(4).await;
+        let id = uuid();
+        dal.create_conversation(&id, None).await.unwrap();
+
+        dal.add_conversation_tag(&id, "alpha").await.unwrap();
+        dal.add_conversation_tag(&id, "alpha").await.unwrap();
+        let tags = dal.tags_for_conversation(&id).await.unwrap();
+        assert_eq!(tags, vec!["alpha"]);
+
+        // Removing a tag that was never created must not error.
+        dal.remove_conversation_tag(&id, "never-existed")
+            .await
+            .unwrap();
+        dal.remove_conversation_tag(&id, "alpha").await.unwrap();
+        assert!(dal.tags_for_conversation(&id).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn conversation_text_search_matches_message_content() {
+        let dal = mem_dal(4).await;
+        let a = uuid();
+        let b = uuid();
+        dal.create_conversation(&a, None).await.unwrap();
+        dal.create_conversation(&b, None).await.unwrap();
+
+        dal.append_message(&a, MessageRole::User, "what is rust?", None)
+            .await
+            .unwrap();
+        dal.append_message(&b, MessageRole::User, "what is python?", None)
+            .await
+            .unwrap();
+
+        let hits = dal
+            .list_conversations(&ConversationFilter {
+                text_query: Some("rust"),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        let ids: Vec<String> = hits.into_iter().map(|c| c.id).collect();
+        assert_eq!(ids, vec![a]);
+    }
+
+    #[tokio::test]
+    async fn delete_conversation_cascades_to_messages_and_tags() {
+        let dal = mem_dal(4).await;
+        let id = uuid();
+        dal.create_conversation(&id, None).await.unwrap();
+        dal.add_conversation_tag(&id, "t1").await.unwrap();
+        dal.append_message(&id, MessageRole::User, "hi", None)
+            .await
+            .unwrap();
+
+        dal.delete_conversation(&id).await.unwrap();
+
+        // Messages and tag links are gone (cascade).
+        assert!(dal.messages_for_conversation(&id).await.unwrap().is_empty());
+        assert!(dal.tags_for_conversation(&id).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn delete_missing_conversation_is_not_found() {
+        let dal = mem_dal(4).await;
+        let err = dal.delete_conversation("does-not-exist").await.unwrap_err();
+        assert!(matches!(
+            err,
+            DbError::NotFound {
+                kind: "conversation",
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn append_message_round_trips_all_roles() {
+        let dal = mem_dal(4).await;
+        let id = uuid();
+        dal.create_conversation(&id, None).await.unwrap();
+
+        dal.append_message(&id, MessageRole::System, "sys prompt", None)
+            .await
+            .unwrap();
+        dal.append_message(&id, MessageRole::User, "hi", None)
+            .await
+            .unwrap();
+        dal.append_message(&id, MessageRole::Assistant, "hello", None)
+            .await
+            .unwrap();
+        dal.append_message(
+            &id,
+            MessageRole::ToolUse,
+            "",
+            Some(&MessageMetadata::ToolUse {
+                tool_call_id: "call-1".into(),
+                name: "search".into(),
+                arguments: serde_json::json!({"q": "rust"}),
+            }),
+        )
+        .await
+        .unwrap();
+        dal.append_message(
+            &id,
+            MessageRole::Tool,
+            "result text",
+            Some(&MessageMetadata::Tool {
+                tool_call_id: "call-1".into(),
+            }),
+        )
+        .await
+        .unwrap();
+
+        let msgs = dal.messages_for_conversation(&id).await.unwrap();
+        assert_eq!(msgs.len(), 5);
+        assert_eq!(msgs[0].role, MessageRole::System);
+        assert_eq!(msgs[1].role, MessageRole::User);
+        assert_eq!(msgs[2].role, MessageRole::Assistant);
+        assert_eq!(msgs[3].role, MessageRole::ToolUse);
+        assert!(matches!(
+            msgs[3].metadata,
+            Some(MessageMetadata::ToolUse { .. })
+        ));
+        assert_eq!(msgs[4].role, MessageRole::Tool);
+        assert!(matches!(
+            msgs[4].metadata,
+            Some(MessageMetadata::Tool { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn append_message_rejects_role_metadata_mismatch() {
+        let dal = mem_dal(4).await;
+        let id = uuid();
+        dal.create_conversation(&id, None).await.unwrap();
+
+        // tool_use role without metadata.
+        let err = dal
+            .append_message(&id, MessageRole::ToolUse, "", None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DbError::InvalidMessage { .. }));
+
+        // user role with tool metadata.
+        let err = dal
+            .append_message(
+                &id,
+                MessageRole::User,
+                "hi",
+                Some(&MessageMetadata::Tool {
+                    tool_call_id: "x".into(),
+                }),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DbError::InvalidMessage { .. }));
+    }
+
+    #[tokio::test]
+    async fn list_all_tags_returns_global_set_sorted() {
+        let dal = mem_dal(4).await;
+        // Mixed source: documents and conversations contribute to the same
+        // tags table.
+        let doc = dal.create_document("/x").await.unwrap();
+        dal.add_tag(doc, "doc-only").await.unwrap();
+
+        let conv = uuid();
+        dal.create_conversation(&conv, None).await.unwrap();
+        dal.add_conversation_tag(&conv, "shared").await.unwrap();
+        dal.add_tag(doc, "shared").await.unwrap();
+
+        let all = dal.list_all_tags().await.unwrap();
+        assert_eq!(all, vec!["doc-only", "shared"]);
     }
 }

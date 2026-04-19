@@ -27,4 +27,27 @@ pub enum Command {
     Ping,
     /// Launch the interactive TUI (default when no subcommand is given).
     Tui,
+    /// Manage stored conversations.
+    Conversations {
+        #[command(subcommand)]
+        action: ConversationCmd,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConversationCmd {
+    /// List conversations, optionally filtered to those carrying ALL of the
+    /// given tags. One line per conversation:
+    ///   <id>\t<updated_at>\t<title>\t<tag1,tag2,…>
+    List {
+        /// Match conversations that have this tag. Repeat for ALL-of.
+        #[arg(long = "tag", value_name = "TAG")]
+        tags: Vec<String>,
+    },
+    /// Delete a conversation by id (cascades to its messages and tag links).
+    Delete { id: String },
+    /// Add a tag to a conversation.
+    AddTag { id: String, tag: String },
+    /// Remove a tag from a conversation.
+    RemoveTag { id: String, tag: String },
 }

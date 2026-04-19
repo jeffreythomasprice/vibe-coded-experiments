@@ -1,12 +1,13 @@
 pub mod app;
 pub mod commands;
 pub mod error;
+pub mod screens;
 pub mod ui;
 
 use std::io::{self, Stdout};
 use std::path::{Path, PathBuf};
 
-use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{Event, EventStream};
 use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -22,8 +23,8 @@ use crate::error::ClientError;
 use crate::protocol::{Request, Response};
 
 use self::app::App;
-use self::commands::{Action, SlashCommand};
 pub use self::error::TuiError;
+use self::screens::{Screen, Transition};
 
 pub async fn run(
     cfg: &Config,
@@ -46,7 +47,10 @@ pub async fn run(
 }
 
 enum AppEvent {
-    Reply(Result<Response, ClientError>),
+    Reply {
+        seq: u64,
+        result: Result<Response, ClientError>,
+    },
 }
 
 /// Owned context shared with spawned request tasks.
@@ -88,7 +92,7 @@ async fn run_loop(
                 Some(Err(err)) => return Err(TuiError::Io(err)),
                 None => break,
             },
-            Some(AppEvent::Reply(result)) = rx.recv() => handle_reply(&mut app, result),
+            Some(AppEvent::Reply { seq, result }) = rx.recv() => handle_reply(&mut app, seq, result),
         }
     }
     Ok(())
@@ -98,69 +102,175 @@ fn handle_term(app: &mut App, event: Event, ctx: &Ctx) {
     let Event::Key(key) = event else {
         return;
     };
-    if key.kind == KeyEventKind::Release {
-        return;
-    }
-    if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('c')) {
-        app.should_quit = true;
-        return;
-    }
-    match key.code {
-        KeyCode::Esc => {
-            if app.autocomplete.is_some() {
-                app.autocomplete = None;
-            } else {
-                app.should_quit = true;
-            }
+
+    // Dispatch the key through the current screen. The screen returns a
+    // Transition which we apply once its borrow on `app.screen` ends.
+    let mut to_send: Option<Request> = None;
+    let mut tag_action: Option<screens::tag_editor::TagAction> = None;
+    let mut search_should_search = false;
+    let mut confirm_action: Option<screens::confirm::ConfirmAction> = None;
+    let transition = match &mut app.screen {
+        Screen::Chat(state) => screens::chat::handle_key(state, key, |req| {
+            to_send = Some(req);
+        }),
+        Screen::ConversationList(state) => screens::conversation_list::handle_key(state, key),
+        Screen::TagEditor(state) => {
+            tag_action = screens::tag_editor::handle_key(state, key);
+            Transition::None
         }
-        KeyCode::Tab => app.cycle_autocomplete(true),
-        KeyCode::BackTab => app.cycle_autocomplete(false),
-        KeyCode::Backspace => app.input_backspace(),
-        KeyCode::Left => app.cursor_left(),
-        KeyCode::Right => app.cursor_right(),
-        KeyCode::Up => app.scroll_offset = app.scroll_offset.saturating_sub(1),
-        KeyCode::Down => app.scroll_offset = app.scroll_offset.saturating_add(1),
-        KeyCode::Enter => submit(app, ctx),
-        KeyCode::Char(c) => app.input_insert(c),
-        _ => {}
+        Screen::Search(state) => match screens::search::handle_key(state, key) {
+            screens::search::SearchAction::None => Transition::None,
+            screens::search::SearchAction::Search => {
+                search_should_search = true;
+                Transition::None
+            }
+            screens::search::SearchAction::Transition(t) => t,
+        },
+        Screen::ConfirmDelete(state) => {
+            confirm_action = Some(screens::confirm::handle_key(state, key));
+            Transition::None
+        }
+    };
+
+    if let Some(req) = to_send {
+        // Requests raised by the current screen's handle_key are tagged with
+        // the current screen's main request_seq so replies route back
+        // correctly (only used by Chat for its normal turn flow).
+        let seq = spawn_request(app, ctx, req);
+        if let Screen::Chat(state) = &mut app.screen {
+            state.request_seq = seq;
+        }
+    }
+
+    if let Some(action) = tag_action {
+        apply_tag_action(app, ctx, action);
+    }
+
+    if search_should_search && let Screen::Search(state) = &mut app.screen {
+        state.loading = true;
+        state.results.clear();
+        let req = screens::search::search_request(state);
+        let seq = spawn_request(app, ctx, req);
+        if let Screen::Search(state) = &mut app.screen {
+            state.results_seq = seq;
+        }
+    }
+
+    if let Some(action) = confirm_action {
+        apply_confirm_action(app, ctx, action);
+    }
+
+    apply_transition(app, ctx, transition);
+}
+
+fn apply_confirm_action(app: &mut App, ctx: &Ctx, action: screens::confirm::ConfirmAction) {
+    use screens::confirm::ConfirmAction;
+    match action {
+        ConfirmAction::None => {}
+        ConfirmAction::Back => {
+            let back = match &app.screen {
+                Screen::ConfirmDelete(state) => screens::confirm::back_transition(state),
+                _ => Transition::None,
+            };
+            apply_transition(app, ctx, back);
+        }
+        ConfirmAction::Confirm => {
+            let (conv_id, back) = match &app.screen {
+                Screen::ConfirmDelete(state) => (
+                    state.conv_id.clone(),
+                    screens::confirm::back_transition(state),
+                ),
+                _ => return,
+            };
+            spawn_request(app, ctx, Request::ConversationDelete { id: conv_id });
+            apply_transition(app, ctx, back);
+        }
     }
 }
 
-fn submit(app: &mut App, ctx: &Ctx) {
-    let input = app.take_input();
-    if input.is_empty() {
-        return;
+fn apply_transition(app: &mut App, ctx: &Ctx, t: Transition) {
+    match t {
+        Transition::None => {}
+        Transition::Quit => app.should_quit = true,
+        Transition::To(screen) => {
+            app.screen = screen;
+            // Fire any initial loads the new screen wants, and stash the
+            // seqs back onto it so the replies can be routed.
+            let reqs = app.screen.on_enter();
+            let seqs: Vec<u64> = reqs
+                .into_iter()
+                .map(|r| spawn_request(app, ctx, r))
+                .collect();
+            app.screen.record_seqs(&seqs);
+        }
     }
-    app.push_user(input.clone());
+}
 
-    if let Some(rest) = input.strip_prefix('/') {
-        let (name, args) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
-        if name.is_empty() {
-            app.push_error("empty command");
+fn apply_tag_action(app: &mut App, ctx: &Ctx, action: screens::tag_editor::TagAction) {
+    use screens::tag_editor::TagAction;
+    let (req, optimistic_add, optimistic_remove) = match action {
+        TagAction::AddTag(tag) => {
+            let conv_id = match &app.screen {
+                Screen::TagEditor(state) => state.conversation_id.clone(),
+                _ => return,
+            };
+            (
+                Request::ConversationAddTag {
+                    id: conv_id,
+                    tag: tag.clone(),
+                },
+                Some(tag),
+                None,
+            )
+        }
+        TagAction::RemoveTag(tag) => {
+            let conv_id = match &app.screen {
+                Screen::TagEditor(state) => state.conversation_id.clone(),
+                _ => return,
+            };
+            (
+                Request::ConversationRemoveTag {
+                    id: conv_id,
+                    tag: tag.clone(),
+                },
+                None,
+                Some(tag),
+            )
+        }
+        TagAction::Back => {
+            let back = match &app.screen {
+                Screen::TagEditor(state) => screens::tag_editor::back_transition(state),
+                _ => Transition::None,
+            };
+            apply_transition(app, ctx, back);
             return;
         }
-        let cmd = commands::find(name).or_else(|| commands::filter(name).into_iter().next());
-        match cmd {
-            Some(cmd) => run_action(app, cmd, args, ctx),
-            None => app.push_error(format!("unknown command: /{name}")),
+    };
+
+    // Optimistic UI update: apply the change locally, THEN send the RPC.
+    // The server's ack doesn't need to be routed back into the tag editor's
+    // load-seqs; its reply is handled as a no-op (see tag_editor::handle_reply).
+    if let Screen::TagEditor(state) = &mut app.screen {
+        if let Some(tag) = optimistic_add
+            && !state.tags.contains(&tag)
+        {
+            state.tags.push(tag);
+            state.tags.sort();
         }
-    } else {
-        spawn_request(ctx, Request::Chat { message: input });
-        app.pending += 1;
+        if let Some(tag) = optimistic_remove {
+            state.tags.retain(|t| t != &tag);
+            if state.selected_tag >= state.tags.len() && !state.tags.is_empty() {
+                state.selected_tag = state.tags.len() - 1;
+            }
+        }
     }
+    spawn_request(app, ctx, req);
 }
 
-fn run_action(app: &mut App, cmd: &SlashCommand, args: &str, ctx: &Ctx) {
-    match cmd.action {
-        Action::Quit => app.should_quit = true,
-        Action::Send(builder) => {
-            spawn_request(ctx, builder(args));
-            app.pending += 1;
-        }
-    }
-}
-
-fn spawn_request(ctx: &Ctx, req: Request) {
+fn spawn_request(app: &mut App, ctx: &Ctx, req: Request) -> u64 {
+    let seq = app.next_request_seq;
+    app.next_request_seq += 1;
+    app.pending += 1;
     let cfg = ctx.cfg.clone();
     let socket = ctx.socket.clone();
     let cfg_override = ctx.cfg_override.clone();
@@ -175,17 +285,49 @@ fn spawn_request(ctx: &Ctx, req: Request) {
             req,
         )
         .await;
-        let _ = tx.send(AppEvent::Reply(result));
+        let _ = tx.send(AppEvent::Reply { seq, result });
     });
+    seq
 }
 
-fn handle_reply(app: &mut App, result: Result<Response, ClientError>) {
+fn handle_reply(app: &mut App, seq: u64, result: Result<Response, ClientError>) {
     if app.pending > 0 {
         app.pending -= 1;
     }
-    match result {
-        Ok(resp) => app.display_response(resp),
-        Err(err) => app.push_error(format!("request failed: {err}")),
+
+    // Route based on the current screen. Each screen decides whether the
+    // reply is one of theirs (matches an outstanding seq) or stale.
+    match &mut app.screen {
+        Screen::Chat(state) => {
+            // Chat accepts normal-turn replies (no outstanding request_seq =
+            // 0) as well as its own ConversationGet reply when request_seq
+            // matches.
+            if state.request_seq == seq || state.request_seq == 0 {
+                state.request_seq = 0;
+                match result {
+                    Ok(resp) => state.display_response(resp),
+                    Err(err) => state.push_error(format!("request failed: {err}")),
+                }
+            }
+        }
+        Screen::ConversationList(state) => {
+            if state.request_seq == seq {
+                match result {
+                    Ok(resp) => screens::conversation_list::handle_reply(state, resp),
+                    Err(_) => state.loading = false,
+                }
+            }
+        }
+        Screen::TagEditor(state) => {
+            screens::tag_editor::handle_reply(state, seq, result);
+        }
+        Screen::Search(state) => {
+            screens::search::handle_reply(state, seq, result);
+        }
+        Screen::ConfirmDelete(_) => {
+            // ConfirmDelete has no outstanding requests of its own; any
+            // delete reply arrives after the transition has already happened.
+        }
     }
 }
 
