@@ -50,11 +50,7 @@ pub enum ChatProviderConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "provider", rename_all = "lowercase")]
 pub enum EmbeddingsProviderConfig {
-    Ollama {
-        url: String,
-        model: String,
-        dimensions: usize,
-    },
+    Ollama { url: String, model: String },
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -224,7 +220,6 @@ model = "llama3.2:3b"
 provider = "ollama"
 url = "http://localhost:11434"
 model = "nomic-embed-text"
-dimensions = 768
 "#
     }
 
@@ -355,7 +350,6 @@ model = "claude-sonnet-4-5"
 provider = "ollama"
 url = "http://localhost:11434"
 model = "nomic-embed-text"
-dimensions = 768
 "#;
         let cfg_path = write(&dir, "config.toml", cfg_text);
         let cfg = load_config_only(Some(&cfg_path)).unwrap();
@@ -373,14 +367,9 @@ dimensions = 768
         let cfg_path = write(&dir, "config.toml", valid_config_toml());
         let cfg = load_config_only(Some(&cfg_path)).unwrap();
         match cfg.llm.embeddings {
-            EmbeddingsProviderConfig::Ollama {
-                url,
-                model,
-                dimensions,
-            } => {
+            EmbeddingsProviderConfig::Ollama { url, model } => {
                 assert_eq!(url, "http://localhost:11434");
                 assert_eq!(model, "nomic-embed-text");
-                assert_eq!(dimensions, 768);
             }
         }
     }
@@ -403,7 +392,6 @@ model = "gpt-4"
 provider = "ollama"
 url = "http://localhost:11434"
 model = "nomic-embed-text"
-dimensions = 768
 "#;
         let cfg_path = write(&dir, "config.toml", cfg_text);
         let err = load_config_only(Some(&cfg_path)).unwrap_err();
@@ -429,7 +417,6 @@ model = "llama3.2:3b"
 provider = "ollama"
 url = "http://localhost:11434"
 model = "nomic-embed-text"
-dimensions = 768
 "#;
         let cfg_path = write(&dir, "config.toml", cfg_text);
         let cfg = load_config_only(Some(&cfg_path)).unwrap();
@@ -461,7 +448,6 @@ model = "llama3.2:3b"
 provider = "ollama"
 url = "http://localhost:11434"
 model = "nomic-embed-text"
-dimensions = 768
 "#
         );
         let cfg_path = write(&dir, "config.toml", &cfg_text);
@@ -493,7 +479,6 @@ model = "llama3.2:3b"
 provider = "ollama"
 url = "http://localhost:11434"
 model = "nomic-embed-text"
-dimensions = 768
 "#,
         )
         .unwrap();

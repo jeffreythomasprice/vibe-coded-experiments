@@ -23,7 +23,7 @@ db_path = "./local.db"
 [llm.chat]
 provider = "ollama"
 url = "http://localhost:11434"
-model = "llama3.2:3b"
+model = "qwen3.5:35b"
 
 # Anthropic variant (cloud; requires `anthropic_api_key` in secrets.toml):
 # [llm.chat]
@@ -31,8 +31,9 @@ model = "llama3.2:3b"
 # model = "claude-sonnet-4-5"
 
 # --- LLM embeddings provider: ollama is the only option today. ---
+# The vector dimensionality is probed from the model on first boot and cached
+# in the local DB (`embedding_model_dimensions` table).
 [llm.embeddings]
 provider = "ollama"
 url = "http://localhost:11434"
-model = "nomic-embed-text"
-dimensions = 768
+model = "qwen3-embedding:8b"

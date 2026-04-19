@@ -9,11 +9,11 @@ use tokio::sync::Notify;
 
 use tracing::Instrument;
 
-use crate::config::Config;
-use crate::db::{self, EmbeddingModelInfo};
+use crate::config::{Config, EmbeddingsProviderConfig};
+use crate::db::{self, DbError};
 use crate::error::{CliError, ProtocolError, ServerStartError};
 use crate::handlers::dispatch;
-use crate::llm::{self, LlmStack};
+use crate::llm::{self, LlmStack, ollama::probe_ollama_dimensions};
 use crate::protocol::{Request, framed, read_frame, write_frame};
 
 /// Shared, read-through handles available to every connection. Wrapped in
@@ -28,21 +28,57 @@ pub async fn run(cfg: &Config, socket: &Path) -> Result<(), CliError> {
     let listener = bind_with_stale_cleanup(socket).await?;
     tracing::info!(socket = %socket.display(), "llm-rag server listening");
 
+    // Once we've bound the socket, every exit path — happy or error — must
+    // remove the file so a failed startup doesn't leave a zombie socket that
+    // confuses the next client.
+    let result = serve(cfg, listener).await;
+
+    if let Err(err) = std::fs::remove_file(socket)
+        && err.kind() != ErrorKind::NotFound
+    {
+        tracing::warn!(
+            socket = %socket.display(),
+            %err,
+            "failed to remove socket"
+        );
+    }
+    result
+}
+
+async fn serve(cfg: &Config, listener: UnixListener) -> Result<(), CliError> {
     // Build shared state before accepting any connections: if these fail the
     // server dies cleanly with an appropriate CliError variant (and matching
     // exit code) rather than half-serving requests.
-    let llm = llm::build(cfg)?;
-    let model = EmbeddingModelInfo::from_config(cfg);
+    //
+    // Order: build chat first (cheap, no I/O), then open the DB which resolves
+    // the embedding model's vector length (cache hit, or one probe call), then
+    // build the embeddings provider now that we know the dimensions.
+    let chat = llm::build_chat(cfg)?;
+    let (probe_url, probe_model) = match &cfg.llm.embeddings {
+        EmbeddingsProviderConfig::Ollama { url, model } => (url.clone(), model.clone()),
+    };
     tracing::info!(
         db_path = %cfg.db_path.display(),
-        embedding_model = %model.name,
-        dimensions = model.dimensions,
+        embedding_model = %probe_model,
         "opening database",
     );
-    let dal = db::open(cfg, model).await?;
+
+    let probe_model_for_err = probe_model.clone();
+    let probe_model_for_call = probe_model.clone();
+    let dal = db::open(cfg, probe_model.clone(), move || async move {
+        probe_ollama_dimensions(&probe_url, &probe_model_for_call)
+            .await
+            .map_err(|source| DbError::Probe {
+                model: probe_model_for_err,
+                source: source.into(),
+            })
+    })
+    .await?;
+
+    let embeddings = llm::build_embeddings(cfg, dal.model().dimensions)?;
     let state = Arc::new(ServerState {
         dal: Arc::new(dal),
-        llm: Arc::new(llm),
+        llm: Arc::new(LlmStack { chat, embeddings }),
     });
 
     let active = Arc::new(AtomicUsize::new(0));
@@ -86,16 +122,6 @@ pub async fn run(cfg: &Config, socket: &Path) -> Result<(), CliError> {
         }
     }
 
-    drop(listener);
-    if let Err(err) = std::fs::remove_file(socket)
-        && err.kind() != ErrorKind::NotFound
-    {
-        tracing::warn!(
-            socket = %socket.display(),
-            %err,
-            "failed to remove socket"
-        );
-    }
     Ok(())
 }
 

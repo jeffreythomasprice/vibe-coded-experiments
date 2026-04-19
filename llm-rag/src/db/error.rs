@@ -28,4 +28,16 @@ pub enum DbError {
 
     #[error("{kind} with id {id} not found")]
     NotFound { kind: &'static str, id: i64 },
+
+    /// A probe call to the embeddings provider failed during bootstrap. This
+    /// happens on a cold cache (no row in `embedding_model_dimensions` for the
+    /// configured model) when we couldn't reach the model to ask for its
+    /// vector length. The source is opaque (the LLM layer's error) — we keep
+    /// it as `anyhow::Error` to avoid pulling `LlmError` into the DB layer.
+    #[error("probing embedding model {model:?}: {source}")]
+    Probe {
+        model: String,
+        #[source]
+        source: anyhow::Error,
+    },
 }

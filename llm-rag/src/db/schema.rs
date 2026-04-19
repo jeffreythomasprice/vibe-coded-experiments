@@ -1,33 +1,66 @@
-use turso::Connection;
-
-use crate::config::{Config, EmbeddingsProviderConfig};
+use turso::{Connection, Value};
 
 use super::error::DbError;
 
 /// Metadata about the embedding model in use at startup. `dimensions` selects
 /// the per-dimension chunk table (e.g. `document_chunks_768`) so swapping
-/// models with different vector lengths does not collide.
+/// models with different vector lengths does not collide. The value is
+/// resolved at startup via [`lookup_dimensions`] (or by probing the model and
+/// then [`record_dimensions`]) — it's no longer declared in config.
 #[derive(Debug, Clone)]
 pub struct EmbeddingModelInfo {
     pub name: String,
     pub dimensions: usize,
 }
 
-impl EmbeddingModelInfo {
-    /// Derive the active embedding model from the loaded [`Config`]. Today
-    /// only Ollama is supported and its `dimensions` are declared in the
-    /// config file (not queried from the model), which matches how
-    /// `crate::llm::build` uses them.
-    pub fn from_config(cfg: &Config) -> Self {
-        match &cfg.llm.embeddings {
-            EmbeddingsProviderConfig::Ollama {
-                model, dimensions, ..
-            } => Self {
-                name: model.clone(),
-                dimensions: *dimensions,
-            },
+/// Look up the cached vector length for `model`. `Ok(None)` means we've never
+/// seen this model before and the caller should probe it.
+pub async fn lookup_dimensions(conn: &Connection, model: &str) -> Result<Option<usize>, DbError> {
+    let mut rows = conn
+        .query(
+            "SELECT dimensions FROM embedding_model_dimensions WHERE model = ?",
+            (model.to_string(),),
+        )
+        .await
+        .map_err(|source| DbError::Query {
+            op: "lookup_dimensions",
+            source,
+        })?;
+    match rows.next().await.map_err(|source| DbError::Query {
+        op: "lookup_dimensions.next",
+        source,
+    })? {
+        Some(row) => {
+            let dims: i64 = row.get(0).map_err(|source| DbError::Query {
+                op: "lookup_dimensions.get",
+                source,
+            })?;
+            Ok(Some(dims as usize))
         }
+        None => Ok(None),
     }
+}
+
+/// Persist a probed vector length. `INSERT OR IGNORE` keeps two racing
+/// processes from each writing a row for the same model.
+pub async fn record_dimensions(
+    conn: &Connection,
+    model: &str,
+    dimensions: usize,
+) -> Result<(), DbError> {
+    conn.execute(
+        "INSERT OR IGNORE INTO embedding_model_dimensions (model, dimensions) VALUES (?, ?)",
+        turso::params::Params::Positional(vec![
+            Value::Text(model.to_string()),
+            Value::Integer(dimensions as i64),
+        ]),
+    )
+    .await
+    .map_err(|source| DbError::Query {
+        op: "record_dimensions",
+        source,
+    })?;
+    Ok(())
 }
 
 /// Returns the SQL table name for chunks of a given embedding dimension.

@@ -44,6 +44,25 @@ impl OllamaProvider {
     }
 }
 
+/// Issue a one-shot embedding call against Ollama and return the resulting
+/// vector's length. Used at server bootstrap to populate the
+/// `embedding_model_dimensions` cache without forcing the operator to declare
+/// `dimensions` in `config.toml`.
+///
+/// rig's `embedding_model_with_ndims(name, n)` stores `n` as metadata only —
+/// it is not sent in the HTTP request, so passing a placeholder `1` is
+/// harmless. The vector length we read back is what the model actually
+/// produces.
+pub async fn probe_ollama_dimensions(url: &str, model: &str) -> Result<usize, LlmError> {
+    let client = build_client(url)?;
+    let probe_model = client.embedding_model_with_ndims(model, 1);
+    let embedding = probe_model
+        .embed_text(" ")
+        .await
+        .map_err(|e| LlmError::Provider(anyhow!(e)))?;
+    Ok(embedding.vec.len())
+}
+
 fn build_client(url: &str) -> Result<ollama::Client, LlmError> {
     ollama::Client::builder()
         .api_key(Nothing)

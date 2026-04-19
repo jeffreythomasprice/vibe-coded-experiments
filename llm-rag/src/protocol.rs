@@ -9,12 +9,14 @@ use crate::error::ProtocolError;
 #[serde(tag = "type")]
 pub enum Request {
     Ping,
+    Chat { message: String },
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
 pub enum Response {
     Pong,
+    Chat { reply: String },
     Error { message: String },
 }
 

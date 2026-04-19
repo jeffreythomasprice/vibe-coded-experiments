@@ -8,6 +8,7 @@
 //! Clients reach these operations over the Unix-socket RPC; the DAL itself is
 //! never exposed across process boundaries.
 
+use std::future::Future;
 use std::path::Path;
 
 use turso::{Builder, Connection, Value};
@@ -97,7 +98,18 @@ pub struct Dal {
 }
 
 impl Dal {
-    pub async fn open(db_path: &Path, model: EmbeddingModelInfo) -> Result<Self, DbError> {
+    /// Open the DB, run migrations, resolve the embedding model's vector
+    /// length (cache hit, or `probe` on miss), ensure the per-dimension chunk
+    /// table exists, and return a ready DAL.
+    ///
+    /// `probe` is invoked at most once, only when no cached row exists for
+    /// `model_name` — its result is then persisted to
+    /// `embedding_model_dimensions` for subsequent boots.
+    pub async fn open<F, Fut>(db_path: &Path, model_name: String, probe: F) -> Result<Self, DbError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<usize, DbError>>,
+    {
         let path_str = db_path.to_string_lossy().to_string();
         let db = Builder::new_local(&path_str)
             .build()
@@ -120,9 +132,35 @@ impl Dal {
             })?;
 
         migrations::run(&conn).await?;
-        schema::ensure_chunk_table(&conn, model.dimensions).await?;
 
-        let chunk_table = schema::chunk_table_name(model.dimensions);
+        let dimensions = match schema::lookup_dimensions(&conn, &model_name).await? {
+            Some(dims) => {
+                tracing::info!(
+                    model = %model_name,
+                    dimensions = dims,
+                    "embedding dimensions resolved from cache",
+                );
+                dims
+            }
+            None => {
+                let dims = probe().await?;
+                schema::record_dimensions(&conn, &model_name, dims).await?;
+                tracing::info!(
+                    model = %model_name,
+                    dimensions = dims,
+                    "embedding dimensions probed and cached",
+                );
+                dims
+            }
+        };
+
+        schema::ensure_chunk_table(&conn, dimensions).await?;
+
+        let model = EmbeddingModelInfo {
+            name: model_name,
+            dimensions,
+        };
+        let chunk_table = schema::chunk_table_name(dimensions);
         Ok(Dal {
             conn,
             model,
@@ -654,11 +692,17 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::TempDir;
 
-    fn model(dims: usize) -> EmbeddingModelInfo {
-        EmbeddingModelInfo {
-            name: format!("test-{dims}"),
-            dimensions: dims,
-        }
+    fn model_name(dims: usize) -> String {
+        format!("test-{dims}")
+    }
+
+    /// Test helper: open a DAL at `path` with a probe that always returns
+    /// `dims`. The cache table will be populated on the first open and
+    /// short-circuit on subsequent ones.
+    async fn open_with_dims(path: &std::path::Path, dims: usize) -> Dal {
+        Dal::open(path, model_name(dims), || async move { Ok(dims) })
+            .await
+            .unwrap()
     }
 
     async fn mem_dal(dims: usize) -> Dal {
@@ -669,7 +713,43 @@ mod tests {
         // Leak the tempdir so files survive the async calls below. Each test
         // gets a fresh one.
         std::mem::forget(dir);
-        Dal::open(&path, model(dims)).await.unwrap()
+        open_with_dims(&path, dims).await
+    }
+
+    #[tokio::test]
+    async fn probe_runs_on_cache_miss_then_is_cached() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let dir = TempDir::new().unwrap();
+        let path: PathBuf = dir.path().join("t.db");
+
+        let calls = Arc::new(AtomicUsize::new(0));
+
+        let calls_a = calls.clone();
+        let dal_a = Dal::open(&path, "probe-test".into(), move || async move {
+            calls_a.fetch_add(1, Ordering::SeqCst);
+            Ok(7)
+        })
+        .await
+        .unwrap();
+        assert_eq!(dal_a.model().dimensions, 7);
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "probe runs on first open");
+        drop(dal_a);
+
+        let calls_b = calls.clone();
+        let dal_b = Dal::open(&path, "probe-test".into(), move || async move {
+            calls_b.fetch_add(1, Ordering::SeqCst);
+            panic!("probe must not run on cache hit");
+        })
+        .await
+        .unwrap();
+        assert_eq!(dal_b.model().dimensions, 7);
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "probe must not run on cache hit",
+        );
     }
 
     #[tokio::test]
@@ -935,7 +1015,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("t.db");
 
-        let dal_4 = Dal::open(&path, model(4)).await.unwrap();
+        let dal_4 = open_with_dims(&path, 4).await;
         let doc = dal_4.create_document("/x").await.unwrap();
         let chunk_4 = dal_4
             .create_chunk(
@@ -948,7 +1028,7 @@ mod tests {
             .unwrap();
         drop(dal_4);
 
-        let dal_8 = Dal::open(&path, model(8)).await.unwrap();
+        let dal_8 = open_with_dims(&path, 8).await;
         // The 8-dim chunk table exists but is empty.
         let hits_8 = dal_8
             .search_chunks(&[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 10, None)
@@ -958,7 +1038,7 @@ mod tests {
 
         // Re-open the 4-dim DAL and confirm the chunk still lives there.
         drop(dal_8);
-        let dal_4_again = Dal::open(&path, model(4)).await.unwrap();
+        let dal_4_again = open_with_dims(&path, 4).await;
         let hits_4 = dal_4_again
             .search_chunks(&[1.0, 0.0, 0.0, 0.0], 10, None)
             .await

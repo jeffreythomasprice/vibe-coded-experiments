@@ -6,8 +6,6 @@ cli commands and messages to:
 - delete documents
 - take a search phrase and find relevant chunks
 
-ratatui tui
-
 pdf documents
 
 youtube download, transcript is the document
@@ -22,3 +20,5 @@ modify tags on an exsting conversation
 structured output
 
 other tools?
+
+turso in-memory db in dal.rs tests, currently leaking a tmp file db?

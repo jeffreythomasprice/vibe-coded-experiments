@@ -14,8 +14,9 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "PATH")]
     pub secrets: Option<PathBuf>,
 
+    /// Subcommand to run. If omitted, the interactive TUI launches.
     #[command(subcommand)]
-    pub command: Command,
+    pub command: Option<Command>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -24,4 +25,6 @@ pub enum Command {
     Server,
     /// Send a ping to the server (auto-starts one if needed).
     Ping,
+    /// Launch the interactive TUI (default when no subcommand is given).
+    Tui,
 }

@@ -22,10 +22,21 @@ pub use dal::{ChunkMatch, ChunkRange, Dal, Document};
 pub use error::DbError;
 pub use schema::EmbeddingModelInfo;
 
+use std::future::Future;
+
 use crate::config::Config;
 
-/// Open the configured DB file, run pending migrations, ensure the
-/// dimension-specific chunk table exists, and return a ready-to-use [`Dal`].
-pub async fn open(cfg: &Config, model: EmbeddingModelInfo) -> Result<Dal, DbError> {
-    Dal::open(&cfg.db_path, model).await
+/// Open the configured DB file, run pending migrations, resolve the embedding
+/// model's vector length (cached or probed), ensure the dimension-specific
+/// chunk table exists, and return a ready-to-use [`Dal`].
+///
+/// `probe` is called at most once — only on a cache miss — to ask the
+/// embedding model for its native vector length. The result is persisted to
+/// `embedding_model_dimensions` so subsequent boots are zero-cost.
+pub async fn open<F, Fut>(cfg: &Config, model_name: String, probe: F) -> Result<Dal, DbError>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<usize, DbError>>,
+{
+    Dal::open(&cfg.db_path, model_name, probe).await
 }

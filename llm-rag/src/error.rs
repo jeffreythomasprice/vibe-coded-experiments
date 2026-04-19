@@ -77,6 +77,8 @@ pub enum CliError {
     #[error(transparent)]
     Db(#[from] crate::db::DbError),
     #[error(transparent)]
+    Tui(#[from] crate::tui::error::TuiError),
+    #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
 
@@ -169,6 +171,9 @@ impl CliError {
             }
             CliError::Db(err) => {
                 serde_json::json!({ "error": "Db", "message": err.to_string() })
+            }
+            CliError::Tui(err) => {
+                serde_json::json!({ "error": "Tui", "message": err.to_string() })
             }
             CliError::Other(err) => {
                 serde_json::json!({ "error": "Other", "message": err.to_string() })

@@ -6,7 +6,7 @@ use llm_rag::cli::{Cli, Command};
 use llm_rag::config::{self, Config};
 use llm_rag::error::{CliError, ClientError};
 use llm_rag::protocol::{Request, Response};
-use llm_rag::{client, logging, paths, server};
+use llm_rag::{client, logging, paths, server, tui};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -33,9 +33,10 @@ async fn main() -> ExitCode {
         );
     }
 
-    let role = match cli.command {
-        Command::Server => "server",
-        Command::Ping => "client",
+    let role = match &cli.command {
+        Some(Command::Server) => "server",
+        Some(Command::Ping) => "client",
+        Some(Command::Tui) | None => "tui",
     };
     let span = tracing::info_span!("app", pid = std::process::id(), role);
     let _entered = span.enter();
@@ -59,11 +60,11 @@ async fn dispatch(cli: Cli, cfg: &Config) -> Result<(), CliError> {
     let socket = paths::socket_path(&cfg.socket_dir);
 
     match cli.command {
-        Command::Server => {
+        Some(Command::Server) => {
             server::run(cfg, &socket).await?;
             Ok(())
         }
-        Command::Ping => {
+        Some(Command::Ping) => {
             let resp = client::round_trip(
                 cfg,
                 &socket,
@@ -80,7 +81,14 @@ async fn dispatch(cli: Cli, cfg: &Config) -> Result<(), CliError> {
                 Response::Error { message } => {
                     Err(CliError::Client(ClientError::ServerError { message }))
                 }
+                Response::Chat { .. } => Err(CliError::Client(ClientError::ServerError {
+                    message: "unexpected Chat response to Ping".into(),
+                })),
             }
+        }
+        Some(Command::Tui) | None => {
+            tui::run(cfg, &socket, cli.config.as_deref(), cli.secrets.as_deref()).await?;
+            Ok(())
         }
     }
 }

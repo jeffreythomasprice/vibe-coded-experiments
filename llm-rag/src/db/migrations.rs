@@ -11,8 +11,14 @@ use turso::Connection;
 use super::error::DbError;
 
 /// `(version, name, sql)` — `version` must be monotonically increasing.
-const MIGRATIONS: &[(u32, &str, &str)] =
-    &[(1, "initial", include_str!("migrations/0001_initial.sql"))];
+const MIGRATIONS: &[(u32, &str, &str)] = &[
+    (1, "initial", include_str!("migrations/0001_initial.sql")),
+    (
+        2,
+        "embedding_model_dimensions",
+        include_str!("migrations/0002_embedding_model_dimensions.sql"),
+    ),
+];
 
 /// Ensure `_schema_migrations` exists, then apply any migrations whose
 /// `version` isn't already recorded.
@@ -270,12 +276,17 @@ mod tests {
             )
             .await
             .unwrap();
-        let row = rows.next().await.unwrap().expect("one migration");
-        let version: i64 = row.get(0).unwrap();
-        let name: String = row.get(1).unwrap();
-        assert_eq!(version, 1);
-        assert_eq!(name, "initial");
-        assert!(rows.next().await.unwrap().is_none());
+        let mut applied = Vec::new();
+        while let Some(row) = rows.next().await.unwrap() {
+            let version: i64 = row.get(0).unwrap();
+            let name: String = row.get(1).unwrap();
+            applied.push((version, name));
+        }
+        let expected: Vec<(i64, String)> = MIGRATIONS
+            .iter()
+            .map(|(v, n, _)| (*v as i64, (*n).to_string()))
+            .collect();
+        assert_eq!(applied, expected);
 
         // Sanity: the target tables are queryable.
         conn.execute("INSERT INTO documents (path) VALUES ('x')", ())
@@ -295,7 +306,7 @@ mod tests {
             .unwrap();
         let row = rows.next().await.unwrap().unwrap();
         let count: i64 = row.get(0).unwrap();
-        assert_eq!(count, 1);
+        assert_eq!(count, MIGRATIONS.len() as i64);
     }
 
     #[tokio::test]

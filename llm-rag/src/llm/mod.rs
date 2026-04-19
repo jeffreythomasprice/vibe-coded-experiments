@@ -30,7 +30,10 @@ pub struct LlmStack {
     pub embeddings: Arc<dyn EmbeddingProvider>,
 }
 
-pub fn build(cfg: &Config) -> Result<LlmStack, LlmError> {
+/// Build the chat-side provider from config. Embeddings are built separately
+/// via [`build_embeddings`] because their construction requires the model's
+/// vector length, which is resolved from the DB cache (or probed) at startup.
+pub fn build_chat(cfg: &Config) -> Result<Arc<dyn LlmProvider>, LlmError> {
     let chat: Arc<dyn LlmProvider> = match &cfg.llm.chat {
         ChatProviderConfig::Ollama { url, model } => {
             Arc::new(ollama::OllamaProvider::new(url, model)?)
@@ -44,20 +47,21 @@ pub fn build(cfg: &Config) -> Result<LlmStack, LlmError> {
             Arc::new(anthropic::AnthropicProvider::new(key, model)?)
         }
     };
+    Ok(chat)
+}
 
+/// Build the embeddings provider once `dimensions` is known (resolved by the
+/// DB layer's cache lookup / probe).
+pub fn build_embeddings(
+    cfg: &Config,
+    dimensions: usize,
+) -> Result<Arc<dyn EmbeddingProvider>, LlmError> {
     let embeddings: Arc<dyn EmbeddingProvider> = match &cfg.llm.embeddings {
-        EmbeddingsProviderConfig::Ollama {
-            url,
-            model,
-            dimensions,
-        } => Arc::new(ollama::OllamaProvider::new_embeddings(
-            url,
-            model,
-            *dimensions,
-        )?),
+        EmbeddingsProviderConfig::Ollama { url, model } => Arc::new(
+            ollama::OllamaProvider::new_embeddings(url, model, dimensions)?,
+        ),
     };
-
-    Ok(LlmStack { chat, embeddings })
+    Ok(embeddings)
 }
 
 #[cfg(test)]
@@ -79,7 +83,6 @@ mod tests {
                 embeddings: EmbeddingsProviderConfig::Ollama {
                     url: "http://localhost:11434".into(),
                     model: "nomic-embed-text".into(),
-                    dimensions: 768,
                 },
             },
             secrets,
@@ -94,7 +97,7 @@ mod tests {
             },
             SecretsConfig::default(),
         );
-        match build(&cfg) {
+        match build_chat(&cfg) {
             Err(LlmError::MissingSecret("anthropic_api_key")) => {}
             Err(other) => panic!("expected MissingSecret, got {other:?}"),
             Ok(_) => panic!("expected MissingSecret, got Ok"),
@@ -110,7 +113,8 @@ mod tests {
             },
             SecretsConfig::default(),
         );
-        build(&cfg).expect("ollama build should not need a secret");
+        build_chat(&cfg).expect("ollama build should not need a secret");
+        build_embeddings(&cfg, 768).expect("embeddings build is dimension-only");
     }
 
     #[test]
@@ -124,6 +128,6 @@ mod tests {
                 loaded_from_insecure_path: None,
             },
         );
-        build(&cfg).expect("anthropic build with secret should succeed");
+        build_chat(&cfg).expect("anthropic build with secret should succeed");
     }
 }

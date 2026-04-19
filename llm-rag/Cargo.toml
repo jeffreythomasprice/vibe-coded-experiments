@@ -8,10 +8,12 @@ anyhow = "1"
 async-trait = "0.1"
 bytemuck = "1"
 clap = { version = "4", features = ["derive"] }
+crossterm = { version = "0.28", features = ["event-stream"] }
 directories = "5"
 futures = "0.3"
 futures-util = "0.3"
 libc = "0.2"
+ratatui = "0.29"
 rig-core = "0.35"
 secrecy = { version = "0.10", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
