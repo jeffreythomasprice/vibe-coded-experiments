@@ -55,6 +55,8 @@ pub enum ClientError {
     SpawnServer(#[source] io::Error),
     #[error("server responded with error: {message}")]
     ServerError { message: String },
+    #[error("stream closed before receiving a terminal frame (ChatDone or Error)")]
+    StreamClosedMidResponse,
     #[error(transparent)]
     Protocol(#[from] ProtocolError),
     #[error("io error: {0}")]

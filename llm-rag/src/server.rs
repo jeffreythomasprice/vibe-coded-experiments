@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::Notify;
+use tokio::sync::mpsc;
 
 use tracing::Instrument;
 
@@ -14,13 +15,15 @@ use crate::db::{self, DbError};
 use crate::error::{CliError, ProtocolError, ServerStartError};
 use crate::handlers::dispatch;
 use crate::llm::{self, LlmStack, ollama::probe_ollama_dimensions};
-use crate::protocol::{Request, framed, read_frame, write_frame};
+use crate::protocol::{Request, Response, framed, read_frame, write_frame};
+use crate::tools::ToolRegistry;
 
 /// Shared, read-through handles available to every connection. Wrapped in
 /// `Arc` on the outside and cloned cheaply into each accept task.
 pub struct ServerState {
     pub dal: Arc<db::Dal>,
     pub llm: Arc<LlmStack>,
+    pub tools: Arc<ToolRegistry>,
 }
 
 pub async fn run(cfg: &Config, socket: &Path) -> Result<(), CliError> {
@@ -79,6 +82,7 @@ async fn serve(cfg: &Config, listener: UnixListener) -> Result<(), CliError> {
     let state = Arc::new(ServerState {
         dal: Arc::new(dal),
         llm: Arc::new(LlmStack { chat, embeddings }),
+        tools: Arc::new(ToolRegistry::with_defaults()),
     });
 
     let active = Arc::new(AtomicUsize::new(0));
@@ -133,6 +137,14 @@ async fn idle_sleep(active: &AtomicUsize, idle: Duration) {
     }
 }
 
+/// Run a single request's dispatch and drop the sender so the writer loop
+/// paired with this channel terminates. Errors from `dispatch` (only
+/// `SendError` is possible — see handler docs) are silently absorbed: the
+/// writer's error, if any, is the authoritative signal.
+async fn run_dispatch(req: Request, state: &ServerState, tx: mpsc::Sender<Response>) {
+    let _ = dispatch(req, state, &tx).await;
+}
+
 async fn serve_connection(
     stream: UnixStream,
     state: Arc<ServerState>,
@@ -152,8 +164,36 @@ async fn serve_connection(
             }
             Err(err) => return Err(err),
         };
-        let resp = dispatch(req, &state).await;
-        write_frame(&mut fr, &resp).await?;
+
+        // One channel per request. Dispatch emits frames into `tx`; we drain
+        // them onto the wire concurrently. Both must finish before we read
+        // the next request — otherwise frames from the next turn could race.
+        //
+        // If the client disconnects mid-stream the writer errors on send,
+        // `rx` is dropped (at the end of its future), and dispatch's next
+        // `tx.send(...)` fails — ending the in-flight handler without
+        // persisting a partial turn (handlers only persist before `ChatDone`).
+        let (tx, mut rx) = mpsc::channel::<Response>(32);
+        let dispatch_fut = run_dispatch(req, &state, tx);
+        let writer_fut = async {
+            while let Some(resp) = rx.recv().await {
+                write_frame(&mut fr, &resp).await?;
+            }
+            Ok::<(), ProtocolError>(())
+        };
+        let (_, writer_result) = tokio::join!(dispatch_fut, writer_fut);
+        match writer_result {
+            Ok(()) => {}
+            Err(ProtocolError::Io(err))
+                if matches!(
+                    err.kind(),
+                    ErrorKind::BrokenPipe | ErrorKind::ConnectionReset | ErrorKind::UnexpectedEof
+                ) =>
+            {
+                return Ok(());
+            }
+            Err(err) => return Err(err),
+        }
     }
 }
 

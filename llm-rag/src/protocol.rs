@@ -43,9 +43,40 @@ pub enum Request {
 #[serde(tag = "type")]
 pub enum Response {
     Pong,
-    Chat {
+    /// First frame of a streaming chat response. Confirms/mints the
+    /// conversation id. Omitted when the chat fails before LLM setup; in that
+    /// case the very first frame is `Response::Error`.
+    ChatStart {
         conversation_id: String,
-        reply: String,
+    },
+    /// Incremental assistant text. Zero or more between `ChatStart` and
+    /// `ChatDone`.
+    ChatDelta {
+        conversation_id: String,
+        text: String,
+    },
+    /// Incremental tool-call arguments. `name` is populated on the first
+    /// fragment for a given `id` (may be None on subsequent fragments).
+    ChatToolCallDelta {
+        conversation_id: String,
+        id: String,
+        name: Option<String>,
+        arguments_delta: String,
+    },
+    /// The server-side result of executing a tool call. Emitted after the
+    /// corresponding tool_use row has been persisted and before the next
+    /// `ChatDelta`/`ChatToolCallDelta` round starts. `id` matches the
+    /// `ChatToolCallDelta` id.
+    ChatToolResult {
+        conversation_id: String,
+        id: String,
+        content: String,
+    },
+    /// Terminator for a streaming chat response. Carries the authoritative
+    /// persisted rows (assistant text + tool_use rows — user row is omitted
+    /// since the TUI echoed it optimistically).
+    ChatDone {
+        conversation_id: String,
         messages_appended: Vec<WireMessage>,
     },
     ConversationList {

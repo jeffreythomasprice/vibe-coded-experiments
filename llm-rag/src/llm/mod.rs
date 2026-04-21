@@ -75,6 +75,7 @@ mod tests {
         Config {
             server_idle_timeout_secs: 10,
             client_request_timeout_secs: 30,
+            client_stream_idle_timeout_secs: 120,
             socket_dir: PathBuf::from("/tmp/x"),
             log_dir: PathBuf::from("/tmp/x"),
             db_path: PathBuf::from("/tmp/x/local.db"),

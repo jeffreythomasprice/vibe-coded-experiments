@@ -1,7 +1,10 @@
 pub mod app;
 pub mod commands;
 pub mod error;
+pub mod format;
+pub mod input;
 pub mod screens;
+pub mod spinner;
 pub mod ui;
 
 use std::io::{self, Stdout};
@@ -47,9 +50,15 @@ pub async fn run(
 }
 
 enum AppEvent {
+    /// One frame from a server response. For single-frame RPCs (ping,
+    /// conversation-list, etc.) this fires exactly once with `terminal:
+    /// true`. For streaming chat it fires many times — one per frame — and
+    /// only the last (`ChatDone` or `Response::Error`) carries `terminal:
+    /// true`, which is what decrements `app.pending` and clears the spinner.
     Reply {
         seq: u64,
         result: Result<Response, ClientError>,
+        terminal: bool,
     },
 }
 
@@ -80,6 +89,8 @@ async fn run_loop(
     };
     let mut term_stream = EventStream::new();
     let mut app = App::new();
+    let mut tick = tokio::time::interval(spinner::TICK);
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     loop {
         term.draw(|f| ui::render(f, &app))?;
@@ -92,7 +103,10 @@ async fn run_loop(
                 Some(Err(err)) => return Err(TuiError::Io(err)),
                 None => break,
             },
-            Some(AppEvent::Reply { seq, result }) = rx.recv() => handle_reply(&mut app, seq, result),
+            Some(AppEvent::Reply { seq, result, terminal }) = rx.recv() => handle_reply(&mut app, seq, result, terminal),
+            _ = tick.tick(), if app.pending > 0 => {
+                app.spinner_frame = app.spinner_frame.wrapping_add(1);
+            }
         }
     }
     Ok(())
@@ -105,20 +119,21 @@ fn handle_term(app: &mut App, event: Event, ctx: &Ctx) {
 
     // Dispatch the key through the current screen. The screen returns a
     // Transition which we apply once its borrow on `app.screen` ends.
+    let waiting = app.pending > 0;
     let mut to_send: Option<Request> = None;
     let mut tag_action: Option<screens::tag_editor::TagAction> = None;
     let mut search_should_search = false;
     let mut confirm_action: Option<screens::confirm::ConfirmAction> = None;
     let transition = match &mut app.screen {
-        Screen::Chat(state) => screens::chat::handle_key(state, key, |req| {
+        Screen::Chat(state) => screens::chat::handle_key(state, key, waiting, |req| {
             to_send = Some(req);
         }),
         Screen::ConversationList(state) => screens::conversation_list::handle_key(state, key),
         Screen::TagEditor(state) => {
-            tag_action = screens::tag_editor::handle_key(state, key);
+            tag_action = screens::tag_editor::handle_key(state, key, waiting);
             Transition::None
         }
-        Screen::Search(state) => match screens::search::handle_key(state, key) {
+        Screen::Search(state) => match screens::search::handle_key(state, key, waiting) {
             screens::search::SearchAction::None => Transition::None,
             screens::search::SearchAction::Search => {
                 search_should_search = true;
@@ -276,22 +291,59 @@ fn spawn_request(app: &mut App, ctx: &Ctx, req: Request) -> u64 {
     let cfg_override = ctx.cfg_override.clone();
     let sec_override = ctx.sec_override.clone();
     let tx = ctx.tx.clone();
-    tokio::spawn(async move {
-        let result = client::round_trip(
-            &cfg,
-            &socket,
-            cfg_override.as_deref(),
-            sec_override.as_deref(),
-            req,
-        )
-        .await;
-        let _ = tx.send(AppEvent::Reply { seq, result });
-    });
+    if matches!(req, Request::Chat { .. }) {
+        tokio::spawn(async move {
+            let tx_for_cb = tx.clone();
+            let result = client::chat_stream(
+                &cfg,
+                &socket,
+                cfg_override.as_deref(),
+                sec_override.as_deref(),
+                req,
+                |frame| {
+                    let terminal =
+                        matches!(frame, Response::ChatDone { .. } | Response::Error { .. },);
+                    let _ = tx_for_cb.send(AppEvent::Reply {
+                        seq,
+                        result: Ok(frame),
+                        terminal,
+                    });
+                },
+            )
+            .await;
+            // If chat_stream itself errored (connection failure, timeout,
+            // stream closed before a terminal frame), surface it as one
+            // terminal event so the spinner clears.
+            if let Err(err) = result {
+                let _ = tx.send(AppEvent::Reply {
+                    seq,
+                    result: Err(err),
+                    terminal: true,
+                });
+            }
+        });
+    } else {
+        tokio::spawn(async move {
+            let result = client::round_trip(
+                &cfg,
+                &socket,
+                cfg_override.as_deref(),
+                sec_override.as_deref(),
+                req,
+            )
+            .await;
+            let _ = tx.send(AppEvent::Reply {
+                seq,
+                result,
+                terminal: true,
+            });
+        });
+    }
     seq
 }
 
-fn handle_reply(app: &mut App, seq: u64, result: Result<Response, ClientError>) {
-    if app.pending > 0 {
+fn handle_reply(app: &mut App, seq: u64, result: Result<Response, ClientError>, terminal: bool) {
+    if terminal && app.pending > 0 {
         app.pending -= 1;
     }
 
@@ -303,10 +355,15 @@ fn handle_reply(app: &mut App, seq: u64, result: Result<Response, ClientError>) 
             // 0) as well as its own ConversationGet reply when request_seq
             // matches.
             if state.request_seq == seq || state.request_seq == 0 {
-                state.request_seq = 0;
+                if terminal {
+                    state.request_seq = 0;
+                }
                 match result {
                     Ok(resp) => state.display_response(resp),
-                    Err(err) => state.push_error(format!("request failed: {err}")),
+                    Err(err) => {
+                        state.streaming = None;
+                        state.push_error(format!("request failed: {err}"));
+                    }
                 }
             }
         }

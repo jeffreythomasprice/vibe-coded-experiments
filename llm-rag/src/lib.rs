@@ -9,4 +9,5 @@ pub mod logging;
 pub mod paths;
 pub mod protocol;
 pub mod server;
+pub mod tools;
 pub mod tui;

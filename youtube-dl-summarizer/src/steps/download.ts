@@ -17,18 +17,28 @@ export async function downloadVideo(
   }
 
   const bin = ensureBinary("yt-dlp", INSTALL_HINT);
-  const bar = new ProgressBar({ label: "Downloading video" });
+  let bar = new ProgressBar({ label: "Downloading video" });
   bar.updatePercent(0);
 
-  // yt-dlp outputs progress on stderr with \r separators
-  let stderrBuf = "";
   // yt-dlp writes progress to stdout
   let buf = "";
+  let destinationCount = 0;
   const onStdout = (chunk: string) => {
     buf += chunk;
     const lines = buf.split(/[\r\n]/);
     buf = lines.pop() ?? "";
     for (const line of lines) {
+      if (/^\[download\] Destination:/.test(line)) {
+        destinationCount++;
+        // yt-dlp downloads video and audio as separate streams when muxing.
+        // On the second Destination line, finalize the first bar and start a new one.
+        if (destinationCount === 2) {
+          bar.done("done");
+          bar = new ProgressBar({ label: "Downloading audio" });
+          bar.updatePercent(0);
+        }
+        continue;
+      }
       const match = line.match(/\[download\]\s+([\d.]+)%/);
       if (match) {
         const percent = parseFloat(match[1]);

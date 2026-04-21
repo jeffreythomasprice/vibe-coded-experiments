@@ -1,7 +1,7 @@
 //! Tag editor: shows the tags attached to a conversation plus a text input
 //! that both adds new tags and fuzzy-matches existing ones.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -10,6 +10,9 @@ use ratatui::widgets::{Block, List, ListItem, ListState, Paragraph};
 
 use crate::error::ClientError;
 use crate::protocol::{Request, Response};
+use crate::tui::app::App;
+use crate::tui::input;
+use crate::tui::spinner;
 
 use super::{Screen, Transition};
 
@@ -93,19 +96,38 @@ fn suggest(all: &[String], query: &str, excluded: &[String]) -> Vec<String> {
     scored.into_iter().map(|(_, t)| t).collect()
 }
 
-pub fn render(frame: &mut Frame, area: Rect, state: &TagEditorState) {
-    let chunks = Layout::vertical([
-        Constraint::Length(3), // header
-        Constraint::Min(1),    // tags list
-        Constraint::Length(3), // input box
-        Constraint::Length(6), // suggestions
-        Constraint::Length(1), // help
-    ])
-    .split(area);
+pub fn render(frame: &mut Frame, area: Rect, app: &App, state: &TagEditorState) {
+    let (banner_area, header_area, tags_area, input_area, sugg_area, help_area) = if app.pending > 0
+    {
+        let c = Layout::vertical([
+            Constraint::Length(1), // banner
+            Constraint::Length(3), // header
+            Constraint::Min(1),    // tags list
+            Constraint::Length(3), // input box
+            Constraint::Length(6), // suggestions
+            Constraint::Length(1), // help
+        ])
+        .split(area);
+        (Some(c[0]), c[1], c[2], c[3], c[4], c[5])
+    } else {
+        let c = Layout::vertical([
+            Constraint::Length(3),
+            Constraint::Min(1),
+            Constraint::Length(3),
+            Constraint::Length(6),
+            Constraint::Length(1),
+        ])
+        .split(area);
+        (None, c[0], c[1], c[2], c[3], c[4])
+    };
+
+    if let Some(b) = banner_area {
+        spinner::render_banner(frame, b, app.spinner_frame);
+    }
 
     let header = Paragraph::new(format!("editing: {}", state.conversation_label))
         .block(Block::bordered().title(" tag editor "));
-    frame.render_widget(header, chunks[0]);
+    frame.render_widget(header, header_area);
 
     let tag_items: Vec<ListItem> = state
         .tags
@@ -123,10 +145,15 @@ pub fn render(frame: &mut Frame, area: Rect, state: &TagEditorState) {
     if !state.tags.is_empty() {
         ls.select(Some(state.selected_tag.min(state.tags.len() - 1)));
     }
-    frame.render_stateful_widget(tags_list, chunks[1], &mut ls);
+    frame.render_stateful_widget(tags_list, tags_area, &mut ls);
 
-    let input = Paragraph::new(state.input.as_str()).block(Block::bordered().title(" add tag "));
-    frame.render_widget(input, chunks[2]);
+    let input_title = if app.pending > 0 {
+        format!(" add tag {} ", spinner::frame(app.spinner_frame))
+    } else {
+        " add tag ".to_string()
+    };
+    let input = Paragraph::new(state.input.as_str()).block(Block::bordered().title(input_title));
+    frame.render_widget(input, input_area);
 
     let sugg_items: Vec<ListItem> = state
         .suggestions
@@ -140,17 +167,23 @@ pub fn render(frame: &mut Frame, area: Rect, state: &TagEditorState) {
     if let Some(i) = state.selected_suggestion {
         sl.select(Some(i));
     }
-    frame.render_stateful_widget(sugg_list, chunks[3], &mut sl);
+    frame.render_stateful_widget(sugg_list, sugg_area, &mut sl);
 
     let help = Paragraph::new(
         "enter: add · tab: accept suggestion · ↑↓: navigate · d/del/backspace (empty input): remove · esc: back",
     )
     .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(help, chunks[4]);
+    frame.render_widget(help, help_area);
 }
 
-pub fn handle_key(state: &mut TagEditorState, key: KeyEvent) -> Option<TagAction> {
+pub fn handle_key(state: &mut TagEditorState, key: KeyEvent, waiting: bool) -> Option<TagAction> {
     if key.kind == KeyEventKind::Release {
+        return None;
+    }
+    // While a request is pending, swallow everything that types into the
+    // input or fires an RPC. Esc/Tab/arrows still work so the user can back
+    // out or navigate the existing tags.
+    if waiting && (input::is_buffer_edit(&key) || key.code == KeyCode::Enter) {
         return None;
     }
     match key.code {
@@ -206,28 +239,62 @@ pub fn handle_key(state: &mut TagEditorState, key: KeyEvent) -> Option<TagAction
         }
         KeyCode::Backspace if state.input.is_empty() => remove_highlighted(state),
         KeyCode::Delete if state.input.is_empty() => remove_highlighted(state),
-        KeyCode::Char('d') if state.input.is_empty() => remove_highlighted(state),
+        KeyCode::Char('d')
+            if state.input.is_empty() && !key.modifiers.contains(KeyModifiers::CONTROL) =>
+        {
+            remove_highlighted(state)
+        }
         KeyCode::Backspace => {
-            if state.cursor > 0 {
-                let prev = state.input[..state.cursor]
-                    .chars()
-                    .next_back()
-                    .map(char::len_utf8)
-                    .unwrap_or(0);
-                if prev > 0 {
-                    state
-                        .input
-                        .replace_range(state.cursor - prev..state.cursor, "");
-                    state.cursor -= prev;
-                    state.refresh_suggestions();
-                }
+            if input::delete_char_backward(&mut state.input, &mut state.cursor) {
+                state.refresh_suggestions();
             }
             None
         }
+        KeyCode::Delete => {
+            if input::delete_char_forward(&mut state.input, &mut state.cursor) {
+                state.refresh_suggestions();
+            }
+            None
+        }
+        KeyCode::Left => {
+            input::cursor_left(&state.input, &mut state.cursor);
+            None
+        }
+        KeyCode::Right => {
+            input::cursor_right(&state.input, &mut state.cursor);
+            None
+        }
+        KeyCode::Home => {
+            input::cursor_home(&mut state.cursor);
+            None
+        }
+        KeyCode::End => {
+            input::cursor_end(&state.input, &mut state.cursor);
+            None
+        }
         KeyCode::Char(c) => {
-            state.input.insert(state.cursor, c);
-            state.cursor += c.len_utf8();
-            state.refresh_suggestions();
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+                let changed = match c {
+                    'w' => input::delete_word_backward(&mut state.input, &mut state.cursor),
+                    'u' => input::delete_to_start(&mut state.input, &mut state.cursor),
+                    'k' => input::delete_to_end(&mut state.input, &mut state.cursor),
+                    'a' => {
+                        input::cursor_home(&mut state.cursor);
+                        false
+                    }
+                    'e' => {
+                        input::cursor_end(&state.input, &mut state.cursor);
+                        false
+                    }
+                    _ => false,
+                };
+                if changed {
+                    state.refresh_suggestions();
+                }
+            } else {
+                input::insert_char(&mut state.input, &mut state.cursor, c);
+                state.refresh_suggestions();
+            }
             None
         }
         _ => None,

@@ -1,6 +1,6 @@
 //! Search screen: substring query on message content + ALL-of tag filter.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -9,6 +9,9 @@ use ratatui::widgets::{Block, List, ListItem, ListState, Paragraph};
 
 use crate::error::ClientError;
 use crate::protocol::{ConversationSummary, Request, Response};
+use crate::tui::app::App;
+use crate::tui::input;
+use crate::tui::spinner;
 
 use super::chat::ChatState;
 use super::tag_editor::ReturnScreen as TagReturn;
@@ -85,14 +88,31 @@ pub fn initial_requests() -> Vec<Request> {
     vec![Request::TagList]
 }
 
-pub fn render(frame: &mut Frame, area: Rect, state: &SearchState) {
-    let chunks = Layout::vertical([
-        Constraint::Length(3), // text input
-        Constraint::Length(6), // tag checklist
-        Constraint::Min(1),    // results
-        Constraint::Length(1), // help
-    ])
-    .split(area);
+pub fn render(frame: &mut Frame, area: Rect, app: &App, state: &SearchState) {
+    let (banner_area, input_area, tags_area, results_area, help_area) = if app.pending > 0 {
+        let c = Layout::vertical([
+            Constraint::Length(1), // banner
+            Constraint::Length(3), // text input
+            Constraint::Length(6), // tag checklist
+            Constraint::Min(1),    // results
+            Constraint::Length(1), // help
+        ])
+        .split(area);
+        (Some(c[0]), c[1], c[2], c[3], c[4])
+    } else {
+        let c = Layout::vertical([
+            Constraint::Length(3),
+            Constraint::Length(6),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
+        .split(area);
+        (None, c[0], c[1], c[2], c[3])
+    };
+
+    if let Some(b) = banner_area {
+        spinner::render_banner(frame, b, app.spinner_frame);
+    }
 
     let focused = |f: Focus| -> Style {
         if state.focus == f {
@@ -102,9 +122,14 @@ pub fn render(frame: &mut Frame, area: Rect, state: &SearchState) {
         }
     };
 
+    let input_title = if app.pending > 0 {
+        format!(" search text {} ", spinner::frame(app.spinner_frame))
+    } else {
+        " search text ".to_string()
+    };
     let input = Paragraph::new(state.text_input.as_str())
-        .block(Block::bordered().title(Span::styled(" search text ", focused(Focus::Text))));
-    frame.render_widget(input, chunks[0]);
+        .block(Block::bordered().title(Span::styled(input_title, focused(Focus::Text))));
+    frame.render_widget(input, input_area);
 
     let tag_items: Vec<ListItem> = state
         .tag_selections
@@ -130,7 +155,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &SearchState) {
             state.selected_result.min(state.tag_selections.len() - 1),
         ));
     }
-    frame.render_stateful_widget(tags_list, chunks[1], &mut tl);
+    frame.render_stateful_widget(tags_list, tags_area, &mut tl);
 
     let result_items: Vec<ListItem> = state
         .results
@@ -148,10 +173,10 @@ pub fn render(frame: &mut Frame, area: Rect, state: &SearchState) {
         .collect();
     let results_block = Block::bordered().title(Span::styled(" results ", focused(Focus::Results)));
     if state.loading && state.results.is_empty() {
-        let msg = Paragraph::new("searching…")
+        let msg = Paragraph::new(format!("{} searching…", spinner::frame(app.spinner_frame)))
             .style(Style::default().fg(Color::DarkGray))
             .block(results_block);
-        frame.render_widget(msg, chunks[2]);
+        frame.render_widget(msg, results_area);
     } else {
         let list = List::new(result_items)
             .block(results_block)
@@ -164,14 +189,14 @@ pub fn render(frame: &mut Frame, area: Rect, state: &SearchState) {
         if state.focus == Focus::Results && !state.results.is_empty() {
             ls.select(Some(state.selected_result.min(state.results.len() - 1)));
         }
-        frame.render_stateful_widget(list, chunks[2], &mut ls);
+        frame.render_stateful_widget(list, results_area, &mut ls);
     }
 
     let help = Paragraph::new(
         "tab: cycle focus · enter: search / resume · t: tags · d/del/backspace: delete · esc: back",
     )
     .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(help, chunks[3]);
+    frame.render_widget(help, help_area);
 }
 
 pub enum SearchAction {
@@ -180,9 +205,23 @@ pub enum SearchAction {
     Search,
 }
 
-pub fn handle_key(state: &mut SearchState, key: KeyEvent) -> SearchAction {
+pub fn handle_key(state: &mut SearchState, key: KeyEvent, waiting: bool) -> SearchAction {
     if key.kind == KeyEventKind::Release {
         return SearchAction::None;
+    }
+    // While a request is pending, swallow keys that would either edit the
+    // text input or fire a new RPC. Navigation (Tab, arrows, Esc) still works.
+    if waiting {
+        match state.focus {
+            Focus::Text if input::is_buffer_edit(&key) || key.code == KeyCode::Enter => {
+                return SearchAction::None;
+            }
+            Focus::Tags if matches!(key.code, KeyCode::Char(' ')) => return SearchAction::None,
+            Focus::Results if matches!(key.code, KeyCode::Enter | KeyCode::Char('t')) => {
+                return SearchAction::None;
+            }
+            _ => {}
+        }
     }
     match (state.focus, key.code) {
         (_, KeyCode::Esc) => SearchAction::Transition(Transition::To(Screen::ConversationList(
@@ -201,24 +240,48 @@ pub fn handle_key(state: &mut SearchState, key: KeyEvent) -> SearchAction {
         }
 
         (Focus::Text, KeyCode::Char(c)) => {
-            state.text_input.insert(state.text_cursor, c);
-            state.text_cursor += c.len_utf8();
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+                match c {
+                    'w' => {
+                        input::delete_word_backward(&mut state.text_input, &mut state.text_cursor);
+                    }
+                    'u' => {
+                        input::delete_to_start(&mut state.text_input, &mut state.text_cursor);
+                    }
+                    'k' => {
+                        input::delete_to_end(&mut state.text_input, &mut state.text_cursor);
+                    }
+                    'a' => input::cursor_home(&mut state.text_cursor),
+                    'e' => input::cursor_end(&state.text_input, &mut state.text_cursor),
+                    _ => {}
+                }
+            } else {
+                input::insert_char(&mut state.text_input, &mut state.text_cursor, c);
+            }
             SearchAction::None
         }
         (Focus::Text, KeyCode::Backspace) => {
-            if state.text_cursor > 0 {
-                let prev = state.text_input[..state.text_cursor]
-                    .chars()
-                    .next_back()
-                    .map(char::len_utf8)
-                    .unwrap_or(0);
-                if prev > 0 {
-                    state
-                        .text_input
-                        .replace_range(state.text_cursor - prev..state.text_cursor, "");
-                    state.text_cursor -= prev;
-                }
-            }
+            input::delete_char_backward(&mut state.text_input, &mut state.text_cursor);
+            SearchAction::None
+        }
+        (Focus::Text, KeyCode::Delete) => {
+            input::delete_char_forward(&mut state.text_input, &mut state.text_cursor);
+            SearchAction::None
+        }
+        (Focus::Text, KeyCode::Left) => {
+            input::cursor_left(&state.text_input, &mut state.text_cursor);
+            SearchAction::None
+        }
+        (Focus::Text, KeyCode::Right) => {
+            input::cursor_right(&state.text_input, &mut state.text_cursor);
+            SearchAction::None
+        }
+        (Focus::Text, KeyCode::Home) => {
+            input::cursor_home(&mut state.text_cursor);
+            SearchAction::None
+        }
+        (Focus::Text, KeyCode::End) => {
+            input::cursor_end(&state.text_input, &mut state.text_cursor);
             SearchAction::None
         }
         (Focus::Text, KeyCode::Enter) => SearchAction::Search,

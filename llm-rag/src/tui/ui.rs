@@ -8,8 +8,8 @@ pub fn render(frame: &mut Frame, app: &App) {
     match &app.screen {
         Screen::Chat(state) => screens::chat::render(frame, area, app, state),
         Screen::ConversationList(state) => screens::conversation_list::render(frame, area, state),
-        Screen::TagEditor(state) => screens::tag_editor::render(frame, area, state),
-        Screen::Search(state) => screens::search::render(frame, area, state),
+        Screen::TagEditor(state) => screens::tag_editor::render(frame, area, app, state),
+        Screen::Search(state) => screens::search::render(frame, area, app, state),
         Screen::ConfirmDelete(state) => {
             // Render the ConversationList "behind" the modal so the user sees
             // the context they're acting on. Since we don't preserve the

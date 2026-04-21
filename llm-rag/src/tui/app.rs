@@ -12,6 +12,9 @@ pub struct App {
     /// and records it on the issuing screen; replies with a non-matching seq
     /// are dropped (they belong to a screen the user has navigated away from).
     pub next_request_seq: u64,
+    /// Advanced by the event loop's tick arm while `pending > 0`. Renderers
+    /// index into `spinner::FRAMES` with this to draw the animated indicator.
+    pub spinner_frame: usize,
 }
 
 pub struct Autocomplete {
@@ -32,6 +35,7 @@ impl App {
             pending: 0,
             should_quit: false,
             next_request_seq: 0,
+            spinner_frame: 0,
         }
     }
 }

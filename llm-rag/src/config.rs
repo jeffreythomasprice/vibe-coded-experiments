@@ -21,6 +21,12 @@ use crate::paths::{default_config_search_paths, default_secrets_search_paths};
 pub struct Config {
     pub server_idle_timeout_secs: u64,
     pub client_request_timeout_secs: u64,
+    /// Per-frame idle timeout for streaming responses (seconds). Triggers when
+    /// the server goes this long without sending any frame during a streamed
+    /// chat turn — distinct from `client_request_timeout_secs`, which is the
+    /// total-wall budget for single-frame request/response.
+    #[serde(default = "default_client_stream_idle_timeout_secs")]
+    pub client_stream_idle_timeout_secs: u64,
     pub socket_dir: PathBuf,
     pub log_dir: PathBuf,
     /// Path to the local Turso/libSQL database file. If written as a relative
@@ -31,6 +37,10 @@ pub struct Config {
 
     #[serde(skip, default)]
     pub secrets: SecretsConfig,
+}
+
+fn default_client_stream_idle_timeout_secs() -> u64 {
+    120
 }
 
 #[derive(Debug, Clone, Deserialize)]

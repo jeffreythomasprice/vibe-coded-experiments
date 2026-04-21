@@ -13,6 +13,9 @@ use crate::db::MessageRole;
 use crate::protocol::{Request, Response, WireMessage};
 use crate::tui::app::{App, Autocomplete};
 use crate::tui::commands;
+use crate::tui::format;
+use crate::tui::input;
+use crate::tui::spinner;
 
 use super::Transition;
 
@@ -32,6 +35,35 @@ pub struct ChatState {
     /// When entering via `/resume`, [`Screen::on_enter`] fires this request
     /// so the transcript gets populated with history.
     pub pending_resume_request: Option<Request>,
+    /// Populated while a streaming chat response is in flight. Cleared on
+    /// `ChatDone` (or error). `transcript_mark` is the transcript length at
+    /// `ChatStart` — on completion we truncate back to it and replay the
+    /// authoritative rows from `ChatDone.messages_appended`, which ensures
+    /// parity with the rendering path used for `/resume`'d history. Boxed so
+    /// the idle (non-streaming) case keeps `ChatState` — and by extension
+    /// `Screen` / `Transition` — small enough to stay under clippy's
+    /// `large_enum_variant` threshold.
+    pub streaming: Option<Box<StreamingTurn>>,
+}
+
+pub struct StreamingTurn {
+    pub transcript_mark: usize,
+    pub events: Vec<StreamEvent>,
+}
+
+/// One ordered piece of the in-flight streaming turn. The stream can include
+/// multiple LLM passes with tool calls in between, so the renderer has to
+/// walk these in first-seen order rather than grouping by kind.
+pub enum StreamEvent {
+    Text(String),
+    ToolCall(StreamingToolCall),
+    ToolResult { id: String, content: String },
+}
+
+pub struct StreamingToolCall {
+    pub id: String,
+    pub name: Option<String>,
+    pub args: String,
 }
 
 impl Default for ChatState {
@@ -57,6 +89,7 @@ impl ChatState {
             conversation_id: None,
             request_seq: 0,
             pending_resume_request: None,
+            streaming: None,
         }
     }
 
@@ -97,22 +130,12 @@ impl ChatState {
     }
 
     pub fn push_tool_use(&mut self, name: &str, args: &serde_json::Value) {
-        let body = format!("[tool: {name}({args})]");
-        self.transcript.push(Line::from(Span::styled(
-            body,
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::DIM),
-        )));
+        self.transcript
+            .push(format::tool_call_line(name, &args.to_string()));
     }
 
     pub fn push_tool_result(&mut self, content: &str) {
-        self.transcript.push(Line::from(Span::styled(
-            format!("[tool result] {content}"),
-            Style::default()
-                .fg(Color::Magenta)
-                .add_modifier(Modifier::DIM),
-        )));
+        self.transcript.push(format::tool_result_line(content));
     }
 
     pub fn push_error(&mut self, text: impl Into<String>) {
@@ -125,20 +148,70 @@ impl ChatState {
     pub fn display_response(&mut self, resp: Response) {
         match resp {
             Response::Pong => self.push_server("Pong"),
-            Response::Chat {
-                conversation_id,
-                messages_appended,
+            Response::ChatStart { conversation_id } => {
+                self.conversation_id = Some(conversation_id);
+                self.streaming = Some(Box::new(StreamingTurn {
+                    transcript_mark: self.transcript.len(),
+                    events: Vec::new(),
+                }));
+            }
+            Response::ChatDelta { text, .. } => {
+                if let Some(stream) = self.streaming.as_mut() {
+                    // Append to the last Text event if one is already the
+                    // latest — otherwise start a new one. This keeps turns
+                    // that come after a tool result visually distinct.
+                    if let Some(StreamEvent::Text(buf)) = stream.events.last_mut() {
+                        buf.push_str(&text);
+                    } else {
+                        stream.events.push(StreamEvent::Text(text));
+                    }
+                    rerender_streaming(&mut self.transcript, stream);
+                }
+            }
+            Response::ChatToolCallDelta {
+                id,
+                name,
+                arguments_delta,
                 ..
             } => {
+                if let Some(stream) = self.streaming.as_mut() {
+                    let existing = stream.events.iter_mut().find_map(|ev| match ev {
+                        StreamEvent::ToolCall(tc) if tc.id == id => Some(tc),
+                        _ => None,
+                    });
+                    match existing {
+                        Some(tc) => {
+                            if tc.name.is_none() {
+                                tc.name = name;
+                            }
+                            tc.args.push_str(&arguments_delta);
+                        }
+                        None => stream.events.push(StreamEvent::ToolCall(StreamingToolCall {
+                            id,
+                            name,
+                            args: arguments_delta,
+                        })),
+                    }
+                    rerender_streaming(&mut self.transcript, stream);
+                }
+            }
+            Response::ChatToolResult { id, content, .. } => {
+                if let Some(stream) = self.streaming.as_mut() {
+                    stream.events.push(StreamEvent::ToolResult { id, content });
+                    rerender_streaming(&mut self.transcript, stream);
+                }
+            }
+            Response::ChatDone {
+                conversation_id,
+                messages_appended,
+            } => {
                 self.conversation_id = Some(conversation_id);
-                // The server echoes the user's own row first — we already
-                // rendered it locally in submit(), so skip it here to avoid
-                // a duplicate. Everything else (assistant text + tool_use
-                // rows) lands in the transcript with its role styling.
-                for msg in messages_appended
-                    .into_iter()
-                    .skip_while(|m| matches!(m.role, crate::db::MessageRole::User))
-                {
+                // Truncate the live placeholders and replay the authoritative
+                // rows so role styling and metadata match the `/resume` path.
+                if let Some(stream) = self.streaming.take() {
+                    self.transcript.truncate(stream.transcript_mark);
+                }
+                for msg in messages_appended {
                     self.append_history(msg);
                 }
             }
@@ -158,7 +231,12 @@ impl ChatState {
                     self.append_history(msg);
                 }
             }
-            Response::Error { message } => self.push_error(format!("server error: {message}")),
+            Response::Error { message } => {
+                // If the error arrived mid-stream, leave the partial render in
+                // place and append the error line — preserves context.
+                self.streaming = None;
+                self.push_error(format!("server error: {message}"));
+            }
             other => self.push_error(format!("unexpected response: {other:?}")),
         }
     }
@@ -184,45 +262,55 @@ impl ChatState {
     }
 
     fn input_insert(&mut self, ch: char) {
-        self.input.insert(self.cursor, ch);
-        self.cursor += ch.len_utf8();
-        self.refresh_autocomplete();
+        if input::insert_char(&mut self.input, &mut self.cursor, ch) {
+            self.refresh_autocomplete();
+        }
     }
 
     fn input_backspace(&mut self) {
-        if self.cursor == 0 {
-            return;
+        if input::delete_char_backward(&mut self.input, &mut self.cursor) {
+            self.refresh_autocomplete();
         }
-        let prev = self.input[..self.cursor]
-            .chars()
-            .next_back()
-            .map(char::len_utf8)
-            .unwrap_or(0);
-        if prev == 0 {
-            return;
+    }
+
+    fn input_delete_forward(&mut self) {
+        if input::delete_char_forward(&mut self.input, &mut self.cursor) {
+            self.refresh_autocomplete();
         }
-        let new_cursor = self.cursor - prev;
-        self.input.replace_range(new_cursor..self.cursor, "");
-        self.cursor = new_cursor;
-        self.refresh_autocomplete();
+    }
+
+    fn input_delete_word_backward(&mut self) {
+        if input::delete_word_backward(&mut self.input, &mut self.cursor) {
+            self.refresh_autocomplete();
+        }
+    }
+
+    fn input_delete_to_start(&mut self) {
+        if input::delete_to_start(&mut self.input, &mut self.cursor) {
+            self.refresh_autocomplete();
+        }
+    }
+
+    fn input_delete_to_end(&mut self) {
+        if input::delete_to_end(&mut self.input, &mut self.cursor) {
+            self.refresh_autocomplete();
+        }
     }
 
     fn cursor_left(&mut self) {
-        let prev = self.input[..self.cursor]
-            .chars()
-            .next_back()
-            .map(char::len_utf8)
-            .unwrap_or(0);
-        self.cursor -= prev;
+        input::cursor_left(&self.input, &mut self.cursor);
     }
 
     fn cursor_right(&mut self) {
-        let next = self.input[self.cursor..]
-            .chars()
-            .next()
-            .map(char::len_utf8)
-            .unwrap_or(0);
-        self.cursor += next;
+        input::cursor_right(&self.input, &mut self.cursor);
+    }
+
+    fn cursor_home(&mut self) {
+        input::cursor_home(&mut self.cursor);
+    }
+
+    fn cursor_end(&mut self) {
+        input::cursor_end(&self.input, &mut self.cursor);
     }
 
     fn take_input(&mut self) -> String {
@@ -268,12 +356,51 @@ impl ChatState {
     }
 }
 
+/// Rebuild the in-flight portion of the transcript from `stream`'s ordered
+/// events. Truncates back to the stream's `transcript_mark` and re-pushes one
+/// line per event, in first-seen order. Tool-call and tool-result lines route
+/// through `tui::format` so they look identical to the post-`ChatDone` replay.
+fn rerender_streaming(transcript: &mut Vec<Line<'static>>, stream: &StreamingTurn) {
+    transcript.truncate(stream.transcript_mark);
+    for event in &stream.events {
+        match event {
+            StreamEvent::Text(text) => {
+                if !text.is_empty() {
+                    transcript.push(Line::from(vec![
+                        Span::styled("• ", Style::default().fg(Color::Green)),
+                        Span::raw(text.clone()),
+                    ]));
+                }
+            }
+            StreamEvent::ToolCall(tc) => {
+                let name = tc.name.as_deref().unwrap_or("?");
+                transcript.push(format::tool_call_line(name, &tc.args));
+            }
+            StreamEvent::ToolResult { content, .. } => {
+                transcript.push(format::tool_result_line(content));
+            }
+        }
+    }
+}
+
 pub fn render(frame: &mut Frame, area: Rect, app: &App, state: &ChatState) {
-    let chunks = Layout::vertical([Constraint::Min(1), Constraint::Length(3)]).split(area);
-    let transcript_area = chunks[0];
-    let input_area = chunks[1];
+    let (transcript_area, banner_area, input_area) = if app.pending > 0 {
+        let c = Layout::vertical([
+            Constraint::Min(1),
+            Constraint::Length(1),
+            Constraint::Length(3),
+        ])
+        .split(area);
+        (c[0], Some(c[1]), c[2])
+    } else {
+        let c = Layout::vertical([Constraint::Min(1), Constraint::Length(3)]).split(area);
+        (c[0], None, c[1])
+    };
 
     render_transcript(frame, transcript_area, state);
+    if let Some(b) = banner_area {
+        spinner::render_banner(frame, b, app.spinner_frame);
+    }
     render_input(frame, input_area, app, state);
     render_autocomplete(frame, input_area, state);
 }
@@ -288,12 +415,14 @@ fn render_transcript(frame: &mut Frame, area: Rect, state: &ChatState) {
 }
 
 fn render_input(frame: &mut Frame, area: Rect, app: &App, state: &ChatState) {
-    let title = if app.pending > 0 { " … " } else { " > " };
-    let block = Block::bordered().title(title);
+    let block = Block::bordered().title(" > ");
     let inner = block.inner(area);
     let paragraph = Paragraph::new(state.input.as_str()).block(block);
     frame.render_widget(paragraph, area);
 
+    if app.pending > 0 {
+        return;
+    }
     let col = state.input[..state.cursor].chars().count() as u16;
     let x = inner.x + col;
     let y = inner.y;
@@ -348,10 +477,13 @@ fn render_autocomplete(frame: &mut Frame, input_area: Rect, state: &ChatState) {
 
 /// Per-screen key handler. `issue_request` is called to enqueue an outgoing
 /// RPC; the caller (event loop) is responsible for bumping `pending` and
-/// actually spawning the request task.
+/// actually spawning the request task. When `waiting` is true, the input is
+/// disabled: keys that type into the prompt or fire a new request are
+/// swallowed; navigation, scroll, and quit keys still work.
 pub fn handle_key(
     state: &mut ChatState,
     key: KeyEvent,
+    waiting: bool,
     mut issue_request: impl FnMut(Request),
 ) -> Transition {
     if key.kind == KeyEventKind::Release {
@@ -359,6 +491,12 @@ pub fn handle_key(
     }
     if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('c')) {
         return Transition::Quit;
+    }
+    if waiting
+        && (input::is_buffer_edit(&key)
+            || matches!(key.code, KeyCode::Enter | KeyCode::Tab | KeyCode::BackTab))
+    {
+        return Transition::None;
     }
     match key.code {
         KeyCode::Esc => {
@@ -381,12 +519,24 @@ pub fn handle_key(
             state.input_backspace();
             Transition::None
         }
+        KeyCode::Delete => {
+            state.input_delete_forward();
+            Transition::None
+        }
         KeyCode::Left => {
             state.cursor_left();
             Transition::None
         }
         KeyCode::Right => {
             state.cursor_right();
+            Transition::None
+        }
+        KeyCode::Home => {
+            state.cursor_home();
+            Transition::None
+        }
+        KeyCode::End => {
+            state.cursor_end();
             Transition::None
         }
         KeyCode::Up => {
@@ -399,7 +549,18 @@ pub fn handle_key(
         }
         KeyCode::Enter => submit(state, &mut issue_request),
         KeyCode::Char(c) => {
-            state.input_insert(c);
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+                match c {
+                    'w' => state.input_delete_word_backward(),
+                    'u' => state.input_delete_to_start(),
+                    'k' => state.input_delete_to_end(),
+                    'a' => state.cursor_home(),
+                    'e' => state.cursor_end(),
+                    _ => {}
+                }
+            } else {
+                state.input_insert(c);
+            }
             Transition::None
         }
         _ => Transition::None,
@@ -428,6 +589,12 @@ fn submit(state: &mut ChatState, issue_request: &mut dyn FnMut(Request)) -> Tran
                     Transition::None
                 }
                 commands::Action::OpenScreen(intent) => super::open(intent),
+                commands::Action::ClearChat => {
+                    let mut fresh = ChatState::blank();
+                    fresh.push_system("new conversation — type a message to begin");
+                    *state = fresh;
+                    Transition::None
+                }
             },
             None => {
                 state.push_error(format!("unknown command: /{name}"));

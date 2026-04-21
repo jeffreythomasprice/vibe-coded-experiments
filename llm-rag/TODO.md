@@ -1,11 +1,5 @@
 rename this project
 
-spinner in tui while waiting on response
-
-/clear command to start new convo
-
-streaming responses in tui
-
 send one-shot messages via cli command and get a response
 
 cli commands and tui and messages to:
@@ -20,9 +14,9 @@ youtube download, transcript is the document
 
 structured output
 
-other tools?
-web search
-summarize a conversation or a document and save that as another document
+web search tool
+
+read and write files tools
 
 subagents?
 

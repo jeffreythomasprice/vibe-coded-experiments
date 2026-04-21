@@ -19,6 +19,11 @@ pub enum Action {
     /// Swap in a different screen. The event loop looks up the intent in
     /// `screens::open` and performs the transition + initial data fetch.
     OpenScreen(ScreenIntent),
+    /// Reset the current chat screen's local state — clear the transcript and
+    /// drop `conversation_id` so the next user message mints a new
+    /// conversation. No server RPC; the prior conversation is preserved in
+    /// SQLite and reachable via `/resume`.
+    ClearChat,
 }
 
 /// Screens that a slash command can open. Each variant is resolved to a
@@ -42,6 +47,12 @@ pub fn registry() -> &'static [SlashCommand] {
             aliases: &["conversations"],
             description: "list and resume past conversations",
             action: Action::OpenScreen(ScreenIntent::ConversationList),
+        },
+        SlashCommand {
+            name: "clear",
+            aliases: &[],
+            description: "start a new conversation",
+            action: Action::ClearChat,
         },
         SlashCommand {
             name: "quit",

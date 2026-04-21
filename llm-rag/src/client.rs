@@ -32,6 +32,53 @@ pub async fn round_trip(
     Ok(resp)
 }
 
+/// Send a chat request and drive its streaming response, invoking `on_event`
+/// for each frame (`ChatStart`, `ChatDelta`, `ChatToolCallDelta`, and either
+/// `ChatDone` or `Response::Error` as the terminator). Applies
+/// `client_stream_idle_timeout_secs` as a per-frame idle timeout so a silent
+/// server eventually surfaces as `RequestTimeout` rather than hanging forever.
+///
+/// Returns `Ok(())` on either successful completion (`ChatDone`) or a
+/// server-reported error (`Response::Error`) — callers inspect the frames to
+/// distinguish. Returns `Err(StreamClosedMidResponse)` if the stream ends
+/// before a terminal frame is seen.
+pub async fn chat_stream<F>(
+    cfg: &Config,
+    socket: &Path,
+    config_override: Option<&Path>,
+    secrets_override: Option<&Path>,
+    req: Request,
+    mut on_event: F,
+) -> Result<(), ClientError>
+where
+    F: FnMut(Response),
+{
+    debug_assert!(
+        matches!(req, Request::Chat { .. }),
+        "chat_stream only supports Request::Chat",
+    );
+    let stream = connect_or_spawn(socket, config_override, secrets_override).await?;
+    let mut fr = framed(stream);
+    write_frame(&mut fr, &req).await?;
+
+    let idle = Duration::from_secs(cfg.client_stream_idle_timeout_secs);
+    loop {
+        let frame = match tokio::time::timeout(idle, read_frame::<_, Response>(&mut fr)).await {
+            Ok(Ok(f)) => f,
+            Ok(Err(crate::error::ProtocolError::StreamClosed)) => {
+                return Err(ClientError::StreamClosedMidResponse);
+            }
+            Ok(Err(err)) => return Err(err.into()),
+            Err(_) => return Err(ClientError::RequestTimeout),
+        };
+        let terminal = matches!(frame, Response::ChatDone { .. } | Response::Error { .. },);
+        on_event(frame);
+        if terminal {
+            return Ok(());
+        }
+    }
+}
+
 async fn connect_or_spawn(
     socket: &Path,
     config_override: Option<&Path>,
