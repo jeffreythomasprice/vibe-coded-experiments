@@ -123,7 +123,9 @@ fn handle_term(app: &mut App, event: Event, ctx: &Ctx) {
     let mut to_send: Option<Request> = None;
     let mut tag_action: Option<screens::tag_editor::TagAction> = None;
     let mut search_should_search = false;
+    let mut document_search_should_search = false;
     let mut confirm_action: Option<screens::confirm::ConfirmAction> = None;
+    let mut picker_submit: Option<(String, Vec<String>)> = None;
     let transition = match &mut app.screen {
         Screen::Chat(state) => screens::chat::handle_key(state, key, waiting, |req| {
             to_send = Some(req);
@@ -145,6 +147,25 @@ fn handle_term(app: &mut App, event: Event, ctx: &Ctx) {
             confirm_action = Some(screens::confirm::handle_key(state, key));
             Transition::None
         }
+        Screen::DocumentList(state) => screens::document_list::handle_key(state, key),
+        Screen::DocumentSearch(state) => {
+            match screens::document_search::handle_key(state, key, waiting) {
+                screens::document_search::SearchAction::None => Transition::None,
+                screens::document_search::SearchAction::Search => {
+                    document_search_should_search = true;
+                    Transition::None
+                }
+                screens::document_search::SearchAction::Transition(t) => t,
+            }
+        }
+        Screen::FilePicker(state) => match screens::file_picker::handle_key(state, key) {
+            screens::file_picker::PickerAction::None => Transition::None,
+            screens::file_picker::PickerAction::Transition(t) => t,
+            screens::file_picker::PickerAction::Submit { path, tags } => {
+                picker_submit = Some((path, tags));
+                Transition::None
+            }
+        },
     };
 
     if let Some(req) = to_send {
@@ -171,8 +192,25 @@ fn handle_term(app: &mut App, event: Event, ctx: &Ctx) {
         }
     }
 
+    if document_search_should_search && let Screen::DocumentSearch(state) = &mut app.screen {
+        state.loading = true;
+        state.results.clear();
+        let req = screens::document_search::search_request(state);
+        let seq = spawn_request(app, ctx, req);
+        if let Screen::DocumentSearch(state) = &mut app.screen {
+            state.results_seq = seq;
+        }
+    }
+
     if let Some(action) = confirm_action {
         apply_confirm_action(app, ctx, action);
+    }
+
+    if let Some((path, tags)) = picker_submit {
+        let seq = spawn_request(app, ctx, Request::DocumentCreate { path, tags });
+        if let Screen::FilePicker(state) = &mut app.screen {
+            screens::file_picker::set_request_seq(state, seq);
+        }
     }
 
     apply_transition(app, ctx, transition);
@@ -190,14 +228,14 @@ fn apply_confirm_action(app: &mut App, ctx: &Ctx, action: screens::confirm::Conf
             apply_transition(app, ctx, back);
         }
         ConfirmAction::Confirm => {
-            let (conv_id, back) = match &app.screen {
+            let (delete_req, back) = match &app.screen {
                 Screen::ConfirmDelete(state) => (
-                    state.conv_id.clone(),
+                    state.target.delete_request(),
                     screens::confirm::back_transition(state),
                 ),
                 _ => return,
             };
-            spawn_request(app, ctx, Request::ConversationDelete { id: conv_id });
+            spawn_request(app, ctx, delete_req);
             apply_transition(app, ctx, back);
         }
     }
@@ -225,32 +263,18 @@ fn apply_tag_action(app: &mut App, ctx: &Ctx, action: screens::tag_editor::TagAc
     use screens::tag_editor::TagAction;
     let (req, optimistic_add, optimistic_remove) = match action {
         TagAction::AddTag(tag) => {
-            let conv_id = match &app.screen {
-                Screen::TagEditor(state) => state.conversation_id.clone(),
+            let target = match &app.screen {
+                Screen::TagEditor(state) => state.target.clone(),
                 _ => return,
             };
-            (
-                Request::ConversationAddTag {
-                    id: conv_id,
-                    tag: tag.clone(),
-                },
-                Some(tag),
-                None,
-            )
+            (target.add_tag_request(tag.clone()), Some(tag), None)
         }
         TagAction::RemoveTag(tag) => {
-            let conv_id = match &app.screen {
-                Screen::TagEditor(state) => state.conversation_id.clone(),
+            let target = match &app.screen {
+                Screen::TagEditor(state) => state.target.clone(),
                 _ => return,
             };
-            (
-                Request::ConversationRemoveTag {
-                    id: conv_id,
-                    tag: tag.clone(),
-                },
-                None,
-                Some(tag),
-            )
+            (target.remove_tag_request(tag.clone()), None, Some(tag))
         }
         TagAction::Back => {
             let back = match &app.screen {
@@ -291,53 +315,84 @@ fn spawn_request(app: &mut App, ctx: &Ctx, req: Request) -> u64 {
     let cfg_override = ctx.cfg_override.clone();
     let sec_override = ctx.sec_override.clone();
     let tx = ctx.tx.clone();
-    if matches!(req, Request::Chat { .. }) {
-        tokio::spawn(async move {
-            let tx_for_cb = tx.clone();
-            let result = client::chat_stream(
-                &cfg,
-                &socket,
-                cfg_override.as_deref(),
-                sec_override.as_deref(),
-                req,
-                |frame| {
-                    let terminal =
-                        matches!(frame, Response::ChatDone { .. } | Response::Error { .. },);
-                    let _ = tx_for_cb.send(AppEvent::Reply {
+    match &req {
+        Request::Chat { .. } => {
+            tokio::spawn(async move {
+                let tx_for_cb = tx.clone();
+                let result = client::chat_stream(
+                    &cfg,
+                    &socket,
+                    cfg_override.as_deref(),
+                    sec_override.as_deref(),
+                    req,
+                    |frame| {
+                        let terminal =
+                            matches!(frame, Response::ChatDone { .. } | Response::Error { .. });
+                        let _ = tx_for_cb.send(AppEvent::Reply {
+                            seq,
+                            result: Ok(frame),
+                            terminal,
+                        });
+                    },
+                )
+                .await;
+                if let Err(err) = result {
+                    let _ = tx.send(AppEvent::Reply {
                         seq,
-                        result: Ok(frame),
-                        terminal,
+                        result: Err(err),
+                        terminal: true,
                     });
-                },
-            )
-            .await;
-            // If chat_stream itself errored (connection failure, timeout,
-            // stream closed before a terminal frame), surface it as one
-            // terminal event so the spinner clears.
-            if let Err(err) = result {
+                }
+            });
+        }
+        Request::DocumentCreate { .. } => {
+            tokio::spawn(async move {
+                let tx_for_cb = tx.clone();
+                let result = client::document_create_stream(
+                    &cfg,
+                    &socket,
+                    cfg_override.as_deref(),
+                    sec_override.as_deref(),
+                    req,
+                    |frame| {
+                        let terminal = matches!(
+                            frame,
+                            Response::DocumentCreateDone { .. } | Response::Error { .. }
+                        );
+                        let _ = tx_for_cb.send(AppEvent::Reply {
+                            seq,
+                            result: Ok(frame),
+                            terminal,
+                        });
+                    },
+                )
+                .await;
+                if let Err(err) = result {
+                    let _ = tx.send(AppEvent::Reply {
+                        seq,
+                        result: Err(err),
+                        terminal: true,
+                    });
+                }
+            });
+        }
+        _ => {
+            tokio::spawn(async move {
+                let result = client::round_trip(
+                    &cfg,
+                    &socket,
+                    cfg_override.as_deref(),
+                    sec_override.as_deref(),
+                    req,
+                )
+                .await;
                 let _ = tx.send(AppEvent::Reply {
                     seq,
-                    result: Err(err),
+                    result,
                     terminal: true,
                 });
-            }
-        });
-    } else {
-        tokio::spawn(async move {
-            let result = client::round_trip(
-                &cfg,
-                &socket,
-                cfg_override.as_deref(),
-                sec_override.as_deref(),
-                req,
-            )
-            .await;
-            let _ = tx.send(AppEvent::Reply {
-                seq,
-                result,
-                terminal: true,
             });
-        });
+        }
     }
     seq
 }
@@ -384,6 +439,20 @@ fn handle_reply(app: &mut App, seq: u64, result: Result<Response, ClientError>, 
         Screen::ConfirmDelete(_) => {
             // ConfirmDelete has no outstanding requests of its own; any
             // delete reply arrives after the transition has already happened.
+        }
+        Screen::DocumentList(state) => {
+            if state.request_seq == seq {
+                match result {
+                    Ok(resp) => screens::document_list::handle_reply(state, resp),
+                    Err(_) => state.loading = false,
+                }
+            }
+        }
+        Screen::DocumentSearch(state) => {
+            screens::document_search::handle_reply(state, seq, result);
+        }
+        Screen::FilePicker(state) => {
+            let _ = screens::file_picker::handle_reply(state, seq, &result);
         }
     }
 }

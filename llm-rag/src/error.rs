@@ -79,6 +79,8 @@ pub enum CliError {
     #[error(transparent)]
     Db(#[from] crate::db::DbError),
     #[error(transparent)]
+    Ingest(#[from] crate::ingest::IngestError),
+    #[error(transparent)]
     Tui(#[from] crate::tui::error::TuiError),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
@@ -173,6 +175,26 @@ impl CliError {
             }
             CliError::Db(err) => {
                 serde_json::json!({ "error": "Db", "message": err.to_string() })
+            }
+            CliError::Ingest(crate::ingest::IngestError::TooLarge { path, actual, max }) => {
+                serde_json::json!({
+                    "error": "Ingest",
+                    "variant": "TooLarge",
+                    "path": path,
+                    "actual": actual,
+                    "max": max,
+                })
+            }
+            CliError::Ingest(crate::ingest::IngestError::NotTextFile { path, reason }) => {
+                serde_json::json!({
+                    "error": "Ingest",
+                    "variant": "NotTextFile",
+                    "path": path,
+                    "reason": reason,
+                })
+            }
+            CliError::Ingest(err) => {
+                serde_json::json!({ "error": "Ingest", "message": err.to_string() })
             }
             CliError::Tui(err) => {
                 serde_json::json!({ "error": "Tui", "message": err.to_string() })

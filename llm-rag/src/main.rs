@@ -2,10 +2,12 @@ use std::process::ExitCode;
 
 use clap::Parser;
 
-use llm_rag::cli::{Cli, Command, ConversationCmd};
+use llm_rag::cli::{Cli, Command, ConversationCmd, DocumentCmd};
 use llm_rag::config::{self, Config};
 use llm_rag::error::{CliError, ClientError};
-use llm_rag::protocol::{ConversationSummary, Request, Response};
+use llm_rag::protocol::{
+    ConversationSummary, DocumentSearchHit, DocumentSummary, Request, Response,
+};
 use llm_rag::{client, logging, paths, server, tui};
 
 #[tokio::main]
@@ -37,6 +39,7 @@ async fn main() -> ExitCode {
         Some(Command::Server) => "server",
         Some(Command::Ping) => "client",
         Some(Command::Conversations { .. }) => "client",
+        Some(Command::Documents { .. }) => "client",
         Some(Command::Tui) | None => "tui",
     };
     let span = tracing::info_span!("app", pid = std::process::id(), role);
@@ -101,6 +104,16 @@ async fn dispatch(cli: Cli, cfg: &Config) -> Result<(), CliError> {
             )
             .await
         }
+        Some(Command::Documents { action }) => {
+            run_document_cmd(
+                action,
+                cfg,
+                &socket,
+                cli.config.as_deref(),
+                cli.secrets.as_deref(),
+            )
+            .await
+        }
     }
 }
 
@@ -151,4 +164,182 @@ fn format_list_line(item: &ConversationSummary) -> String {
     let title = item.title.as_deref().unwrap_or("");
     let tags = item.tags.join(",");
     format!("{}\t{}\t{}\t{}", item.id, item.updated_at, title, tags)
+}
+
+async fn run_document_cmd(
+    action: DocumentCmd,
+    cfg: &Config,
+    socket: &std::path::Path,
+    config_override: Option<&std::path::Path>,
+    secrets_override: Option<&std::path::Path>,
+) -> Result<(), CliError> {
+    match action {
+        DocumentCmd::List { tags } => {
+            let resp = client::round_trip(
+                cfg,
+                socket,
+                config_override,
+                secrets_override,
+                Request::DocumentList {
+                    tags: tags.clone(),
+                    limit: None,
+                },
+            )
+            .await?;
+            match resp {
+                Response::DocumentList { items } => {
+                    for item in items {
+                        println!("{}", format_document_line(&item));
+                    }
+                    Ok(())
+                }
+                Response::Error { message } => {
+                    Err(CliError::Client(ClientError::ServerError { message }))
+                }
+                other => Err(CliError::Client(ClientError::ServerError {
+                    message: format!("unexpected response: {other:?}"),
+                })),
+            }
+        }
+        DocumentCmd::Delete { id } => simple_ok(
+            client::round_trip(
+                cfg,
+                socket,
+                config_override,
+                secrets_override,
+                Request::DocumentDelete { id },
+            )
+            .await?,
+        ),
+        DocumentCmd::AddTag { id, tag } => simple_ok(
+            client::round_trip(
+                cfg,
+                socket,
+                config_override,
+                secrets_override,
+                Request::DocumentAddTag { id, tag },
+            )
+            .await?,
+        ),
+        DocumentCmd::RemoveTag { id, tag } => simple_ok(
+            client::round_trip(
+                cfg,
+                socket,
+                config_override,
+                secrets_override,
+                Request::DocumentRemoveTag { id, tag },
+            )
+            .await?,
+        ),
+        DocumentCmd::New { path, tags } => {
+            // Resolve to an absolute path so the server finds it regardless
+            // of its own CWD.
+            let abs = match path.canonicalize() {
+                Ok(p) => p,
+                Err(err) => {
+                    return Err(CliError::Client(ClientError::ServerError {
+                        message: format!("resolving {}: {err}", path.display()),
+                    }));
+                }
+            };
+            let mut terminal: Option<Response> = None;
+            client::document_create_stream(
+                cfg,
+                socket,
+                config_override,
+                secrets_override,
+                Request::DocumentCreate {
+                    path: abs.to_string_lossy().into_owned(),
+                    tags,
+                },
+                |frame| match &frame {
+                    Response::DocumentCreateStart {
+                        document_id,
+                        total_chunks,
+                    } => {
+                        eprintln!("ingesting id={document_id} chunks={total_chunks}");
+                    }
+                    Response::DocumentCreateProgress { index, total, .. } => {
+                        eprintln!("  chunk {}/{}", index + 1, total);
+                    }
+                    Response::DocumentCreateDone { .. } | Response::Error { .. } => {
+                        terminal = Some(frame);
+                    }
+                    _ => {}
+                },
+            )
+            .await?;
+            match terminal {
+                Some(Response::DocumentCreateDone {
+                    document_id,
+                    chunks,
+                }) => {
+                    println!("{document_id}\t{chunks} chunks");
+                    Ok(())
+                }
+                Some(Response::Error { message }) => {
+                    Err(CliError::Client(ClientError::ServerError { message }))
+                }
+                _ => Err(CliError::Client(ClientError::ServerError {
+                    message: "ingest ended without terminal frame".to_string(),
+                })),
+            }
+        }
+        DocumentCmd::Search { query, tags, limit } => {
+            let resp = client::round_trip(
+                cfg,
+                socket,
+                config_override,
+                secrets_override,
+                Request::DocumentSearch {
+                    query,
+                    tags,
+                    limit: Some(limit),
+                },
+            )
+            .await?;
+            match resp {
+                Response::DocumentSearch { results } => {
+                    for hit in results {
+                        println!("{}", format_search_line(&hit));
+                    }
+                    Ok(())
+                }
+                Response::Error { message } => {
+                    Err(CliError::Client(ClientError::ServerError { message }))
+                }
+                other => Err(CliError::Client(ClientError::ServerError {
+                    message: format!("unexpected response: {other:?}"),
+                })),
+            }
+        }
+    }
+}
+
+// `CliError` carries several per-layer error variants and is ~128 bytes.
+// This helper is short enough that clippy flags it; the fn is small and
+// only called from the document command dispatch, so the cost is trivial.
+#[allow(clippy::result_large_err)]
+fn simple_ok(resp: Response) -> Result<(), CliError> {
+    match resp {
+        Response::Ok => Ok(()),
+        Response::Error { message } => Err(CliError::Client(ClientError::ServerError { message })),
+        other => Err(CliError::Client(ClientError::ServerError {
+            message: format!("unexpected response: {other:?}"),
+        })),
+    }
+}
+
+fn format_document_line(item: &DocumentSummary) -> String {
+    let tags = item.tags.join(",");
+    format!("{}\t{}\t{}\t{}", item.id, item.created_at, item.path, tags)
+}
+
+fn format_search_line(hit: &DocumentSearchHit) -> String {
+    let snippet: String = hit.content.chars().take(100).collect();
+    let snippet = snippet.replace('\n', " ");
+    format!(
+        "{}\t{:.4}\t{}\t{}",
+        hit.document_id, hit.distance, hit.path, snippet
+    )
 }

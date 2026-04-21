@@ -188,6 +188,14 @@ pub struct ConversationFilter<'a> {
     pub limit: Option<usize>,
 }
 
+/// Filter passed to [`Dal::list_documents_filtered`]. `tags` applies ALL-of
+/// semantics — a document matches only when every listed tag is present.
+#[derive(Debug, Clone, Default)]
+pub struct DocumentFilter<'a> {
+    pub tags: &'a [&'a str],
+    pub limit: Option<usize>,
+}
+
 pub struct Dal {
     conn: Connection,
     model: EmbeddingModelInfo,
@@ -269,6 +277,46 @@ impl Dal {
         &self.model
     }
 
+    // ---- Transactions -----------------------------------------------------
+    //
+    // turso 0.4 doesn't expose an async-friendly transaction/savepoint struct,
+    // so callers compose BEGIN / COMMIT / ROLLBACK as plain statements. The
+    // single shared connection means these are ordered strictly against any
+    // other DAL call on the same `Dal`.
+
+    pub async fn begin(&self) -> Result<(), DbError> {
+        self.conn
+            .execute("BEGIN", ())
+            .await
+            .map_err(|source| DbError::Query {
+                op: "begin",
+                source,
+            })?;
+        Ok(())
+    }
+
+    pub async fn commit(&self) -> Result<(), DbError> {
+        self.conn
+            .execute("COMMIT", ())
+            .await
+            .map_err(|source| DbError::Query {
+                op: "commit",
+                source,
+            })?;
+        Ok(())
+    }
+
+    pub async fn rollback(&self) -> Result<(), DbError> {
+        self.conn
+            .execute("ROLLBACK", ())
+            .await
+            .map_err(|source| DbError::Query {
+                op: "rollback",
+                source,
+            })?;
+        Ok(())
+    }
+
     // ---- Documents --------------------------------------------------------
 
     pub async fn create_document(&self, path: &str) -> Result<i64, DbError> {
@@ -328,20 +376,57 @@ impl Dal {
     }
 
     pub async fn list_documents(&self) -> Result<Vec<Document>, DbError> {
+        self.list_documents_filtered(&DocumentFilter::default())
+            .await
+    }
+
+    pub async fn list_documents_filtered(
+        &self,
+        filter: &DocumentFilter<'_>,
+    ) -> Result<Vec<Document>, DbError> {
+        // ALL-of tag semantics via the same GROUP BY / HAVING pattern used by
+        // `list_conversations`.
+        let mut sql =
+            String::from("SELECT d.id, d.path, d.created_at, d.updated_at FROM documents d");
+        let mut params: Vec<Value> = Vec::new();
+
+        if !filter.tags.is_empty() {
+            sql.push_str(
+                " INNER JOIN document_tags dt ON dt.document_id = d.id\
+                 \n INNER JOIN tags t ON t.id = dt.tag_id",
+            );
+            let placeholders = vec!["?"; filter.tags.len()].join(", ");
+            sql.push_str(&format!(" WHERE t.name IN ({placeholders})"));
+            for tag in filter.tags {
+                params.push(Value::Text((*tag).to_string()));
+            }
+        }
+
+        sql.push_str(" GROUP BY d.id, d.path, d.created_at, d.updated_at");
+
+        if !filter.tags.is_empty() {
+            sql.push_str(" HAVING COUNT(DISTINCT t.id) = ?");
+            params.push(Value::Integer(filter.tags.len() as i64));
+        }
+
+        sql.push_str(" ORDER BY d.id");
+
+        if let Some(limit) = filter.limit {
+            sql.push_str(" LIMIT ?");
+            params.push(Value::Integer(limit as i64));
+        }
+
         let mut rows = self
             .conn
-            .query(
-                "SELECT id, path, created_at, updated_at FROM documents ORDER BY id",
-                (),
-            )
+            .query(&sql, turso::params::Params::Positional(params))
             .await
             .map_err(|source| DbError::Query {
-                op: "list_documents",
+                op: "list_documents_filtered",
                 source,
             })?;
         let mut out = Vec::new();
         while let Some(row) = rows.next().await.map_err(|source| DbError::Query {
-            op: "list_documents.next",
+            op: "list_documents_filtered.next",
             source,
         })? {
             out.push(row_to_document(&row)?);
@@ -652,13 +737,14 @@ impl Dal {
         Ok(self.conn.last_insert_rowid())
     }
 
-    /// K-nearest chunks under cosine distance. `tag_filter`, when provided,
-    /// restricts the scan to chunks whose document has that tag.
+    /// K-nearest chunks under cosine distance. `tags`, when non-empty, applies
+    /// ALL-of semantics — only chunks whose document carries every listed tag
+    /// are considered. An empty slice means "no tag filter".
     pub async fn search_chunks(
         &self,
         query: &[f32],
         limit: usize,
-        tag_filter: Option<&str>,
+        tags: &[&str],
     ) -> Result<Vec<ChunkMatch>, DbError> {
         if query.len() != self.model.dimensions {
             return Err(DbError::DimensionMismatch {
@@ -668,45 +754,47 @@ impl Dal {
         }
         let blob: Vec<u8> = bytemuck::cast_slice(query).to_vec();
 
-        // Build SQL with or without the tag-JOIN. turso supports
-        // vector_distance_cos(blob, blob) natively, so ordering happens in the
-        // DB. No KNN index is available in 0.4, so this scans the chunk
-        // table — fine for small collections.
-        let (sql, params) = match tag_filter {
-            None => {
-                let sql = format!(
-                    "SELECT c.id, c.document_id, c.content, c.range_kind, c.range_start, c.range_end,
-                            vector_distance_cos(c.embedding, ?) AS dist
-                     FROM {table} c
-                     ORDER BY dist ASC
-                     LIMIT ?",
-                    table = self.chunk_table,
-                );
-                let params = turso::params::Params::Positional(vec![
-                    Value::Blob(blob),
-                    Value::Integer(limit as i64),
-                ]);
-                (sql, params)
+        // turso supports vector_distance_cos(blob, blob) natively, so ordering
+        // happens in the DB. No KNN index is available in 0.4, so this scans
+        // the chunk table — fine for small collections. ALL-of tag semantics
+        // mirror `list_conversations`: JOIN, GROUP BY, HAVING COUNT(DISTINCT).
+        let (sql, params) = if tags.is_empty() {
+            let sql = format!(
+                "SELECT c.id, c.document_id, c.content, c.range_kind, c.range_start, c.range_end,
+                        vector_distance_cos(c.embedding, ?) AS dist
+                 FROM {table} c
+                 ORDER BY dist ASC
+                 LIMIT ?",
+                table = self.chunk_table,
+            );
+            let params = turso::params::Params::Positional(vec![
+                Value::Blob(blob),
+                Value::Integer(limit as i64),
+            ]);
+            (sql, params)
+        } else {
+            let placeholders = vec!["?"; tags.len()].join(", ");
+            let sql = format!(
+                "SELECT c.id, c.document_id, c.content, c.range_kind, c.range_start, c.range_end,
+                        vector_distance_cos(c.embedding, ?) AS dist
+                 FROM {table} c
+                 INNER JOIN document_tags dt ON dt.document_id = c.document_id
+                 INNER JOIN tags t           ON t.id = dt.tag_id
+                 WHERE t.name IN ({placeholders})
+                 GROUP BY c.id, c.document_id, c.content, c.range_kind, c.range_start, c.range_end, dist
+                 HAVING COUNT(DISTINCT t.id) = ?
+                 ORDER BY dist ASC
+                 LIMIT ?",
+                table = self.chunk_table,
+            );
+            let mut positional: Vec<Value> = Vec::with_capacity(tags.len() + 3);
+            positional.push(Value::Blob(blob));
+            for tag in tags {
+                positional.push(Value::Text((*tag).to_string()));
             }
-            Some(tag) => {
-                let sql = format!(
-                    "SELECT c.id, c.document_id, c.content, c.range_kind, c.range_start, c.range_end,
-                            vector_distance_cos(c.embedding, ?) AS dist
-                     FROM {table} c
-                     INNER JOIN document_tags dt ON dt.document_id = c.document_id
-                     INNER JOIN tags t           ON t.id = dt.tag_id
-                     WHERE t.name = ?
-                     ORDER BY dist ASC
-                     LIMIT ?",
-                    table = self.chunk_table,
-                );
-                let params = turso::params::Params::Positional(vec![
-                    Value::Blob(blob),
-                    Value::Text(tag.to_string()),
-                    Value::Integer(limit as i64),
-                ]);
-                (sql, params)
-            }
+            positional.push(Value::Integer(tags.len() as i64));
+            positional.push(Value::Integer(limit as i64));
+            (sql, turso::params::Params::Positional(positional))
         };
 
         let mut rows = self
@@ -1347,6 +1435,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn list_documents_filtered_all_of_tags() {
+        let dal = mem_dal(4).await;
+        let a = dal.create_document("/a").await.unwrap();
+        let b = dal.create_document("/b").await.unwrap();
+        let c = dal.create_document("/c").await.unwrap();
+        dal.set_tags(a, &["x", "y"]).await.unwrap();
+        dal.set_tags(b, &["x"]).await.unwrap();
+        dal.set_tags(c, &["y"]).await.unwrap();
+
+        let hits = dal
+            .list_documents_filtered(&DocumentFilter {
+                tags: &["x", "y"],
+                limit: None,
+            })
+            .await
+            .unwrap();
+        let ids: Vec<i64> = hits.iter().map(|d| d.id).collect();
+        assert_eq!(ids, vec![a]);
+
+        // Single tag acts as OR=1 (only those matching that tag).
+        let x_only = dal
+            .list_documents_filtered(&DocumentFilter {
+                tags: &["x"],
+                limit: None,
+            })
+            .await
+            .unwrap();
+        let mut x_ids: Vec<i64> = x_only.iter().map(|d| d.id).collect();
+        x_ids.sort();
+        assert_eq!(x_ids, vec![a, b]);
+
+        // No tag filter returns all.
+        assert_eq!(dal.list_documents().await.unwrap().len(), 3);
+    }
+
+    #[tokio::test]
     async fn delete_missing_document_is_not_found() {
         let dal = mem_dal(4).await;
         match dal.delete_document(999).await {
@@ -1498,7 +1622,7 @@ mod tests {
             .unwrap();
 
         let hits = dal
-            .search_chunks(&[1.0, 0.0, 0.0, 0.0], 3, None)
+            .search_chunks(&[1.0, 0.0, 0.0, 0.0], 3, &[])
             .await
             .unwrap();
         assert_eq!(hits.len(), 3);
@@ -1538,11 +1662,41 @@ mod tests {
             .unwrap();
 
         let hits = dal
-            .search_chunks(&[1.0, 0.0, 0.0, 0.0], 10, Some("keep"))
+            .search_chunks(&[1.0, 0.0, 0.0, 0.0], 10, &["keep"])
             .await
             .unwrap();
         let ids: Vec<i64> = hits.iter().map(|h| h.chunk_id).collect();
         assert_eq!(ids, vec![c_a]);
+    }
+
+    #[tokio::test]
+    async fn search_chunks_all_of_tag_filter() {
+        let dal = mem_dal(4).await;
+        let a = dal.create_document("/a").await.unwrap();
+        let b = dal.create_document("/b").await.unwrap();
+        let c = dal.create_document("/c").await.unwrap();
+        // Only `a` has both tags. `b` has only `x`, `c` has only `y`.
+        dal.set_tags(a, &["x", "y"]).await.unwrap();
+        dal.set_tags(b, &["x"]).await.unwrap();
+        dal.set_tags(c, &["y"]).await.unwrap();
+
+        for doc in [a, b, c] {
+            dal.create_chunk(
+                doc,
+                ChunkRange::Pages { start: 1, end: 1 },
+                "c",
+                &[1.0, 0.0, 0.0, 0.0],
+            )
+            .await
+            .unwrap();
+        }
+
+        let hits = dal
+            .search_chunks(&[1.0, 0.0, 0.0, 0.0], 10, &["x", "y"])
+            .await
+            .unwrap();
+        let docs: Vec<i64> = hits.iter().map(|h| h.document_id).collect();
+        assert_eq!(docs, vec![a]);
     }
 
     #[tokio::test]
@@ -1562,7 +1716,7 @@ mod tests {
         .unwrap();
 
         let hits = dal
-            .search_chunks(&[0.0, 0.0, 0.0, 1.0], 1, None)
+            .search_chunks(&[0.0, 0.0, 0.0, 1.0], 1, &[])
             .await
             .unwrap();
         assert_eq!(hits.len(), 1);
@@ -1599,7 +1753,7 @@ mod tests {
         let dal_8 = open_with_dims(&path, 8).await;
         // The 8-dim chunk table exists but is empty.
         let hits_8 = dal_8
-            .search_chunks(&[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 10, None)
+            .search_chunks(&[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 10, &[])
             .await
             .unwrap();
         assert!(hits_8.is_empty(), "8-dim table should not see 4-dim chunks");
@@ -1608,7 +1762,7 @@ mod tests {
         drop(dal_8);
         let dal_4_again = open_with_dims(&path, 4).await;
         let hits_4 = dal_4_again
-            .search_chunks(&[1.0, 0.0, 0.0, 0.0], 10, None)
+            .search_chunks(&[1.0, 0.0, 0.0, 0.0], 10, &[])
             .await
             .unwrap();
         assert_eq!(hits_4.len(), 1);

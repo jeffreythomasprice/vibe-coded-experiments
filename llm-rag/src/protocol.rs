@@ -37,6 +37,37 @@ pub enum Request {
         id: String,
     },
     TagList,
+    DocumentList {
+        tags: Vec<String>,
+        limit: Option<usize>,
+    },
+    DocumentDelete {
+        id: i64,
+    },
+    /// Streaming ingest: the server reads `path` from its own filesystem,
+    /// chunks it, embeds each chunk, and persists the results transactionally.
+    /// Emits `DocumentCreateStart`, zero-or-more `DocumentCreateProgress`, and
+    /// a terminal `DocumentCreateDone` (or `Error`) frame.
+    DocumentCreate {
+        path: String,
+        tags: Vec<String>,
+    },
+    DocumentAddTag {
+        id: i64,
+        tag: String,
+    },
+    DocumentRemoveTag {
+        id: i64,
+        tag: String,
+    },
+    DocumentTags {
+        id: i64,
+    },
+    DocumentSearch {
+        query: String,
+        tags: Vec<String>,
+        limit: Option<usize>,
+    },
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -92,6 +123,33 @@ pub enum Response {
     TagList {
         tags: Vec<String>,
     },
+    DocumentList {
+        items: Vec<DocumentSummary>,
+    },
+    DocumentTags {
+        tags: Vec<String>,
+    },
+    /// First frame of a streaming `DocumentCreate`. Confirms the new row id
+    /// and (once chunking is done) the total number of chunks that will be
+    /// embedded + persisted.
+    DocumentCreateStart {
+        document_id: i64,
+        total_chunks: usize,
+    },
+    /// Emitted after each persisted chunk. `index` is 0-based.
+    DocumentCreateProgress {
+        document_id: i64,
+        index: usize,
+        total: usize,
+    },
+    /// Terminator for a successful ingest.
+    DocumentCreateDone {
+        document_id: i64,
+        chunks: usize,
+    },
+    DocumentSearch {
+        results: Vec<DocumentSearchHit>,
+    },
     Ok,
     Error {
         message: String,
@@ -112,6 +170,28 @@ pub struct WireMessage {
     pub content: String,
     pub metadata: Option<MessageMetadata>,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DocumentSummary {
+    pub id: i64,
+    pub path: String,
+    pub created_at: String,
+    pub tags: Vec<String>,
+}
+
+/// One result row from a `DocumentSearch`. `range_kind` / `range_start` /
+/// `range_end` flatten the DAL's `ChunkRange` enum for a simpler on-wire type.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DocumentSearchHit {
+    pub document_id: i64,
+    pub path: String,
+    pub chunk_id: i64,
+    pub content: String,
+    pub distance: f32,
+    pub range_kind: String,
+    pub range_start: i64,
+    pub range_end: i64,
 }
 
 /// Wrap a stream with a u32 big-endian length prefix codec.

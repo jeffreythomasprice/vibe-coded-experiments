@@ -19,8 +19,8 @@ pub mod migrations;
 pub mod schema;
 
 pub use dal::{
-    ChunkMatch, ChunkRange, Conversation, ConversationFilter, Dal, Document, MessageMetadata,
-    MessageRole, StoredMessage,
+    ChunkMatch, ChunkRange, Conversation, ConversationFilter, Dal, Document, DocumentFilter,
+    MessageMetadata, MessageRole, StoredMessage,
 };
 pub use error::DbError;
 pub use schema::EmbeddingModelInfo;

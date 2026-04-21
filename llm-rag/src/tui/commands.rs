@@ -32,6 +32,7 @@ pub enum Action {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScreenIntent {
     ConversationList,
+    DocumentList,
 }
 
 pub fn registry() -> &'static [SlashCommand] {
@@ -47,6 +48,12 @@ pub fn registry() -> &'static [SlashCommand] {
             aliases: &["conversations"],
             description: "list and resume past conversations",
             action: Action::OpenScreen(ScreenIntent::ConversationList),
+        },
+        SlashCommand {
+            name: "documents",
+            aliases: &[],
+            description: "list, ingest, and search documents",
+            action: Action::OpenScreen(ScreenIntent::DocumentList),
         },
         SlashCommand {
             name: "clear",

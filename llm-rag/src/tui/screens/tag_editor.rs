@@ -1,5 +1,6 @@
-//! Tag editor: shows the tags attached to a conversation plus a text input
-//! that both adds new tags and fuzzy-matches existing ones.
+//! Tag editor: shows the tags attached to some target (conversation or
+//! document) plus a text input that both adds new tags and fuzzy-matches
+//! existing ones.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::Frame;
@@ -14,18 +15,12 @@ use crate::tui::app::App;
 use crate::tui::input;
 use crate::tui::spinner;
 
-use super::{Screen, Transition};
-
-/// Where the user came from; an Esc transition lands back here (with a
-/// refresh).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ReturnScreen {
-    ConversationList,
-}
+use super::Transition;
+use super::targets::TagTarget;
 
 pub struct TagEditorState {
-    pub conversation_id: String,
-    pub conversation_label: String,
+    pub target: TagTarget,
+    pub label: String,
     pub tags: Vec<String>,
     pub selected_tag: usize,
     pub input: String,
@@ -33,22 +28,17 @@ pub struct TagEditorState {
     pub suggestions: Vec<String>,
     pub selected_suggestion: Option<usize>,
     pub all_tags_cache: Vec<String>,
-    pub return_screen: ReturnScreen,
-    /// Seqs of the two initial loads (ConversationTags + TagList). Zeroed
+    /// Seqs of the two initial loads (target tags + global tag list). Zeroed
     /// after each reply lands.
     pub tags_seq: u64,
     pub all_tags_seq: u64,
 }
 
 impl TagEditorState {
-    pub fn loading(
-        conversation_id: String,
-        conversation_label: String,
-        return_screen: ReturnScreen,
-    ) -> Self {
+    pub fn loading(target: TagTarget, label: String) -> Self {
         Self {
-            conversation_id,
-            conversation_label,
+            target,
+            label,
             tags: Vec::new(),
             selected_tag: 0,
             input: String::new(),
@@ -56,7 +46,6 @@ impl TagEditorState {
             suggestions: Vec::new(),
             selected_suggestion: None,
             all_tags_cache: Vec::new(),
-            return_screen,
             tags_seq: 0,
             all_tags_seq: 0,
         }
@@ -72,14 +61,9 @@ impl TagEditorState {
     }
 }
 
-/// Initial load pair: current tags for this conv + global tag list.
-pub fn initial_requests(conv_id: &str) -> (Request, Request) {
-    (
-        Request::ConversationTags {
-            id: conv_id.to_string(),
-        },
-        Request::TagList,
-    )
+/// Initial load pair: current tags for this target + global tag list.
+pub fn initial_requests(target: &TagTarget) -> (Request, Request) {
+    (target.tags_request(), Request::TagList)
 }
 
 fn suggest(all: &[String], query: &str, excluded: &[String]) -> Vec<String> {
@@ -125,7 +109,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, state: &TagEditorState) 
         spinner::render_banner(frame, b, app.spinner_frame);
     }
 
-    let header = Paragraph::new(format!("editing: {}", state.conversation_label))
+    let header = Paragraph::new(format!("editing: {}", state.label))
         .block(Block::bordered().title(" tag editor "));
     frame.render_widget(header, header_area);
 
@@ -320,7 +304,9 @@ pub enum TagAction {
 pub fn handle_reply(state: &mut TagEditorState, seq: u64, result: Result<Response, ClientError>) {
     if seq == state.tags_seq && seq != 0 {
         state.tags_seq = 0;
-        if let Ok(Response::ConversationTags { tags }) = result {
+        if let Ok(resp) = &result
+            && let Some(tags) = state.target.extract_tags(resp)
+        {
             state.tags = tags;
             if state.selected_tag >= state.tags.len() && !state.tags.is_empty() {
                 state.selected_tag = state.tags.len() - 1;
@@ -348,9 +334,5 @@ pub fn handle_reply(state: &mut TagEditorState, seq: u64, result: Result<Respons
 /// The event loop's [`Screen::on_enter`] will re-fire the screen's initial
 /// loads so data is fresh.
 pub fn back_transition(state: &TagEditorState) -> Transition {
-    match state.return_screen {
-        ReturnScreen::ConversationList => Transition::To(Screen::ConversationList(
-            super::ConversationListState::new_loading(),
-        )),
-    }
+    state.target.back_transition()
 }

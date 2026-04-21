@@ -1,6 +1,6 @@
-//! Generic two-button confirmation dialog. Currently only used for conversation
-//! deletion; generalize the variants in this file when another confirm flow
-//! lands.
+//! Generic two-button confirmation dialog. Drives delete flows for any
+//! `DeleteTarget` — the target's `back_transition()` + `delete_request()`
+//! handle the routing, so new entity types don't touch this file.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use ratatui::Frame;
@@ -9,7 +9,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Paragraph};
 
-use super::{ConversationListState, Screen, Transition};
+use super::Transition;
+use super::targets::DeleteTarget;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Choice {
@@ -17,27 +18,18 @@ pub enum Choice {
     Cancel,
 }
 
-/// Where to return after the confirmation resolves. The state machine stays
-/// narrow in this phase; wire more variants as more call sites show up.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ReturnTo {
-    ConversationList,
-}
-
 pub struct ConfirmDeleteState {
-    pub conv_id: String,
+    pub target: DeleteTarget,
     pub label: String,
     pub choice: Choice,
-    pub return_to: ReturnTo,
 }
 
 impl ConfirmDeleteState {
-    pub fn new(conv_id: String, label: String, return_to: ReturnTo) -> Self {
+    pub fn new(target: DeleteTarget, label: String) -> Self {
         Self {
-            conv_id,
+            target,
             label,
             choice: Choice::Cancel,
-            return_to,
         }
     }
 }
@@ -54,7 +46,8 @@ pub fn render(frame: &mut Frame, area: Rect, state: &ConfirmDeleteState) {
     let chunks = Layout::vertical([Constraint::Min(1), Constraint::Length(3)]).split(inner);
 
     let msg = Paragraph::new(format!(
-        "Delete conversation:\n\n  {}\n\nThis cannot be undone.",
+        "Delete {}:\n\n  {}\n\nThis cannot be undone.",
+        state.target.kind(),
         state.label
     ));
     frame.render_widget(msg, chunks[0]);
@@ -127,9 +120,5 @@ pub fn handle_key(state: &mut ConfirmDeleteState, key: KeyEvent) -> ConfirmActio
 }
 
 pub fn back_transition(state: &ConfirmDeleteState) -> Transition {
-    match state.return_to {
-        ReturnTo::ConversationList => Transition::To(Screen::ConversationList(
-            ConversationListState::new_loading(),
-        )),
-    }
+    state.target.back_transition()
 }

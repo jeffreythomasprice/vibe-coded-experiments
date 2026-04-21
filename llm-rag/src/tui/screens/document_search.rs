@@ -1,4 +1,5 @@
-//! Search screen: substring query on message content + ALL-of tag filter.
+//! Vector search over stored chunks. Mirrors the three-pane layout of
+//! `search.rs` (text input + ALL-of tag checklist + result list).
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::Frame;
@@ -8,13 +9,11 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, List, ListItem, ListState, Paragraph};
 
 use crate::error::ClientError;
-use crate::protocol::{ConversationSummary, Request, Response};
+use crate::protocol::{DocumentSearchHit, Request, Response};
 use crate::tui::app::App;
 use crate::tui::input;
 use crate::tui::spinner;
 
-use super::chat::ChatState;
-use super::targets::TagTarget;
 use super::{Screen, Transition};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,27 +23,25 @@ pub enum Focus {
     Results,
 }
 
-pub struct SearchState {
+pub struct DocumentSearchState {
     pub text_input: String,
     pub text_cursor: usize,
     pub tag_selections: Vec<(String, bool)>,
     pub focus: Focus,
-    pub results: Vec<ConversationSummary>,
-    pub selected_result: usize,
+    pub results: Vec<DocumentSearchHit>,
+    pub selected: usize,
     pub loading: bool,
-    /// Seq of an outstanding `TagList` load (populates tag_selections).
     pub tags_seq: u64,
-    /// Seq of an outstanding `ConversationList` search.
     pub results_seq: u64,
 }
 
-impl Default for SearchState {
+impl Default for DocumentSearchState {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl SearchState {
+impl DocumentSearchState {
     pub fn new() -> Self {
         Self {
             text_input: String::new(),
@@ -52,7 +49,7 @@ impl SearchState {
             tag_selections: Vec::new(),
             focus: Focus::Text,
             results: Vec::new(),
-            selected_result: 0,
+            selected: 0,
             loading: false,
             tags_seq: 0,
             results_seq: 0,
@@ -66,36 +63,29 @@ impl SearchState {
             .map(|(t, _)| t.clone())
             .collect()
     }
-
-    fn search_request(&self) -> Request {
-        let text = self.text_input.trim();
-        Request::ConversationList {
-            tags: self.selected_tags(),
-            text_query: if text.is_empty() {
-                None
-            } else {
-                Some(text.to_string())
-            },
-            limit: Some(200),
-        }
-    }
 }
 
-/// Initial load: fetch the global tag list so the user has something to
-/// multi-select. The first search is triggered by Enter in the text box
-/// (or by toggling a tag).
 pub fn initial_requests() -> Vec<Request> {
     vec![Request::TagList]
 }
 
-pub fn render(frame: &mut Frame, area: Rect, app: &App, state: &SearchState) {
+pub fn search_request(state: &DocumentSearchState) -> Request {
+    let text = state.text_input.trim();
+    Request::DocumentSearch {
+        query: text.to_string(),
+        tags: state.selected_tags(),
+        limit: Some(20),
+    }
+}
+
+pub fn render(frame: &mut Frame, area: Rect, app: &App, state: &DocumentSearchState) {
     let (banner_area, input_area, tags_area, results_area, help_area) = if app.pending > 0 {
         let c = Layout::vertical([
-            Constraint::Length(1), // banner
-            Constraint::Length(3), // text input
-            Constraint::Length(6), // tag checklist
-            Constraint::Min(1),    // results
-            Constraint::Length(1), // help
+            Constraint::Length(1),
+            Constraint::Length(3),
+            Constraint::Length(6),
+            Constraint::Min(1),
+            Constraint::Length(1),
         ])
         .split(area);
         (Some(c[0]), c[1], c[2], c[3], c[4])
@@ -123,9 +113,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, state: &SearchState) {
     };
 
     let input_title = if app.pending > 0 {
-        format!(" search text {} ", spinner::frame(app.spinner_frame))
+        format!(" query {} ", spinner::frame(app.spinner_frame))
     } else {
-        " search text ".to_string()
+        " query ".to_string()
     };
     let input = Paragraph::new(state.text_input.as_str())
         .block(Block::bordered().title(Span::styled(input_title, focused(Focus::Text))));
@@ -151,24 +141,29 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, state: &SearchState) {
         );
     let mut tl = ListState::default();
     if state.focus == Focus::Tags && !state.tag_selections.is_empty() {
-        tl.select(Some(
-            state.selected_result.min(state.tag_selections.len() - 1),
-        ));
+        tl.select(Some(state.selected.min(state.tag_selections.len() - 1)));
     }
     frame.render_stateful_widget(tags_list, tags_area, &mut tl);
 
     let result_items: Vec<ListItem> = state
         .results
         .iter()
-        .map(|item| {
-            let title = item.title.as_deref().unwrap_or(&item.id);
-            ListItem::new(Line::from(vec![
-                Span::styled(
-                    format!("{:<19} ", item.updated_at),
-                    Style::default().fg(Color::DarkGray),
-                ),
-                Span::raw(title.to_string()),
-            ]))
+        .map(|hit| {
+            let snippet: String = hit.content.chars().take(80).collect();
+            let snippet = snippet.replace('\n', " ");
+            ListItem::new(vec![
+                Line::from(vec![
+                    Span::styled(
+                        format!("{:>6.4}  ", hit.distance),
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                    Span::raw(hit.path.clone()),
+                ]),
+                Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(snippet, Style::default().fg(Color::Gray)),
+                ]),
+            ])
         })
         .collect();
     let results_block = Block::bordered().title(Span::styled(" results ", focused(Focus::Results)));
@@ -187,15 +182,13 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, state: &SearchState) {
             );
         let mut ls = ListState::default();
         if state.focus == Focus::Results && !state.results.is_empty() {
-            ls.select(Some(state.selected_result.min(state.results.len() - 1)));
+            ls.select(Some(state.selected.min(state.results.len() - 1)));
         }
         frame.render_stateful_widget(list, results_area, &mut ls);
     }
 
-    let help = Paragraph::new(
-        "tab: cycle focus · enter: search / resume · t: tags · d/del/backspace: delete · esc: back",
-    )
-    .style(Style::default().fg(Color::DarkGray));
+    let help = Paragraph::new("tab: cycle focus · enter: search · space: toggle tag · esc: back")
+        .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, help_area);
 }
 
@@ -206,37 +199,30 @@ pub enum SearchAction {
     Search,
 }
 
-pub fn handle_key(state: &mut SearchState, key: KeyEvent, waiting: bool) -> SearchAction {
+pub fn handle_key(state: &mut DocumentSearchState, key: KeyEvent, waiting: bool) -> SearchAction {
     if key.kind == KeyEventKind::Release {
         return SearchAction::None;
     }
-    // While a request is pending, swallow keys that would either edit the
-    // text input or fire a new RPC. Navigation (Tab, arrows, Esc) still works.
     if waiting {
         match state.focus {
             Focus::Text if input::is_buffer_edit(&key) || key.code == KeyCode::Enter => {
                 return SearchAction::None;
             }
             Focus::Tags if matches!(key.code, KeyCode::Char(' ')) => return SearchAction::None,
-            Focus::Results if matches!(key.code, KeyCode::Enter | KeyCode::Char('t')) => {
-                return SearchAction::None;
-            }
             _ => {}
         }
     }
     match (state.focus, key.code) {
-        (_, KeyCode::Esc) => SearchAction::Transition(Transition::To(Screen::ConversationList(
-            super::ConversationListState::new_loading(),
-        ))),
+        (_, KeyCode::Esc) => {
+            SearchAction::Transition(Transition::To(Screen::DocumentList(Box::default())))
+        }
         (_, KeyCode::Tab) => {
             state.focus = match state.focus {
                 Focus::Text => Focus::Tags,
                 Focus::Tags => Focus::Results,
                 Focus::Results => Focus::Text,
             };
-            // Reset the list cursor across focus changes so we don't
-            // accidentally index into the wrong list.
-            state.selected_result = 0;
+            state.selected = 0;
             SearchAction::None
         }
 
@@ -285,68 +271,57 @@ pub fn handle_key(state: &mut SearchState, key: KeyEvent, waiting: bool) -> Sear
             input::cursor_end(&state.text_input, &mut state.text_cursor);
             SearchAction::None
         }
-        (Focus::Text, KeyCode::Enter) => SearchAction::Search,
+        (Focus::Text, KeyCode::Enter) => {
+            if state.text_input.trim().is_empty() {
+                SearchAction::None
+            } else {
+                SearchAction::Search
+            }
+        }
 
         (Focus::Tags, KeyCode::Up) => {
-            if state.selected_result > 0 {
-                state.selected_result -= 1;
+            if state.selected > 0 {
+                state.selected -= 1;
             }
             SearchAction::None
         }
         (Focus::Tags, KeyCode::Down) => {
-            if state.selected_result + 1 < state.tag_selections.len() {
-                state.selected_result += 1;
+            if state.selected + 1 < state.tag_selections.len() {
+                state.selected += 1;
             }
             SearchAction::None
         }
         (Focus::Tags, KeyCode::Char(' ')) => {
-            if let Some((_, on)) = state.tag_selections.get_mut(state.selected_result) {
+            if let Some((_, on)) = state.tag_selections.get_mut(state.selected) {
                 *on = !*on;
-                return SearchAction::Search;
+                if !state.text_input.trim().is_empty() {
+                    return SearchAction::Search;
+                }
             }
             SearchAction::None
         }
 
         (Focus::Results, KeyCode::Up) => {
-            if state.selected_result > 0 {
-                state.selected_result -= 1;
+            if state.selected > 0 {
+                state.selected -= 1;
             }
             SearchAction::None
         }
         (Focus::Results, KeyCode::Down) => {
-            if state.selected_result + 1 < state.results.len() {
-                state.selected_result += 1;
+            if state.selected + 1 < state.results.len() {
+                state.selected += 1;
             }
             SearchAction::None
-        }
-        (Focus::Results, KeyCode::Enter) => {
-            let Some(item) = state.results.get(state.selected_result) else {
-                return SearchAction::None;
-            };
-            SearchAction::Transition(Transition::To(Screen::Chat(ChatState::loading_resume(
-                item.id.clone(),
-            ))))
-        }
-        (Focus::Results, KeyCode::Char('t')) => {
-            let Some(item) = state.results.get(state.selected_result) else {
-                return SearchAction::None;
-            };
-            let label = item.title.clone().unwrap_or_else(|| item.id.clone());
-            SearchAction::Transition(Transition::To(Screen::TagEditor(
-                // Return to search would require carrying the prefill
-                // forward; for now ConversationList is the return path.
-                super::TagEditorState::loading(TagTarget::Conversation(item.id.clone()), label),
-            )))
         }
         _ => SearchAction::None,
     }
 }
 
-pub fn search_request(state: &SearchState) -> Request {
-    state.search_request()
-}
-
-pub fn handle_reply(state: &mut SearchState, seq: u64, result: Result<Response, ClientError>) {
+pub fn handle_reply(
+    state: &mut DocumentSearchState,
+    seq: u64,
+    result: Result<Response, ClientError>,
+) {
     if seq == state.tags_seq && seq != 0 {
         state.tags_seq = 0;
         if let Ok(Response::TagList { tags }) = result {
@@ -358,10 +333,10 @@ pub fn handle_reply(state: &mut SearchState, seq: u64, result: Result<Response, 
         state.results_seq = 0;
         state.loading = false;
         match result {
-            Ok(Response::ConversationList { items }) => {
-                state.results = items;
-                if state.selected_result >= state.results.len() {
-                    state.selected_result = state.results.len().saturating_sub(1);
+            Ok(Response::DocumentSearch { results }) => {
+                state.results = results;
+                if state.selected >= state.results.len() {
+                    state.selected = state.results.len().saturating_sub(1);
                 }
             }
             _ => state.results.clear(),

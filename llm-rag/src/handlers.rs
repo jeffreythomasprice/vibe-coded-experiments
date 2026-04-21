@@ -1,10 +1,18 @@
+use std::path::PathBuf;
+
 use futures::StreamExt;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::SendError;
 
-use crate::db::{ConversationFilter, DbError, MessageMetadata, MessageRole, StoredMessage};
+use crate::db::{
+    ChunkRange, ConversationFilter, DbError, DocumentFilter, MessageMetadata, MessageRole,
+    StoredMessage,
+};
+use crate::ingest::{self, ChunkProgress, IngestError};
 use crate::llm::types::{ChatRequest, Message, StreamChunk, ToolCall};
-use crate::protocol::{ConversationSummary, Request, Response, WireMessage};
+use crate::protocol::{
+    ConversationSummary, DocumentSearchHit, DocumentSummary, Request, Response, WireMessage,
+};
 use crate::server::ServerState;
 
 /// Dispatch a request, emitting one or more `Response` frames on `tx`. Most
@@ -76,6 +84,53 @@ pub async fn dispatch(
             let resp = match state.dal.list_all_tags().await {
                 Ok(tags) => Response::TagList { tags },
                 Err(err) => err_response(err),
+            };
+            tx.send(resp).await
+        }
+        Request::DocumentList { tags, limit } => {
+            let resp = match handle_document_list(state, tags, limit).await {
+                Ok(r) => r,
+                Err(err) => err_response(err),
+            };
+            tx.send(resp).await
+        }
+        Request::DocumentDelete { id } => {
+            let resp = match state.dal.delete_document(id).await {
+                Ok(()) => Response::Ok,
+                Err(err) => err_response(err),
+            };
+            tx.send(resp).await
+        }
+        Request::DocumentCreate { path, tags } => {
+            handle_document_create(state, path, tags, tx).await
+        }
+        Request::DocumentAddTag { id, tag } => {
+            let resp = match state.dal.add_tag(id, &tag).await {
+                Ok(()) => Response::Ok,
+                Err(err) => err_response(err),
+            };
+            tx.send(resp).await
+        }
+        Request::DocumentRemoveTag { id, tag } => {
+            let resp = match state.dal.remove_tag(id, &tag).await {
+                Ok(()) => Response::Ok,
+                Err(err) => err_response(err),
+            };
+            tx.send(resp).await
+        }
+        Request::DocumentTags { id } => {
+            let resp = match state.dal.tags_for_document(id).await {
+                Ok(tags) => Response::DocumentTags { tags },
+                Err(err) => err_response(err),
+            };
+            tx.send(resp).await
+        }
+        Request::DocumentSearch { query, tags, limit } => {
+            let resp = match handle_document_search(state, query, tags, limit).await {
+                Ok(r) => r,
+                Err(err) => Response::Error {
+                    message: err.to_string(),
+                },
             };
             tx.send(resp).await
         }
@@ -484,6 +539,236 @@ pub(crate) fn stored_to_wire(m: StoredMessage) -> WireMessage {
         content: m.content,
         metadata: m.metadata,
         created_at: m.created_at,
+    }
+}
+
+async fn handle_document_list(
+    state: &ServerState,
+    tags: Vec<String>,
+    limit: Option<usize>,
+) -> Result<Response, DbError> {
+    let tag_refs: Vec<&str> = tags.iter().map(String::as_str).collect();
+    let filter = DocumentFilter {
+        tags: &tag_refs,
+        limit,
+    };
+    let docs = state.dal.list_documents_filtered(&filter).await?;
+    let mut items = Vec::with_capacity(docs.len());
+    for d in docs {
+        let tags = state.dal.tags_for_document(d.id).await?;
+        items.push(DocumentSummary {
+            id: d.id,
+            path: d.path,
+            created_at: d.created_at,
+            tags,
+        });
+    }
+    Ok(Response::DocumentList { items })
+}
+
+/// Streaming `DocumentCreate`: emits `DocumentCreateStart`, zero-or-more
+/// `DocumentCreateProgress`, and a terminal `DocumentCreateDone` — or a single
+/// `Response::Error` if anything fails. Mirrors the shape of `handle_chat`.
+async fn handle_document_create(
+    state: &ServerState,
+    path: String,
+    tags: Vec<String>,
+    tx: &mpsc::Sender<Response>,
+) -> Result<(), SendError<Response>> {
+    // Read + chunk outside the transaction so we can emit Start with the
+    // total chunk count before the first embedding call.
+    let path_buf = PathBuf::from(&path);
+    let text = match ingest::read::read_text_file(&path_buf) {
+        Ok(t) => t,
+        Err(err) => return tx.send(ingest_err_to_response(&err)).await,
+    };
+    let chunks = ingest::chunking::chunk(&text);
+    if chunks.is_empty() {
+        return tx
+            .send(Response::Error {
+                message: format!("{path:?} is empty"),
+            })
+            .await;
+    }
+
+    // Embed before DocumentCreateStart so we know the full chunk count and any
+    // embed error surfaces as a clean Error frame (no partial document row).
+    let contents: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
+    let vectors = match state.llm.embeddings.embed_batch(&contents).await {
+        Ok(v) => v,
+        Err(err) => {
+            return tx
+                .send(Response::Error {
+                    message: err.to_string(),
+                })
+                .await;
+        }
+    };
+    if vectors.len() != chunks.len() {
+        return tx
+            .send(Response::Error {
+                message: format!(
+                    "embed_batch returned {} vectors for {} chunks",
+                    vectors.len(),
+                    chunks.len()
+                ),
+            })
+            .await;
+    }
+
+    // Persist transactionally. We inline the DAL transaction here so the
+    // progress frames can be streamed between chunk inserts.
+    if let Err(err) = state.dal.begin().await {
+        return tx.send(err_response(err)).await;
+    }
+
+    let document_id = match state.dal.create_document(&path).await {
+        Ok(id) => id,
+        Err(err) => {
+            let _ = state.dal.rollback().await;
+            let message = friendly_create_document_error(&path, &err);
+            return tx.send(Response::Error { message }).await;
+        }
+    };
+    let total = chunks.len();
+    if let Err(send_err) = tx
+        .send(Response::DocumentCreateStart {
+            document_id,
+            total_chunks: total,
+        })
+        .await
+    {
+        let _ = state.dal.rollback().await;
+        return Err(send_err);
+    }
+
+    for (index, (chunk, embedding)) in chunks.iter().zip(vectors.iter()).enumerate() {
+        if let Err(err) = state
+            .dal
+            .create_chunk(
+                document_id,
+                ChunkRange::Bytes {
+                    start: chunk.byte_start,
+                    end: chunk.byte_end,
+                },
+                &chunk.content,
+                embedding,
+            )
+            .await
+        {
+            let _ = state.dal.rollback().await;
+            return tx.send(err_response(err)).await;
+        }
+        if let Err(send_err) = tx
+            .send(Response::DocumentCreateProgress {
+                document_id,
+                index,
+                total,
+            })
+            .await
+        {
+            let _ = state.dal.rollback().await;
+            return Err(send_err);
+        }
+    }
+
+    for tag in &tags {
+        if let Err(err) = state.dal.add_tag(document_id, tag).await {
+            let _ = state.dal.rollback().await;
+            return tx.send(err_response(err)).await;
+        }
+    }
+
+    if let Err(err) = state.dal.commit().await {
+        return tx.send(err_response(err)).await;
+    }
+
+    // Mirror ChunkProgress so test/runtime paths stay uniform.
+    let _ = ChunkProgress {
+        index: total.saturating_sub(1),
+        total,
+    };
+
+    tx.send(Response::DocumentCreateDone {
+        document_id,
+        chunks: total,
+    })
+    .await
+}
+
+async fn handle_document_search(
+    state: &ServerState,
+    query: String,
+    tags: Vec<String>,
+    limit: Option<usize>,
+) -> Result<Response, anyhow::Error> {
+    let limit = limit.unwrap_or(20);
+    let vec = state
+        .llm
+        .embeddings
+        .embed(&query)
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
+    let tag_refs: Vec<&str> = tags.iter().map(String::as_str).collect();
+    let hits = state
+        .dal
+        .search_chunks(&vec, limit, &tag_refs)
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
+
+    // Hydrate paths. Cache per-document lookups to avoid repeats when many
+    // chunks share one document.
+    let mut results = Vec::with_capacity(hits.len());
+    let mut path_cache: std::collections::HashMap<i64, String> = std::collections::HashMap::new();
+    for h in hits {
+        let path = match path_cache.get(&h.document_id) {
+            Some(p) => p.clone(),
+            None => {
+                let doc = state
+                    .dal
+                    .get_document(h.document_id)
+                    .await
+                    .map_err(|e| anyhow::anyhow!(e))?;
+                let p = doc.map(|d| d.path).unwrap_or_default();
+                path_cache.insert(h.document_id, p.clone());
+                p
+            }
+        };
+        let (range_kind, range_start, range_end) = match h.range {
+            ChunkRange::Pages { start, end } => ("pages".to_string(), start as i64, end as i64),
+            ChunkRange::Bytes { start, end } => ("bytes".to_string(), start as i64, end as i64),
+        };
+        results.push(DocumentSearchHit {
+            document_id: h.document_id,
+            path,
+            chunk_id: h.chunk_id,
+            content: h.content,
+            distance: h.distance,
+            range_kind,
+            range_start,
+            range_end,
+        });
+    }
+    Ok(Response::DocumentSearch { results })
+}
+
+fn friendly_create_document_error(path: &str, err: &DbError) -> String {
+    if let DbError::Query {
+        op: "create_document",
+        source,
+    } = err
+    {
+        let text = source.to_string();
+        if text.contains("UNIQUE") || text.contains("unique") {
+            return format!("document already exists at {path:?} — delete the existing one first",);
+        }
+    }
+    err.to_string()
+}
+
+fn ingest_err_to_response(err: &IngestError) -> Response {
+    Response::Error {
+        message: err.to_string(),
     }
 }
 

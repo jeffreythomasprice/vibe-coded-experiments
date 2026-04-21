@@ -1,22 +1,26 @@
 rename this project
 
-send one-shot messages via cli command and get a response
+when ingesting new document via tui, adding tags doesn't really work? or at least it's confusing
 
-cli commands and tui and messages to:
-- ingest new documents
-- modify tags on documents
-- delete documents
-- take a search phrase and find relevant chunks
+when ingesting new document via tui, it doesn't show each chunk as it is processed, only a summary at the end
+
+chunking.rs, char limit and overlap chars should probably be way bigger
+
+when doing "document new" via cli, put a progress bar in place
+
+document search tool
+
+web search tool
+
+read and write files tools
+
+send one-shot messages via cli command and get a response
 
 pdf documents
 
 youtube download, transcript is the document
 
 structured output
-
-web search tool
-
-read and write files tools
 
 subagents?
 

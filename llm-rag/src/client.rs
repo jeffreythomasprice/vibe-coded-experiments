@@ -32,31 +32,30 @@ pub async fn round_trip(
     Ok(resp)
 }
 
-/// Send a chat request and drive its streaming response, invoking `on_event`
-/// for each frame (`ChatStart`, `ChatDelta`, `ChatToolCallDelta`, and either
-/// `ChatDone` or `Response::Error` as the terminator). Applies
-/// `client_stream_idle_timeout_secs` as a per-frame idle timeout so a silent
-/// server eventually surfaces as `RequestTimeout` rather than hanging forever.
+/// Send a request and drive a streaming response, invoking `on_event` for
+/// each frame until the response is terminated by a frame for which
+/// `is_terminal` returns true (or by `Response::Error`, which is always
+/// treated as terminal). Applies `client_stream_idle_timeout_secs` as a
+/// per-frame idle timeout so a silent server eventually surfaces as
+/// `RequestTimeout` rather than hanging forever.
 ///
-/// Returns `Ok(())` on either successful completion (`ChatDone`) or a
-/// server-reported error (`Response::Error`) — callers inspect the frames to
-/// distinguish. Returns `Err(StreamClosedMidResponse)` if the stream ends
-/// before a terminal frame is seen.
-pub async fn chat_stream<F>(
+/// Returns `Ok(())` on either successful completion or a server-reported
+/// error — callers inspect the frames to distinguish. Returns
+/// `Err(StreamClosedMidResponse)` if the stream ends before a terminal frame
+/// is seen.
+pub async fn stream_request<F, T>(
     cfg: &Config,
     socket: &Path,
     config_override: Option<&Path>,
     secrets_override: Option<&Path>,
     req: Request,
     mut on_event: F,
+    is_terminal: T,
 ) -> Result<(), ClientError>
 where
     F: FnMut(Response),
+    T: Fn(&Response) -> bool,
 {
-    debug_assert!(
-        matches!(req, Request::Chat { .. }),
-        "chat_stream only supports Request::Chat",
-    );
     let stream = connect_or_spawn(socket, config_override, secrets_override).await?;
     let mut fr = framed(stream);
     write_frame(&mut fr, &req).await?;
@@ -71,12 +70,68 @@ where
             Ok(Err(err)) => return Err(err.into()),
             Err(_) => return Err(ClientError::RequestTimeout),
         };
-        let terminal = matches!(frame, Response::ChatDone { .. } | Response::Error { .. },);
+        let terminal = matches!(frame, Response::Error { .. }) || is_terminal(&frame);
         on_event(frame);
         if terminal {
             return Ok(());
         }
     }
+}
+
+/// Chat-streaming convenience wrapper over [`stream_request`].
+pub async fn chat_stream<F>(
+    cfg: &Config,
+    socket: &Path,
+    config_override: Option<&Path>,
+    secrets_override: Option<&Path>,
+    req: Request,
+    on_event: F,
+) -> Result<(), ClientError>
+where
+    F: FnMut(Response),
+{
+    debug_assert!(
+        matches!(req, Request::Chat { .. }),
+        "chat_stream only supports Request::Chat",
+    );
+    stream_request(
+        cfg,
+        socket,
+        config_override,
+        secrets_override,
+        req,
+        on_event,
+        |frame| matches!(frame, Response::ChatDone { .. }),
+    )
+    .await
+}
+
+/// Document-create streaming convenience wrapper over [`stream_request`].
+pub async fn document_create_stream<F>(
+    cfg: &Config,
+    socket: &Path,
+    config_override: Option<&Path>,
+    secrets_override: Option<&Path>,
+    req: Request,
+    on_event: F,
+) -> Result<(), ClientError>
+where
+    F: FnMut(Response),
+{
+    debug_assert!(
+        matches!(req, Request::DocumentCreate { .. }),
+        "document_create_stream only supports Request::DocumentCreate",
+    );
+    stream_request(
+        cfg,
+        socket,
+        config_override,
+        secrets_override,
+        req,
+        on_event,
+        |frame| matches!(frame, Response::DocumentCreateDone { .. }),
+    )
+    .await
 }
 
 async fn connect_or_spawn(

@@ -1,5 +1,6 @@
-//! Conversation picker: scrollable list, Enter to resume, `t` for tags,
-//! `d`/Backspace/Delete to delete (confirm dialog), `s` to search, Esc back.
+//! Document picker: scrollable list; `n` to open the file picker, `t` for
+//! tags, `d`/Backspace/Delete to delete (confirm dialog), `s` to search,
+//! Esc back to chat.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use ratatui::Frame;
@@ -8,29 +9,26 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, List, ListItem, ListState, Paragraph};
 
-use crate::protocol::{ConversationSummary, Request, Response};
+use crate::protocol::{DocumentSummary, Request, Response};
 
 use super::chat::ChatState;
 use super::targets::{DeleteTarget, TagTarget};
 use super::{Screen, Transition};
 
-pub struct ConversationListState {
-    pub items: Vec<ConversationSummary>,
+pub struct DocumentListState {
+    pub items: Vec<DocumentSummary>,
     pub selected: usize,
     pub loading: bool,
-    /// The seq of the currently-outstanding load request (or 0 when idle).
     pub request_seq: u64,
 }
 
-impl Default for ConversationListState {
+impl Default for DocumentListState {
     fn default() -> Self {
         Self::new_loading()
     }
 }
 
-impl ConversationListState {
-    /// Start in the loading state; the event loop will kick off a
-    /// `Request::ConversationList` and record the seq via `set_request_seq`.
+impl DocumentListState {
     pub fn new_loading() -> Self {
         Self {
             items: Vec::new(),
@@ -42,26 +40,25 @@ impl ConversationListState {
 }
 
 pub fn initial_request() -> Request {
-    Request::ConversationList {
+    Request::DocumentList {
         tags: Vec::new(),
-        text_query: None,
         limit: Some(200),
     }
 }
 
-pub fn render(frame: &mut Frame, area: Rect, state: &ConversationListState) {
+pub fn render(frame: &mut Frame, area: Rect, state: &DocumentListState) {
     let chunks = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(area);
     let list_area = chunks[0];
     let help_area = chunks[1];
 
-    let block = Block::bordered().title(" conversations ");
+    let block = Block::bordered().title(" documents ");
     if state.loading && state.items.is_empty() {
         let msg = Paragraph::new("loading…")
             .style(Style::default().fg(Color::DarkGray))
             .block(block);
         frame.render_widget(msg, list_area);
     } else if state.items.is_empty() {
-        let msg = Paragraph::new("no conversations yet")
+        let msg = Paragraph::new("no documents yet — press `n` to ingest one")
             .style(Style::default().fg(Color::DarkGray))
             .block(block);
         frame.render_widget(msg, list_area);
@@ -70,7 +67,6 @@ pub fn render(frame: &mut Frame, area: Rect, state: &ConversationListState) {
             .items
             .iter()
             .map(|item| {
-                let title = item.title.as_deref().unwrap_or(&item.id);
                 let tags = if item.tags.is_empty() {
                     String::new()
                 } else {
@@ -78,10 +74,10 @@ pub fn render(frame: &mut Frame, area: Rect, state: &ConversationListState) {
                 };
                 ListItem::new(Line::from(vec![
                     Span::styled(
-                        format!("{:<19} ", item.updated_at),
+                        format!("{:<19} ", item.created_at),
                         Style::default().fg(Color::DarkGray),
                     ),
-                    Span::raw(title.to_string()),
+                    Span::raw(item.path.clone()),
                     Span::styled(tags, Style::default().fg(Color::Yellow)),
                 ]))
             })
@@ -96,15 +92,12 @@ pub fn render(frame: &mut Frame, area: Rect, state: &ConversationListState) {
         frame.render_stateful_widget(list, list_area, &mut ls);
     }
 
-    let help =
-        Paragraph::new("enter: resume · t: tags · d/del/backspace: delete · s: search · esc: back")
-            .style(Style::default().fg(Color::DarkGray));
+    let help = Paragraph::new("n: new · t: tags · d/del/backspace: delete · s: search · esc: back")
+        .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, help_area);
 }
 
-/// Key handler. Returns a [`Transition`]; initial loads for the next screen
-/// are dispatched by the event loop via [`Screen::on_enter`].
-pub fn handle_key(state: &mut ConversationListState, key: KeyEvent) -> Transition {
+pub fn handle_key(state: &mut DocumentListState, key: KeyEvent) -> Transition {
     if key.kind == KeyEventKind::Release {
         return Transition::None;
     }
@@ -122,30 +115,25 @@ pub fn handle_key(state: &mut ConversationListState, key: KeyEvent) -> Transitio
             }
             Transition::None
         }
-        KeyCode::Enter => {
-            let Some(item) = state.items.get(state.selected) else {
-                return Transition::None;
-            };
-            Transition::To(Screen::Chat(ChatState::loading_resume(item.id.clone())))
-        }
+        KeyCode::Char('n') => Transition::To(Screen::FilePicker(Box::default())),
         KeyCode::Char('t') => {
             let Some(item) = state.items.get(state.selected) else {
                 return Transition::None;
             };
-            let label = item.title.clone().unwrap_or_else(|| item.id.clone());
+            let label = item.path.clone();
             Transition::To(Screen::TagEditor(super::TagEditorState::loading(
-                TagTarget::Conversation(item.id.clone()),
+                TagTarget::Document(item.id),
                 label,
             )))
         }
-        KeyCode::Char('s') => Transition::To(Screen::Search(super::SearchState::new())),
+        KeyCode::Char('s') => Transition::To(Screen::DocumentSearch(Box::default())),
         KeyCode::Char('d') | KeyCode::Backspace | KeyCode::Delete => {
             let Some(item) = state.items.get(state.selected) else {
                 return Transition::None;
             };
-            let label = item.title.clone().unwrap_or_else(|| item.id.clone());
+            let label = item.path.clone();
             Transition::To(Screen::ConfirmDelete(super::ConfirmDeleteState::new(
-                DeleteTarget::Conversation(item.id.clone()),
+                DeleteTarget::Document(item.id),
                 label,
             )))
         }
@@ -153,19 +141,16 @@ pub fn handle_key(state: &mut ConversationListState, key: KeyEvent) -> Transitio
     }
 }
 
-/// Apply a reply whose `seq` matches `state.request_seq`. Stale replies
-/// (from a prior screen the user has navigated away from) are dropped by the
-/// outer event loop before reaching us.
-pub fn handle_reply(state: &mut ConversationListState, result: Response) {
+pub fn handle_reply(state: &mut DocumentListState, result: Response) {
     state.loading = false;
     match result {
-        Response::ConversationList { items } => {
+        Response::DocumentList { items } => {
             state.items = items;
             if state.selected >= state.items.len() {
                 state.selected = state.items.len().saturating_sub(1);
             }
         }
-        Response::Error { message: _ } => {
+        Response::Error { .. } => {
             state.items.clear();
         }
         _ => {}

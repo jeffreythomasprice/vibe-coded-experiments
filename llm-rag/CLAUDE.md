@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # llm-rag
 
-Rust CLI + daemon for a local LLM-with-RAG system. The client/server transport, streaming chat against Ollama/Anthropic, a Turso-backed store for conversations/messages/tags (and the chunk-table scaffolding for future RAG), and a ratatui TUI with chat/conversation-list/search/tag-editor screens are all implemented. Document ingest + vector search + citation UI are not yet wired up — see `TODO.md` for the wishlist.
+Rust CLI + daemon for a local LLM-with-RAG system. The client/server transport, streaming chat against Ollama/Anthropic, a Turso-backed store for conversations/messages/tags, and a ratatui TUI with chat/conversation-list/search/tag-editor screens are all implemented. Document ingest (text-file chunking + embedding), vector search with ALL-of tag filtering, and a `/documents` TUI (with file picker) are also wired — see the `documents` CLI subcommand and `src/ingest/`. PDF/YouTube ingest, citation UI, and hybrid search remain on the wishlist — see `TODO.md`.
 
 ## Commands
 
@@ -51,13 +51,25 @@ All conversation/message/tag CRUD, message history for a conversation, and the f
 
 `MessageRole` includes `ToolUse` + `Tool` rows, and `MessageMetadata` (stored as JSON) carries the tool-call id/name/arguments so a streamed turn containing tool calls can be replayed faithfully on reload (see `handlers::stored_to_llm`).
 
+### Document ingest (`src/ingest/`)
+Three small modules plus orchestration:
+- `chunking.rs` — `CHUNK_CHARS` and `OVERLAP_CHARS` constants at the top of the file; `chunk(&str)` slides a **char** window (not bytes, so UTF-8 codepoints are never split) while recording **byte** offsets into each `Chunk` so `ChunkRange::Bytes` maps back 1:1 into the source.
+- `read.rs` — reads a file, rejects if >`MAX_FILE_BYTES` or if NUL appears in the first 8 KB, then `String::from_utf8`. Extensions are intentionally ignored.
+- `mod.rs::ingest_document` — reads, chunks, calls `embeddings.embed_batch` once for the whole document, then opens a single DAL transaction (`dal.begin()` / `commit()` / `rollback()`) for the writes. Network calls stay out of the transaction so a slow embedding provider can't hold a write lock. On any persistence error the transaction rolls back — no orphaned document + half-chunks.
+
+The `DocumentCreate` RPC is streaming (same pattern as chat): `DocumentCreateStart { document_id, total_chunks }` → per-chunk `DocumentCreateProgress` → terminal `DocumentCreateDone` or `Response::Error`. `client::document_create_stream` is the matching client helper; both it and `client::chat_stream` are thin specializations of the shared `client::stream_request`.
+
+`DocumentSearch` runs the query through the same embedding model, then `dal.search_chunks(vec, limit, &tag_refs)` which supports ALL-of tag filtering via `GROUP BY … HAVING COUNT(DISTINCT t.id) = ?`. A duplicate-path ingest fails loudly (the `documents.path` UNIQUE constraint) — delete first, then re-ingest.
+
 ### TUI (`src/tui/`)
 Single `tokio::select!` loop in `tui::run_loop` over three sources: terminal key events, `AppEvent::Reply` from spawned request tasks, and a spinner tick.
 
 - **Screens** (`screens/`): one module per screen, each exporting a `State` struct, a `handle_key` returning a `Transition`, and (usually) a `handle_reply`. The outer loop owns the event dispatch; screens never touch the socket directly.
 - **Async requests**: `spawn_request` fires a request on a tokio task, tagging it with a monotonically-increasing `seq`. The screen stores the `seq` in its state (`request_seq`, `tags_seq`, etc.); `handle_reply` ignores replies whose `seq` doesn't match any outstanding request on the current screen — this is how navigating away from a pending request cleanly discards its late reply.
-- **Streaming chat in the TUI**: `spawn_request` special-cases `Request::Chat` to use `client::chat_stream`. Each frame arrives as a separate `AppEvent::Reply` with `terminal: false` except the last; `app.pending` is decremented only on the terminal frame so the spinner keeps ticking through the stream.
-- **Optimistic UI**: `apply_tag_action` mutates the tag list locally before sending the `ConversationAddTag` / `RemoveTag` RPC — the ack is treated as a no-op in `tag_editor::handle_reply`. On server error the optimistic change would be out of sync; this is a known gap.
+- **Streaming RPCs in the TUI**: `spawn_request` special-cases `Request::Chat` (via `client::chat_stream`) and `Request::DocumentCreate` (via `client::document_create_stream`). Each frame arrives as a separate `AppEvent::Reply` with `terminal: false` except the last; `app.pending` is decremented only on the terminal frame so the spinner keeps ticking through the stream.
+- **Optimistic UI**: `apply_tag_action` mutates the tag list locally before sending the add/remove RPC — the ack is treated as a no-op in `tag_editor::handle_reply`. On server error the optimistic change would be out of sync; this is a known gap.
+- **Target enums for shared screens** (`screens/targets.rs`): `TagTarget` and `DeleteTarget` each parameterize the tag-editor and confirm-delete screens over "conversation or document" without branching in the outer event loop. The target's `tags_request()` / `add_tag_request()` / `remove_tag_request()` / `delete_request()` / `back_transition()` methods yield the right `Request` variant or `Transition` for whichever entity the user is editing.
+- **Document screens**: `document_list.rs` mirrors the conversation list (keys: `n`=new, `t`=tags, `d`/Backspace/Delete=confirm delete, `s`=search). `document_search.rs` mirrors the conversation search (Focus::Text/Tags/Results three-pane), but results are `DocumentSearchHit`s ranked by cosine distance. `file_picker.rs` is a bespoke ratatui browser — Up/Down, Enter descends, Backspace/Left goes up — with a Confirm sub-mode for tag entry, an Ingesting sub-mode that renders the `DocumentCreateProgress` counter, and Done/Failed terminal screens.
 
 ### Socket + config paths (`src/paths.rs`)
 - Socket: XDG `runtime_dir` if available (e.g. `/run/user/<uid>/llm-rag.sock`), otherwise `/tmp/llm-rag-$USER.sock`.
@@ -66,7 +78,7 @@ Single `tokio::select!` loop in `tui::run_loop` over three sources: terminal key
 - Secrets search order: `./secrets.toml`, then `$XDG_CONFIG_HOME/llm-rag/secrets.toml`. A `--secrets <path>` override is a hard-fail (`ConfigError::SecretsNotFound`) if missing, but missing default-search files **silently** yield `SecretsConfig::default()` (all `None`). Features that need a secret error at use-site, not at load. Secret values are `secrecy::SecretString` — `Debug` prints `[REDACTED]` and the value is zeroized on drop. Loader sets `SecretsConfig::loaded_from_insecure_path` when the file is group/world-readable on Unix; `main` emits a deferred `tracing::warn!` after `logging::init`.
 
 ### Error taxonomy and exit codes (`src/error.rs`)
-Errors are split by layer: `ConfigError`, `ServerStartError`, `ClientError`, `ProtocolError`, `LlmError`, `DbError`, `TuiError`, all funneled into `CliError`, which `main` renders as a one-line JSON blob on stderr (`{"error": "<Variant>", ...}`) plus a specific exit code:
+Errors are split by layer: `ConfigError`, `ServerStartError`, `ClientError`, `ProtocolError`, `LlmError`, `DbError`, `IngestError`, `TuiError`, all funneled into `CliError`, which `main` renders as a one-line JSON blob on stderr (`{"error": "<Variant>", ...}`) plus a specific exit code:
 
 | Code | Meaning |
 |------|---------|
@@ -87,4 +99,4 @@ Callers (other CLIs, scripts) are expected to parse the JSON line; keep this con
 
 ## Planning docs
 
-- `TODO.md` — feature wishlist (hybrid search, small-to-large chunking, OCR, document ingest, YouTube transcript ingest, etc.). Scope is still fluid.
+- `TODO.md` — feature wishlist (hybrid search, small-to-large chunking, OCR, PDF ingest, YouTube transcript ingest, etc.). Scope is still fluid.

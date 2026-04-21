@@ -16,5 +16,8 @@ pub fn render(frame: &mut Frame, app: &App) {
             // previous list state once we transition, just paint the modal.
             screens::confirm::render(frame, area, state);
         }
+        Screen::DocumentList(state) => screens::document_list::render(frame, area, state),
+        Screen::DocumentSearch(state) => screens::document_search::render(frame, area, app, state),
+        Screen::FilePicker(state) => screens::file_picker::render(frame, area, app, state),
     }
 }

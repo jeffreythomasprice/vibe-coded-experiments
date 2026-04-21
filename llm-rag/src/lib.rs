@@ -4,6 +4,7 @@ pub mod config;
 pub mod db;
 pub mod error;
 pub mod handlers;
+pub mod ingest;
 pub mod llm;
 pub mod logging;
 pub mod paths;
