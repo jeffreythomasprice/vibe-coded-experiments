@@ -569,20 +569,25 @@ async fn handle_document_list(
 /// Streaming `DocumentCreate`: emits `DocumentCreateStart`, zero-or-more
 /// `DocumentCreateProgress`, and a terminal `DocumentCreateDone` — or a single
 /// `Response::Error` if anything fails. Mirrors the shape of `handle_chat`.
+///
+/// Chunks are embedded one at a time *inside* the DB transaction so every
+/// chunk is a distinct progress tick — otherwise the user would see a long
+/// "embedding…" stall followed by an instantaneous persist burst. For a
+/// single-user local SQLite store the held write lock is harmless.
 async fn handle_document_create(
     state: &ServerState,
     path: String,
     tags: Vec<String>,
     tx: &mpsc::Sender<Response>,
 ) -> Result<(), SendError<Response>> {
-    // Read + chunk outside the transaction so we can emit Start with the
-    // total chunk count before the first embedding call.
     let path_buf = PathBuf::from(&path);
     let text = match ingest::read::read_text_file(&path_buf) {
         Ok(t) => t,
         Err(err) => return tx.send(ingest_err_to_response(&err)).await,
     };
-    let chunks = ingest::chunking::chunk(&text);
+    let (chunk_chars, overlap_chars) =
+        ingest::chunking::chunk_sizes_for(state.llm.embeddings.max_input_tokens());
+    let chunks = ingest::chunking::chunk(&text, chunk_chars, overlap_chars);
     if chunks.is_empty() {
         return tx
             .send(Response::Error {
@@ -590,34 +595,8 @@ async fn handle_document_create(
             })
             .await;
     }
+    let total = chunks.len();
 
-    // Embed before DocumentCreateStart so we know the full chunk count and any
-    // embed error surfaces as a clean Error frame (no partial document row).
-    let contents: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
-    let vectors = match state.llm.embeddings.embed_batch(&contents).await {
-        Ok(v) => v,
-        Err(err) => {
-            return tx
-                .send(Response::Error {
-                    message: err.to_string(),
-                })
-                .await;
-        }
-    };
-    if vectors.len() != chunks.len() {
-        return tx
-            .send(Response::Error {
-                message: format!(
-                    "embed_batch returned {} vectors for {} chunks",
-                    vectors.len(),
-                    chunks.len()
-                ),
-            })
-            .await;
-    }
-
-    // Persist transactionally. We inline the DAL transaction here so the
-    // progress frames can be streamed between chunk inserts.
     if let Err(err) = state.dal.begin().await {
         return tx.send(err_response(err)).await;
     }
@@ -630,7 +609,6 @@ async fn handle_document_create(
             return tx.send(Response::Error { message }).await;
         }
     };
-    let total = chunks.len();
     if let Err(send_err) = tx
         .send(Response::DocumentCreateStart {
             document_id,
@@ -642,7 +620,34 @@ async fn handle_document_create(
         return Err(send_err);
     }
 
-    for (index, (chunk, embedding)) in chunks.iter().zip(vectors.iter()).enumerate() {
+    for (index, chunk) in chunks.iter().enumerate() {
+        // Announce this chunk going in-flight BEFORE the embed call so the
+        // TUI reflects the slow phase, not just the persist.
+        if let Err(send_err) = tx
+            .send(Response::DocumentCreateProgress {
+                document_id,
+                completed: index,
+                in_flight: 1,
+                total,
+            })
+            .await
+        {
+            let _ = state.dal.rollback().await;
+            return Err(send_err);
+        }
+
+        let embedding = match state.llm.embeddings.embed(&chunk.content).await {
+            Ok(v) => v,
+            Err(err) => {
+                let _ = state.dal.rollback().await;
+                return tx
+                    .send(Response::Error {
+                        message: err.to_string(),
+                    })
+                    .await;
+            }
+        };
+
         if let Err(err) = state
             .dal
             .create_chunk(
@@ -652,17 +657,19 @@ async fn handle_document_create(
                     end: chunk.byte_end,
                 },
                 &chunk.content,
-                embedding,
+                &embedding,
             )
             .await
         {
             let _ = state.dal.rollback().await;
             return tx.send(err_response(err)).await;
         }
+
         if let Err(send_err) = tx
             .send(Response::DocumentCreateProgress {
                 document_id,
-                index,
+                completed: index + 1,
+                in_flight: 0,
                 total,
             })
             .await
@@ -823,9 +830,14 @@ mod tests {
     async fn state_with_dal() -> (ServerState, TempDir) {
         let dir = TempDir::new().unwrap();
         let path: PathBuf = dir.path().join("t.db");
-        let dal = Dal::open(&path, "test-model".into(), || async move { Ok(4) })
-            .await
-            .unwrap();
+        let dal = Dal::open(&path, "test-model".into(), || async move {
+            Ok(crate::db::EmbeddingProbe {
+                dimensions: 4,
+                max_input_tokens: None,
+            })
+        })
+        .await
+        .unwrap();
         let mock = Arc::new(crate::llm::mock::MockProvider::new());
         let state = ServerState {
             dal: Arc::new(dal),
@@ -970,9 +982,14 @@ mod tests {
     ) -> (ServerState, Arc<crate::llm::mock::MockProvider>, TempDir) {
         let dir = TempDir::new().unwrap();
         let path: PathBuf = dir.path().join("t.db");
-        let dal = Dal::open(&path, "test-model".into(), || async move { Ok(4) })
-            .await
-            .unwrap();
+        let dal = Dal::open(&path, "test-model".into(), || async move {
+            Ok(crate::db::EmbeddingProbe {
+                dimensions: 4,
+                max_input_tokens: None,
+            })
+        })
+        .await
+        .unwrap();
         let mock = Arc::new(crate::llm::mock::MockProvider::new());
         for chunks in streams {
             mock.push_stream(chunks);

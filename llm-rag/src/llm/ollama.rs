@@ -15,13 +15,27 @@ use super::error::LlmError;
 use super::provider::{EmbeddingProvider, LlmProvider};
 use super::types::{ChatRequest, ChatResponse, StreamChunk};
 
+/// Result of an Ollama embedding-model probe: the vector length (always) and
+/// the advertised context window in tokens (if `/api/show` reported one).
+#[derive(Debug, Clone, Copy)]
+pub struct OllamaEmbeddingProbe {
+    pub dimensions: usize,
+    pub max_input_tokens: Option<usize>,
+}
+
 /// Wraps a rig Ollama client. `chat_model` is populated for chat providers,
 /// `embedding_model` is populated for embedding providers (a single struct
 /// keeps the factory simple even though each instance has only one role).
 pub struct OllamaProvider {
     client: ollama::Client,
     chat_model: Option<String>,
-    embedding_model: Option<(String, usize)>,
+    embedding_model: Option<EmbeddingState>,
+}
+
+struct EmbeddingState {
+    name: String,
+    dimensions: usize,
+    max_input_tokens: Option<usize>,
 }
 
 impl OllamaProvider {
@@ -34,33 +48,106 @@ impl OllamaProvider {
         })
     }
 
-    pub fn new_embeddings(url: &str, model: &str, dimensions: usize) -> Result<Self, LlmError> {
+    pub fn new_embeddings(
+        url: &str,
+        model: &str,
+        dimensions: usize,
+        max_input_tokens: Option<usize>,
+    ) -> Result<Self, LlmError> {
         let client = build_client(url)?;
         Ok(Self {
             client,
             chat_model: None,
-            embedding_model: Some((model.to_string(), dimensions)),
+            embedding_model: Some(EmbeddingState {
+                name: model.to_string(),
+                dimensions,
+                max_input_tokens,
+            }),
         })
     }
 }
 
 /// Issue a one-shot embedding call against Ollama and return the resulting
-/// vector's length. Used at server bootstrap to populate the
-/// `embedding_model_dimensions` cache without forcing the operator to declare
-/// `dimensions` in `config.toml`.
+/// vector's length plus the model's advertised context length (if reported).
+/// Used at server bootstrap to populate the `embedding_model_dimensions`
+/// cache without forcing the operator to declare any model metadata in
+/// `config.toml`.
 ///
 /// rig's `embedding_model_with_ndims(name, n)` stores `n` as metadata only —
 /// it is not sent in the HTTP request, so passing a placeholder `1` is
 /// harmless. The vector length we read back is what the model actually
 /// produces.
-pub async fn probe_ollama_dimensions(url: &str, model: &str) -> Result<usize, LlmError> {
+///
+/// The context length comes from Ollama's `/api/show` endpoint, which returns
+/// a `model_info` map whose context key is architecture-specific (e.g.
+/// `bert.context_length`, `nomic-bert.context_length`). If the call fails or
+/// no matching key is present, `max_input_tokens` is `None` and the caller
+/// falls back to a conservative chunk-size default.
+pub async fn probe_ollama_embedding_info(
+    url: &str,
+    model: &str,
+) -> Result<OllamaEmbeddingProbe, LlmError> {
     let client = build_client(url)?;
     let probe_model = client.embedding_model_with_ndims(model, 1);
     let embedding = probe_model
         .embed_text(" ")
         .await
         .map_err(|e| LlmError::Provider(anyhow!(e)))?;
-    Ok(embedding.vec.len())
+    let dimensions = embedding.vec.len();
+
+    // /api/show is best-effort: if the endpoint is unreachable or the payload
+    // doesn't expose a context length, we log and continue with None.
+    let max_input_tokens = match fetch_ollama_context_length(url, model).await {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::warn!(
+                model = %model,
+                error = %err,
+                "failed to fetch /api/show context length; falling back to default chunk size",
+            );
+            None
+        }
+    };
+
+    Ok(OllamaEmbeddingProbe {
+        dimensions,
+        max_input_tokens,
+    })
+}
+
+async fn fetch_ollama_context_length(url: &str, model: &str) -> Result<Option<usize>, LlmError> {
+    let endpoint = format!("{}/api/show", url.trim_end_matches('/'));
+    let resp = reqwest::Client::new()
+        .post(endpoint)
+        .json(&serde_json::json!({ "name": model }))
+        .send()
+        .await
+        .map_err(|e| LlmError::Provider(anyhow!(e)))?;
+    if !resp.status().is_success() {
+        return Err(LlmError::Provider(anyhow!(
+            "ollama /api/show returned {}",
+            resp.status()
+        )));
+    }
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| LlmError::Provider(anyhow!(e)))?;
+    Ok(extract_context_length(&body))
+}
+
+/// Pick the first `*.context_length` integer field out of an Ollama
+/// `/api/show` response. Returns `None` if no such field is present.
+fn extract_context_length(body: &serde_json::Value) -> Option<usize> {
+    let info = body.get("model_info")?.as_object()?;
+    for (key, value) in info {
+        if key.ends_with(".context_length")
+            && let Some(n) = value.as_u64()
+        {
+            return Some(n as usize);
+        }
+    }
+    None
 }
 
 fn build_client(url: &str) -> Result<ollama::Client, LlmError> {
@@ -121,11 +208,13 @@ impl LlmProvider for OllamaProvider {
 #[async_trait]
 impl EmbeddingProvider for OllamaProvider {
     async fn embed(&self, text: &str) -> Result<Vec<f32>, LlmError> {
-        let (name, dims) = self
+        let state = self
             .embedding_model
             .as_ref()
             .ok_or(LlmError::Unsupported("ollama embeddings not configured"))?;
-        let model = self.client.embedding_model_with_ndims(name, *dims);
+        let model = self
+            .client
+            .embedding_model_with_ndims(&state.name, state.dimensions);
         let embedding = model
             .embed_text(text)
             .await
@@ -134,11 +223,13 @@ impl EmbeddingProvider for OllamaProvider {
     }
 
     async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, LlmError> {
-        let (name, dims) = self
+        let state = self
             .embedding_model
             .as_ref()
             .ok_or(LlmError::Unsupported("ollama embeddings not configured"))?;
-        let model = self.client.embedding_model_with_ndims(name, *dims);
+        let model = self
+            .client
+            .embedding_model_with_ndims(&state.name, state.dimensions);
         let embeddings = model
             .embed_texts(texts.to_vec())
             .await
@@ -147,6 +238,12 @@ impl EmbeddingProvider for OllamaProvider {
             .into_iter()
             .map(|e| e.vec.into_iter().map(|v| v as f32).collect())
             .collect())
+    }
+
+    fn max_input_tokens(&self) -> Option<usize> {
+        self.embedding_model
+            .as_ref()
+            .and_then(|s| s.max_input_tokens)
     }
 }
 
@@ -304,5 +401,39 @@ mod tests {
         let (prompt, schema) = structured_output_system_prompt(&req);
         assert!(prompt.is_none());
         assert!(schema.is_none());
+    }
+
+    #[test]
+    fn extract_context_length_reads_architecture_specific_key() {
+        let body = json!({
+            "model_info": {
+                "general.architecture": "bert",
+                "bert.context_length": 2048,
+                "bert.embedding_length": 768,
+            }
+        });
+        assert_eq!(extract_context_length(&body), Some(2048));
+    }
+
+    #[test]
+    fn extract_context_length_matches_any_suffix() {
+        let body = json!({
+            "model_info": {
+                "nomic-bert.context_length": 8192,
+            }
+        });
+        assert_eq!(extract_context_length(&body), Some(8192));
+    }
+
+    #[test]
+    fn extract_context_length_returns_none_when_missing() {
+        let body = json!({ "model_info": { "bert.embedding_length": 768 } });
+        assert_eq!(extract_context_length(&body), None);
+    }
+
+    #[test]
+    fn extract_context_length_returns_none_without_model_info() {
+        let body = json!({ "modelfile": "FROM ...", "template": "..." });
+        assert_eq!(extract_context_length(&body), None);
     }
 }

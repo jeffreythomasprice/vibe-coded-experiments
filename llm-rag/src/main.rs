@@ -259,8 +259,13 @@ async fn run_document_cmd(
                     } => {
                         eprintln!("ingesting id={document_id} chunks={total_chunks}");
                     }
-                    Response::DocumentCreateProgress { index, total, .. } => {
-                        eprintln!("  chunk {}/{}", index + 1, total);
+                    Response::DocumentCreateProgress {
+                        completed,
+                        in_flight,
+                        total,
+                        ..
+                    } => {
+                        eprintln!("  {completed}/{total} complete · {in_flight} in flight");
                     }
                     Response::DocumentCreateDone { .. } | Response::Error { .. } => {
                         terminal = Some(frame);

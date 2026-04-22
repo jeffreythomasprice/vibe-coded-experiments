@@ -46,7 +46,8 @@ pub enum PickerMode {
     Ingesting {
         file: PathBuf,
         total: Option<usize>,
-        progress: Option<usize>,
+        completed: usize,
+        in_flight: usize,
         request_seq: u64,
     },
     Done {
@@ -147,9 +148,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, state: &FilePickerState)
         PickerMode::Ingesting {
             file,
             total,
-            progress,
+            completed,
+            in_flight,
             ..
-        } => render_ingesting(frame, area, app, file, *total, *progress),
+        } => render_ingesting(frame, area, app, file, *total, *completed, *in_flight),
         PickerMode::Done {
             document_id,
             chunks,
@@ -252,7 +254,8 @@ fn render_ingesting(
     app: &App,
     file: &Path,
     total: Option<usize>,
-    progress: Option<usize>,
+    completed: usize,
+    in_flight: usize,
 ) {
     let chunks = Layout::vertical([
         Constraint::Length(3),
@@ -264,10 +267,9 @@ fn render_ingesting(
     let header = Paragraph::new(file.display().to_string()).block(Block::bordered().title(title));
     frame.render_widget(header, chunks[0]);
 
-    let body = match (total, progress) {
-        (Some(total), Some(i)) => format!("chunk {}/{}", i + 1, total),
-        (Some(total), None) => format!("preparing {total} chunks…"),
-        _ => "embedding…".to_string(),
+    let body = match total {
+        Some(total) => format!("{completed}/{total} complete · {in_flight} in flight"),
+        None => "preparing…".to_string(),
     };
     let msg = Paragraph::new(body).style(Style::default().fg(Color::DarkGray));
     frame.render_widget(msg, chunks[1]);
@@ -480,7 +482,8 @@ fn submit(state: &mut FilePickerState) -> PickerAction {
     state.mode = PickerMode::Ingesting {
         file: path,
         total: None,
-        progress: None,
+        completed: 0,
+        in_flight: 0,
         request_seq: 0,
     };
     action
@@ -517,18 +520,35 @@ pub fn handle_reply(
 
     match result {
         Ok(Response::DocumentCreateStart { total_chunks, .. }) => {
-            if let PickerMode::Ingesting { total, .. } = &mut state.mode {
+            if let PickerMode::Ingesting {
+                total,
+                completed,
+                in_flight,
+                ..
+            } = &mut state.mode
+            {
                 *total = Some(*total_chunks);
+                *completed = 0;
+                *in_flight = 0;
             }
             true
         }
-        Ok(Response::DocumentCreateProgress { index, total, .. }) => {
+        Ok(Response::DocumentCreateProgress {
+            completed: c,
+            in_flight: f,
+            total: t,
+            ..
+        }) => {
             if let PickerMode::Ingesting {
-                total: t, progress, ..
+                total,
+                completed,
+                in_flight,
+                ..
             } = &mut state.mode
             {
-                *t = Some(*total);
-                *progress = Some(*index);
+                *total = Some(*t);
+                *completed = *c;
+                *in_flight = *f;
             }
             true
         }

@@ -11,10 +11,10 @@ use tokio::sync::mpsc;
 use tracing::Instrument;
 
 use crate::config::{Config, EmbeddingsProviderConfig};
-use crate::db::{self, DbError};
+use crate::db::{self, DbError, schema::EmbeddingProbe};
 use crate::error::{CliError, ProtocolError, ServerStartError};
 use crate::handlers::dispatch;
-use crate::llm::{self, LlmStack, ollama::probe_ollama_dimensions};
+use crate::llm::{self, LlmStack, ollama::probe_ollama_embedding_info};
 use crate::protocol::{Request, Response, framed, read_frame, write_frame};
 use crate::tools::ToolRegistry;
 
@@ -69,16 +69,21 @@ async fn serve(cfg: &Config, listener: UnixListener) -> Result<(), CliError> {
     let probe_model_for_err = probe_model.clone();
     let probe_model_for_call = probe_model.clone();
     let dal = db::open(cfg, probe_model.clone(), move || async move {
-        probe_ollama_dimensions(&probe_url, &probe_model_for_call)
+        let info = probe_ollama_embedding_info(&probe_url, &probe_model_for_call)
             .await
             .map_err(|source| DbError::Probe {
                 model: probe_model_for_err,
                 source: source.into(),
-            })
+            })?;
+        Ok(EmbeddingProbe {
+            dimensions: info.dimensions,
+            max_input_tokens: info.max_input_tokens,
+        })
     })
     .await?;
 
-    let embeddings = llm::build_embeddings(cfg, dal.model().dimensions)?;
+    let embeddings =
+        llm::build_embeddings(cfg, dal.model().dimensions, dal.model().max_input_tokens)?;
     let state = Arc::new(ServerState {
         dal: Arc::new(dal),
         llm: Arc::new(LlmStack { chat, embeddings }),

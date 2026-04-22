@@ -17,7 +17,7 @@ use std::sync::Arc;
 use crate::db::{ChunkRange, Dal};
 use crate::llm::EmbeddingProvider;
 
-pub use chunking::{CHUNK_CHARS, Chunk, OVERLAP_CHARS};
+pub use chunking::{Chunk, chunk_sizes_for};
 pub use error::IngestError;
 pub use read::MAX_FILE_BYTES;
 
@@ -45,7 +45,8 @@ where
     F: FnMut(ChunkProgress),
 {
     let text = read::read_text_file(path)?;
-    let chunks = chunking::chunk(&text);
+    let (chunk_chars, overlap_chars) = chunking::chunk_sizes_for(embeddings.max_input_tokens());
+    let chunks = chunking::chunk(&text, chunk_chars, overlap_chars);
     if chunks.is_empty() {
         return Err(IngestError::NotTextFile {
             path: path.to_path_buf(),

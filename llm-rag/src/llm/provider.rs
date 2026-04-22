@@ -19,4 +19,10 @@ pub trait EmbeddingProvider: Send + Sync {
     async fn embed(&self, text: &str) -> Result<Vec<f32>, LlmError>;
 
     async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, LlmError>;
+
+    /// Advertised max input-token context length, if the provider reports one.
+    /// Used by the ingest pipeline to size chunks to the model's window.
+    fn max_input_tokens(&self) -> Option<usize> {
+        None
+    }
 }

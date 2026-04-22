@@ -136,10 +136,15 @@ pub enum Response {
         document_id: i64,
         total_chunks: usize,
     },
-    /// Emitted after each persisted chunk. `index` is 0-based.
+    /// Progress update during a streaming ingest. Emitted at the start of
+    /// each embed sub-batch (to announce chunks going in-flight) and after
+    /// each chunk is persisted (to retire one from in-flight into completed).
+    /// `completed + in_flight <= total`; `total == completed` when the
+    /// terminal `DocumentCreateDone` is about to fire.
     DocumentCreateProgress {
         document_id: i64,
-        index: usize,
+        completed: usize,
+        in_flight: usize,
         total: usize,
     },
     /// Terminator for a successful ingest.

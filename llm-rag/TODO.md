@@ -1,12 +1,8 @@
 rename this project
 
-when ingesting new document via tui, adding tags doesn't really work? or at least it's confusing
+be able to cancel document ingest in the tui, which deletes any partial chunks that might have been produced
 
-when ingesting new document via tui, it doesn't show each chunk as it is processed, only a summary at the end
-
-chunking.rs, char limit and overlap chars should probably be way bigger
-
-when doing "document new" via cli, put a progress bar in place
+when doing "document new" via cli, put a progress bar in place so we can see chunks as they are processed
 
 document search tool
 

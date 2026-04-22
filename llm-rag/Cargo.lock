@@ -1617,6 +1617,7 @@ dependencies = [
  "futures-util",
  "libc",
  "ratatui",
+ "reqwest",
  "rig-core",
  "secrecy",
  "serde",

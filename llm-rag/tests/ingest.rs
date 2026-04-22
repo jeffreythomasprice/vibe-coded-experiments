@@ -8,28 +8,36 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use llm_rag::db::Dal;
+use llm_rag::db::{Dal, EmbeddingProbe};
 use llm_rag::ingest;
 use llm_rag::llm::EmbeddingProvider;
 use llm_rag::llm::mock::MockProvider;
 use tempfile::TempDir;
 
 async fn open_dal(path: &std::path::Path, dims: usize) -> Dal {
-    Dal::open(path, format!("mock-{dims}"), || async move { Ok(dims) })
-        .await
-        .unwrap()
+    Dal::open(path, format!("mock-{dims}"), || async move {
+        Ok(EmbeddingProbe {
+            dimensions: dims,
+            max_input_tokens: None,
+        })
+    })
+    .await
+    .unwrap()
 }
 
 #[tokio::test]
 async fn ingest_persists_document_chunks_and_tags() {
     // Pick text long enough to span multiple chunks so we exercise the
     // overlap path. `ingest::chunking::chunk` is the single source of truth
-    // for the chunk count — derive it here instead of hard-coding.
+    // for the chunk count — derive it here instead of hard-coding. The mock
+    // provider returns `None` for `max_input_tokens`, so ingest falls back to
+    // the default chunk size — use the same here to match.
     const DIMS: usize = 4;
-    let text: String = (0..(ingest::CHUNK_CHARS * 3))
+    let (chunk_chars, overlap_chars) = ingest::chunk_sizes_for(None);
+    let text: String = (0..(chunk_chars * 3))
         .map(|i| (b'a' + (i % 26) as u8) as char)
         .collect();
-    let expected_chunks = ingest::chunking::chunk(&text).len();
+    let expected_chunks = ingest::chunking::chunk(&text, chunk_chars, overlap_chars).len();
     assert!(
         expected_chunks >= 2,
         "test fixture should produce multiple chunks"

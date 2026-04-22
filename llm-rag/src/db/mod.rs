@@ -23,23 +23,25 @@ pub use dal::{
     MessageMetadata, MessageRole, StoredMessage,
 };
 pub use error::DbError;
-pub use schema::EmbeddingModelInfo;
+pub use schema::{EmbeddingModelInfo, EmbeddingProbe};
 
 use std::future::Future;
 
 use crate::config::Config;
 
 /// Open the configured DB file, run pending migrations, resolve the embedding
-/// model's vector length (cached or probed), ensure the dimension-specific
-/// chunk table exists, and return a ready-to-use [`Dal`].
+/// model's vector length and max input-token context length (cached or
+/// probed), ensure the dimension-specific chunk table exists, and return a
+/// ready-to-use [`Dal`].
 ///
-/// `probe` is called at most once — only on a cache miss — to ask the
-/// embedding model for its native vector length. The result is persisted to
-/// `embedding_model_dimensions` so subsequent boots are zero-cost.
+/// `probe` is called at most once — only on a cache miss (or when the cached
+/// row pre-dates `max_input_tokens` so the column is `NULL`) — to ask the
+/// embedding provider for its metadata. Results are persisted so subsequent
+/// boots are zero-cost.
 pub async fn open<F, Fut>(cfg: &Config, model_name: String, probe: F) -> Result<Dal, DbError>
 where
     F: FnOnce() -> Fut,
-    Fut: Future<Output = Result<usize, DbError>>,
+    Fut: Future<Output = Result<EmbeddingProbe, DbError>>,
 {
     Dal::open(&cfg.db_path, model_name, probe).await
 }

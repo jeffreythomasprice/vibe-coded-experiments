@@ -213,7 +213,7 @@ impl Dal {
     pub async fn open<F, Fut>(db_path: &Path, model_name: String, probe: F) -> Result<Self, DbError>
     where
         F: FnOnce() -> Fut,
-        Fut: Future<Output = Result<usize, DbError>>,
+        Fut: Future<Output = Result<schema::EmbeddingProbe, DbError>>,
     {
         let path_str = db_path.to_string_lossy().to_string();
         let db = Builder::new_local(&path_str)
@@ -238,32 +238,59 @@ impl Dal {
 
         migrations::run(&conn).await?;
 
-        let dimensions = match schema::lookup_dimensions(&conn, &model_name).await? {
-            Some(dims) => {
-                tracing::info!(
-                    model = %model_name,
-                    dimensions = dims,
-                    "embedding dimensions resolved from cache",
-                );
-                dims
-            }
-            None => {
-                let dims = probe().await?;
-                schema::record_dimensions(&conn, &model_name, dims).await?;
-                tracing::info!(
-                    model = %model_name,
-                    dimensions = dims,
-                    "embedding dimensions probed and cached",
-                );
-                dims
-            }
-        };
+        let (dimensions, max_input_tokens) =
+            match schema::lookup_embedding_info(&conn, &model_name).await? {
+                Some(cached) if cached.max_input_tokens.is_some() => {
+                    tracing::info!(
+                        model = %model_name,
+                        dimensions = cached.dimensions,
+                        max_input_tokens = ?cached.max_input_tokens,
+                        "embedding model info resolved from cache",
+                    );
+                    (cached.dimensions, cached.max_input_tokens)
+                }
+                Some(cached) => {
+                    // Row pre-dates migration 0004 — dimensions are trustworthy
+                    // but max_input_tokens is NULL. Re-probe and backfill.
+                    let probed = probe().await?;
+                    if probed.dimensions != cached.dimensions {
+                        tracing::warn!(
+                            model = %model_name,
+                            cached = cached.dimensions,
+                            probed = probed.dimensions,
+                            "probed dimensions differ from cached; keeping cached",
+                        );
+                    }
+                    if let Some(tokens) = probed.max_input_tokens {
+                        schema::update_max_input_tokens(&conn, &model_name, tokens).await?;
+                    }
+                    tracing::info!(
+                        model = %model_name,
+                        dimensions = cached.dimensions,
+                        max_input_tokens = ?probed.max_input_tokens,
+                        "embedding max_input_tokens backfilled from probe",
+                    );
+                    (cached.dimensions, probed.max_input_tokens)
+                }
+                None => {
+                    let probed = probe().await?;
+                    schema::record_embedding_info(&conn, &model_name, probed).await?;
+                    tracing::info!(
+                        model = %model_name,
+                        dimensions = probed.dimensions,
+                        max_input_tokens = ?probed.max_input_tokens,
+                        "embedding model info probed and cached",
+                    );
+                    (probed.dimensions, probed.max_input_tokens)
+                }
+            };
 
         schema::ensure_chunk_table(&conn, dimensions).await?;
 
         let model = EmbeddingModelInfo {
             name: model_name,
             dimensions,
+            max_input_tokens,
         };
         let chunk_table = schema::chunk_table_name(dimensions);
         Ok(Dal {
@@ -1356,9 +1383,14 @@ mod tests {
     /// `dims`. The cache table will be populated on the first open and
     /// short-circuit on subsequent ones.
     async fn open_with_dims(path: &std::path::Path, dims: usize) -> Dal {
-        Dal::open(path, model_name(dims), || async move { Ok(dims) })
-            .await
-            .unwrap()
+        Dal::open(path, model_name(dims), || async move {
+            Ok(schema::EmbeddingProbe {
+                dimensions: dims,
+                max_input_tokens: None,
+            })
+        })
+        .await
+        .unwrap()
     }
 
     async fn mem_dal(dims: usize) -> Dal {
@@ -1385,11 +1417,15 @@ mod tests {
         let calls_a = calls.clone();
         let dal_a = Dal::open(&path, "probe-test".into(), move || async move {
             calls_a.fetch_add(1, Ordering::SeqCst);
-            Ok(7)
+            Ok(schema::EmbeddingProbe {
+                dimensions: 7,
+                max_input_tokens: Some(512),
+            })
         })
         .await
         .unwrap();
         assert_eq!(dal_a.model().dimensions, 7);
+        assert_eq!(dal_a.model().max_input_tokens, Some(512));
         assert_eq!(calls.load(Ordering::SeqCst), 1, "probe runs on first open");
         drop(dal_a);
 
@@ -1401,6 +1437,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(dal_b.model().dimensions, 7);
+        assert_eq!(dal_b.model().max_input_tokens, Some(512));
         assert_eq!(
             calls.load(Ordering::SeqCst),
             1,

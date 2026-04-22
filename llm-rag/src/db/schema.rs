@@ -4,60 +4,123 @@ use super::error::DbError;
 
 /// Metadata about the embedding model in use at startup. `dimensions` selects
 /// the per-dimension chunk table (e.g. `document_chunks_768`) so swapping
-/// models with different vector lengths does not collide. The value is
-/// resolved at startup via [`lookup_dimensions`] (or by probing the model and
-/// then [`record_dimensions`]) — it's no longer declared in config.
+/// models with different vector lengths does not collide.
+/// `max_input_tokens` is the model's advertised context length in tokens,
+/// sourced from the provider (e.g. Ollama's `/api/show`); `None` means the
+/// provider didn't report one and callers should pick a conservative default.
 #[derive(Debug, Clone)]
 pub struct EmbeddingModelInfo {
     pub name: String,
     pub dimensions: usize,
+    pub max_input_tokens: Option<usize>,
 }
 
-/// Look up the cached vector length for `model`. `Ok(None)` means we've never
-/// seen this model before and the caller should probe it.
-pub async fn lookup_dimensions(conn: &Connection, model: &str) -> Result<Option<usize>, DbError> {
+/// What a single provider probe yields: the vector length (required) plus an
+/// optional max input-token count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EmbeddingProbe {
+    pub dimensions: usize,
+    pub max_input_tokens: Option<usize>,
+}
+
+/// Cached probe row for `model`. `Ok(None)` means we've never seen this model
+/// and the caller should probe. If `max_input_tokens` in the cached row is
+/// `NULL` (older DBs pre-dating migration 0004), callers should still probe
+/// to fill it in — dimensions stays trustworthy since it's immutable per model.
+pub async fn lookup_embedding_info(
+    conn: &Connection,
+    model: &str,
+) -> Result<Option<EmbeddingProbe>, DbError> {
     let mut rows = conn
         .query(
-            "SELECT dimensions FROM embedding_model_dimensions WHERE model = ?",
+            "SELECT dimensions, max_input_tokens FROM embedding_model_dimensions WHERE model = ?",
             (model.to_string(),),
         )
         .await
         .map_err(|source| DbError::Query {
-            op: "lookup_dimensions",
+            op: "lookup_embedding_info",
             source,
         })?;
     match rows.next().await.map_err(|source| DbError::Query {
-        op: "lookup_dimensions.next",
+        op: "lookup_embedding_info.next",
         source,
     })? {
         Some(row) => {
             let dims: i64 = row.get(0).map_err(|source| DbError::Query {
-                op: "lookup_dimensions.get",
+                op: "lookup_embedding_info.get_dims",
                 source,
             })?;
-            Ok(Some(dims as usize))
+            let tokens = match row.get_value(1).map_err(|source| DbError::Query {
+                op: "lookup_embedding_info.get_tokens",
+                source,
+            })? {
+                Value::Integer(v) => Some(v as usize),
+                Value::Null => None,
+                other => {
+                    return Err(DbError::Query {
+                        op: "lookup_embedding_info.get_tokens",
+                        source: turso::Error::ConversionFailure(format!(
+                            "unexpected type for max_input_tokens: {other:?}"
+                        )),
+                    });
+                }
+            };
+            Ok(Some(EmbeddingProbe {
+                dimensions: dims as usize,
+                max_input_tokens: tokens,
+            }))
         }
         None => Ok(None),
     }
 }
 
-/// Persist a probed vector length. `INSERT OR IGNORE` keeps two racing
-/// processes from each writing a row for the same model.
-pub async fn record_dimensions(
+/// Insert a fresh probe row. `INSERT OR IGNORE` keeps two racing processes
+/// from each writing a row for the same model.
+pub async fn record_embedding_info(
     conn: &Connection,
     model: &str,
-    dimensions: usize,
+    probe: EmbeddingProbe,
 ) -> Result<(), DbError> {
     conn.execute(
-        "INSERT OR IGNORE INTO embedding_model_dimensions (model, dimensions) VALUES (?, ?)",
+        "INSERT OR IGNORE INTO embedding_model_dimensions
+            (model, dimensions, max_input_tokens)
+            VALUES (?, ?, ?)",
         turso::params::Params::Positional(vec![
             Value::Text(model.to_string()),
-            Value::Integer(dimensions as i64),
+            Value::Integer(probe.dimensions as i64),
+            probe
+                .max_input_tokens
+                .map(|t| Value::Integer(t as i64))
+                .unwrap_or(Value::Null),
         ]),
     )
     .await
     .map_err(|source| DbError::Query {
-        op: "record_dimensions",
+        op: "record_embedding_info",
+        source,
+    })?;
+    Ok(())
+}
+
+/// Backfill `max_input_tokens` on an existing row whose value is NULL (older
+/// DB predating migration 0004). No-op if no row matches.
+pub async fn update_max_input_tokens(
+    conn: &Connection,
+    model: &str,
+    max_input_tokens: usize,
+) -> Result<(), DbError> {
+    conn.execute(
+        "UPDATE embedding_model_dimensions
+            SET max_input_tokens = ?
+            WHERE model = ? AND max_input_tokens IS NULL",
+        turso::params::Params::Positional(vec![
+            Value::Integer(max_input_tokens as i64),
+            Value::Text(model.to_string()),
+        ]),
+    )
+    .await
+    .map_err(|source| DbError::Query {
+        op: "update_max_input_tokens",
         source,
     })?;
     Ok(())

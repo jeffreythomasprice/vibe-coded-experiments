@@ -23,6 +23,11 @@ const MIGRATIONS: &[(u32, &str, &str)] = &[
         "conversations",
         include_str!("migrations/0003_conversations.sql"),
     ),
+    (
+        4,
+        "embedding_max_input_tokens",
+        include_str!("migrations/0004_embedding_max_input_tokens.sql"),
+    ),
 ];
 
 /// Ensure `_schema_migrations` exists, then apply any migrations whose

@@ -50,15 +50,18 @@ pub fn build_chat(cfg: &Config) -> Result<Arc<dyn LlmProvider>, LlmError> {
     Ok(chat)
 }
 
-/// Build the embeddings provider once `dimensions` is known (resolved by the
-/// DB layer's cache lookup / probe).
+/// Build the embeddings provider once `dimensions` and `max_input_tokens` are
+/// known (both resolved by the DB layer's cache lookup / probe).
+/// `max_input_tokens` is best-effort — `None` means the provider didn't report
+/// one and ingest will fall back to a conservative chunk-size default.
 pub fn build_embeddings(
     cfg: &Config,
     dimensions: usize,
+    max_input_tokens: Option<usize>,
 ) -> Result<Arc<dyn EmbeddingProvider>, LlmError> {
     let embeddings: Arc<dyn EmbeddingProvider> = match &cfg.llm.embeddings {
         EmbeddingsProviderConfig::Ollama { url, model } => Arc::new(
-            ollama::OllamaProvider::new_embeddings(url, model, dimensions)?,
+            ollama::OllamaProvider::new_embeddings(url, model, dimensions, max_input_tokens)?,
         ),
     };
     Ok(embeddings)
@@ -115,7 +118,7 @@ mod tests {
             SecretsConfig::default(),
         );
         build_chat(&cfg).expect("ollama build should not need a secret");
-        build_embeddings(&cfg, 768).expect("embeddings build is dimension-only");
+        build_embeddings(&cfg, 768, Some(2048)).expect("embeddings build should accept metadata");
     }
 
     #[test]
