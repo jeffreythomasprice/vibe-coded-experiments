@@ -1,0 +1,23 @@
+# Copy this file to ~/.config/document-search/config.toml,
+# or pass `--config <path>` on the command line.
+
+# Path to the SQLite/turso database file. Relative paths are resolved
+# against the directory containing this config file.
+db_path = "document-search.db"
+
+[ollama]
+url = "http://localhost:11434"
+
+# The embedding model used to generate vectors for the chunks table.
+# Pull it once with: ollama pull <model>
+# The model's vector length is probed on first run and cached in the DB.
+embedding_model = "nomic-embed-text"
+
+[chunking]
+# Target chunk size in bytes. The chunker steps back to the nearest UTF-8
+# char boundary, so actual chunks may be a few bytes smaller.
+chunk_size_bytes = 5000
+# How many bytes each chunk overlaps with the previous one. Must be less
+# than chunk_size_bytes.
+overlap_bytes = 1000
+
