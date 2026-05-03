@@ -34,3 +34,12 @@ idle_timeout_secs = 15
 # directory is created on startup if missing. Point at /dev/null to
 # disable file logging.
 file = "/tmp/document-search.log"
+
+[search]
+# Top-matching chunks to return per in-scope document by default.
+# Override per-call with `search --limit N`.
+default_results_per_document = 5
+
+# Drop matches whose similarity (1.0 - cosine_distance) falls below this.
+# Range [0.0, 1.0]. Override per-call with `search --cutoff F`.
+relevancy_cutoff = 0.3

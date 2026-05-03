@@ -85,6 +85,21 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             TagCommand::Remove { path, tags } => Ok(Request::TagRemove { path, tags }),
             TagCommand::List => Ok(Request::TagList),
         },
+        Command::Search {
+            term,
+            path,
+            tags,
+            match_all,
+            limit,
+            cutoff,
+        } => Ok(Request::Search {
+            term,
+            path,
+            tags,
+            match_all,
+            limit,
+            cutoff,
+        }),
         Command::Server => unreachable!("Server is dispatched directly"),
     }
 }

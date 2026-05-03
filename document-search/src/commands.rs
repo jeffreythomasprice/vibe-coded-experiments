@@ -1,11 +1,14 @@
 //! Read-side CLI command handlers: `info` and the three flavors of `text`.
 
+use std::cmp::Ordering;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use turso::{Value, params::Params};
 
-use crate::db::Db;
+use crate::config::Config;
+use crate::db::{Db, vector};
+use crate::ollama;
 use crate::protocol::StatusSnapshot;
 
 #[derive(thiserror::Error, Debug)]
@@ -58,6 +61,28 @@ pub enum CommandError {
 
     #[error("empty tag (after trimming whitespace) is not allowed")]
     EmptyTag,
+
+    #[error("must specify --path or at least one --tag for search")]
+    SearchScopeRequired,
+
+    #[error("embedding query term: {source}")]
+    EmbedQuery {
+        #[source]
+        source: crate::ollama::OllamaError,
+    },
+
+    #[error("query embedding has {got} dims, expected {expected} for model {model:?}")]
+    EmbedDimMismatch {
+        got: usize,
+        expected: usize,
+        model: String,
+    },
+
+    #[error("invalid --limit: must be >= 1")]
+    InvalidLimit,
+
+    #[error("invalid --cutoff {0}: must be in [0.0, 1.0]")]
+    InvalidCutoff(f32),
 }
 
 struct DocumentRow {
@@ -823,4 +848,329 @@ async fn stitch_chars(
         return Err(CommandError::ChunkCoverageGap { missing: cursor });
     }
     Ok(out)
+}
+
+struct SearchHit {
+    path: String,
+    byte_start: i64,
+    byte_end: i64,
+    page_first: Option<i64>,
+    page_last: Option<i64>,
+    text: String,
+    similarity: f32,
+}
+
+pub async fn search_text(
+    db: &Db,
+    http: &reqwest::Client,
+    cfg: &Config,
+    term: &str,
+    path: Option<&Path>,
+    raw_tags: &[String],
+    match_all: bool,
+    limit_override: Option<usize>,
+    cutoff_override: Option<f32>,
+) -> Result<String, CommandError> {
+    if path.is_none() && raw_tags.is_empty() {
+        return Err(CommandError::SearchScopeRequired);
+    }
+
+    let limit = limit_override.unwrap_or(cfg.search.default_results_per_document);
+    if limit == 0 {
+        return Err(CommandError::InvalidLimit);
+    }
+    let cutoff = cutoff_override.unwrap_or(cfg.search.relevancy_cutoff);
+    if !(0.0..=1.0).contains(&cutoff) {
+        return Err(CommandError::InvalidCutoff(cutoff));
+    }
+    let max_distance = (1.0 - cutoff) as f64;
+
+    let conn = db
+        .fresh_conn()
+        .await
+        .map_err(|source| CommandError::FreshConn { source })?;
+
+    let docs = if let Some(p) = path {
+        let canon = canonicalize(p)?;
+        let path_str = canon.to_string_lossy().to_string();
+        let mut rows = conn
+            .query(
+                "SELECT id, path FROM document WHERE path = ?",
+                (path_str,),
+            )
+            .await
+            .map_err(|source| CommandError::Db {
+                op: "search.lookup_path",
+                source,
+            })?;
+        let row = rows
+            .next()
+            .await
+            .map_err(|source| CommandError::Db {
+                op: "search.lookup_path.next",
+                source,
+            })?
+            .ok_or_else(|| CommandError::DocumentNotFound {
+                path: canon.clone(),
+            })?;
+        let id: i64 = row.get(0).map_err(|source| CommandError::Db {
+            op: "search.lookup_path.get.id",
+            source,
+        })?;
+        let path: String = row.get(1).map_err(|source| CommandError::Db {
+            op: "search.lookup_path.get.path",
+            source,
+        })?;
+        vec![(id, path)]
+    } else {
+        let tags = normalize_tags(raw_tags)?;
+        let placeholders = std::iter::repeat("?")
+            .take(tags.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = if match_all {
+            format!(
+                "SELECT d.id, d.path FROM document d \
+                 JOIN document_tag t ON t.document_id = d.id \
+                 WHERE t.tag IN ({placeholders}) \
+                 GROUP BY d.id \
+                 HAVING COUNT(DISTINCT t.tag) = ?"
+            )
+        } else {
+            format!(
+                "SELECT d.id, d.path FROM document d \
+                 WHERE EXISTS (SELECT 1 FROM document_tag t \
+                                WHERE t.document_id = d.id AND t.tag IN ({placeholders}))"
+            )
+        };
+        let mut params: Vec<Value> = tags.iter().map(|t| Value::Text(t.clone())).collect();
+        if match_all {
+            params.push(Value::Integer(tags.len() as i64));
+        }
+        let mut rows = conn
+            .query(&sql, Params::Positional(params))
+            .await
+            .map_err(|source| CommandError::Db {
+                op: "search.lookup_tags",
+                source,
+            })?;
+        let mut docs: Vec<(i64, String)> = Vec::new();
+        while let Some(row) = rows.next().await.map_err(|source| CommandError::Db {
+            op: "search.lookup_tags.next",
+            source,
+        })? {
+            let id: i64 = row.get(0).map_err(|source| CommandError::Db {
+                op: "search.lookup_tags.get.id",
+                source,
+            })?;
+            let p: String = row.get(1).map_err(|source| CommandError::Db {
+                op: "search.lookup_tags.get.path",
+                source,
+            })?;
+            docs.push((id, p));
+        }
+        docs
+    };
+
+    let embedding = ollama::embed(http, &cfg.ollama.url, &cfg.ollama.embedding_model, term)
+        .await
+        .map_err(|source| CommandError::EmbedQuery { source })?;
+    if embedding.len() != db.embedding_dimensions {
+        return Err(CommandError::EmbedDimMismatch {
+            got: embedding.len(),
+            expected: db.embedding_dimensions,
+            model: db.embedding_model.clone(),
+        });
+    }
+    let blob = vector::to_blob(&embedding);
+
+    let per_doc_sql = format!(
+        "SELECT \
+            c.byte_start, c.byte_end, c.page_first, c.page_last, c.text, \
+            vector_distance_cos(cv.embedding, ?) AS distance \
+         FROM document_chunk c \
+         JOIN {chunks_table} cv ON cv.chunk_id = c.id \
+         WHERE c.document_id = ? \
+           AND vector_distance_cos(cv.embedding, ?) <= ? \
+         ORDER BY distance ASC \
+         LIMIT ?",
+        chunks_table = db.chunks_table,
+    );
+
+    let mut hits: Vec<SearchHit> = Vec::new();
+    for (doc_id, path) in &docs {
+        let params = Params::Positional(vec![
+            Value::Blob(blob.clone()),
+            Value::Integer(*doc_id),
+            Value::Blob(blob.clone()),
+            Value::Real(max_distance),
+            Value::Integer(limit as i64),
+        ]);
+        let mut rows = conn
+            .query(&per_doc_sql, params)
+            .await
+            .map_err(|source| CommandError::Db {
+                op: "search.per_doc",
+                source,
+            })?;
+        while let Some(row) = rows.next().await.map_err(|source| CommandError::Db {
+            op: "search.per_doc.next",
+            source,
+        })? {
+            let byte_start: i64 = row.get(0).map_err(|source| CommandError::Db {
+                op: "search.per_doc.get.byte_start",
+                source,
+            })?;
+            let byte_end: i64 = row.get(1).map_err(|source| CommandError::Db {
+                op: "search.per_doc.get.byte_end",
+                source,
+            })?;
+            let page_first: Option<i64> = match row.get_value(2) {
+                Ok(Value::Null) => None,
+                Ok(Value::Integer(n)) => Some(n),
+                Ok(other) => panic!("unexpected page_first value {other:?}"),
+                Err(source) => {
+                    return Err(CommandError::Db {
+                        op: "search.per_doc.get.page_first",
+                        source,
+                    });
+                }
+            };
+            let page_last: Option<i64> = match row.get_value(3) {
+                Ok(Value::Null) => None,
+                Ok(Value::Integer(n)) => Some(n),
+                Ok(other) => panic!("unexpected page_last value {other:?}"),
+                Err(source) => {
+                    return Err(CommandError::Db {
+                        op: "search.per_doc.get.page_last",
+                        source,
+                    });
+                }
+            };
+            let text: String = row.get(4).map_err(|source| CommandError::Db {
+                op: "search.per_doc.get.text",
+                source,
+            })?;
+            let distance: f64 = row.get(5).map_err(|source| CommandError::Db {
+                op: "search.per_doc.get.distance",
+                source,
+            })?;
+            let similarity = (1.0 - distance as f32).clamp(0.0, 1.0);
+            hits.push(SearchHit {
+                path: path.clone(),
+                byte_start,
+                byte_end,
+                page_first,
+                page_last,
+                text,
+                similarity,
+            });
+        }
+    }
+
+    hits.sort_by(|a, b| {
+        b.similarity
+            .partial_cmp(&a.similarity)
+            .unwrap_or(Ordering::Equal)
+    });
+
+    Ok(render_search(term, limit, cutoff, &hits))
+}
+
+fn render_search(term: &str, limit: usize, cutoff: f32, hits: &[SearchHit]) -> String {
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "search {:?} \u{2014} {} result(s) (cutoff {:.3}, limit {}/doc)",
+        term,
+        hits.len(),
+        cutoff,
+        limit,
+    );
+    if hits.is_empty() {
+        return out;
+    }
+    for h in hits {
+        let _ = writeln!(out);
+        let location = match h.page_first {
+            Some(first) => match h.page_last {
+                Some(last) if last != first => format!("page {first}-{last}"),
+                _ => format!("page {first}"),
+            },
+            None => format!("bytes {}-{}", h.byte_start, h.byte_end),
+        };
+        let _ = writeln!(
+            out,
+            "{}  {}  similarity {:.4}",
+            h.path, location, h.similarity,
+        );
+        let _ = writeln!(out, "  {}", snippet(&h.text, 240));
+    }
+    out
+}
+
+fn snippet(text: &str, max_chars: usize) -> String {
+    let collapsed: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let total = collapsed.chars().count();
+    if total <= max_chars {
+        collapsed
+    } else {
+        let truncated: String = collapsed.chars().take(max_chars).collect();
+        format!("{truncated}\u{2026}")
+    }
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+
+    fn hit(path: &str, sim: f32, page: Option<i64>, text: &str) -> SearchHit {
+        SearchHit {
+            path: path.to_string(),
+            byte_start: 0,
+            byte_end: 100,
+            page_first: page,
+            page_last: page,
+            text: text.to_string(),
+            similarity: sim,
+        }
+    }
+
+    #[test]
+    fn render_empty_results() {
+        let out = render_search("foo", 5, 0.3, &[]);
+        assert!(out.starts_with("search \"foo\""));
+        assert!(out.contains("0 result(s)"));
+        assert!(!out.contains("similarity"));
+    }
+
+    #[test]
+    fn render_mixed_pdf_and_non_pdf() {
+        let hits = vec![
+            hit("a.pdf", 0.91, Some(3), "from a pdf"),
+            hit("b.txt", 0.42, None, "from a text file"),
+        ];
+        let out = render_search("q", 5, 0.3, &hits);
+        assert!(out.contains("a.pdf  page 3  similarity 0.9100"));
+        assert!(out.contains("b.txt  bytes 0-100  similarity 0.4200"));
+    }
+
+    #[test]
+    fn snippet_collapses_whitespace_and_truncates() {
+        let s = snippet("a   b\nc\t d", 100);
+        assert_eq!(s, "a b c d");
+
+        let long: String = "x".repeat(300);
+        let trunc = snippet(&long, 240);
+        assert_eq!(trunc.chars().count(), 241); // 240 + ellipsis
+        assert!(trunc.ends_with('\u{2026}'));
+    }
+
+    #[test]
+    fn snippet_handles_multibyte_boundary() {
+        // 4-byte chars: ensure we slice on a char boundary, not bytes.
+        let s: String = "\u{1F600}".repeat(300);
+        let trunc = snippet(&s, 240);
+        assert_eq!(trunc.chars().count(), 241);
+    }
 }

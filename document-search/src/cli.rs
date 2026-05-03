@@ -80,6 +80,39 @@ pub enum Command {
         #[command(subcommand)]
         action: TagCommand,
     },
+
+    /// Vector search across ingested documents. Embeds the term via Ollama
+    /// and ranks chunks by cosine similarity. Specify exactly one scope:
+    /// either --path for a single document or --tag (repeatable).
+    Search {
+        /// The search term (embedded once via Ollama).
+        term: String,
+
+        /// Restrict to a single document by exact ingested path. Mutually
+        /// exclusive with --tag/--match-all.
+        #[arg(long, value_name = "PATH", conflicts_with_all = ["tags", "match_all"])]
+        path: Option<PathBuf>,
+
+        /// Restrict to documents that have this tag. Repeatable.
+        /// Default: match ANY given tag. Use --match-all to tighten.
+        #[arg(long = "tag", value_name = "TAG")]
+        tags: Vec<String>,
+
+        /// With multiple --tag, require ALL tags to match (default: ANY).
+        #[arg(long, requires = "tags")]
+        match_all: bool,
+
+        /// Max chunks to return per in-scope document. Overrides
+        /// [search].default_results_per_document.
+        #[arg(long, value_name = "N")]
+        limit: Option<usize>,
+
+        /// Drop chunks whose similarity (1.0 - cosine_distance) is below
+        /// this threshold. Overrides [search].relevancy_cutoff. Range
+        /// [0.0, 1.0].
+        #[arg(long, value_name = "F")]
+        cutoff: Option<f32>,
+    },
 }
 
 #[derive(Subcommand, Debug)]

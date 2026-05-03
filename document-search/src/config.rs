@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 /// the user's config fall back to known-good values.
 const DEFAULT_CONFIG_TOML: &str = include_str!("../config.example.toml");
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Config {
     /// Path to the turso/SQLite DB file. When loaded from a config file,
     /// relative paths are resolved against the directory containing that
@@ -23,6 +23,8 @@ pub struct Config {
     pub server: ServerConfig,
 
     pub logging: LoggingConfig,
+
+    pub search: SearchConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -48,6 +50,12 @@ pub struct LoggingConfig {
     pub file: PathBuf,
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SearchConfig {
+    pub default_results_per_document: usize,
+    pub relevancy_cutoff: f32,
+}
+
 #[derive(Debug, Default, Deserialize)]
 struct PartialConfig {
     #[serde(default)]
@@ -60,6 +68,8 @@ struct PartialConfig {
     server: Option<PartialServerConfig>,
     #[serde(default)]
     logging: Option<PartialLoggingConfig>,
+    #[serde(default)]
+    search: Option<PartialSearchConfig>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -90,6 +100,14 @@ struct PartialServerConfig {
 struct PartialLoggingConfig {
     #[serde(default)]
     file: Option<PathBuf>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct PartialSearchConfig {
+    #[serde(default)]
+    default_results_per_document: Option<usize>,
+    #[serde(default)]
+    relevancy_cutoff: Option<f32>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -198,6 +216,7 @@ fn merge(base: Config, overlay: PartialConfig) -> Config {
         chunking: merge_chunking(base.chunking, overlay.chunking),
         server: merge_server(base.server, overlay.server),
         logging: merge_logging(base.logging, overlay.logging),
+        search: merge_search(base.search, overlay.search),
     }
 }
 
@@ -237,6 +256,18 @@ fn merge_logging(base: LoggingConfig, overlay: Option<PartialLoggingConfig>) -> 
     };
     LoggingConfig {
         file: overlay.file.unwrap_or(base.file),
+    }
+}
+
+fn merge_search(base: SearchConfig, overlay: Option<PartialSearchConfig>) -> SearchConfig {
+    let Some(overlay) = overlay else {
+        return base;
+    };
+    SearchConfig {
+        default_results_per_document: overlay
+            .default_results_per_document
+            .unwrap_or(base.default_results_per_document),
+        relevancy_cutoff: overlay.relevancy_cutoff.unwrap_or(base.relevancy_cutoff),
     }
 }
 
@@ -280,6 +311,8 @@ mod tests {
         );
         assert_eq!(cfg.server.idle_timeout_secs, 15);
         assert_eq!(cfg.logging.file, PathBuf::from("/tmp/document-search.log"));
+        assert_eq!(cfg.search.default_results_per_document, 5);
+        assert_eq!(cfg.search.relevancy_cutoff, 0.3);
     }
 
     #[test]

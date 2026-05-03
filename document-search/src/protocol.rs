@@ -25,6 +25,19 @@ pub enum Request {
     TagAdd { path: PathBuf, tags: Vec<String> },
     TagRemove { path: PathBuf, tags: Vec<String> },
     TagList,
+    Search {
+        term: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        path: Option<PathBuf>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        tags: Vec<String>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        match_all: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        limit: Option<usize>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cutoff: Option<f32>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,6 +74,23 @@ impl Request {
                 format!("tag remove {} [{}]", path.display(), tags.join(","))
             }
             Request::TagList => "tag list".to_string(),
+            Request::Search {
+                term,
+                path,
+                tags,
+                match_all,
+                ..
+            } => {
+                let scope = if let Some(p) = path {
+                    format!(" --path {}", p.display())
+                } else if !tags.is_empty() {
+                    let mode = if *match_all { "all" } else { "any" };
+                    format!(" --tag {} ({})", tags.join(","), mode)
+                } else {
+                    String::new()
+                };
+                format!("search {:?}{}", term, scope)
+            }
         }
     }
 }

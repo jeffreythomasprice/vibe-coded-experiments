@@ -121,6 +121,58 @@ pub(crate) async fn handle(
         return Ok(());
     }
 
+    if let Request::Search {
+        term,
+        path,
+        tags,
+        match_all,
+        limit,
+        cutoff,
+    } = &req
+    {
+        let (db, http, cfg) = {
+            let g = state.lock().unwrap();
+            (Arc::clone(&g.db), g.http.clone(), Arc::clone(&g.cfg))
+        };
+        match commands::search_text(
+            &db,
+            &http,
+            &cfg,
+            term,
+            path.as_deref(),
+            tags,
+            *match_all,
+            *limit,
+            *cutoff,
+        )
+        .await
+        {
+            Ok(text) => {
+                write_event(&mut write_half, &Event::Output { text }).await?;
+                write_event(
+                    &mut write_half,
+                    &Event::Final {
+                        ok: true,
+                        error: None,
+                    },
+                )
+                .await?;
+            }
+            Err(e) => {
+                write_event(
+                    &mut write_half,
+                    &Event::Final {
+                        ok: false,
+                        error: Some(e.to_string()),
+                    },
+                )
+                .await?;
+            }
+        }
+        let _ = write_half.shutdown().await;
+        return Ok(());
+    }
+
     if matches!(req, Request::Cancel) {
         let outcome: Result<String, String> = {
             let mut g = state.lock().unwrap();

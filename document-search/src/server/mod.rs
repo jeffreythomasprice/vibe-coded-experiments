@@ -45,6 +45,12 @@ pub(crate) struct ServerState {
     /// Shared so inline handlers (status, list, cancel) can read without
     /// going through the worker's queue. Holds the same `Db` the worker uses.
     pub db: Arc<Db>,
+    /// Shared HTTP client for inline handlers that need to call Ollama
+    /// (e.g. `search`). `reqwest::Client` is internally `Arc`, so cloning is
+    /// cheap.
+    pub http: reqwest::Client,
+    /// Assembled config; inline handlers read `[search]`, `[ollama]`, etc.
+    pub cfg: Arc<Config>,
 }
 
 pub(crate) struct QueueEntry {
@@ -107,12 +113,15 @@ pub async fn run(cfg: Config) -> Result<(), ServerError> {
 
     let http = reqwest::Client::new();
     let db = Arc::new(db::open(&cfg, &http).await?);
+    let cfg_arc = Arc::new(cfg.clone());
 
     let state = Arc::new(Mutex::new(ServerState {
         started_at: Instant::now(),
         queued: VecDeque::new(),
         current: None,
         db: Arc::clone(&db),
+        http: http.clone(),
+        cfg: Arc::clone(&cfg_arc),
     }));
 
     let (job_tx, job_rx) = mpsc::channel::<Job>(32);
@@ -288,6 +297,9 @@ async fn worker_loop(
                 unreachable!("tag list is handled inline by the connection task")
             }
             Request::Cancel => unreachable!("cancel is handled inline by the connection task"),
+            Request::Search { .. } => {
+                unreachable!("search is handled inline by the connection task")
+            }
         };
 
         match result {
