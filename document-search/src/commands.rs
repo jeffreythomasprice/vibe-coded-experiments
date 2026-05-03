@@ -55,6 +55,9 @@ pub enum CommandError {
         #[source]
         source: crate::db::DbError,
     },
+
+    #[error("empty tag (after trimming whitespace) is not allowed")]
+    EmptyTag,
 }
 
 struct DocumentRow {
@@ -80,6 +83,223 @@ pub async fn info(db: &Db, raw_path: &Path) -> Result<String, CommandError> {
         }
         None => {
             let _ = writeln!(out, "total_size_pages: null");
+        }
+    }
+
+    let tags = fetch_document_tags(db, row.id).await?;
+    if tags.is_empty() {
+        let _ = writeln!(out, "tags:             (none)");
+    } else {
+        let _ = writeln!(out, "tags:             {}", tags.join(", "));
+    }
+    Ok(out)
+}
+
+async fn fetch_document_tags(db: &Db, document_id: i64) -> Result<Vec<String>, CommandError> {
+    let mut rows = db
+        .conn
+        .query(
+            "SELECT tag FROM document_tag WHERE document_id = ? ORDER BY tag",
+            (document_id,),
+        )
+        .await
+        .map_err(|source| CommandError::Db {
+            op: "fetch_document_tags",
+            source,
+        })?;
+    let mut out = Vec::new();
+    while let Some(row) = rows.next().await.map_err(|source| CommandError::Db {
+        op: "fetch_document_tags.next",
+        source,
+    })? {
+        let t: String = row.get(0).map_err(|source| CommandError::Db {
+            op: "fetch_document_tags.get",
+            source,
+        })?;
+        out.push(t);
+    }
+    Ok(out)
+}
+
+fn normalize_tags(raw: &[String]) -> Result<Vec<String>, CommandError> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for t in raw {
+        let n = t.trim().to_lowercase();
+        if n.is_empty() {
+            return Err(CommandError::EmptyTag);
+        }
+        if seen.insert(n.clone()) {
+            out.push(n);
+        }
+    }
+    Ok(out)
+}
+
+pub async fn tag_add(
+    db: &Db,
+    raw_path: &Path,
+    raw_tags: &[String],
+) -> Result<String, CommandError> {
+    let path = canonicalize(raw_path)?;
+    let row = lookup_document(db, &path).await?;
+    let tags = normalize_tags(raw_tags)?;
+
+    // Determine added vs already-present counts up front. turso 0.4.4's
+    // execute() return value over-counts DELETEs on tables with secondary
+    // indexes, so we compute mutation counts in Rust and treat the SQL writes
+    // as fire-and-forget on success.
+    let existing: std::collections::BTreeSet<String> =
+        fetch_document_tags(db, row.id).await?.into_iter().collect();
+    let to_insert: Vec<&String> = tags.iter().filter(|t| !existing.contains(*t)).collect();
+    let already = (tags.len() - to_insert.len()) as u64;
+    let added = to_insert.len() as u64;
+
+    db.conn
+        .execute("BEGIN", ())
+        .await
+        .map_err(|source| CommandError::Db {
+            op: "tag_add.begin",
+            source,
+        })?;
+
+    for tag in &to_insert {
+        if let Err(source) = db
+            .conn
+            .execute(
+                "INSERT OR IGNORE INTO document_tag (document_id, tag) VALUES (?, ?)",
+                Params::Positional(vec![Value::Integer(row.id), Value::Text((*tag).clone())]),
+            )
+            .await
+        {
+            let _ = db.conn.execute("ROLLBACK", ()).await;
+            return Err(CommandError::Db {
+                op: "tag_add.insert",
+                source,
+            });
+        }
+    }
+
+    db.conn
+        .execute("COMMIT", ())
+        .await
+        .map_err(|source| CommandError::Db {
+            op: "tag_add.commit",
+            source,
+        })?;
+
+    Ok(format!(
+        "added {added} tag(s) to {}; {already} already present\n",
+        path.display()
+    ))
+}
+
+pub async fn tag_remove(
+    db: &Db,
+    raw_path: &Path,
+    raw_tags: &[String],
+) -> Result<String, CommandError> {
+    let path = canonicalize(raw_path)?;
+    let row = lookup_document(db, &path).await?;
+    let tags = normalize_tags(raw_tags)?;
+
+    let existing: std::collections::BTreeSet<String> =
+        fetch_document_tags(db, row.id).await?.into_iter().collect();
+    let to_remove: Vec<&String> = tags.iter().filter(|t| existing.contains(*t)).collect();
+    let removed = to_remove.len() as u64;
+
+    db.conn
+        .execute("BEGIN", ())
+        .await
+        .map_err(|source| CommandError::Db {
+            op: "tag_remove.begin",
+            source,
+        })?;
+
+    for tag in &to_remove {
+        if let Err(source) = db
+            .conn
+            .execute(
+                "DELETE FROM document_tag WHERE document_id = ? AND tag = ?",
+                Params::Positional(vec![Value::Integer(row.id), Value::Text((*tag).clone())]),
+            )
+            .await
+        {
+            let _ = db.conn.execute("ROLLBACK", ()).await;
+            return Err(CommandError::Db {
+                op: "tag_remove.delete",
+                source,
+            });
+        }
+    }
+
+    db.conn
+        .execute("COMMIT", ())
+        .await
+        .map_err(|source| CommandError::Db {
+            op: "tag_remove.commit",
+            source,
+        })?;
+
+    Ok(format!(
+        "removed {removed} tag(s) from {}\n",
+        path.display()
+    ))
+}
+
+pub async fn tag_list_text(db: &Db) -> Result<String, CommandError> {
+    let conn = db
+        .fresh_conn()
+        .await
+        .map_err(|source| CommandError::FreshConn { source })?;
+
+    let mut rows = conn
+        .query(
+            "SELECT tag, COUNT(*) AS n FROM document_tag GROUP BY tag ORDER BY tag",
+            (),
+        )
+        .await
+        .map_err(|source| CommandError::Db {
+            op: "tag_list_text.query",
+            source,
+        })?;
+
+    let mut entries: Vec<(String, i64)> = Vec::new();
+    while let Some(row) = rows.next().await.map_err(|source| CommandError::Db {
+        op: "tag_list_text.next",
+        source,
+    })? {
+        let tag: String = row.get(0).map_err(|source| CommandError::Db {
+            op: "tag_list_text.get.tag",
+            source,
+        })?;
+        let n: i64 = row.get(1).map_err(|source| CommandError::Db {
+            op: "tag_list_text.get.n",
+            source,
+        })?;
+        entries.push((tag, n));
+    }
+
+    let mut out = String::new();
+    let _ = writeln!(out, "tags ({}):", entries.len());
+    if entries.is_empty() {
+        let _ = writeln!(out, "  (none)");
+    } else {
+        let tag_w = entries.iter().map(|(t, _)| t.len()).max().unwrap_or(0);
+        let count_w = entries
+            .iter()
+            .map(|(_, n)| n.to_string().len())
+            .max()
+            .unwrap_or(0);
+        for (tag, n) in &entries {
+            let _ = writeln!(
+                out,
+                "  {tag:<tag_w$}  {n:>count_w$}",
+                tag = tag,
+                n = n,
+                tag_w = tag_w,
+                count_w = count_w,
+            );
         }
     }
     Ok(out)
@@ -110,7 +330,12 @@ struct ListedDocument {
     created_at: String,
 }
 
-pub async fn list_text(db: &Db, snapshot: &StatusSnapshot) -> Result<String, CommandError> {
+pub async fn list_text(
+    db: &Db,
+    snapshot: &StatusSnapshot,
+    raw_tags: &[String],
+    match_all: bool,
+) -> Result<String, CommandError> {
     // Use a fresh connection so this SELECT does not interleave with whatever
     // transaction is open on the worker's `db.conn`.
     let conn = db
@@ -118,8 +343,10 @@ pub async fn list_text(db: &Db, snapshot: &StatusSnapshot) -> Result<String, Com
         .await
         .map_err(|source| CommandError::FreshConn { source })?;
 
-    let mut rows = conn
-        .query(
+    let tags = normalize_tags(raw_tags)?;
+
+    let mut rows = if tags.is_empty() {
+        conn.query(
             "SELECT path, doc_type, total_size_bytes, total_size_pages, created_at \
              FROM document ORDER BY created_at",
             (),
@@ -128,7 +355,41 @@ pub async fn list_text(db: &Db, snapshot: &StatusSnapshot) -> Result<String, Com
         .map_err(|source| CommandError::Db {
             op: "list_text.query",
             source,
-        })?;
+        })?
+    } else {
+        let placeholders = std::iter::repeat("?")
+            .take(tags.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = if match_all {
+            format!(
+                "SELECT d.path, d.doc_type, d.total_size_bytes, d.total_size_pages, d.created_at \
+                 FROM document d JOIN document_tag t ON t.document_id = d.id \
+                 WHERE t.tag IN ({placeholders}) \
+                 GROUP BY d.id \
+                 HAVING COUNT(DISTINCT t.tag) = ? \
+                 ORDER BY d.created_at"
+            )
+        } else {
+            format!(
+                "SELECT d.path, d.doc_type, d.total_size_bytes, d.total_size_pages, d.created_at \
+                 FROM document d \
+                 WHERE EXISTS (SELECT 1 FROM document_tag t \
+                                WHERE t.document_id = d.id AND t.tag IN ({placeholders})) \
+                 ORDER BY d.created_at"
+            )
+        };
+        let mut params: Vec<Value> = tags.iter().map(|t| Value::Text(t.clone())).collect();
+        if match_all {
+            params.push(Value::Integer(tags.len() as i64));
+        }
+        conn.query(&sql, Params::Positional(params))
+            .await
+            .map_err(|source| CommandError::Db {
+                op: "list_text.query",
+                source,
+            })?
+    };
 
     let mut docs: Vec<ListedDocument> = Vec::new();
     while let Some(row) = rows.next().await.map_err(|source| CommandError::Db {

@@ -274,8 +274,19 @@ async fn worker_loop(
                 .await
                 .map(|()| String::new())
                 .map_err(|e| e.to_string()),
+            Request::TagAdd { path, tags } => commands::tag_add(&db, &path, &tags)
+                .await
+                .map_err(|e| e.to_string()),
+            Request::TagRemove { path, tags } => commands::tag_remove(&db, &path, &tags)
+                .await
+                .map_err(|e| e.to_string()),
             Request::Status => unreachable!("status is handled inline by the connection task"),
-            Request::List => unreachable!("list is handled inline by the connection task"),
+            Request::List { .. } => {
+                unreachable!("list is handled inline by the connection task")
+            }
+            Request::TagList => {
+                unreachable!("tag list is handled inline by the connection task")
+            }
             Request::Cancel => unreachable!("cancel is handled inline by the connection task"),
         };
 

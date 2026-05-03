@@ -14,7 +14,7 @@ mod server;
 
 use clap::Parser;
 
-use crate::cli::{Cli, Command, TextRange};
+use crate::cli::{Cli, Command, TagCommand, TextRange};
 use crate::error::Error;
 use crate::protocol::{Request, TextRangeReq};
 
@@ -77,9 +77,14 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
         }),
         Command::PrintConfig => Ok(Request::PrintConfig),
         Command::Status => Ok(Request::Status),
-        Command::List => Ok(Request::List),
+        Command::List { tags, match_all } => Ok(Request::List { tags, match_all }),
         Command::Delete { path } => Ok(Request::Delete { path }),
         Command::Cancel => Ok(Request::Cancel),
+        Command::Tag { action } => match action {
+            TagCommand::Add { path, tags } => Ok(Request::TagAdd { path, tags }),
+            TagCommand::Remove { path, tags } => Ok(Request::TagRemove { path, tags }),
+            TagCommand::List => Ok(Request::TagList),
+        },
         Command::Server => unreachable!("Server is dispatched directly"),
     }
 }

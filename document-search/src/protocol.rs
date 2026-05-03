@@ -14,9 +14,17 @@ pub enum Request {
     Text { path: PathBuf, range: TextRangeReq },
     PrintConfig,
     Status,
-    List,
+    List {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        tags: Vec<String>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        match_all: bool,
+    },
     Delete { path: PathBuf },
     Cancel,
+    TagAdd { path: PathBuf, tags: Vec<String> },
+    TagRemove { path: PathBuf, tags: Vec<String> },
+    TagList,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,9 +44,23 @@ impl Request {
             Request::Text { path, .. } => format!("text {}", path.display()),
             Request::PrintConfig => "print-config".to_string(),
             Request::Status => "status".to_string(),
-            Request::List => "list".to_string(),
+            Request::List { tags, match_all } => {
+                if tags.is_empty() {
+                    "list".to_string()
+                } else {
+                    let mode = if *match_all { "all" } else { "any" };
+                    format!("list --tag {} ({})", tags.join(","), mode)
+                }
+            }
             Request::Delete { path } => format!("delete {}", path.display()),
             Request::Cancel => "cancel".to_string(),
+            Request::TagAdd { path, tags } => {
+                format!("tag add {} [{}]", path.display(), tags.join(","))
+            }
+            Request::TagRemove { path, tags } => {
+                format!("tag remove {} [{}]", path.display(), tags.join(","))
+            }
+            Request::TagList => "tag list".to_string(),
         }
     }
 }
@@ -69,6 +91,11 @@ pub enum Event {
 pub enum ProgressEvent {
     /// Named pipeline stage (e.g. "extracting", "chunking", "inserting").
     Stage { name: String },
+    /// Per-page PDF text extraction progress. `current` is 1-indexed.
+    Extracting { current: u32, total: u32 },
+    /// Per-chunk chunking progress. `current` is 1-indexed; `total` is an
+    /// estimate derived from text length and stride.
+    Chunking { current: usize, total: usize },
     /// Per-chunk embedding progress. `current` is 1-indexed.
     Embedding { current: usize, total: usize },
 }

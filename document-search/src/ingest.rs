@@ -107,13 +107,19 @@ pub async fn ingest(
 
     let doc_type = detect_type(&path)?;
     emit_stage(progress, "extracting");
-    let bytes = std::fs::read(&path).map_err(|source| IngestError::Read {
-        path: path.clone(),
-        source,
-    })?;
 
     let (text, page_offsets) = match doc_type {
         DocType::Txt => {
+            let bytes = std::fs::read(&path).map_err(|source| IngestError::Read {
+                path: path.clone(),
+                source,
+            })?;
+            tracing::info!(
+                path = %path.display(),
+                doc_type = doc_type.as_str(),
+                file_bytes = bytes.len(),
+                "ingest: read source file",
+            );
             let s = String::from_utf8(bytes).map_err(|source| IngestError::NotUtf8 {
                 path: path.clone(),
                 source,
@@ -124,7 +130,9 @@ pub async fn ingest(
             let PdfText {
                 full_text,
                 page_offsets,
-            } = pdf::extract(&bytes)?;
+            } = pdf::extract(&path, |current, total| {
+                emit_extracting(progress, current, total);
+            })?;
             (full_text, page_offsets)
         }
     };
@@ -142,6 +150,9 @@ pub async fn ingest(
         &text,
         cfg.chunking.chunk_size_bytes,
         cfg.chunking.overlap_bytes,
+        |current, total| {
+            emit_chunking(progress, current, total);
+        },
     );
 
     tracing::info!(
@@ -187,6 +198,26 @@ fn emit_embedding(
 ) {
     if let Some(tx) = progress {
         let _ = tx.send(Event::Progress(ProgressEvent::Embedding { current, total }));
+    }
+}
+
+fn emit_extracting(
+    progress: Option<&mpsc::UnboundedSender<Event>>,
+    current: u32,
+    total: u32,
+) {
+    if let Some(tx) = progress {
+        let _ = tx.send(Event::Progress(ProgressEvent::Extracting { current, total }));
+    }
+}
+
+fn emit_chunking(
+    progress: Option<&mpsc::UnboundedSender<Event>>,
+    current: usize,
+    total: usize,
+) {
+    if let Some(tx) = progress {
+        let _ = tx.send(Event::Progress(ProgressEvent::Chunking { current, total }));
     }
 }
 
@@ -313,11 +344,26 @@ async fn insert_all_inner(
     for (i, span) in spans.iter().enumerate() {
         if let Some(rx) = cancel {
             if *rx.borrow() {
+                tracing::debug!(
+                    chunk_index = i,
+                    total_chunks,
+                    "ingest: cancelled before embedding chunk",
+                );
                 return Err(IngestError::Cancelled);
             }
         }
         emit_embedding(progress, i + 1, total_chunks);
         let chunk_text = &text[span.byte_start..span.byte_end];
+        let chunk_bytes = span.byte_end - span.byte_start;
+        tracing::trace!(
+            chunk_index = i,
+            current = i + 1,
+            total = total_chunks,
+            byte_start = span.byte_start,
+            byte_end = span.byte_end,
+            chunk_bytes,
+            "ingest: embedding chunk",
+        );
 
         let (page_first, page_last) = if doc_type == DocType::Pdf && !page_offsets.is_empty() {
             let pf = pdf::page_for_byte_or_preceding(page_offsets, span.byte_start)
@@ -376,6 +422,14 @@ async fn insert_all_inner(
             op: "insert_embedding",
             source,
         })?;
+
+        tracing::trace!(
+            chunk_index = i,
+            current = i + 1,
+            total = total_chunks,
+            chunk_id,
+            "ingest: embedded and inserted chunk",
+        );
     }
 
     Ok(document_id)

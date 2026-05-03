@@ -57,12 +57,44 @@ pub(crate) async fn handle(
         return Ok(());
     }
 
-    if matches!(req, Request::List) {
+    if let Request::List { tags, match_all } = &req {
         let (db, snapshot) = {
             let g = state.lock().unwrap();
             (Arc::clone(&g.db), g.snapshot())
         };
-        match commands::list_text(&db, &snapshot).await {
+        match commands::list_text(&db, &snapshot, tags, *match_all).await {
+            Ok(text) => {
+                write_event(&mut write_half, &Event::Output { text }).await?;
+                write_event(
+                    &mut write_half,
+                    &Event::Final {
+                        ok: true,
+                        error: None,
+                    },
+                )
+                .await?;
+            }
+            Err(e) => {
+                write_event(
+                    &mut write_half,
+                    &Event::Final {
+                        ok: false,
+                        error: Some(e.to_string()),
+                    },
+                )
+                .await?;
+            }
+        }
+        let _ = write_half.shutdown().await;
+        return Ok(());
+    }
+
+    if matches!(req, Request::TagList) {
+        let db = {
+            let g = state.lock().unwrap();
+            Arc::clone(&g.db)
+        };
+        match commands::tag_list_text(&db).await {
             Ok(text) => {
                 write_event(&mut write_half, &Event::Output { text }).await?;
                 write_event(

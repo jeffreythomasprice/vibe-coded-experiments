@@ -56,7 +56,15 @@ pub enum Command {
 
     /// List all ingested documents, plus any in-progress or queued jobs.
     /// Bypasses the queue.
-    List,
+    List {
+        /// Filter to documents that have this tag. Repeatable.
+        #[arg(long = "tag", value_name = "TAG")]
+        tags: Vec<String>,
+
+        /// With multiple --tag, require ALL tags to match (default: ANY).
+        #[arg(long, requires = "tags")]
+        match_all: bool,
+    },
 
     /// Delete an ingested document and all of its chunks/embeddings.
     Delete {
@@ -66,6 +74,36 @@ pub enum Command {
 
     /// Cancel the currently-running ingest, if any. Bypasses the queue.
     Cancel,
+
+    /// Manage tags on ingested documents.
+    Tag {
+        #[command(subcommand)]
+        action: TagCommand,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum TagCommand {
+    /// Add one or more tags to a document. Tags are lowercased and trimmed.
+    Add {
+        /// Path of an already-ingested document.
+        path: PathBuf,
+        /// Tag(s) to add.
+        #[arg(required = true, num_args = 1..)]
+        tags: Vec<String>,
+    },
+
+    /// Remove one or more tags from a document. Tags not present are a no-op.
+    Remove {
+        /// Path of an already-ingested document.
+        path: PathBuf,
+        /// Tag(s) to remove.
+        #[arg(required = true, num_args = 1..)]
+        tags: Vec<String>,
+    },
+
+    /// List all known tags with usage counts.
+    List,
 }
 
 #[derive(Args, Debug)]

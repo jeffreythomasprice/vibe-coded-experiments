@@ -149,6 +149,12 @@ where
             Event::Progress(ProgressEvent::Stage { name }) => {
                 pb.set_message(name);
             }
+            Event::Progress(ProgressEvent::Extracting { current, total }) => {
+                pb.set_message(format!("Extracting page {current}/{total}"));
+            }
+            Event::Progress(ProgressEvent::Chunking { current, total }) => {
+                pb.set_message(format!("Chunking {current}/{total}"));
+            }
             Event::Progress(ProgressEvent::Embedding { current, total }) => {
                 pb.set_message(format!("Embedding chunk {current}/{total}"));
             }

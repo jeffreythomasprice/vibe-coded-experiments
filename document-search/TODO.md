@@ -5,13 +5,10 @@ test:
 
 dynamic chunking instead of fixed regions?
 
-/init
+skill
 
 
 
-I want to add a new table that defines tags on documents. Each document can have any number of tags.
-
-I want new cli commands to do CRUD on tags: add and remove tags, list tags whenever we display info about a document, list all documents with matching tags (all of listed tags, or any of listed tags)
 
 
 
