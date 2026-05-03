@@ -41,6 +41,31 @@ pub enum Command {
         #[command(flatten)]
         range: TextRange,
     },
+
+    /// Print the assembled configuration (embedded defaults + user overrides) as TOML.
+    PrintConfig,
+
+    /// Run the document-search server in the foreground. Listens on the
+    /// Unix socket configured under [server] and auto-exits after the
+    /// configured idle timeout.
+    Server,
+
+    /// Print the server's queue and currently-running job. Bypasses the
+    /// queue.
+    Status,
+
+    /// List all ingested documents, plus any in-progress or queued jobs.
+    /// Bypasses the queue.
+    List,
+
+    /// Delete an ingested document and all of its chunks/embeddings.
+    Delete {
+        /// Path of an already-ingested document.
+        path: PathBuf,
+    },
+
+    /// Cancel the currently-running ingest, if any. Bypasses the queue.
+    Cancel,
 }
 
 #[derive(Args, Debug)]

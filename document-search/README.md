@@ -56,3 +56,16 @@ via `RUST_LOG`:
 RUST_LOG=document_search=debug cargo run
 RUST_LOG=trace cargo run
 ```
+
+## Reset
+
+Kill any running server, remove its socket, and wipe the DB:
+
+```sh
+killall -9 document-search 2>/dev/null
+rm -f /tmp/document-search.sock
+rm -f document-search.db document-search.db-wal document-search.db-shm
+```
+
+The `rm` paths assume the default `db_path` from `config.example.toml`; adjust
+them if you've configured a different `db_path`.

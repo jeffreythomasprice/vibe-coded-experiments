@@ -15,6 +15,12 @@ pub enum Error {
     #[error("command: {0}")]
     Command(#[from] crate::commands::CommandError),
 
+    #[error("server: {0}")]
+    Server(#[from] crate::server::ServerError),
+
+    #[error("client: {0}")]
+    Client(#[from] crate::client::ClientError),
+
     #[error("cli: {0}")]
     Cli(String),
 

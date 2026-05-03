@@ -7,7 +7,7 @@ pub mod vector;
 
 use std::path::PathBuf;
 
-use turso::{Builder, Connection, Value};
+use turso::{Builder, Connection, Database, Value};
 
 use crate::config::Config;
 
@@ -46,11 +46,38 @@ pub enum DbError {
 /// What `open` returns to callers — a live connection plus the resolved
 /// embedding metadata so the rest of the app knows which `chunks_<N>` table
 /// to write to.
+///
+/// `database` is retained so callers that need to read concurrently with the
+/// worker's open transaction can mint a separate `Connection` via
+/// [`Db::fresh_conn`].
 pub struct Db {
+    pub database: Database,
     pub conn: Connection,
     pub embedding_model: String,
     pub embedding_dimensions: usize,
     pub chunks_table: String,
+}
+
+impl Db {
+    /// Open a fresh `Connection` against the same underlying `Database` and
+    /// enable foreign keys on it. Use this when you need DB access from a
+    /// task that must not interleave with whatever transaction is open on
+    /// `self.conn`. Turso 0.4's `BEGIN`/`COMMIT` are connection-scoped, so a
+    /// SELECT on the worker's `conn` while it's mid-ingest would land inside
+    /// the ingest transaction.
+    pub async fn fresh_conn(&self) -> Result<Connection, DbError> {
+        let conn = self.database.connect().map_err(|source| DbError::Open {
+            path: PathBuf::new(),
+            source,
+        })?;
+        conn.execute("PRAGMA foreign_keys = ON", ())
+            .await
+            .map_err(|source| DbError::Query {
+                op: "fresh_conn.pragma.foreign_keys",
+                source,
+            })?;
+        Ok(conn)
+    }
 }
 
 /// Returns the SQL table name for chunks of a given embedding dimension.
@@ -75,14 +102,14 @@ pub async fn open(cfg: &Config, http: &reqwest::Client) -> Result<Db, DbError> {
         }
     }
 
-    let db = Builder::new_local(&path_str)
+    let database = Builder::new_local(&path_str)
         .build()
         .await
         .map_err(|source| DbError::Open {
             path: cfg.db_path.clone(),
             source,
         })?;
-    let conn = db.connect().map_err(|source| DbError::Open {
+    let conn = database.connect().map_err(|source| DbError::Open {
         path: cfg.db_path.clone(),
         source,
     })?;
@@ -120,6 +147,7 @@ pub async fn open(cfg: &Config, http: &reqwest::Client) -> Result<Db, DbError> {
     ensure_chunks_table(&conn, &chunks_table, dimensions).await?;
 
     Ok(Db {
+        database,
         conn,
         embedding_model: model,
         embedding_dimensions: dimensions,

@@ -4,6 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
+use tokio::sync::{mpsc, watch};
 use turso::{Value, params::Params};
 
 use crate::chunking::{self, ChunkSpan};
@@ -11,6 +12,7 @@ use crate::config::Config;
 use crate::db::{Db, vector};
 use crate::ollama;
 use crate::pdf::{self, PageOffset, PdfText};
+use crate::protocol::{Event, ProgressEvent};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DocType {
@@ -83,6 +85,9 @@ pub enum IngestError {
         #[source]
         source: turso::Error,
     },
+
+    #[error("ingest cancelled")]
+    Cancelled,
 }
 
 pub async fn ingest(
@@ -90,6 +95,8 @@ pub async fn ingest(
     cfg: &Config,
     http: &reqwest::Client,
     raw_path: &Path,
+    progress: Option<&mpsc::UnboundedSender<Event>>,
+    cancel: Option<watch::Receiver<bool>>,
 ) -> Result<i64, IngestError> {
     let path = raw_path
         .canonicalize()
@@ -99,6 +106,7 @@ pub async fn ingest(
         })?;
 
     let doc_type = detect_type(&path)?;
+    emit_stage(progress, "extracting");
     let bytes = std::fs::read(&path).map_err(|source| IngestError::Read {
         path: path.clone(),
         source,
@@ -129,6 +137,7 @@ pub async fn ingest(
         None
     };
 
+    emit_stage(progress, "chunking");
     let spans = chunking::chunk(
         &text,
         cfg.chunking.chunk_size_bytes,
@@ -157,8 +166,28 @@ pub async fn ingest(
         total_size_bytes,
         total_size_chars,
         total_size_pages,
+        progress,
+        cancel.as_ref(),
     )
     .await
+}
+
+fn emit_stage(progress: Option<&mpsc::UnboundedSender<Event>>, name: &str) {
+    if let Some(tx) = progress {
+        let _ = tx.send(Event::Progress(ProgressEvent::Stage {
+            name: name.to_string(),
+        }));
+    }
+}
+
+fn emit_embedding(
+    progress: Option<&mpsc::UnboundedSender<Event>>,
+    current: usize,
+    total: usize,
+) {
+    if let Some(tx) = progress {
+        let _ = tx.send(Event::Progress(ProgressEvent::Embedding { current, total }));
+    }
 }
 
 fn detect_type(path: &Path) -> Result<DocType, IngestError> {
@@ -184,6 +213,8 @@ async fn insert_all(
     total_size_bytes: usize,
     total_size_chars: usize,
     total_size_pages: Option<usize>,
+    progress: Option<&mpsc::UnboundedSender<Event>>,
+    cancel: Option<&watch::Receiver<bool>>,
 ) -> Result<i64, IngestError> {
     let conn = &db.conn;
 
@@ -203,11 +234,14 @@ async fn insert_all(
         total_size_bytes,
         total_size_chars,
         total_size_pages,
+        progress,
+        cancel,
     )
     .await;
 
     match result {
         Ok(id) => {
+            emit_stage(progress, "inserting");
             conn.execute("COMMIT", ())
                 .await
                 .map_err(|source| IngestError::Db {
@@ -236,6 +270,8 @@ async fn insert_all_inner(
     total_size_bytes: usize,
     total_size_chars: usize,
     total_size_pages: Option<usize>,
+    progress: Option<&mpsc::UnboundedSender<Event>>,
+    cancel: Option<&watch::Receiver<bool>>,
 ) -> Result<i64, IngestError> {
     let conn = &db.conn;
     let path_str = path.to_string_lossy().to_string();
@@ -273,7 +309,14 @@ async fn insert_all_inner(
         }
     }
 
+    let total_chunks = spans.len();
     for (i, span) in spans.iter().enumerate() {
+        if let Some(rx) = cancel {
+            if *rx.borrow() {
+                return Err(IngestError::Cancelled);
+            }
+        }
+        emit_embedding(progress, i + 1, total_chunks);
         let chunk_text = &text[span.byte_start..span.byte_end];
 
         let (page_first, page_last) = if doc_type == DocType::Pdf && !page_offsets.is_empty() {

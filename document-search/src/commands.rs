@@ -1,10 +1,12 @@
 //! Read-side CLI command handlers: `info` and the three flavors of `text`.
 
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use turso::{Value, params::Params};
 
 use crate::db::Db;
+use crate::protocol::StatusSnapshot;
 
 #[derive(thiserror::Error, Debug)]
 pub enum CommandError {
@@ -47,6 +49,12 @@ pub enum CommandError {
         #[source]
         source: turso::Error,
     },
+
+    #[error("opening read connection: {source}")]
+    FreshConn {
+        #[source]
+        source: crate::db::DbError,
+    },
 }
 
 struct DocumentRow {
@@ -57,19 +65,162 @@ struct DocumentRow {
     total_size_pages: Option<i64>,
 }
 
-pub async fn info(db: &Db, raw_path: &Path) -> Result<(), CommandError> {
+pub async fn info(db: &Db, raw_path: &Path) -> Result<String, CommandError> {
     let path = canonicalize(raw_path)?;
     let row = lookup_document(db, &path).await?;
 
-    println!("path:             {}", path.display());
-    println!("type:             {}", row.doc_type);
-    println!("total_size_bytes: {}", row.total_size_bytes);
-    println!("total_size_chars: {}", row.total_size_chars);
+    let mut out = String::new();
+    let _ = writeln!(out, "path:             {}", path.display());
+    let _ = writeln!(out, "type:             {}", row.doc_type);
+    let _ = writeln!(out, "total_size_bytes: {}", row.total_size_bytes);
+    let _ = writeln!(out, "total_size_chars: {}", row.total_size_chars);
     match row.total_size_pages {
-        Some(p) => println!("total_size_pages: {p}"),
-        None => println!("total_size_pages: null"),
+        Some(p) => {
+            let _ = writeln!(out, "total_size_pages: {p}");
+        }
+        None => {
+            let _ = writeln!(out, "total_size_pages: null");
+        }
     }
+    Ok(out)
+}
+
+pub async fn delete(db: &Db, raw_path: &Path) -> Result<(), CommandError> {
+    let path = canonicalize(raw_path)?;
+    // Surfaces DocumentNotFound when the path isn't ingested, instead of a
+    // silent no-op DELETE.
+    let _ = lookup_document(db, &path).await?;
+
+    let path_str = path.to_string_lossy().to_string();
+    db.conn
+        .execute("DELETE FROM document WHERE path = ?", (path_str,))
+        .await
+        .map_err(|source| CommandError::Db {
+            op: "delete_document",
+            source,
+        })?;
     Ok(())
+}
+
+struct ListedDocument {
+    path: String,
+    doc_type: String,
+    total_size_bytes: i64,
+    total_size_pages: Option<i64>,
+    created_at: String,
+}
+
+pub async fn list_text(db: &Db, snapshot: &StatusSnapshot) -> Result<String, CommandError> {
+    // Use a fresh connection so this SELECT does not interleave with whatever
+    // transaction is open on the worker's `db.conn`.
+    let conn = db
+        .fresh_conn()
+        .await
+        .map_err(|source| CommandError::FreshConn { source })?;
+
+    let mut rows = conn
+        .query(
+            "SELECT path, doc_type, total_size_bytes, total_size_pages, created_at \
+             FROM document ORDER BY created_at",
+            (),
+        )
+        .await
+        .map_err(|source| CommandError::Db {
+            op: "list_text.query",
+            source,
+        })?;
+
+    let mut docs: Vec<ListedDocument> = Vec::new();
+    while let Some(row) = rows.next().await.map_err(|source| CommandError::Db {
+        op: "list_text.next",
+        source,
+    })? {
+        let path: String = row.get(0).map_err(|source| CommandError::Db {
+            op: "list_text.get.path",
+            source,
+        })?;
+        let doc_type: String = row.get(1).map_err(|source| CommandError::Db {
+            op: "list_text.get.doc_type",
+            source,
+        })?;
+        let total_size_bytes: i64 = row.get(2).map_err(|source| CommandError::Db {
+            op: "list_text.get.bytes",
+            source,
+        })?;
+        let total_size_pages: Option<i64> = match row.get_value(3) {
+            Ok(Value::Null) => None,
+            Ok(Value::Integer(n)) => Some(n),
+            Ok(other) => panic!("unexpected total_size_pages value {other:?}"),
+            Err(source) => {
+                return Err(CommandError::Db {
+                    op: "list_text.get.pages",
+                    source,
+                });
+            }
+        };
+        let created_at: String = row.get(4).map_err(|source| CommandError::Db {
+            op: "list_text.get.created_at",
+            source,
+        })?;
+        docs.push(ListedDocument {
+            path,
+            doc_type,
+            total_size_bytes,
+            total_size_pages,
+            created_at,
+        });
+    }
+
+    Ok(format_list(&docs, snapshot))
+}
+
+fn format_list(docs: &[ListedDocument], snapshot: &StatusSnapshot) -> String {
+    let mut out = String::new();
+
+    let path_w = docs.iter().map(|d| d.path.len()).max().unwrap_or(0);
+    let type_w = docs.iter().map(|d| d.doc_type.len()).max().unwrap_or(0).max(3);
+    let bytes_w = docs
+        .iter()
+        .map(|d| d.total_size_bytes.to_string().len())
+        .max()
+        .unwrap_or(0);
+    let pages_w = docs
+        .iter()
+        .filter_map(|d| d.total_size_pages.map(|p| p.to_string().len()))
+        .max()
+        .unwrap_or(0);
+
+    let _ = writeln!(out, "ingested ({}):", docs.len());
+    for d in docs {
+        let pages_cell = match d.total_size_pages {
+            Some(p) => format!("{p:>w$} pages", w = pages_w),
+            None => " ".repeat(pages_w + " pages".len()),
+        };
+        let _ = writeln!(
+            out,
+            "  {path:<path_w$}  {ty:<type_w$}  {bytes:>bytes_w$} bytes  {pages_cell}  {created}",
+            path = d.path,
+            ty = d.doc_type,
+            bytes = d.total_size_bytes,
+            created = d.created_at,
+        );
+    }
+
+    if let Some(c) = &snapshot.current {
+        let _ = writeln!(out);
+        let _ = writeln!(out, "in progress:");
+        let _ = writeln!(out, "  {} (running {}s)", c.label, c.running_secs);
+    }
+
+    if !snapshot.queued.is_empty() {
+        let _ = writeln!(out);
+        let _ = writeln!(out, "queued ({}):", snapshot.queued.len());
+        for (i, q) in snapshot.queued.iter().enumerate() {
+            let _ = writeln!(out, "  {}. {q}", i + 1);
+        }
+    }
+
+    out
 }
 
 pub async fn text_bytes(
@@ -77,7 +228,7 @@ pub async fn text_bytes(
     raw_path: &Path,
     start: u64,
     end: u64,
-) -> Result<(), CommandError> {
+) -> Result<String, CommandError> {
     if start > end {
         return Err(CommandError::InvalidRange { start, end });
     }
@@ -88,9 +239,7 @@ pub async fn text_bytes(
         return Err(CommandError::ByteRangeOutOfBounds { start, end, total });
     }
     let end_exclusive = end + 1;
-    let out = stitch_bytes(db, row.id, start, end_exclusive).await?;
-    print!("{out}");
-    Ok(())
+    stitch_bytes(db, row.id, start, end_exclusive).await
 }
 
 pub async fn text_chars(
@@ -98,7 +247,7 @@ pub async fn text_chars(
     raw_path: &Path,
     start: u64,
     end: u64,
-) -> Result<(), CommandError> {
+) -> Result<String, CommandError> {
     if start > end {
         return Err(CommandError::InvalidRange { start, end });
     }
@@ -109,9 +258,7 @@ pub async fn text_chars(
         return Err(CommandError::CharRangeOutOfBounds { start, end, total });
     }
     let end_exclusive = end + 1;
-    let out = stitch_chars(db, row.id, start, end_exclusive).await?;
-    print!("{out}");
-    Ok(())
+    stitch_chars(db, row.id, start, end_exclusive).await
 }
 
 pub async fn text_pages(
@@ -119,7 +266,7 @@ pub async fn text_pages(
     raw_path: &Path,
     first: u32,
     last: u32,
-) -> Result<(), CommandError> {
+) -> Result<String, CommandError> {
     if first > last {
         return Err(CommandError::InvalidPageRange { first, last });
     }
@@ -144,9 +291,7 @@ pub async fn text_pages(
     }
 
     let (byte_start, byte_end_exclusive) = page_byte_range(db, row.id, first, last).await?;
-    let out = stitch_bytes(db, row.id, byte_start, byte_end_exclusive).await?;
-    print!("{out}");
-    Ok(())
+    stitch_bytes(db, row.id, byte_start, byte_end_exclusive).await
 }
 
 fn canonicalize(p: &Path) -> Result<PathBuf, CommandError> {

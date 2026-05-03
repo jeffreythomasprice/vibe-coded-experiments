@@ -11,7 +11,7 @@ url = "http://localhost:11434"
 # The embedding model used to generate vectors for the chunks table.
 # Pull it once with: ollama pull <model>
 # The model's vector length is probed on first run and cached in the DB.
-embedding_model = "nomic-embed-text"
+embedding_model = "qwen3-embedding:8b"
 
 [chunking]
 # Target chunk size in bytes. The chunker steps back to the nearest UTF-8
@@ -21,3 +21,16 @@ chunk_size_bytes = 5000
 # than chunk_size_bytes.
 overlap_bytes = 1000
 
+[server]
+# Path to the Unix domain socket the server listens on. Clients auto-spawn
+# the server if this socket is missing.
+socket_path = "/tmp/document-search.sock"
+# Server auto-exits after this many seconds with no connected clients,
+# no in-flight job, and an empty queue.
+idle_timeout_secs = 15
+
+[logging]
+# All processes (server and clients) append to this file. The parent
+# directory is created on startup if missing. Point at /dev/null to
+# disable file logging.
+file = "/tmp/document-search.log"
