@@ -25,6 +25,8 @@ pub struct Config {
     pub logging: LoggingConfig,
 
     pub search: SearchConfig,
+
+    pub ocr: OcrConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -56,6 +58,16 @@ pub struct SearchConfig {
     pub relevancy_cutoff: f32,
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct OcrConfig {
+    pub enabled: bool,
+    pub min_decodable_ratio: f32,
+    pub min_chars_for_check: usize,
+    pub dpi: u32,
+    pub language: String,
+    pub psm: u32,
+}
+
 #[derive(Debug, Default, Deserialize)]
 struct PartialConfig {
     #[serde(default)]
@@ -70,6 +82,8 @@ struct PartialConfig {
     logging: Option<PartialLoggingConfig>,
     #[serde(default)]
     search: Option<PartialSearchConfig>,
+    #[serde(default)]
+    ocr: Option<PartialOcrConfig>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -108,6 +122,22 @@ struct PartialSearchConfig {
     default_results_per_document: Option<usize>,
     #[serde(default)]
     relevancy_cutoff: Option<f32>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct PartialOcrConfig {
+    #[serde(default)]
+    enabled: Option<bool>,
+    #[serde(default)]
+    min_decodable_ratio: Option<f32>,
+    #[serde(default)]
+    min_chars_for_check: Option<usize>,
+    #[serde(default)]
+    dpi: Option<u32>,
+    #[serde(default)]
+    language: Option<String>,
+    #[serde(default)]
+    psm: Option<u32>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -217,6 +247,7 @@ fn merge(base: Config, overlay: PartialConfig) -> Config {
         server: merge_server(base.server, overlay.server),
         logging: merge_logging(base.logging, overlay.logging),
         search: merge_search(base.search, overlay.search),
+        ocr: merge_ocr(base.ocr, overlay.ocr),
     }
 }
 
@@ -271,6 +302,24 @@ fn merge_search(base: SearchConfig, overlay: Option<PartialSearchConfig>) -> Sea
     }
 }
 
+fn merge_ocr(base: OcrConfig, overlay: Option<PartialOcrConfig>) -> OcrConfig {
+    let Some(overlay) = overlay else {
+        return base;
+    };
+    OcrConfig {
+        enabled: overlay.enabled.unwrap_or(base.enabled),
+        min_decodable_ratio: overlay
+            .min_decodable_ratio
+            .unwrap_or(base.min_decodable_ratio),
+        min_chars_for_check: overlay
+            .min_chars_for_check
+            .unwrap_or(base.min_chars_for_check),
+        dpi: overlay.dpi.unwrap_or(base.dpi),
+        language: overlay.language.unwrap_or(base.language),
+        psm: overlay.psm.unwrap_or(base.psm),
+    }
+}
+
 fn validate_chunking(c: &ChunkingConfig) -> Result<(), ConfigError> {
     if c.chunk_size_bytes == 0 {
         return Err(ConfigError::ZeroChunkSize);
@@ -313,6 +362,12 @@ mod tests {
         assert_eq!(cfg.logging.file, PathBuf::from("/tmp/document-search.log"));
         assert_eq!(cfg.search.default_results_per_document, 5);
         assert_eq!(cfg.search.relevancy_cutoff, 0.3);
+        assert!(cfg.ocr.enabled);
+        assert_eq!(cfg.ocr.min_decodable_ratio, 0.7);
+        assert_eq!(cfg.ocr.min_chars_for_check, 40);
+        assert_eq!(cfg.ocr.dpi, 300);
+        assert_eq!(cfg.ocr.language, "eng");
+        assert_eq!(cfg.ocr.psm, 3);
     }
 
     #[test]

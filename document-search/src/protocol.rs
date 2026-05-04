@@ -123,6 +123,10 @@ pub enum ProgressEvent {
     Stage { name: String },
     /// Per-page PDF text extraction progress. `current` is 1-indexed.
     Extracting { current: u32, total: u32 },
+    /// Per-page OCR fallback progress, fired only for pages whose pdftotext
+    /// output failed the decodability check. `total` is the count of bad
+    /// pages (not the document's total page count); `current` is 1-indexed.
+    Ocr { current: u32, total: u32 },
     /// Per-chunk chunking progress. `current` is 1-indexed; `total` is an
     /// estimate derived from text length and stride.
     Chunking { current: usize, total: usize },

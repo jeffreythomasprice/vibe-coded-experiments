@@ -43,3 +43,32 @@ default_results_per_document = 5
 # Drop matches whose similarity (1.0 - cosine_distance) falls below this.
 # Range [0.0, 1.0]. Override per-call with `search --cutoff F`.
 relevancy_cutoff = 0.3
+
+[ocr]
+# Re-extract pages that pdftotext garbled (typically PDFs with CID fonts
+# and no ToUnicode CMap) by rasterizing them and running OCR via tesseract.
+# When false, ingests fail loudly on unreadable PDFs instead of falling back.
+enabled = true
+
+# Per-page decodability threshold. Pages from pdftotext scoring below this
+# get OCR'd; pages still below this after OCR fail the ingest. Range
+# [0.0, 1.0]. The score allowlist is ASCII-leaning, so heavily-accented
+# non-English PDFs may score lower than expected.
+min_decodable_ratio = 0.7
+
+# Skip the decodability check on pages with fewer non-whitespace chars
+# than this. Avoids false positives on title pages, dividers, etc.
+min_chars_for_check = 40
+
+# Rasterization DPI for pdftoppm. 300 is standard for OCR; higher is
+# slower with diminishing returns.
+dpi = 300
+
+# Tesseract language (must be installed: tesseract-ocr-<lang>). Combine
+# multiple as e.g. "eng+fra".
+language = "eng"
+
+# Tesseract page segmentation mode. 3 = auto (no OSD); 1 = auto with OSD
+# (requires osd.traineddata, not always installed); 6 = single uniform
+# block. See `tesseract --help-psm`.
+psm = 3

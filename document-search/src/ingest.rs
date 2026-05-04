@@ -127,11 +127,21 @@ pub async fn ingest(
             (s, Vec::new())
         }
         DocType::Pdf => {
+            let mut emitted_ocr_stage = false;
             let PdfText {
                 full_text,
                 page_offsets,
-            } = pdf::extract(&path, |current, total| {
-                emit_extracting(progress, current, total);
+            } = pdf::extract(&path, &cfg.ocr, |p| match p {
+                pdf::ExtractProgress::Pdftotext { current, total } => {
+                    emit_extracting(progress, current, total);
+                }
+                pdf::ExtractProgress::Ocr { current, total } => {
+                    if !emitted_ocr_stage {
+                        emit_stage(progress, "ocr");
+                        emitted_ocr_stage = true;
+                    }
+                    emit_ocr(progress, current, total);
+                }
             })?;
             (full_text, page_offsets)
         }
@@ -208,6 +218,12 @@ fn emit_extracting(
 ) {
     if let Some(tx) = progress {
         let _ = tx.send(Event::Progress(ProgressEvent::Extracting { current, total }));
+    }
+}
+
+fn emit_ocr(progress: Option<&mpsc::UnboundedSender<Event>>, current: u32, total: u32) {
+    if let Some(tx) = progress {
+        let _ = tx.send(Event::Progress(ProgressEvent::Ocr { current, total }));
     }
 }
 

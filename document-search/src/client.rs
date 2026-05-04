@@ -152,6 +152,9 @@ where
             Event::Progress(ProgressEvent::Extracting { current, total }) => {
                 pb.set_message(format!("Extracting page {current}/{total}"));
             }
+            Event::Progress(ProgressEvent::Ocr { current, total }) => {
+                pb.set_message(format!("OCR page {current}/{total}"));
+            }
             Event::Progress(ProgressEvent::Chunking { current, total }) => {
                 pb.set_message(format!("Chunking {current}/{total}"));
             }
