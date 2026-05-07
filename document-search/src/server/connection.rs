@@ -8,7 +8,7 @@ use tokio::net::UnixStream;
 use tokio::sync::{mpsc, watch};
 
 use crate::commands;
-use crate::protocol::{Event, Request};
+use crate::protocol::{Event, OutputMode, Request, RequestEnvelope};
 use crate::server::{Job, QueueEntry, ServerState};
 
 #[derive(thiserror::Error, Debug)]
@@ -40,11 +40,22 @@ pub(crate) async fn handle(
     if n == 0 {
         return Err(ConnectionError::NoRequest);
     }
-    let req: Request = serde_json::from_str(line.trim_end()).map_err(ConnectionError::Decode)?;
+    let envelope: RequestEnvelope =
+        serde_json::from_str(line.trim_end()).map_err(ConnectionError::Decode)?;
+    let output_mode = envelope.output_mode;
+    let req = envelope.request;
 
     if matches!(req, Request::Status) {
         let snapshot = state.lock().unwrap().snapshot();
-        write_event(&mut write_half, &Event::StatusSnapshot(snapshot)).await?;
+        match output_mode {
+            OutputMode::Text => {
+                write_event(&mut write_half, &Event::StatusSnapshot(snapshot)).await?;
+            }
+            OutputMode::Json => {
+                let text = commands::status_json(&snapshot);
+                write_event(&mut write_half, &Event::Output { text }).await?;
+            }
+        }
         write_event(
             &mut write_half,
             &Event::Final {
@@ -62,7 +73,11 @@ pub(crate) async fn handle(
             let g = state.lock().unwrap();
             (Arc::clone(&g.db), g.snapshot())
         };
-        match commands::list_text(&db, &snapshot, tags, *match_all).await {
+        let result = match output_mode {
+            OutputMode::Text => commands::list_text(&db, &snapshot, tags, *match_all).await,
+            OutputMode::Json => commands::list_json(&db, &snapshot, tags, *match_all).await,
+        };
+        match result {
             Ok(text) => {
                 write_event(&mut write_half, &Event::Output { text }).await?;
                 write_event(
@@ -94,7 +109,11 @@ pub(crate) async fn handle(
             let g = state.lock().unwrap();
             Arc::clone(&g.db)
         };
-        match commands::tag_list_text(&db).await {
+        let result = match output_mode {
+            OutputMode::Text => commands::tag_list_text(&db).await,
+            OutputMode::Json => commands::tag_list_json(&db).await,
+        };
+        match result {
             Ok(text) => {
                 write_event(&mut write_half, &Event::Output { text }).await?;
                 write_event(
@@ -128,25 +147,46 @@ pub(crate) async fn handle(
         match_all,
         limit,
         cutoff,
+        no_truncate,
     } = &req
     {
         let (db, http, cfg) = {
             let g = state.lock().unwrap();
             (Arc::clone(&g.db), g.http.clone(), Arc::clone(&g.cfg))
         };
-        match commands::search_text(
-            &db,
-            &http,
-            &cfg,
-            term,
-            path.as_deref(),
-            tags,
-            *match_all,
-            *limit,
-            *cutoff,
-        )
-        .await
-        {
+        let result = match output_mode {
+            OutputMode::Text => {
+                commands::search_text(
+                    &db,
+                    &http,
+                    &cfg,
+                    term,
+                    path.as_deref(),
+                    tags,
+                    *match_all,
+                    *limit,
+                    *cutoff,
+                    *no_truncate,
+                )
+                .await
+            }
+            OutputMode::Json => {
+                commands::search_json(
+                    &db,
+                    &http,
+                    &cfg,
+                    term,
+                    path.as_deref(),
+                    tags,
+                    *match_all,
+                    *limit,
+                    *cutoff,
+                    *no_truncate,
+                )
+                .await
+            }
+        };
+        match result {
             Ok(text) => {
                 write_event(&mut write_half, &Event::Output { text }).await?;
                 write_event(
@@ -179,7 +219,7 @@ pub(crate) async fn handle(
             match g.current.as_mut() {
                 Some(j) if j.is_ingest => {
                     let _ = j.cancel_tx.send(true);
-                    Ok(format!("cancellation requested for: {}\n", j.label))
+                    Ok(j.label.clone())
                 }
                 Some(j) => Err(format!(
                     "current job is not an ingest ({}); nothing to cancel",
@@ -189,7 +229,13 @@ pub(crate) async fn handle(
             }
         };
         match outcome {
-            Ok(text) => {
+            Ok(label) => {
+                let text = match output_mode {
+                    OutputMode::Text => format!("cancellation requested for: {label}\n"),
+                    OutputMode::Json => {
+                        serde_json::json!({"ok": true, "cancelled": label}).to_string()
+                    }
+                };
                 write_event(&mut write_half, &Event::Output { text }).await?;
                 write_event(
                     &mut write_half,
@@ -237,6 +283,7 @@ pub(crate) async fn handle(
     if job_tx
         .send(Job {
             req,
+            output_mode,
             event_tx: event_tx.clone(),
         })
         .await

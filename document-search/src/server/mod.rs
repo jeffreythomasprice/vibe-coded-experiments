@@ -14,7 +14,7 @@ use tokio::sync::{mpsc, watch};
 
 use crate::config::Config;
 use crate::db::{self, Db};
-use crate::protocol::{CurrentJob, Event, Request, StatusSnapshot};
+use crate::protocol::{CurrentJob, Event, OutputMode, Request, StatusSnapshot};
 use crate::{commands, config as cfg_mod, ingest};
 
 #[derive(thiserror::Error, Debug)]
@@ -82,6 +82,7 @@ impl ServerState {
 
 pub(crate) struct Job {
     pub req: Request,
+    pub output_mode: OutputMode,
     pub event_tx: mpsc::UnboundedSender<Event>,
 }
 
@@ -267,28 +268,66 @@ async fn worker_loop(
         }
         let _ = job.event_tx.send(Event::Started);
 
+        let mode = job.output_mode;
         let result: Result<String, String> = match job.req {
             Request::Ingest { path } => {
                 ingest::ingest(&db, &cfg, &http, &path, Some(&job.event_tx), Some(cancel_rx))
                     .await
-                    .map(|id| format!("ingested document id {id} from {}\n", path.display()))
+                    .map(|id| match mode {
+                        OutputMode::Text => {
+                            format!("ingested document id {id} from {}\n", path.display())
+                        }
+                        OutputMode::Json => serde_json::json!({
+                            "ok": true,
+                            "document_id": id,
+                            "path": path.display().to_string(),
+                        })
+                        .to_string(),
+                    })
                     .map_err(|e| e.to_string())
             }
-            Request::Info { path } => commands::info(&db, &path)
-                .await
-                .map_err(|e| e.to_string()),
-            Request::Text { path, range } => run_text(&db, &path, range).await,
-            Request::PrintConfig => cfg_mod::render_toml(&cfg).map_err(|e| e.to_string()),
+            Request::Info { path } => match mode {
+                OutputMode::Text => commands::info(&db, &path).await.map_err(|e| e.to_string()),
+                OutputMode::Json => commands::info_json(&db, &path)
+                    .await
+                    .map_err(|e| e.to_string()),
+            },
+            Request::Text { path, range } => run_text(&db, &path, range, mode).await,
+            Request::PrintConfig => match mode {
+                OutputMode::Text => cfg_mod::render_toml(&cfg).map_err(|e| e.to_string()),
+                OutputMode::Json => Ok(serde_json::json!({
+                    "ok": true,
+                    "config": &cfg,
+                })
+                .to_string()),
+            },
             Request::Delete { path } => commands::delete(&db, &path)
                 .await
-                .map(|()| String::new())
+                .map(|()| match mode {
+                    OutputMode::Text => String::new(),
+                    OutputMode::Json => serde_json::json!({
+                        "ok": true,
+                        "path": path.display().to_string(),
+                    })
+                    .to_string(),
+                })
                 .map_err(|e| e.to_string()),
-            Request::TagAdd { path, tags } => commands::tag_add(&db, &path, &tags)
-                .await
-                .map_err(|e| e.to_string()),
-            Request::TagRemove { path, tags } => commands::tag_remove(&db, &path, &tags)
-                .await
-                .map_err(|e| e.to_string()),
+            Request::TagAdd { path, tags } => match mode {
+                OutputMode::Text => commands::tag_add(&db, &path, &tags)
+                    .await
+                    .map_err(|e| e.to_string()),
+                OutputMode::Json => commands::tag_add_json(&db, &path, &tags)
+                    .await
+                    .map_err(|e| e.to_string()),
+            },
+            Request::TagRemove { path, tags } => match mode {
+                OutputMode::Text => commands::tag_remove(&db, &path, &tags)
+                    .await
+                    .map_err(|e| e.to_string()),
+                OutputMode::Json => commands::tag_remove_json(&db, &path, &tags)
+                    .await
+                    .map_err(|e| e.to_string()),
+            },
             Request::Status => unreachable!("status is handled inline by the connection task"),
             Request::List { .. } => {
                 unreachable!("list is handled inline by the connection task")
@@ -333,18 +372,23 @@ async fn run_text(
     db: &Db,
     path: &Path,
     range: crate::protocol::TextRangeReq,
+    mode: OutputMode,
 ) -> Result<String, String> {
     use crate::protocol::TextRangeReq;
-    match range {
+    let raw = match range.clone() {
         TextRangeReq::Bytes { start, end } => commands::text_bytes(db, path, start, end)
             .await
-            .map_err(|e| e.to_string()),
+            .map_err(|e| e.to_string())?,
         TextRangeReq::Chars { start, end } => commands::text_chars(db, path, start, end)
             .await
-            .map_err(|e| e.to_string()),
+            .map_err(|e| e.to_string())?,
         TextRangeReq::Pages { first, last } => commands::text_pages(db, path, first, last)
             .await
-            .map_err(|e| e.to_string()),
+            .map_err(|e| e.to_string())?,
+    };
+    match mode {
+        OutputMode::Text => Ok(raw),
+        OutputMode::Json => Ok(commands::text_to_json(path, &range, &raw)),
     }
 }
 

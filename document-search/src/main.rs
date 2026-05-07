@@ -16,26 +16,41 @@ use clap::Parser;
 
 use crate::cli::{Cli, Command, TagCommand, TextRange};
 use crate::error::Error;
-use crate::protocol::{Request, TextRangeReq};
+use crate::protocol::{OutputMode, Request, RequestEnvelope, TextRangeReq};
 
 #[tokio::main]
 async fn main() {
-    if let Err(e) = run().await {
+    let args = Cli::parse();
+    let output_mode = args.output_mode;
+    if let Err(e) = run(args).await {
         // Errors that originated server-side already have a complete
         // human-readable message; surface them directly without re-wrapping.
-        if let Error::Client(crate::client::ClientError::Server(msg)) = &e {
-            eprintln!("error: {msg}");
-        } else {
-            eprintln!("error: {e}");
+        let msg = match &e {
+            Error::Client(crate::client::ClientError::Server(msg)) => msg.clone(),
+            _ => e.to_string(),
+        };
+        match output_mode {
+            OutputMode::Json => {
+                // For Server-originated errors, the client has already
+                // printed the JSON envelope on stdout. Avoid double-printing.
+                let already_printed =
+                    matches!(&e, Error::Client(crate::client::ClientError::Server(_)));
+                if !already_printed {
+                    let env = serde_json::json!({"ok": false, "error": msg});
+                    println!("{env}");
+                }
+            }
+            OutputMode::Text => {
+                eprintln!("error: {msg}");
+            }
         }
         std::process::exit(1);
     }
 }
 
-async fn run() -> Result<(), Error> {
-    let args = Cli::parse();
-
+async fn run(args: Cli) -> Result<(), Error> {
     let (config_path, cfg) = config::load(args.config.as_deref())?;
+    let output_mode = args.output_mode;
 
     match args.command {
         Command::Server => {
@@ -59,8 +74,12 @@ async fn run() -> Result<(), Error> {
         }
         other => {
             logging::init(logging::Role::Client, &cfg.logging)?;
-            let req = command_to_request(other)?;
-            client::run(&cfg, req, args.config.as_deref())
+            let request = command_to_request(other)?;
+            let envelope = RequestEnvelope {
+                output_mode,
+                request,
+            };
+            client::run(&cfg, envelope, args.config.as_deref())
                 .await
                 .map_err(Error::from)
         }
@@ -92,6 +111,7 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             match_all,
             limit,
             cutoff,
+            no_truncate,
         } => Ok(Request::Search {
             term,
             path,
@@ -99,6 +119,7 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             match_all,
             limit,
             cutoff,
+            no_truncate,
         }),
         Command::Server => unreachable!("Server is dispatched directly"),
     }

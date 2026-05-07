@@ -9,7 +9,7 @@ use turso::{Value, params::Params};
 use crate::config::Config;
 use crate::db::{Db, vector};
 use crate::ollama;
-use crate::protocol::StatusSnapshot;
+use crate::protocol::{StatusSnapshot, TextRangeReq};
 
 #[derive(thiserror::Error, Debug)]
 pub enum CommandError {
@@ -120,6 +120,22 @@ pub async fn info(db: &Db, raw_path: &Path) -> Result<String, CommandError> {
     Ok(out)
 }
 
+pub async fn info_json(db: &Db, raw_path: &Path) -> Result<String, CommandError> {
+    let path = canonicalize(raw_path)?;
+    let row = lookup_document(db, &path).await?;
+    let tags = fetch_document_tags(db, row.id).await?;
+    let env = serde_json::json!({
+        "ok": true,
+        "path": path.display().to_string(),
+        "type": row.doc_type,
+        "total_size_bytes": row.total_size_bytes,
+        "total_size_chars": row.total_size_chars,
+        "total_size_pages": row.total_size_pages,
+        "tags": tags,
+    });
+    Ok(env.to_string())
+}
+
 async fn fetch_document_tags(db: &Db, document_id: i64) -> Result<Vec<String>, CommandError> {
     let mut rows = db
         .conn
@@ -219,6 +235,63 @@ pub async fn tag_add(
     ))
 }
 
+pub async fn tag_add_json(
+    db: &Db,
+    raw_path: &Path,
+    raw_tags: &[String],
+) -> Result<String, CommandError> {
+    let path = canonicalize(raw_path)?;
+    let row = lookup_document(db, &path).await?;
+    let tags = normalize_tags(raw_tags)?;
+
+    let existing: std::collections::BTreeSet<String> =
+        fetch_document_tags(db, row.id).await?.into_iter().collect();
+    let to_insert: Vec<&String> = tags.iter().filter(|t| !existing.contains(*t)).collect();
+    let already = (tags.len() - to_insert.len()) as u64;
+    let added = to_insert.len() as u64;
+
+    db.conn
+        .execute("BEGIN", ())
+        .await
+        .map_err(|source| CommandError::Db {
+            op: "tag_add_json.begin",
+            source,
+        })?;
+
+    for tag in &to_insert {
+        if let Err(source) = db
+            .conn
+            .execute(
+                "INSERT OR IGNORE INTO document_tag (document_id, tag) VALUES (?, ?)",
+                Params::Positional(vec![Value::Integer(row.id), Value::Text((*tag).clone())]),
+            )
+            .await
+        {
+            let _ = db.conn.execute("ROLLBACK", ()).await;
+            return Err(CommandError::Db {
+                op: "tag_add_json.insert",
+                source,
+            });
+        }
+    }
+
+    db.conn
+        .execute("COMMIT", ())
+        .await
+        .map_err(|source| CommandError::Db {
+            op: "tag_add_json.commit",
+            source,
+        })?;
+
+    Ok(serde_json::json!({
+        "ok": true,
+        "path": path.display().to_string(),
+        "added": added,
+        "already_present": already,
+    })
+    .to_string())
+}
+
 pub async fn tag_remove(
     db: &Db,
     raw_path: &Path,
@@ -270,6 +343,61 @@ pub async fn tag_remove(
         "removed {removed} tag(s) from {}\n",
         path.display()
     ))
+}
+
+pub async fn tag_remove_json(
+    db: &Db,
+    raw_path: &Path,
+    raw_tags: &[String],
+) -> Result<String, CommandError> {
+    let path = canonicalize(raw_path)?;
+    let row = lookup_document(db, &path).await?;
+    let tags = normalize_tags(raw_tags)?;
+
+    let existing: std::collections::BTreeSet<String> =
+        fetch_document_tags(db, row.id).await?.into_iter().collect();
+    let to_remove: Vec<&String> = tags.iter().filter(|t| existing.contains(*t)).collect();
+    let removed = to_remove.len() as u64;
+
+    db.conn
+        .execute("BEGIN", ())
+        .await
+        .map_err(|source| CommandError::Db {
+            op: "tag_remove_json.begin",
+            source,
+        })?;
+
+    for tag in &to_remove {
+        if let Err(source) = db
+            .conn
+            .execute(
+                "DELETE FROM document_tag WHERE document_id = ? AND tag = ?",
+                Params::Positional(vec![Value::Integer(row.id), Value::Text((*tag).clone())]),
+            )
+            .await
+        {
+            let _ = db.conn.execute("ROLLBACK", ()).await;
+            return Err(CommandError::Db {
+                op: "tag_remove_json.delete",
+                source,
+            });
+        }
+    }
+
+    db.conn
+        .execute("COMMIT", ())
+        .await
+        .map_err(|source| CommandError::Db {
+            op: "tag_remove_json.commit",
+            source,
+        })?;
+
+    Ok(serde_json::json!({
+        "ok": true,
+        "path": path.display().to_string(),
+        "removed": removed,
+    })
+    .to_string())
 }
 
 pub async fn tag_list_text(db: &Db) -> Result<String, CommandError> {
@@ -330,6 +458,42 @@ pub async fn tag_list_text(db: &Db) -> Result<String, CommandError> {
     Ok(out)
 }
 
+pub async fn tag_list_json(db: &Db) -> Result<String, CommandError> {
+    let conn = db
+        .fresh_conn()
+        .await
+        .map_err(|source| CommandError::FreshConn { source })?;
+
+    let mut rows = conn
+        .query(
+            "SELECT tag, COUNT(*) AS n FROM document_tag GROUP BY tag ORDER BY tag",
+            (),
+        )
+        .await
+        .map_err(|source| CommandError::Db {
+            op: "tag_list_json.query",
+            source,
+        })?;
+
+    let mut entries: Vec<serde_json::Value> = Vec::new();
+    while let Some(row) = rows.next().await.map_err(|source| CommandError::Db {
+        op: "tag_list_json.next",
+        source,
+    })? {
+        let tag: String = row.get(0).map_err(|source| CommandError::Db {
+            op: "tag_list_json.get.tag",
+            source,
+        })?;
+        let n: i64 = row.get(1).map_err(|source| CommandError::Db {
+            op: "tag_list_json.get.n",
+            source,
+        })?;
+        entries.push(serde_json::json!({"tag": tag, "count": n}));
+    }
+
+    Ok(serde_json::json!({"ok": true, "tags": entries}).to_string())
+}
+
 pub async fn delete(db: &Db, raw_path: &Path) -> Result<(), CommandError> {
     let path = canonicalize(raw_path)?;
     // Surfaces DocumentNotFound when the path isn't ingested, instead of a
@@ -361,6 +525,85 @@ pub async fn list_text(
     raw_tags: &[String],
     match_all: bool,
 ) -> Result<String, CommandError> {
+    let docs = gather_listed_documents(db, raw_tags, match_all).await?;
+    Ok(format_list(&docs, snapshot))
+}
+
+pub async fn list_json(
+    db: &Db,
+    snapshot: &StatusSnapshot,
+    raw_tags: &[String],
+    match_all: bool,
+) -> Result<String, CommandError> {
+    let docs = gather_listed_documents(db, raw_tags, match_all).await?;
+    let documents: Vec<serde_json::Value> = docs
+        .iter()
+        .map(|d| {
+            serde_json::json!({
+                "path": d.path,
+                "type": d.doc_type,
+                "total_size_bytes": d.total_size_bytes,
+                "total_size_pages": d.total_size_pages,
+                "created_at": d.created_at,
+            })
+        })
+        .collect();
+    let env = serde_json::json!({
+        "ok": true,
+        "documents": documents,
+        "current": snapshot.current.as_ref().map(|c| serde_json::json!({
+            "label": c.label,
+            "running_secs": c.running_secs,
+        })),
+        "queued": snapshot.queued,
+    });
+    Ok(env.to_string())
+}
+
+/// Build the JSON payload for the `status` request. Wraps the current
+/// `StatusSnapshot` in the standard `{"ok": true, ...}` envelope.
+pub fn status_json(snapshot: &StatusSnapshot) -> String {
+    let env = serde_json::json!({
+        "ok": true,
+        "uptime_secs": snapshot.uptime_secs,
+        "current": snapshot.current.as_ref().map(|c| serde_json::json!({
+            "label": c.label,
+            "running_secs": c.running_secs,
+        })),
+        "queued": snapshot.queued,
+    });
+    env.to_string()
+}
+
+/// Wrap a raw extracted text response in the JSON envelope used by the
+/// `text` subcommand. The `range` field mirrors the request shape so callers
+/// can correlate results with what they asked for.
+pub fn text_to_json(path: &Path, range: &TextRangeReq, raw: &str) -> String {
+    let range_json = match range {
+        TextRangeReq::Bytes { start, end } => {
+            serde_json::json!({"type": "bytes", "start": start, "end": end})
+        }
+        TextRangeReq::Chars { start, end } => {
+            serde_json::json!({"type": "chars", "start": start, "end": end})
+        }
+        TextRangeReq::Pages { first, last } => {
+            serde_json::json!({"type": "pages", "first": first, "last": last})
+        }
+    };
+    serde_json::json!({
+        "ok": true,
+        "path": path.display().to_string(),
+        "range": range_json,
+        "text": raw,
+    })
+    .to_string()
+}
+
+async fn gather_listed_documents(
+    db: &Db,
+    raw_tags: &[String],
+    match_all: bool,
+) -> Result<Vec<ListedDocument>, CommandError> {
     // Use a fresh connection so this SELECT does not interleave with whatever
     // transaction is open on the worker's `db.conn`.
     let conn = db
@@ -457,7 +700,7 @@ pub async fn list_text(
         });
     }
 
-    Ok(format_list(&docs, snapshot))
+    Ok(docs)
 }
 
 fn format_list(docs: &[ListedDocument], snapshot: &StatusSnapshot) -> String {
@@ -860,6 +1103,7 @@ struct SearchHit {
     similarity: f32,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn search_text(
     db: &Db,
     http: &reqwest::Client,
@@ -870,7 +1114,79 @@ pub async fn search_text(
     match_all: bool,
     limit_override: Option<usize>,
     cutoff_override: Option<f32>,
+    no_truncate: bool,
 ) -> Result<String, CommandError> {
+    let (hits, limit, cutoff) = gather_search_hits(
+        db,
+        http,
+        cfg,
+        term,
+        path,
+        raw_tags,
+        match_all,
+        limit_override,
+        cutoff_override,
+    )
+    .await?;
+    Ok(render_search(term, limit, cutoff, &hits, no_truncate))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn search_json(
+    db: &Db,
+    http: &reqwest::Client,
+    cfg: &Config,
+    term: &str,
+    path: Option<&Path>,
+    raw_tags: &[String],
+    match_all: bool,
+    limit_override: Option<usize>,
+    cutoff_override: Option<f32>,
+    no_truncate: bool,
+) -> Result<String, CommandError> {
+    let (hits, limit, cutoff) =
+        gather_search_hits(db, http, cfg, term, path, raw_tags, match_all, limit_override, cutoff_override).await?;
+    let max_chars = if no_truncate { None } else { Some(SNIPPET_MAX_CHARS) };
+    let results: Vec<serde_json::Value> = hits
+        .iter()
+        .map(|h| {
+            let (snippet_text, truncated) = snippet_with_flag(&h.text, max_chars);
+            serde_json::json!({
+                "path": h.path,
+                "byte_start": h.byte_start,
+                "byte_end": h.byte_end,
+                "page_first": h.page_first,
+                "page_last": h.page_last,
+                "similarity": h.similarity,
+                "snippet": snippet_text,
+                "truncated": truncated,
+            })
+        })
+        .collect();
+    let env = serde_json::json!({
+        "ok": true,
+        "term": term,
+        "limit": limit,
+        "cutoff": cutoff,
+        "results": results,
+    });
+    Ok(env.to_string())
+}
+
+const SNIPPET_MAX_CHARS: usize = 240;
+
+#[allow(clippy::too_many_arguments)]
+async fn gather_search_hits(
+    db: &Db,
+    http: &reqwest::Client,
+    cfg: &Config,
+    term: &str,
+    path: Option<&Path>,
+    raw_tags: &[String],
+    match_all: bool,
+    limit_override: Option<usize>,
+    cutoff_override: Option<f32>,
+) -> Result<(Vec<SearchHit>, usize, f32), CommandError> {
     if path.is_none() && raw_tags.is_empty() {
         return Err(CommandError::SearchScopeRequired);
     }
@@ -894,10 +1210,7 @@ pub async fn search_text(
         let canon = canonicalize(p)?;
         let path_str = canon.to_string_lossy().to_string();
         let mut rows = conn
-            .query(
-                "SELECT id, path FROM document WHERE path = ?",
-                (path_str,),
-            )
+            .query("SELECT id, path FROM document WHERE path = ?", (path_str,))
             .await
             .map_err(|source| CommandError::Db {
                 op: "search.lookup_path",
@@ -1074,10 +1387,16 @@ pub async fn search_text(
             .unwrap_or(Ordering::Equal)
     });
 
-    Ok(render_search(term, limit, cutoff, &hits))
+    Ok((hits, limit, cutoff))
 }
 
-fn render_search(term: &str, limit: usize, cutoff: f32, hits: &[SearchHit]) -> String {
+fn render_search(
+    term: &str,
+    limit: usize,
+    cutoff: f32,
+    hits: &[SearchHit],
+    no_truncate: bool,
+) -> String {
     let mut out = String::new();
     let _ = writeln!(
         out,
@@ -1090,6 +1409,7 @@ fn render_search(term: &str, limit: usize, cutoff: f32, hits: &[SearchHit]) -> S
     if hits.is_empty() {
         return out;
     }
+    let max_chars = if no_truncate { None } else { Some(SNIPPET_MAX_CHARS) };
     for h in hits {
         let _ = writeln!(out);
         let location = match h.page_first {
@@ -1104,19 +1424,28 @@ fn render_search(term: &str, limit: usize, cutoff: f32, hits: &[SearchHit]) -> S
             "{}  {}  similarity {:.4}",
             h.path, location, h.similarity,
         );
-        let _ = writeln!(out, "  {}", snippet(&h.text, 240));
+        let (snip, _) = snippet_with_flag(&h.text, max_chars);
+        let _ = writeln!(out, "  {snip}");
     }
     out
 }
 
-fn snippet(text: &str, max_chars: usize) -> String {
+/// Whitespace-collapse a chunk body. When `max_chars` is `Some(n)`, also
+/// truncate to `n` chars and append U+2026; the second tuple field reports
+/// whether truncation happened. With `None`, only collapse and return.
+fn snippet_with_flag(text: &str, max_chars: Option<usize>) -> (String, bool) {
     let collapsed: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    let total = collapsed.chars().count();
-    if total <= max_chars {
-        collapsed
-    } else {
-        let truncated: String = collapsed.chars().take(max_chars).collect();
-        format!("{truncated}\u{2026}")
+    match max_chars {
+        None => (collapsed, false),
+        Some(n) => {
+            let total = collapsed.chars().count();
+            if total <= n {
+                (collapsed, false)
+            } else {
+                let truncated: String = collapsed.chars().take(n).collect();
+                (format!("{truncated}\u{2026}"), true)
+            }
+        }
     }
 }
 
@@ -1138,7 +1467,7 @@ mod search_tests {
 
     #[test]
     fn render_empty_results() {
-        let out = render_search("foo", 5, 0.3, &[]);
+        let out = render_search("foo", 5, 0.3, &[], false);
         assert!(out.starts_with("search \"foo\""));
         assert!(out.contains("0 result(s)"));
         assert!(!out.contains("similarity"));
@@ -1150,27 +1479,54 @@ mod search_tests {
             hit("a.pdf", 0.91, Some(3), "from a pdf"),
             hit("b.txt", 0.42, None, "from a text file"),
         ];
-        let out = render_search("q", 5, 0.3, &hits);
+        let out = render_search("q", 5, 0.3, &hits, false);
         assert!(out.contains("a.pdf  page 3  similarity 0.9100"));
         assert!(out.contains("b.txt  bytes 0-100  similarity 0.4200"));
     }
 
     #[test]
     fn snippet_collapses_whitespace_and_truncates() {
-        let s = snippet("a   b\nc\t d", 100);
+        let (s, truncated) = snippet_with_flag("a   b\nc\t d", Some(100));
         assert_eq!(s, "a b c d");
+        assert!(!truncated);
 
         let long: String = "x".repeat(300);
-        let trunc = snippet(&long, 240);
+        let (trunc, truncated) = snippet_with_flag(&long, Some(240));
         assert_eq!(trunc.chars().count(), 241); // 240 + ellipsis
         assert!(trunc.ends_with('\u{2026}'));
+        assert!(truncated);
     }
 
     #[test]
     fn snippet_handles_multibyte_boundary() {
         // 4-byte chars: ensure we slice on a char boundary, not bytes.
         let s: String = "\u{1F600}".repeat(300);
-        let trunc = snippet(&s, 240);
+        let (trunc, truncated) = snippet_with_flag(&s, Some(240));
         assert_eq!(trunc.chars().count(), 241);
+        assert!(truncated);
+    }
+
+    #[test]
+    fn snippet_no_truncate_returns_full_collapsed_text() {
+        let long: String = "x".repeat(300);
+        let (full, truncated) = snippet_with_flag(&long, None);
+        assert_eq!(full.chars().count(), 300);
+        assert!(!full.ends_with('\u{2026}'));
+        assert!(!truncated);
+
+        // whitespace still collapsed in no-truncate mode
+        let (collapsed, truncated) = snippet_with_flag("a   b\nc\t d", None);
+        assert_eq!(collapsed, "a b c d");
+        assert!(!truncated);
+    }
+
+    #[test]
+    fn render_search_no_truncate_keeps_full_snippet() {
+        let long_text: String = "y".repeat(300);
+        let hits = vec![hit("a.pdf", 0.5, Some(1), &long_text)];
+        let out_truncated = render_search("q", 5, 0.3, &hits, false);
+        assert!(out_truncated.contains('\u{2026}'));
+        let out_full = render_search("q", 5, 0.3, &hits, true);
+        assert!(!out_full.contains('\u{2026}'));
     }
 }

@@ -11,7 +11,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
 use crate::config::Config;
-use crate::protocol::{Event, ProgressEvent, Request, StatusSnapshot};
+use crate::protocol::{Event, OutputMode, ProgressEvent, RequestEnvelope, StatusSnapshot};
 
 #[derive(thiserror::Error, Debug)]
 pub enum ClientError {
@@ -36,19 +36,24 @@ pub enum ClientError {
 
 /// Run a single request end-to-end. Returns `Ok(())` on a successful Final;
 /// returns `Err(ClientError::Server)` if the server reported an error.
-pub async fn run(cfg: &Config, req: Request, args_config: Option<&Path>) -> Result<(), ClientError> {
+pub async fn run(
+    cfg: &Config,
+    envelope: RequestEnvelope,
+    args_config: Option<&Path>,
+) -> Result<(), ClientError> {
     let socket = &cfg.server.socket_path;
     let stream = connect_or_spawn(socket, args_config).await?;
 
     let (read_half, mut write_half) = stream.into_split();
     let mut reader = BufReader::new(read_half);
 
-    let mut line = serde_json::to_string(&req).map_err(ClientError::Encode)?;
+    let output_mode = envelope.output_mode;
+    let mut line = serde_json::to_string(&envelope).map_err(ClientError::Encode)?;
     line.push('\n');
     write_half.write_all(line.as_bytes()).await?;
     write_half.flush().await?;
 
-    render_events(&mut reader).await
+    render_events(&mut reader, output_mode).await
 }
 
 async fn connect_or_spawn(
@@ -111,7 +116,20 @@ unsafe extern "C" {
     fn libc_setsid() -> i32;
 }
 
-async fn render_events<R>(reader: &mut BufReader<R>) -> Result<(), ClientError>
+async fn render_events<R>(
+    reader: &mut BufReader<R>,
+    output_mode: OutputMode,
+) -> Result<(), ClientError>
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    match output_mode {
+        OutputMode::Text => render_events_text(reader).await,
+        OutputMode::Json => render_events_json(reader).await,
+    }
+}
+
+async fn render_events_text<R>(reader: &mut BufReader<R>) -> Result<(), ClientError>
 where
     R: tokio::io::AsyncRead + Unpin,
 {
@@ -172,6 +190,81 @@ where
                 pb.finish_and_clear();
                 if !ok {
                     return Err(ClientError::Server(error.unwrap_or_default()));
+                }
+                return Ok(());
+            }
+        }
+    }
+}
+
+/// JSON mode: stdout is exactly one JSON object per success; progress goes
+/// to stderr as plain text. On a server error, print the error envelope to
+/// stdout before returning so `main` doesn't double-print.
+async fn render_events_json<R>(reader: &mut BufReader<R>) -> Result<(), ClientError>
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    let mut line = String::new();
+    let mut received_output = false;
+    loop {
+        line.clear();
+        let n = reader.read_line(&mut line).await?;
+        if n == 0 {
+            return Err(ClientError::UnexpectedEof);
+        }
+        let ev: Event = serde_json::from_str(line.trim_end()).map_err(ClientError::Decode)?;
+        match ev {
+            Event::QueuedAhead { ahead } => {
+                if ahead == 0 {
+                    eprintln!("waiting to start");
+                } else {
+                    eprintln!("queued: {ahead} ahead");
+                }
+            }
+            Event::Started => {
+                eprintln!("started");
+            }
+            Event::Progress(ProgressEvent::Stage { name }) => {
+                eprintln!("{name}");
+            }
+            // High-volume per-chunk progress: dropped in JSON mode to keep
+            // stderr quiet. Stage transitions above are enough signal.
+            Event::Progress(_) => {}
+            Event::Output { text } => {
+                received_output = true;
+                // Server already produced a JSON object. Strip any trailing
+                // newline since `println!` will add one.
+                let trimmed = text.trim_end_matches('\n');
+                println!("{trimmed}");
+            }
+            Event::StatusSnapshot(s) => {
+                // Server should send Output { text: json } for status in
+                // JSON mode; this branch is defensive.
+                received_output = true;
+                let env = serde_json::json!({
+                    "ok": true,
+                    "uptime_secs": s.uptime_secs,
+                    "current": s.current.as_ref().map(|c| serde_json::json!({
+                        "label": c.label,
+                        "running_secs": c.running_secs,
+                    })),
+                    "queued": s.queued,
+                });
+                println!("{env}");
+            }
+            Event::Final { ok, error } => {
+                if !ok {
+                    let env = serde_json::json!({
+                        "ok": false,
+                        "error": error.clone().unwrap_or_default(),
+                    });
+                    println!("{env}");
+                    return Err(ClientError::Server(error.unwrap_or_default()));
+                }
+                if !received_output {
+                    // Defensive: every JSON-mode command should emit one
+                    // Output, but synthesize a bare success envelope if not.
+                    println!("{}", serde_json::json!({"ok": true}));
                 }
                 return Ok(());
             }

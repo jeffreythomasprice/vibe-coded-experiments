@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 
+use crate::protocol::OutputMode;
+
 #[derive(Parser, Debug)]
 #[command(
     name = "document-search",
@@ -13,6 +15,11 @@ pub struct Cli {
     /// ~/.config/document-search/config.toml.
     #[arg(long, value_name = "PATH")]
     pub config: Option<PathBuf>,
+
+    /// Output format. `text` (default) is human-readable; `json` makes the
+    /// entire stdout a single JSON object suitable for `jq` / scripts.
+    #[arg(long, value_enum, default_value_t = OutputMode::Text, global = true)]
+    pub output_mode: OutputMode,
 
     #[command(subcommand)]
     pub command: Command,
@@ -112,6 +119,11 @@ pub enum Command {
         /// [0.0, 1.0].
         #[arg(long, value_name = "F")]
         cutoff: Option<f32>,
+
+        /// Return the full chunk text in each result instead of truncating
+        /// to ~240 chars. Whitespace is still collapsed.
+        #[arg(long)]
+        no_truncate: bool,
     },
 }
 

@@ -6,6 +6,30 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+/// Output mode chosen on the client and forwarded to the server so each
+/// command can format its payload accordingly.
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, clap::ValueEnum,
+)]
+#[serde(rename_all = "kebab-case")]
+#[clap(rename_all = "kebab-case")]
+pub enum OutputMode {
+    #[default]
+    Text,
+    Json,
+}
+
+/// Wire envelope: every request from the client carries the chosen output
+/// mode alongside the actual `Request`. `#[serde(flatten)]` keeps the
+/// existing `cmd` discriminator at the top level next to `output_mode`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestEnvelope {
+    #[serde(default)]
+    pub output_mode: OutputMode,
+    #[serde(flatten)]
+    pub request: Request,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "cmd", rename_all = "kebab-case")]
 pub enum Request {
@@ -37,6 +61,8 @@ pub enum Request {
         limit: Option<usize>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cutoff: Option<f32>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        no_truncate: bool,
     },
 }
 
@@ -145,4 +171,82 @@ pub struct StatusSnapshot {
 pub struct CurrentJob {
     pub label: String,
     pub running_secs: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn envelope_default_text_mode_round_trips() {
+        let env = RequestEnvelope {
+            output_mode: OutputMode::default(),
+            request: Request::Status,
+        };
+        let s = serde_json::to_string(&env).unwrap();
+        // Top-level keys: output_mode + cmd discriminator.
+        assert!(s.contains("\"output_mode\":\"text\""));
+        assert!(s.contains("\"cmd\":\"status\""));
+        let back: RequestEnvelope = serde_json::from_str(&s).unwrap();
+        assert_eq!(back.output_mode, OutputMode::Text);
+        assert!(matches!(back.request, Request::Status));
+    }
+
+    #[test]
+    fn envelope_json_mode_round_trips_search_with_no_truncate() {
+        let env = RequestEnvelope {
+            output_mode: OutputMode::Json,
+            request: Request::Search {
+                term: "hello".into(),
+                path: None,
+                tags: vec!["legal".into()],
+                match_all: false,
+                limit: Some(7),
+                cutoff: Some(0.4),
+                no_truncate: true,
+            },
+        };
+        let s = serde_json::to_string(&env).unwrap();
+        assert!(s.contains("\"output_mode\":\"json\""));
+        assert!(s.contains("\"cmd\":\"search\""));
+        assert!(s.contains("\"term\":\"hello\""));
+        assert!(s.contains("\"no_truncate\":true"));
+
+        let back: RequestEnvelope = serde_json::from_str(&s).unwrap();
+        assert_eq!(back.output_mode, OutputMode::Json);
+        match back.request {
+            Request::Search {
+                term,
+                no_truncate,
+                limit,
+                cutoff,
+                ..
+            } => {
+                assert_eq!(term, "hello");
+                assert!(no_truncate);
+                assert_eq!(limit, Some(7));
+                assert_eq!(cutoff, Some(0.4));
+            }
+            _ => panic!("expected Search variant"),
+        }
+    }
+
+    #[test]
+    fn missing_output_mode_defaults_to_text() {
+        // Backwards compatibility: an old client serializing only the `Request`
+        // shape (no output_mode field) should deserialize as `text`.
+        let s = r#"{"cmd":"status"}"#;
+        let env: RequestEnvelope = serde_json::from_str(s).unwrap();
+        assert_eq!(env.output_mode, OutputMode::Text);
+    }
+
+    #[test]
+    fn search_missing_no_truncate_defaults_false() {
+        let s = r#"{"output_mode":"text","cmd":"search","term":"x","tags":["t"]}"#;
+        let env: RequestEnvelope = serde_json::from_str(s).unwrap();
+        match env.request {
+            Request::Search { no_truncate, .. } => assert!(!no_truncate),
+            _ => panic!("expected Search variant"),
+        }
+    }
 }
