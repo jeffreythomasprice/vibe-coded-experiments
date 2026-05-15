@@ -179,6 +179,9 @@ where
             Event::Progress(ProgressEvent::Embedding { current, total }) => {
                 pb.set_message(format!("Embedding chunk {current}/{total}"));
             }
+            Event::Progress(ProgressEvent::Summarizing { level, current, total }) => {
+                pb.set_message(format!("Summarizing level {level}: {current}/{total}"));
+            }
             Event::Output { text } => {
                 pb.suspend(|| print!("{text}"));
             }

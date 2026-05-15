@@ -18,6 +18,12 @@ pub struct Config {
 
     pub ollama: OllamaConfig,
 
+    pub anthropic: AnthropicConfig,
+
+    pub llm: LlmConfig,
+
+    pub summarize: SummarizeConfig,
+
     pub chunking: ChunkingConfig,
 
     pub server: ServerConfig,
@@ -33,6 +39,33 @@ pub struct Config {
 pub struct OllamaConfig {
     pub url: String,
     pub embedding_model: String,
+    pub chat_model: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct AnthropicConfig {
+    pub base_url: String,
+    pub api_key_env: String,
+    pub model: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LlmProvider {
+    Ollama,
+    Anthropic,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct LlmConfig {
+    pub provider: LlmProvider,
+    pub max_output_tokens: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct SummarizeConfig {
+    pub group_size: usize,
+    pub max_depth: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -75,6 +108,12 @@ struct PartialConfig {
     #[serde(default)]
     ollama: Option<PartialOllamaConfig>,
     #[serde(default)]
+    anthropic: Option<PartialAnthropicConfig>,
+    #[serde(default)]
+    llm: Option<PartialLlmConfig>,
+    #[serde(default)]
+    summarize: Option<PartialSummarizeConfig>,
+    #[serde(default)]
     chunking: Option<PartialChunkingConfig>,
     #[serde(default)]
     server: Option<PartialServerConfig>,
@@ -92,6 +131,34 @@ struct PartialOllamaConfig {
     url: Option<String>,
     #[serde(default)]
     embedding_model: Option<String>,
+    #[serde(default)]
+    chat_model: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct PartialAnthropicConfig {
+    #[serde(default)]
+    base_url: Option<String>,
+    #[serde(default)]
+    api_key_env: Option<String>,
+    #[serde(default)]
+    model: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct PartialLlmConfig {
+    #[serde(default)]
+    provider: Option<LlmProvider>,
+    #[serde(default)]
+    max_output_tokens: Option<u32>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct PartialSummarizeConfig {
+    #[serde(default)]
+    group_size: Option<usize>,
+    #[serde(default)]
+    max_depth: Option<usize>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -243,6 +310,9 @@ fn merge(base: Config, overlay: PartialConfig) -> Config {
     Config {
         db_path: overlay.db_path.unwrap_or(base.db_path),
         ollama: merge_ollama(base.ollama, overlay.ollama),
+        anthropic: merge_anthropic(base.anthropic, overlay.anthropic),
+        llm: merge_llm(base.llm, overlay.llm),
+        summarize: merge_summarize(base.summarize, overlay.summarize),
         chunking: merge_chunking(base.chunking, overlay.chunking),
         server: merge_server(base.server, overlay.server),
         logging: merge_logging(base.logging, overlay.logging),
@@ -258,6 +328,44 @@ fn merge_ollama(base: OllamaConfig, overlay: Option<PartialOllamaConfig>) -> Oll
     OllamaConfig {
         url: overlay.url.unwrap_or(base.url),
         embedding_model: overlay.embedding_model.unwrap_or(base.embedding_model),
+        chat_model: overlay.chat_model.unwrap_or(base.chat_model),
+    }
+}
+
+fn merge_anthropic(
+    base: AnthropicConfig,
+    overlay: Option<PartialAnthropicConfig>,
+) -> AnthropicConfig {
+    let Some(overlay) = overlay else {
+        return base;
+    };
+    AnthropicConfig {
+        base_url: overlay.base_url.unwrap_or(base.base_url),
+        api_key_env: overlay.api_key_env.unwrap_or(base.api_key_env),
+        model: overlay.model.unwrap_or(base.model),
+    }
+}
+
+fn merge_llm(base: LlmConfig, overlay: Option<PartialLlmConfig>) -> LlmConfig {
+    let Some(overlay) = overlay else {
+        return base;
+    };
+    LlmConfig {
+        provider: overlay.provider.unwrap_or(base.provider),
+        max_output_tokens: overlay.max_output_tokens.unwrap_or(base.max_output_tokens),
+    }
+}
+
+fn merge_summarize(
+    base: SummarizeConfig,
+    overlay: Option<PartialSummarizeConfig>,
+) -> SummarizeConfig {
+    let Some(overlay) = overlay else {
+        return base;
+    };
+    SummarizeConfig {
+        group_size: overlay.group_size.unwrap_or(base.group_size),
+        max_depth: overlay.max_depth.unwrap_or(base.max_depth),
     }
 }
 
@@ -352,6 +460,14 @@ mod tests {
         assert_eq!(cfg.db_path, PathBuf::from("document-search.db"));
         assert_eq!(cfg.ollama.url, "http://localhost:11434");
         assert_eq!(cfg.ollama.embedding_model, "qwen3-embedding:8b");
+        assert_eq!(cfg.ollama.chat_model, "qwen2.5:14b");
+        assert_eq!(cfg.anthropic.base_url, "https://api.anthropic.com");
+        assert_eq!(cfg.anthropic.api_key_env, "ANTHROPIC_API_KEY");
+        assert_eq!(cfg.anthropic.model, "claude-haiku-4-5-20251001");
+        assert_eq!(cfg.llm.provider, LlmProvider::Ollama);
+        assert_eq!(cfg.llm.max_output_tokens, 800);
+        assert_eq!(cfg.summarize.group_size, 6);
+        assert_eq!(cfg.summarize.max_depth, 4);
         assert_eq!(cfg.chunking.chunk_size_bytes, 5000);
         assert_eq!(cfg.chunking.overlap_bytes, 1000);
         assert_eq!(

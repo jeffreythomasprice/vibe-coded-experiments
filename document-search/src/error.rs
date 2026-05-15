@@ -9,6 +9,9 @@ pub enum Error {
     #[error("ollama: {0}")]
     Ollama(#[from] crate::ollama::OllamaError),
 
+    #[error("llm: {0}")]
+    Llm(#[from] crate::llm::LlmError),
+
     #[error("ingest: {0}")]
     Ingest(#[from] crate::ingest::IngestError),
 

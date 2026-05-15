@@ -6,11 +6,13 @@ mod config;
 mod db;
 mod error;
 mod ingest;
+mod llm;
 mod logging;
 mod ollama;
 mod pdf;
 mod protocol;
 mod server;
+mod summarize;
 
 use clap::Parser;
 
@@ -112,6 +114,7 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             limit,
             cutoff,
             no_truncate,
+            include_summaries,
         } => Ok(Request::Search {
             term,
             path,
@@ -120,7 +123,9 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             limit,
             cutoff,
             no_truncate,
+            include_summaries,
         }),
+        Command::Summarize { path, max_depth } => Ok(Request::Summarize { path, max_depth }),
         Command::Server => unreachable!("Server is dispatched directly"),
     }
 }

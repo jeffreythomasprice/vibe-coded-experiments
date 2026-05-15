@@ -56,6 +56,7 @@ pub struct Db {
     pub embedding_model: String,
     pub embedding_dimensions: usize,
     pub chunks_table: String,
+    pub summary_vectors_table: String,
 }
 
 impl Db {
@@ -83,6 +84,14 @@ impl Db {
 /// Returns the SQL table name for chunks of a given embedding dimension.
 pub fn chunks_table_name(dims: usize) -> String {
     format!("chunks_{dims}")
+}
+
+/// Returns the SQL table name for summary embeddings of a given dimension.
+/// Parallels [`chunks_table_name`] — same per-dimension table-per-model
+/// pattern, with summaries keyed by `document_summary.id` instead of
+/// `document_chunk.id`.
+pub fn summary_vectors_table_name(dims: usize) -> String {
+    format!("summary_vectors_{dims}")
 }
 
 /// Open the configured DB, run migrations, resolve the embedding model's
@@ -146,12 +155,16 @@ pub async fn open(cfg: &Config, http: &reqwest::Client) -> Result<Db, DbError> {
     let chunks_table = chunks_table_name(dimensions);
     ensure_chunks_table(&conn, &chunks_table, dimensions).await?;
 
+    let summary_vectors_table = summary_vectors_table_name(dimensions);
+    ensure_summary_vectors_table(&conn, &summary_vectors_table, dimensions).await?;
+
     Ok(Db {
         database,
         conn,
         embedding_model: model,
         embedding_dimensions: dimensions,
         chunks_table,
+        summary_vectors_table,
     })
 }
 
@@ -216,6 +229,28 @@ async fn ensure_chunks_table(conn: &Connection, table: &str, dims: usize) -> Res
     Ok(())
 }
 
+/// Idempotently create the per-dimension summary embeddings table. Same shape
+/// as the chunks table but keyed by `document_summary.id`.
+async fn ensure_summary_vectors_table(
+    conn: &Connection,
+    table: &str,
+    dims: usize,
+) -> Result<(), DbError> {
+    let create_table = format!(
+        "CREATE TABLE IF NOT EXISTS {table} (
+            summary_id INTEGER PRIMARY KEY REFERENCES document_summary(id) ON DELETE CASCADE,
+            embedding  F32_BLOB({dims}) NOT NULL
+        )"
+    );
+    conn.execute(&create_table, ())
+        .await
+        .map_err(|source| DbError::Query {
+            op: "ensure_summary_vectors_table.create",
+            source,
+        })?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -224,5 +259,11 @@ mod tests {
     fn chunks_table_name_interpolates_dims() {
         assert_eq!(chunks_table_name(768), "chunks_768");
         assert_eq!(chunks_table_name(1536), "chunks_1536");
+    }
+
+    #[test]
+    fn summary_vectors_table_name_interpolates_dims() {
+        assert_eq!(summary_vectors_table_name(768), "summary_vectors_768");
+        assert_eq!(summary_vectors_table_name(1536), "summary_vectors_1536");
     }
 }

@@ -1,8 +1,9 @@
-test:
-- ingest a file (txt and pdf)
-- get ranges from a file (bytes, chars, pages)
-- do vector search on a file
+clean up migrations, merge
 
 dynamic chunking instead of fixed regions?
 
-skill
+keep track of all tasks that go through the queue
+task name
+start time, end time
+query this table for how long stuff took
+new cli commands

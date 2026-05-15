@@ -15,7 +15,7 @@ use tokio::sync::{mpsc, watch};
 use crate::config::Config;
 use crate::db::{self, Db};
 use crate::protocol::{CurrentJob, Event, OutputMode, Request, StatusSnapshot};
-use crate::{commands, config as cfg_mod, ingest};
+use crate::{commands, config as cfg_mod, ingest, summarize};
 
 #[derive(thiserror::Error, Debug)]
 pub enum ServerError {
@@ -63,8 +63,9 @@ pub(crate) struct RunningJob {
     /// Cooperative cancel signal. Held only when the current job supports
     /// cancellation; otherwise the receiver side is dropped immediately.
     pub cancel_tx: watch::Sender<bool>,
-    /// `cancel` only kills ingests; other requests ignore the signal.
-    pub is_ingest: bool,
+    /// Whether the running job polls `cancel_tx` and will stop on signal.
+    /// Currently true for `Ingest` and `Summarize`.
+    pub is_cancellable: bool,
 }
 
 impl ServerState {
@@ -254,7 +255,10 @@ async fn worker_loop(
     let mut completed: u64 = 0;
     while let Some(job) = job_rx.recv().await {
         let label = job.req.label();
-        let is_ingest = matches!(job.req, Request::Ingest { .. });
+        let is_cancellable = matches!(
+            job.req,
+            Request::Ingest { .. } | Request::Summarize { .. }
+        );
         let (cancel_tx, cancel_rx) = watch::channel::<bool>(false);
         {
             let mut g = state.lock().unwrap();
@@ -263,7 +267,7 @@ async fn worker_loop(
                 label: label.clone(),
                 started_at: Instant::now(),
                 cancel_tx,
-                is_ingest,
+                is_cancellable,
             });
         }
         let _ = job.event_tx.send(Event::Started);
@@ -328,6 +332,34 @@ async fn worker_loop(
                     .await
                     .map_err(|e| e.to_string()),
             },
+            Request::Summarize { path, max_depth } => summarize::summarize(
+                &db,
+                &cfg,
+                &http,
+                &path,
+                max_depth,
+                Some(&job.event_tx),
+                Some(cancel_rx),
+            )
+            .await
+            .map(|stats| match mode {
+                OutputMode::Text => format!(
+                    "summarized {}: {} new, {} reused across {} level(s)\n",
+                    path.display(),
+                    stats.new_summaries,
+                    stats.reused_summaries,
+                    stats.levels,
+                ),
+                OutputMode::Json => serde_json::json!({
+                    "ok": true,
+                    "path": path.display().to_string(),
+                    "new_summaries": stats.new_summaries,
+                    "reused_summaries": stats.reused_summaries,
+                    "levels": stats.levels,
+                })
+                .to_string(),
+            })
+            .map_err(|e| e.to_string()),
             Request::Status => unreachable!("status is handled inline by the connection task"),
             Request::List { .. } => {
                 unreachable!("list is handled inline by the connection task")

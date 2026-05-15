@@ -124,6 +124,31 @@ pub enum Command {
         /// to ~240 chars. Whitespace is still collapsed.
         #[arg(long)]
         no_truncate: bool,
+
+        /// In addition to chunk-level vector search, also vector-search the
+        /// per-document summary tree. Chunks reachable from top-scoring
+        /// summaries are merged with the chunk-search hits (deduped, max
+        /// similarity wins) and results are grouped by document with a
+        /// per-document "region summary" shown alongside its chunks.
+        /// Requires that `summarize` has been run for at least one in-scope
+        /// document.
+        #[arg(long)]
+        include_summaries: bool,
+    },
+
+    /// Build (or update) the hierarchical summary tree for an ingested
+    /// document. Uses the LLM provider configured under [llm] to summarize
+    /// groups of chunks, then groups of summaries, until a single root
+    /// summary remains (or `--max-depth` is reached). Idempotent: groups
+    /// whose input content_hash already exists are skipped. Long-running;
+    /// cancel mid-flight with the `cancel` subcommand.
+    Summarize {
+        /// Path of an already-ingested document.
+        path: PathBuf,
+
+        /// Override [summarize].max_depth for this run.
+        #[arg(long, value_name = "N")]
+        max_depth: Option<usize>,
     },
 }
 

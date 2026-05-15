@@ -148,6 +148,7 @@ pub(crate) async fn handle(
         limit,
         cutoff,
         no_truncate,
+        include_summaries,
     } = &req
     {
         let (db, http, cfg) = {
@@ -167,6 +168,7 @@ pub(crate) async fn handle(
                     *limit,
                     *cutoff,
                     *no_truncate,
+                    *include_summaries,
                 )
                 .await
             }
@@ -182,6 +184,7 @@ pub(crate) async fn handle(
                     *limit,
                     *cutoff,
                     *no_truncate,
+                    *include_summaries,
                 )
                 .await
             }
@@ -217,12 +220,12 @@ pub(crate) async fn handle(
         let outcome: Result<String, String> = {
             let mut g = state.lock().unwrap();
             match g.current.as_mut() {
-                Some(j) if j.is_ingest => {
+                Some(j) if j.is_cancellable => {
                     let _ = j.cancel_tx.send(true);
                     Ok(j.label.clone())
                 }
                 Some(j) => Err(format!(
-                    "current job is not an ingest ({}); nothing to cancel",
+                    "current job is not cancellable ({}); nothing to cancel",
                     j.label
                 )),
                 None => Err("no job is currently running".to_string()),

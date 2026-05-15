@@ -13,6 +13,39 @@ url = "http://localhost:11434"
 # The model's vector length is probed on first run and cached in the DB.
 embedding_model = "qwen3-embedding:8b"
 
+# Chat model used for summarization when [llm].provider = "ollama".
+# Pull it once with: ollama pull <model>.
+chat_model = "qwen2.5:14b"
+
+[anthropic]
+# Endpoint for Anthropic Messages API. Override only if proxying.
+base_url = "https://api.anthropic.com"
+
+# Name of the env var that holds the Anthropic API key. The key value itself
+# is read from the environment at request time, never stored in config.
+api_key_env = "ANTHROPIC_API_KEY"
+
+# Chat model used for summarization when [llm].provider = "anthropic".
+model = "claude-haiku-4-5-20251001"
+
+[llm]
+# Which provider to use for chat/summarization. "ollama" uses [ollama] above;
+# "anthropic" uses [anthropic] above and requires the configured env var to be
+# set. Embeddings always come from Ollama regardless of this setting.
+provider = "ollama"
+
+# Max tokens to ask the model to emit per summarization call.
+max_output_tokens = 800
+
+[summarize]
+# Number of consecutive level-(k-1) nodes summarized into one level-k node.
+# Level 0 groups chunks; higher levels group prior-level summaries.
+group_size = 6
+
+# Hard cap on tree depth. Building stops sooner if a level produces a single
+# (root) summary.
+max_depth = 4
+
 [chunking]
 # Target chunk size in bytes. The chunker steps back to the nearest UTF-8
 # char boundary, so actual chunks may be a few bytes smaller.

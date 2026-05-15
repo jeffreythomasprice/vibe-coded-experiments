@@ -63,6 +63,13 @@ pub enum Request {
         cutoff: Option<f32>,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         no_truncate: bool,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        include_summaries: bool,
+    },
+    Summarize {
+        path: PathBuf,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_depth: Option<usize>,
     },
 }
 
@@ -100,6 +107,10 @@ impl Request {
                 format!("tag remove {} [{}]", path.display(), tags.join(","))
             }
             Request::TagList => "tag list".to_string(),
+            Request::Summarize { path, max_depth } => match max_depth {
+                Some(d) => format!("summarize {} --max-depth {}", path.display(), d),
+                None => format!("summarize {}", path.display()),
+            },
             Request::Search {
                 term,
                 path,
@@ -158,6 +169,14 @@ pub enum ProgressEvent {
     Chunking { current: usize, total: usize },
     /// Per-chunk embedding progress. `current` is 1-indexed.
     Embedding { current: usize, total: usize },
+    /// Per-summary build progress within a single tree level. `level` is the
+    /// depth being built (0 = chunks → first summaries). `current` is
+    /// 1-indexed.
+    Summarizing {
+        level: usize,
+        current: usize,
+        total: usize,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -204,6 +223,7 @@ mod tests {
                 limit: Some(7),
                 cutoff: Some(0.4),
                 no_truncate: true,
+                include_summaries: false,
             },
         };
         let s = serde_json::to_string(&env).unwrap();

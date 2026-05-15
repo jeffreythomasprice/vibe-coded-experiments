@@ -1093,7 +1093,34 @@ async fn stitch_chars(
     Ok(out)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HitSource {
+    Chunk,
+    Summary,
+    Both,
+}
+
+impl HitSource {
+    fn as_str(&self) -> &'static str {
+        match self {
+            HitSource::Chunk => "chunk",
+            HitSource::Summary => "summary",
+            HitSource::Both => "both",
+        }
+    }
+
+    fn merged_with(self, other: HitSource) -> HitSource {
+        if self == other {
+            self
+        } else {
+            HitSource::Both
+        }
+    }
+}
+
 struct SearchHit {
+    document_id: i64,
+    chunk_id: i64,
     path: String,
     byte_start: i64,
     byte_end: i64,
@@ -1101,6 +1128,15 @@ struct SearchHit {
     page_last: Option<i64>,
     text: String,
     similarity: f32,
+    source: HitSource,
+}
+
+/// Per-document group used by the `--include-summaries` rendering path.
+struct DocGroup {
+    path: String,
+    region_summary: Option<String>,
+    region_summary_level: Option<i64>,
+    hits: Vec<SearchHit>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1115,6 +1151,7 @@ pub async fn search_text(
     limit_override: Option<usize>,
     cutoff_override: Option<f32>,
     no_truncate: bool,
+    include_summaries: bool,
 ) -> Result<String, CommandError> {
     let (hits, limit, cutoff) = gather_search_hits(
         db,
@@ -1126,9 +1163,15 @@ pub async fn search_text(
         match_all,
         limit_override,
         cutoff_override,
+        include_summaries,
     )
     .await?;
-    Ok(render_search(term, limit, cutoff, &hits, no_truncate))
+    if include_summaries {
+        let groups = group_hits_by_document(db, &hits, &cutoff).await?;
+        Ok(render_search_grouped(term, limit, cutoff, &groups, no_truncate))
+    } else {
+        Ok(render_search(term, limit, cutoff, &hits, no_truncate))
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1143,34 +1186,87 @@ pub async fn search_json(
     limit_override: Option<usize>,
     cutoff_override: Option<f32>,
     no_truncate: bool,
+    include_summaries: bool,
 ) -> Result<String, CommandError> {
-    let (hits, limit, cutoff) =
-        gather_search_hits(db, http, cfg, term, path, raw_tags, match_all, limit_override, cutoff_override).await?;
+    let (hits, limit, cutoff) = gather_search_hits(
+        db,
+        http,
+        cfg,
+        term,
+        path,
+        raw_tags,
+        match_all,
+        limit_override,
+        cutoff_override,
+        include_summaries,
+    )
+    .await?;
     let max_chars = if no_truncate { None } else { Some(SNIPPET_MAX_CHARS) };
-    let results: Vec<serde_json::Value> = hits
-        .iter()
-        .map(|h| {
-            let (snippet_text, truncated) = snippet_with_flag(&h.text, max_chars);
-            serde_json::json!({
-                "path": h.path,
-                "byte_start": h.byte_start,
-                "byte_end": h.byte_end,
-                "page_first": h.page_first,
-                "page_last": h.page_last,
-                "similarity": h.similarity,
-                "snippet": snippet_text,
-                "truncated": truncated,
+    if include_summaries {
+        let groups = group_hits_by_document(db, &hits, &cutoff).await?;
+        let documents: Vec<serde_json::Value> = groups
+            .iter()
+            .map(|g| {
+                let hits_json: Vec<serde_json::Value> = g
+                    .hits
+                    .iter()
+                    .map(|h| {
+                        let (snippet_text, truncated) = snippet_with_flag(&h.text, max_chars);
+                        serde_json::json!({
+                            "byte_start": h.byte_start,
+                            "byte_end": h.byte_end,
+                            "page_first": h.page_first,
+                            "page_last": h.page_last,
+                            "similarity": h.similarity,
+                            "snippet": snippet_text,
+                            "truncated": truncated,
+                            "source": h.source.as_str(),
+                        })
+                    })
+                    .collect();
+                serde_json::json!({
+                    "path": g.path,
+                    "region_summary": g.region_summary,
+                    "region_summary_level": g.region_summary_level,
+                    "hits": hits_json,
+                })
             })
-        })
-        .collect();
-    let env = serde_json::json!({
-        "ok": true,
-        "term": term,
-        "limit": limit,
-        "cutoff": cutoff,
-        "results": results,
-    });
-    Ok(env.to_string())
+            .collect();
+        let env = serde_json::json!({
+            "ok": true,
+            "term": term,
+            "limit": limit,
+            "cutoff": cutoff,
+            "include_summaries": true,
+            "documents": documents,
+        });
+        Ok(env.to_string())
+    } else {
+        let results: Vec<serde_json::Value> = hits
+            .iter()
+            .map(|h| {
+                let (snippet_text, truncated) = snippet_with_flag(&h.text, max_chars);
+                serde_json::json!({
+                    "path": h.path,
+                    "byte_start": h.byte_start,
+                    "byte_end": h.byte_end,
+                    "page_first": h.page_first,
+                    "page_last": h.page_last,
+                    "similarity": h.similarity,
+                    "snippet": snippet_text,
+                    "truncated": truncated,
+                })
+            })
+            .collect();
+        let env = serde_json::json!({
+            "ok": true,
+            "term": term,
+            "limit": limit,
+            "cutoff": cutoff,
+            "results": results,
+        });
+        Ok(env.to_string())
+    }
 }
 
 const SNIPPET_MAX_CHARS: usize = 240;
@@ -1186,6 +1282,7 @@ async fn gather_search_hits(
     match_all: bool,
     limit_override: Option<usize>,
     cutoff_override: Option<f32>,
+    include_summaries: bool,
 ) -> Result<(Vec<SearchHit>, usize, f32), CommandError> {
     if path.is_none() && raw_tags.is_empty() {
         return Err(CommandError::SearchScopeRequired);
@@ -1299,7 +1396,7 @@ async fn gather_search_hits(
 
     let per_doc_sql = format!(
         "SELECT \
-            c.byte_start, c.byte_end, c.page_first, c.page_last, c.text, \
+            c.id, c.byte_start, c.byte_end, c.page_first, c.page_last, c.text, \
             vector_distance_cos(cv.embedding, ?) AS distance \
          FROM document_chunk c \
          JOIN {chunks_table} cv ON cv.chunk_id = c.id \
@@ -1330,15 +1427,19 @@ async fn gather_search_hits(
             op: "search.per_doc.next",
             source,
         })? {
-            let byte_start: i64 = row.get(0).map_err(|source| CommandError::Db {
+            let chunk_id: i64 = row.get(0).map_err(|source| CommandError::Db {
+                op: "search.per_doc.get.chunk_id",
+                source,
+            })?;
+            let byte_start: i64 = row.get(1).map_err(|source| CommandError::Db {
                 op: "search.per_doc.get.byte_start",
                 source,
             })?;
-            let byte_end: i64 = row.get(1).map_err(|source| CommandError::Db {
+            let byte_end: i64 = row.get(2).map_err(|source| CommandError::Db {
                 op: "search.per_doc.get.byte_end",
                 source,
             })?;
-            let page_first: Option<i64> = match row.get_value(2) {
+            let page_first: Option<i64> = match row.get_value(3) {
                 Ok(Value::Null) => None,
                 Ok(Value::Integer(n)) => Some(n),
                 Ok(other) => panic!("unexpected page_first value {other:?}"),
@@ -1349,7 +1450,7 @@ async fn gather_search_hits(
                     });
                 }
             };
-            let page_last: Option<i64> = match row.get_value(3) {
+            let page_last: Option<i64> = match row.get_value(4) {
                 Ok(Value::Null) => None,
                 Ok(Value::Integer(n)) => Some(n),
                 Ok(other) => panic!("unexpected page_last value {other:?}"),
@@ -1360,16 +1461,18 @@ async fn gather_search_hits(
                     });
                 }
             };
-            let text: String = row.get(4).map_err(|source| CommandError::Db {
+            let text: String = row.get(5).map_err(|source| CommandError::Db {
                 op: "search.per_doc.get.text",
                 source,
             })?;
-            let distance: f64 = row.get(5).map_err(|source| CommandError::Db {
+            let distance: f64 = row.get(6).map_err(|source| CommandError::Db {
                 op: "search.per_doc.get.distance",
                 source,
             })?;
             let similarity = (1.0 - distance as f32).clamp(0.0, 1.0);
             hits.push(SearchHit {
+                document_id: *doc_id,
+                chunk_id,
                 path: path.clone(),
                 byte_start,
                 byte_end,
@@ -1377,8 +1480,15 @@ async fn gather_search_hits(
                 page_last,
                 text,
                 similarity,
+                source: HitSource::Chunk,
             });
         }
+    }
+
+    if include_summaries {
+        let summary_hits =
+            gather_summary_hits(db, &conn, &blob, &docs, max_distance, limit).await?;
+        merge_summary_hits(&mut hits, summary_hits);
     }
 
     hits.sort_by(|a, b| {
@@ -1388,6 +1498,375 @@ async fn gather_search_hits(
     });
 
     Ok((hits, limit, cutoff))
+}
+
+/// Top-K vector search against `summary_vectors_<N>` for the in-scope docs,
+/// then expand each matching summary to the underlying chunks (one batched
+/// query per document). Each emitted hit carries the *summary's* similarity,
+/// not the chunk's own — those will get max-merged with chunk-search hits.
+async fn gather_summary_hits(
+    db: &Db,
+    conn: &turso::Connection,
+    query_blob: &[u8],
+    docs: &[(i64, String)],
+    max_distance: f64,
+    limit: usize,
+) -> Result<Vec<SearchHit>, CommandError> {
+    if docs.is_empty() {
+        return Ok(Vec::new());
+    }
+    // Cap the summary candidates per call. Generous so summary-rich docs
+    // still surface their best regions; the per-doc chunk-limit kicks in
+    // downstream when results are grouped.
+    let summary_limit = (limit * docs.len() * 3).max(10) as i64;
+
+    let placeholders = std::iter::repeat("?")
+        .take(docs.len())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let summary_sql = format!(
+        "SELECT s.id, s.document_id, s.level, s.byte_start, s.byte_end, s.text, \
+                vector_distance_cos(sv.embedding, ?) AS distance \
+         FROM document_summary s \
+         JOIN {summary_vectors} sv ON sv.summary_id = s.id \
+         WHERE s.document_id IN ({placeholders}) \
+           AND vector_distance_cos(sv.embedding, ?) <= ? \
+         ORDER BY distance ASC \
+         LIMIT ?",
+        summary_vectors = db.summary_vectors_table,
+    );
+
+    let mut params: Vec<Value> = Vec::with_capacity(docs.len() + 4);
+    params.push(Value::Blob(query_blob.to_vec()));
+    for (id, _) in docs {
+        params.push(Value::Integer(*id));
+    }
+    params.push(Value::Blob(query_blob.to_vec()));
+    params.push(Value::Real(max_distance));
+    params.push(Value::Integer(summary_limit));
+
+    let mut rows = conn
+        .query(&summary_sql, Params::Positional(params))
+        .await
+        .map_err(|source| CommandError::Db {
+            op: "search.summary",
+            source,
+        })?;
+
+    // Collect summaries grouped by document so we can expand each doc's
+    // covering byte ranges in one query below.
+    struct TopSummary {
+        document_id: i64,
+        byte_start: i64,
+        byte_end: i64,
+        similarity: f32,
+    }
+    let mut summaries: Vec<TopSummary> = Vec::new();
+    while let Some(row) = rows.next().await.map_err(|source| CommandError::Db {
+        op: "search.summary.next",
+        source,
+    })? {
+        let _id: i64 = row.get(0).map_err(|source| CommandError::Db {
+            op: "search.summary.get.id",
+            source,
+        })?;
+        let document_id: i64 = row.get(1).map_err(|source| CommandError::Db {
+            op: "search.summary.get.document_id",
+            source,
+        })?;
+        let _level: i64 = row.get(2).map_err(|source| CommandError::Db {
+            op: "search.summary.get.level",
+            source,
+        })?;
+        let byte_start: i64 = row.get(3).map_err(|source| CommandError::Db {
+            op: "search.summary.get.byte_start",
+            source,
+        })?;
+        let byte_end: i64 = row.get(4).map_err(|source| CommandError::Db {
+            op: "search.summary.get.byte_end",
+            source,
+        })?;
+        let _text: String = row.get(5).map_err(|source| CommandError::Db {
+            op: "search.summary.get.text",
+            source,
+        })?;
+        let distance: f64 = row.get(6).map_err(|source| CommandError::Db {
+            op: "search.summary.get.distance",
+            source,
+        })?;
+        let similarity = (1.0 - distance as f32).clamp(0.0, 1.0);
+        summaries.push(TopSummary {
+            document_id,
+            byte_start,
+            byte_end,
+            similarity,
+        });
+    }
+
+    // Group summaries by doc and pick the best (max) similarity per byte
+    // range. Then for each doc, expand to chunks within those ranges.
+    let mut by_doc: std::collections::HashMap<i64, Vec<TopSummary>> =
+        std::collections::HashMap::new();
+    for s in summaries {
+        by_doc.entry(s.document_id).or_default().push(s);
+    }
+
+    let mut out: Vec<SearchHit> = Vec::new();
+    for (doc_id, doc_summaries) in by_doc {
+        let path = docs
+            .iter()
+            .find(|(id, _)| *id == doc_id)
+            .map(|(_, p)| p.clone())
+            .unwrap_or_default();
+
+        // Pull all chunks within any covered range in one query. We union the
+        // ranges via OR in SQL — small N (summary_limit), so OK.
+        let mut where_clauses = Vec::with_capacity(doc_summaries.len());
+        let mut chunk_params: Vec<Value> = Vec::new();
+        chunk_params.push(Value::Integer(doc_id));
+        for s in &doc_summaries {
+            where_clauses.push("(byte_start >= ? AND byte_end <= ?)".to_string());
+            chunk_params.push(Value::Integer(s.byte_start));
+            chunk_params.push(Value::Integer(s.byte_end));
+        }
+        let chunks_sql = format!(
+            "SELECT id, byte_start, byte_end, page_first, page_last, text \
+             FROM document_chunk \
+             WHERE document_id = ? AND ({})",
+            where_clauses.join(" OR ")
+        );
+
+        let mut chunk_rows = conn
+            .query(&chunks_sql, Params::Positional(chunk_params))
+            .await
+            .map_err(|source| CommandError::Db {
+                op: "search.summary.expand",
+                source,
+            })?;
+        while let Some(row) = chunk_rows.next().await.map_err(|source| CommandError::Db {
+            op: "search.summary.expand.next",
+            source,
+        })? {
+            let chunk_id: i64 = row.get(0).map_err(|source| CommandError::Db {
+                op: "search.summary.expand.get.chunk_id",
+                source,
+            })?;
+            let byte_start: i64 = row.get(1).map_err(|source| CommandError::Db {
+                op: "search.summary.expand.get.byte_start",
+                source,
+            })?;
+            let byte_end: i64 = row.get(2).map_err(|source| CommandError::Db {
+                op: "search.summary.expand.get.byte_end",
+                source,
+            })?;
+            let page_first: Option<i64> = match row.get_value(3) {
+                Ok(Value::Null) => None,
+                Ok(Value::Integer(n)) => Some(n),
+                Ok(other) => panic!("unexpected page_first value {other:?}"),
+                Err(source) => {
+                    return Err(CommandError::Db {
+                        op: "search.summary.expand.get.page_first",
+                        source,
+                    });
+                }
+            };
+            let page_last: Option<i64> = match row.get_value(4) {
+                Ok(Value::Null) => None,
+                Ok(Value::Integer(n)) => Some(n),
+                Ok(other) => panic!("unexpected page_last value {other:?}"),
+                Err(source) => {
+                    return Err(CommandError::Db {
+                        op: "search.summary.expand.get.page_last",
+                        source,
+                    });
+                }
+            };
+            let text: String = row.get(5).map_err(|source| CommandError::Db {
+                op: "search.summary.expand.get.text",
+                source,
+            })?;
+            // Best summary similarity that covers this chunk. With small N
+            // this scan is cheap.
+            let similarity = doc_summaries
+                .iter()
+                .filter(|s| s.byte_start <= byte_start && s.byte_end >= byte_end)
+                .map(|s| s.similarity)
+                .fold(0.0f32, f32::max);
+            out.push(SearchHit {
+                document_id: doc_id,
+                chunk_id,
+                path: path.clone(),
+                byte_start,
+                byte_end,
+                page_first,
+                page_last,
+                text,
+                similarity,
+                source: HitSource::Summary,
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// Merge summary-expanded hits into the chunk-search hits, deduping by
+/// `(document_id, chunk_id)`. When the same chunk appears in both sets we
+/// keep the higher similarity and flag the source as `Both`.
+fn merge_summary_hits(hits: &mut Vec<SearchHit>, summary_hits: Vec<SearchHit>) {
+    use std::collections::HashMap;
+    let mut index: HashMap<(i64, i64), usize> = HashMap::with_capacity(hits.len());
+    for (i, h) in hits.iter().enumerate() {
+        index.insert((h.document_id, h.chunk_id), i);
+    }
+    for s in summary_hits {
+        let key = (s.document_id, s.chunk_id);
+        match index.get(&key) {
+            Some(&i) => {
+                let h = &mut hits[i];
+                if s.similarity > h.similarity {
+                    h.similarity = s.similarity;
+                }
+                h.source = h.source.merged_with(s.source);
+            }
+            None => {
+                index.insert(key, hits.len());
+                hits.push(s);
+            }
+        }
+    }
+}
+
+/// Group merged hits by document and pull each document's smallest covering
+/// level≥1 summary in one query per doc. The region summary is the smallest
+/// (innermost) covering one — narrower context is more relevant.
+async fn group_hits_by_document(
+    db: &Db,
+    hits: &[SearchHit],
+    _cutoff: &f32,
+) -> Result<Vec<DocGroup>, CommandError> {
+    // Bucket hits by document_id while preserving relative order (already
+    // similarity-desc from the caller). The first bucket key seen wins doc
+    // ordering, which makes the top-hit doc come first.
+    use std::collections::HashMap;
+    let mut doc_order: Vec<i64> = Vec::new();
+    let mut buckets: HashMap<i64, (String, Vec<usize>)> = HashMap::new();
+    for (i, h) in hits.iter().enumerate() {
+        buckets
+            .entry(h.document_id)
+            .or_insert_with(|| {
+                doc_order.push(h.document_id);
+                (h.path.clone(), Vec::new())
+            })
+            .1
+            .push(i);
+    }
+
+    let conn = db
+        .fresh_conn()
+        .await
+        .map_err(|source| CommandError::FreshConn { source })?;
+
+    let mut groups: Vec<DocGroup> = Vec::with_capacity(doc_order.len());
+    for doc_id in doc_order {
+        let (path, idxs) = buckets.remove(&doc_id).expect("bucket exists");
+        // Pull all level>=1 summaries for this doc once; pick covering ones
+        // per hit in memory below.
+        let mut rows = conn
+            .query(
+                "SELECT level, byte_start, byte_end, text \
+                 FROM document_summary \
+                 WHERE document_id = ? AND level >= 1 \
+                 ORDER BY level ASC, byte_start ASC",
+                (doc_id,),
+            )
+            .await
+            .map_err(|source| CommandError::Db {
+                op: "search.region_summary",
+                source,
+            })?;
+        struct LevelSummary {
+            level: i64,
+            byte_start: i64,
+            byte_end: i64,
+            text: String,
+        }
+        let mut summaries: Vec<LevelSummary> = Vec::new();
+        while let Some(row) = rows.next().await.map_err(|source| CommandError::Db {
+            op: "search.region_summary.next",
+            source,
+        })? {
+            let level: i64 = row.get(0).map_err(|source| CommandError::Db {
+                op: "search.region_summary.get.level",
+                source,
+            })?;
+            let byte_start: i64 = row.get(1).map_err(|source| CommandError::Db {
+                op: "search.region_summary.get.byte_start",
+                source,
+            })?;
+            let byte_end: i64 = row.get(2).map_err(|source| CommandError::Db {
+                op: "search.region_summary.get.byte_end",
+                source,
+            })?;
+            let text: String = row.get(3).map_err(|source| CommandError::Db {
+                op: "search.region_summary.get.text",
+                source,
+            })?;
+            summaries.push(LevelSummary {
+                level,
+                byte_start,
+                byte_end,
+                text,
+            });
+        }
+
+        // Pick the region summary for this doc: smallest-level covering
+        // summary for the doc's top-scoring hit. Falls back to None if the
+        // doc has no summaries built yet.
+        let region: Option<&LevelSummary> = idxs
+            .first()
+            .and_then(|&i| {
+                let hit = &hits[i];
+                summaries
+                    .iter()
+                    .filter(|s| s.byte_start <= hit.byte_start && s.byte_end >= hit.byte_end)
+                    // Already sorted by level ASC, so first match is the innermost.
+                    .next()
+            });
+
+        let region_summary = region.map(|s| s.text.clone());
+        let region_summary_level = region.map(|s| s.level);
+
+        // Materialize hits, preserving the similarity-desc order from the
+        // caller. We move them out by index; the caller is fine with that
+        // because hits is borrowed read-only and we clone.
+        let hits_owned: Vec<SearchHit> = idxs
+            .into_iter()
+            .map(|i| {
+                let h = &hits[i];
+                SearchHit {
+                    document_id: h.document_id,
+                    chunk_id: h.chunk_id,
+                    path: h.path.clone(),
+                    byte_start: h.byte_start,
+                    byte_end: h.byte_end,
+                    page_first: h.page_first,
+                    page_last: h.page_last,
+                    text: h.text.clone(),
+                    similarity: h.similarity,
+                    source: h.source,
+                }
+            })
+            .collect();
+
+        groups.push(DocGroup {
+            path,
+            region_summary,
+            region_summary_level,
+            hits: hits_owned,
+        });
+    }
+
+    Ok(groups)
 }
 
 fn render_search(
@@ -1412,13 +1891,7 @@ fn render_search(
     let max_chars = if no_truncate { None } else { Some(SNIPPET_MAX_CHARS) };
     for h in hits {
         let _ = writeln!(out);
-        let location = match h.page_first {
-            Some(first) => match h.page_last {
-                Some(last) if last != first => format!("page {first}-{last}"),
-                _ => format!("page {first}"),
-            },
-            None => format!("bytes {}-{}", h.byte_start, h.byte_end),
-        };
+        let location = format_location(h.page_first, h.page_last, h.byte_start, h.byte_end);
         let _ = writeln!(
             out,
             "{}  {}  similarity {:.4}",
@@ -1426,6 +1899,73 @@ fn render_search(
         );
         let (snip, _) = snippet_with_flag(&h.text, max_chars);
         let _ = writeln!(out, "  {snip}");
+    }
+    out
+}
+
+fn format_location(
+    page_first: Option<i64>,
+    page_last: Option<i64>,
+    byte_start: i64,
+    byte_end: i64,
+) -> String {
+    match page_first {
+        Some(first) => match page_last {
+            Some(last) if last != first => format!("page {first}-{last}"),
+            _ => format!("page {first}"),
+        },
+        None => format!("bytes {byte_start}-{byte_end}"),
+    }
+}
+
+fn render_search_grouped(
+    term: &str,
+    limit: usize,
+    cutoff: f32,
+    groups: &[DocGroup],
+    no_truncate: bool,
+) -> String {
+    let total_hits: usize = groups.iter().map(|g| g.hits.len()).sum();
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "search {:?} \u{2014} {} result(s) across {} doc(s) (cutoff {:.3}, limit {}/doc, +summaries)",
+        term,
+        total_hits,
+        groups.len(),
+        cutoff,
+        limit,
+    );
+    if groups.is_empty() {
+        return out;
+    }
+    let max_chars = if no_truncate { None } else { Some(SNIPPET_MAX_CHARS) };
+    let summary_max_chars = if no_truncate { None } else { Some(800) };
+
+    for g in groups {
+        let _ = writeln!(out);
+        let _ = writeln!(out, "=== {} ===", g.path);
+        match (&g.region_summary, g.region_summary_level) {
+            (Some(text), Some(level)) => {
+                let (snip, _) = snippet_with_flag(text, summary_max_chars);
+                let _ = writeln!(out, "  region summary (level {level}): {snip}");
+            }
+            _ => {
+                let _ = writeln!(out, "  region summary: (none built — run `summarize`)");
+            }
+        }
+        for h in &g.hits {
+            let location = format_location(h.page_first, h.page_last, h.byte_start, h.byte_end);
+            let _ = writeln!(
+                out,
+                "  - {}  similarity {:.4}  [{}]",
+                location,
+                h.similarity,
+                h.source.as_str(),
+            );
+            let (snip, _) = snippet_with_flag(&h.text, max_chars);
+            let _ = writeln!(out, "      {snip}");
+        }
     }
     out
 }
@@ -1455,6 +1995,8 @@ mod search_tests {
 
     fn hit(path: &str, sim: f32, page: Option<i64>, text: &str) -> SearchHit {
         SearchHit {
+            document_id: 1,
+            chunk_id: 1,
             path: path.to_string(),
             byte_start: 0,
             byte_end: 100,
@@ -1462,6 +2004,7 @@ mod search_tests {
             page_last: page,
             text: text.to_string(),
             similarity: sim,
+            source: HitSource::Chunk,
         }
     }
 

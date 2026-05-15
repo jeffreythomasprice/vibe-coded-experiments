@@ -13,6 +13,7 @@ use super::DbError;
 const MIGRATIONS: &[(u32, &str, &str)] = &[
     (1, "initial", include_str!("migrations/0001_initial.sql")),
     (2, "tags", include_str!("migrations/0002_tags.sql")),
+    (3, "summaries", include_str!("migrations/0003_summaries.sql")),
 ];
 
 pub async fn run(conn: &Connection) -> Result<(), DbError> {
