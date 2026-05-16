@@ -33,11 +33,35 @@ pub struct RequestEnvelope {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "cmd", rename_all = "kebab-case")]
 pub enum Request {
-    Ingest { path: PathBuf },
+    Ingest {
+        path: PathBuf,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        no_summary: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_depth: Option<usize>,
+    },
     Info { path: PathBuf },
     Text { path: PathBuf, range: TextRangeReq },
     PrintConfig,
-    Status,
+    Status {
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        watch: bool,
+        /// Refresh interval in milliseconds when `watch` is true. Ignored
+        /// otherwise. Defaults to 500.
+        #[serde(default = "default_status_interval_ms")]
+        interval_ms: u64,
+    },
+    /// Subset of `Status`: just the queue + currently-running job. Bypasses
+    /// the worker queue.
+    QueueList,
+    /// Remove a queued job by id (or 8-char prefix). If the id matches the
+    /// currently-running cancellable job, cancels it.
+    QueueDelete { id: String },
+    /// Cancel current (if cancellable) and drop every queued job.
+    QueueClear,
+    /// Scan the DB for orphaned rows from interrupted summarize runs and
+    /// repair them in place.
+    QueueCleanup,
     List {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         tags: Vec<String>,
@@ -66,11 +90,10 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         include_summaries: bool,
     },
-    Summarize {
-        path: PathBuf,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        max_depth: Option<usize>,
-    },
+}
+
+fn default_status_interval_ms() -> u64 {
+    500
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,11 +108,25 @@ impl Request {
     /// Short label shown in queue/status output.
     pub fn label(&self) -> String {
         match self {
-            Request::Ingest { path } => format!("ingest {}", path.display()),
+            Request::Ingest { path, no_summary, max_depth } => {
+                let mut s = format!("ingest {}", path.display());
+                if *no_summary {
+                    s.push_str(" --no-summary");
+                }
+                if let Some(d) = max_depth {
+                    s.push_str(&format!(" --max-depth {d}"));
+                }
+                s
+            }
             Request::Info { path } => format!("info {}", path.display()),
             Request::Text { path, .. } => format!("text {}", path.display()),
             Request::PrintConfig => "print-config".to_string(),
-            Request::Status => "status".to_string(),
+            Request::Status { watch: false, .. } => "status".to_string(),
+            Request::Status { watch: true, .. } => "status --watch".to_string(),
+            Request::QueueList => "queue list".to_string(),
+            Request::QueueDelete { id } => format!("queue delete {id}"),
+            Request::QueueClear => "queue clear".to_string(),
+            Request::QueueCleanup => "queue cleanup".to_string(),
             Request::List { tags, match_all } => {
                 if tags.is_empty() {
                     "list".to_string()
@@ -107,10 +144,6 @@ impl Request {
                 format!("tag remove {} [{}]", path.display(), tags.join(","))
             }
             Request::TagList => "tag list".to_string(),
-            Request::Summarize { path, max_depth } => match max_depth {
-                Some(d) => format!("summarize {} --max-depth {}", path.display(), d),
-                None => format!("summarize {}", path.display()),
-            },
             Request::Search {
                 term,
                 path,
@@ -183,13 +216,22 @@ pub enum ProgressEvent {
 pub struct StatusSnapshot {
     pub uptime_secs: u64,
     pub current: Option<CurrentJob>,
-    pub queued: Vec<String>,
+    pub queued: Vec<QueuedJob>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CurrentJob {
+    /// Full UUID of the running job. `queue delete` accepts an 8-char prefix.
+    pub id: String,
     pub label: String,
     pub running_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueuedJob {
+    pub id: String,
+    pub label: String,
+    pub queued_secs: u64,
 }
 
 #[cfg(test)]
@@ -200,7 +242,7 @@ mod tests {
     fn envelope_default_text_mode_round_trips() {
         let env = RequestEnvelope {
             output_mode: OutputMode::default(),
-            request: Request::Status,
+            request: Request::Status { watch: false, interval_ms: 500 },
         };
         let s = serde_json::to_string(&env).unwrap();
         // Top-level keys: output_mode + cmd discriminator.
@@ -208,7 +250,7 @@ mod tests {
         assert!(s.contains("\"cmd\":\"status\""));
         let back: RequestEnvelope = serde_json::from_str(&s).unwrap();
         assert_eq!(back.output_mode, OutputMode::Text);
-        assert!(matches!(back.request, Request::Status));
+        assert!(matches!(back.request, Request::Status { watch: false, .. }));
     }
 
     #[test]
@@ -258,6 +300,13 @@ mod tests {
         let s = r#"{"cmd":"status"}"#;
         let env: RequestEnvelope = serde_json::from_str(s).unwrap();
         assert_eq!(env.output_mode, OutputMode::Text);
+        match env.request {
+            Request::Status { watch, interval_ms } => {
+                assert!(!watch);
+                assert_eq!(interval_ms, 500);
+            }
+            _ => panic!("expected Status variant"),
+        }
     }
 
     #[test]

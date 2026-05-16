@@ -3,7 +3,7 @@
 
 mod connection;
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -11,11 +11,12 @@ use std::time::{Duration, Instant};
 
 use tokio::net::UnixListener;
 use tokio::sync::{mpsc, watch};
+use uuid::Uuid;
 
 use crate::config::Config;
 use crate::db::{self, Db};
-use crate::protocol::{CurrentJob, Event, OutputMode, Request, StatusSnapshot};
-use crate::{commands, config as cfg_mod, ingest, summarize};
+use crate::protocol::{CurrentJob, Event, OutputMode, QueuedJob, Request, StatusSnapshot};
+use crate::{commands, config as cfg_mod, ingest};
 
 #[derive(thiserror::Error, Debug)]
 pub enum ServerError {
@@ -42,6 +43,10 @@ pub(crate) struct ServerState {
     pub started_at: Instant,
     pub queued: VecDeque<QueueEntry>,
     pub current: Option<RunningJob>,
+    /// Ids of jobs that were dequeued by `queue delete`/`queue clear` while
+    /// still sitting in the mpsc channel. When the worker pulls a Job with
+    /// one of these ids it sends a Final and skips execution.
+    pub cancelled_ids: HashSet<Uuid>,
     /// Shared so inline handlers (status, list, cancel) can read without
     /// going through the worker's queue. Holds the same `Db` the worker uses.
     pub db: Arc<Db>,
@@ -54,34 +59,51 @@ pub(crate) struct ServerState {
 }
 
 pub(crate) struct QueueEntry {
+    pub id: Uuid,
     pub label: String,
+    pub enqueued_at: Instant,
+    /// Held so `queue delete` can synthesize an `Event::Final` on the
+    /// connection that submitted this job, before the worker ever sees it.
+    pub event_tx: mpsc::UnboundedSender<Event>,
 }
 
 pub(crate) struct RunningJob {
+    pub id: Uuid,
     pub label: String,
     pub started_at: Instant,
     /// Cooperative cancel signal. Held only when the current job supports
     /// cancellation; otherwise the receiver side is dropped immediately.
     pub cancel_tx: watch::Sender<bool>,
     /// Whether the running job polls `cancel_tx` and will stop on signal.
-    /// Currently true for `Ingest` and `Summarize`.
+    /// Currently true for `Ingest` (which polls during chunk embedding and
+    /// during its post-chunk summarize phase).
     pub is_cancellable: bool,
 }
 
 impl ServerState {
-    fn snapshot(&self) -> StatusSnapshot {
+    pub(crate) fn snapshot(&self) -> StatusSnapshot {
         StatusSnapshot {
             uptime_secs: self.started_at.elapsed().as_secs(),
             current: self.current.as_ref().map(|c| CurrentJob {
+                id: c.id.to_string(),
                 label: c.label.clone(),
                 running_secs: c.started_at.elapsed().as_secs(),
             }),
-            queued: self.queued.iter().map(|q| q.label.clone()).collect(),
+            queued: self
+                .queued
+                .iter()
+                .map(|q| QueuedJob {
+                    id: q.id.to_string(),
+                    label: q.label.clone(),
+                    queued_secs: q.enqueued_at.elapsed().as_secs(),
+                })
+                .collect(),
         }
     }
 }
 
 pub(crate) struct Job {
+    pub id: Uuid,
     pub req: Request,
     pub output_mode: OutputMode,
     pub event_tx: mpsc::UnboundedSender<Event>,
@@ -115,12 +137,22 @@ pub async fn run(cfg: Config) -> Result<(), ServerError> {
 
     let http = reqwest::Client::new();
     let db = Arc::new(db::open(&cfg, &http).await?);
+    match crate::cleanup::scan_and_repair(&db).await {
+        Ok(report) if report.is_empty() => {}
+        Ok(report) => tracing::info!(
+            documents_repaired = report.documents_repaired,
+            summary_rows_removed = report.summary_rows_removed,
+            "server: startup cleanup repaired partial summaries",
+        ),
+        Err(e) => tracing::warn!(error = %e, "server: startup cleanup failed"),
+    }
     let cfg_arc = Arc::new(cfg.clone());
 
     let state = Arc::new(Mutex::new(ServerState {
         started_at: Instant::now(),
         queued: VecDeque::new(),
         current: None,
+        cancelled_ids: HashSet::new(),
         db: Arc::clone(&db),
         http: http.clone(),
         cfg: Arc::clone(&cfg_arc),
@@ -254,16 +286,31 @@ async fn worker_loop(
 ) {
     let mut completed: u64 = 0;
     while let Some(job) = job_rx.recv().await {
+        // Drop the queue entry for this id (which may be anywhere in the
+        // queue — `queue delete` can remove a middle entry) and check whether
+        // the job was cancelled while still queued.
+        let was_cancelled = {
+            let mut g = state.lock().unwrap();
+            g.queued.retain(|q| q.id != job.id);
+            g.cancelled_ids.remove(&job.id)
+        };
+        if was_cancelled {
+            let _ = job.event_tx.send(Event::Final {
+                ok: false,
+                error: Some("removed from queue".to_string()),
+            });
+            completed += 1;
+            let _ = completed_tx.send(completed);
+            continue;
+        }
+
         let label = job.req.label();
-        let is_cancellable = matches!(
-            job.req,
-            Request::Ingest { .. } | Request::Summarize { .. }
-        );
+        let is_cancellable = matches!(job.req, Request::Ingest { .. });
         let (cancel_tx, cancel_rx) = watch::channel::<bool>(false);
         {
             let mut g = state.lock().unwrap();
-            g.queued.pop_front();
             g.current = Some(RunningJob {
+                id: job.id,
                 label: label.clone(),
                 started_at: Instant::now(),
                 cancel_tx,
@@ -274,21 +321,30 @@ async fn worker_loop(
 
         let mode = job.output_mode;
         let result: Result<String, String> = match job.req {
-            Request::Ingest { path } => {
-                ingest::ingest(&db, &cfg, &http, &path, Some(&job.event_tx), Some(cancel_rx))
-                    .await
-                    .map(|id| match mode {
-                        OutputMode::Text => {
-                            format!("ingested document id {id} from {}\n", path.display())
-                        }
-                        OutputMode::Json => serde_json::json!({
-                            "ok": true,
-                            "document_id": id,
-                            "path": path.display().to_string(),
-                        })
-                        .to_string(),
+            Request::Ingest { path, no_summary, max_depth } => {
+                ingest::ingest(
+                    &db,
+                    &cfg,
+                    &http,
+                    &path,
+                    no_summary,
+                    max_depth,
+                    Some(&job.event_tx),
+                    Some(cancel_rx),
+                )
+                .await
+                .map(|id| match mode {
+                    OutputMode::Text => {
+                        format!("ingested document id {id} from {}\n", path.display())
+                    }
+                    OutputMode::Json => serde_json::json!({
+                        "ok": true,
+                        "document_id": id,
+                        "path": path.display().to_string(),
                     })
-                    .map_err(|e| e.to_string())
+                    .to_string(),
+                })
+                .map_err(|e| e.to_string())
             }
             Request::Info { path } => match mode {
                 OutputMode::Text => commands::info(&db, &path).await.map_err(|e| e.to_string()),
@@ -332,35 +388,15 @@ async fn worker_loop(
                     .await
                     .map_err(|e| e.to_string()),
             },
-            Request::Summarize { path, max_depth } => summarize::summarize(
-                &db,
-                &cfg,
-                &http,
-                &path,
-                max_depth,
-                Some(&job.event_tx),
-                Some(cancel_rx),
-            )
-            .await
-            .map(|stats| match mode {
-                OutputMode::Text => format!(
-                    "summarized {}: {} new, {} reused across {} level(s)\n",
-                    path.display(),
-                    stats.new_summaries,
-                    stats.reused_summaries,
-                    stats.levels,
-                ),
-                OutputMode::Json => serde_json::json!({
-                    "ok": true,
-                    "path": path.display().to_string(),
-                    "new_summaries": stats.new_summaries,
-                    "reused_summaries": stats.reused_summaries,
-                    "levels": stats.levels,
-                })
-                .to_string(),
-            })
-            .map_err(|e| e.to_string()),
-            Request::Status => unreachable!("status is handled inline by the connection task"),
+            Request::Status { .. } => {
+                unreachable!("status is handled inline by the connection task")
+            }
+            Request::QueueList
+            | Request::QueueDelete { .. }
+            | Request::QueueClear
+            | Request::QueueCleanup => {
+                unreachable!("queue commands are handled inline by the connection task")
+            }
             Request::List { .. } => {
                 unreachable!("list is handled inline by the connection task")
             }

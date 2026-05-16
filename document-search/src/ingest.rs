@@ -88,13 +88,19 @@ pub enum IngestError {
 
     #[error("ingest cancelled")]
     Cancelled,
+
+    #[error("summarize: {0}")]
+    Summarize(#[from] crate::summarize::SummarizeError),
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn ingest(
     db: &Db,
     cfg: &Config,
     http: &reqwest::Client,
     raw_path: &Path,
+    no_summary: bool,
+    summary_max_depth: Option<usize>,
     progress: Option<&mpsc::UnboundedSender<Event>>,
     cancel: Option<watch::Receiver<bool>>,
 ) -> Result<i64, IngestError> {
@@ -175,7 +181,7 @@ pub async fn ingest(
         "ingest: extracted and chunked",
     );
 
-    insert_all(
+    let doc_id = insert_all(
         db,
         cfg,
         http,
@@ -190,7 +196,22 @@ pub async fn ingest(
         progress,
         cancel.as_ref(),
     )
-    .await
+    .await?;
+
+    if !no_summary {
+        crate::summarize::summarize(
+            db,
+            cfg,
+            http,
+            &path,
+            summary_max_depth,
+            progress,
+            cancel,
+        )
+        .await?;
+    }
+
+    Ok(doc_id)
 }
 
 fn emit_stage(progress: Option<&mpsc::UnboundedSender<Event>>, name: &str) {

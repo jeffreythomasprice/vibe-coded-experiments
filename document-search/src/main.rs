@@ -1,4 +1,5 @@
 mod chunking;
+mod cleanup;
 mod cli;
 mod client;
 mod commands;
@@ -16,7 +17,7 @@ mod summarize;
 
 use clap::Parser;
 
-use crate::cli::{Cli, Command, TagCommand, TextRange};
+use crate::cli::{Cli, Command, QueueCommand, TagCommand, TextRange};
 use crate::error::Error;
 use crate::protocol::{OutputMode, Request, RequestEnvelope, TextRangeReq};
 
@@ -90,14 +91,24 @@ async fn run(args: Cli) -> Result<(), Error> {
 
 fn command_to_request(cmd: Command) -> Result<Request, Error> {
     match cmd {
-        Command::Ingest { path } => Ok(Request::Ingest { path }),
+        Command::Ingest { path, no_summary, max_depth } => Ok(Request::Ingest {
+            path,
+            no_summary,
+            max_depth,
+        }),
         Command::Info { path } => Ok(Request::Info { path }),
         Command::Text { path, range } => Ok(Request::Text {
             path,
             range: text_range_to_proto(range)?,
         }),
         Command::PrintConfig => Ok(Request::PrintConfig),
-        Command::Status => Ok(Request::Status),
+        Command::Status { watch, interval_ms } => Ok(Request::Status { watch, interval_ms }),
+        Command::Queue { action } => match action {
+            QueueCommand::List => Ok(Request::QueueList),
+            QueueCommand::Delete { id } => Ok(Request::QueueDelete { id }),
+            QueueCommand::Clear => Ok(Request::QueueClear),
+            QueueCommand::Cleanup => Ok(Request::QueueCleanup),
+        },
         Command::List { tags, match_all } => Ok(Request::List { tags, match_all }),
         Command::Delete { path } => Ok(Request::Delete { path }),
         Command::Cancel => Ok(Request::Cancel),
@@ -125,7 +136,6 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             no_truncate,
             include_summaries,
         }),
-        Command::Summarize { path, max_depth } => Ok(Request::Summarize { path, max_depth }),
         Command::Server => unreachable!("Server is dispatched directly"),
     }
 }

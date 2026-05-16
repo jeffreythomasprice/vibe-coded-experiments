@@ -38,6 +38,10 @@ provider = "ollama"
 max_output_tokens = 800
 
 [summarize]
+# Settings for the hierarchical summary tree built as the final phase of
+# every `ingest` (skip per-ingest with `--no-summary`; override max_depth
+# per-ingest with `--max-depth N`).
+#
 # Number of consecutive level-(k-1) nodes summarized into one level-k node.
 # Level 0 groups chunks; higher levels group prior-level summaries.
 group_size = 6

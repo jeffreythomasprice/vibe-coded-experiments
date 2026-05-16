@@ -27,10 +27,22 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Ingest a .txt or .pdf file into the DB.
+    /// Ingest a .txt or .pdf file into the DB. After chunking and embedding,
+    /// the hierarchical summary tree is built automatically using the LLM
+    /// provider configured under [llm]. Pass --no-summary to skip the summary
+    /// phase for this ingest.
     Ingest {
         /// Path to the file to ingest.
         path: PathBuf,
+
+        /// Skip the post-ingest summarization phase. The document is still
+        /// chunked and embedded.
+        #[arg(long)]
+        no_summary: bool,
+
+        /// Override [summarize].max_depth for this ingest's summary phase.
+        #[arg(long, value_name = "N")]
+        max_depth: Option<usize>,
     },
 
     /// Print metadata for a document by path.
@@ -59,7 +71,23 @@ pub enum Command {
 
     /// Print the server's queue and currently-running job. Bypasses the
     /// queue.
-    Status,
+    Status {
+        /// Stream live updates until interrupted with Ctrl-C. The screen is
+        /// cleared and redrawn on each refresh in text mode; in JSON mode
+        /// one snapshot is printed per line (NDJSON).
+        #[arg(long)]
+        watch: bool,
+
+        /// Refresh interval in milliseconds (only meaningful with --watch).
+        #[arg(long, value_name = "MS", default_value_t = 500, requires = "watch")]
+        interval_ms: u64,
+    },
+
+    /// Manage the server's job queue.
+    Queue {
+        #[command(subcommand)]
+        action: QueueCommand,
+    },
 
     /// List all ingested documents, plus any in-progress or queued jobs.
     /// Bypasses the queue.
@@ -136,20 +164,28 @@ pub enum Command {
         include_summaries: bool,
     },
 
-    /// Build (or update) the hierarchical summary tree for an ingested
-    /// document. Uses the LLM provider configured under [llm] to summarize
-    /// groups of chunks, then groups of summaries, until a single root
-    /// summary remains (or `--max-depth` is reached). Idempotent: groups
-    /// whose input content_hash already exists are skipped. Long-running;
-    /// cancel mid-flight with the `cancel` subcommand.
-    Summarize {
-        /// Path of an already-ingested document.
-        path: PathBuf,
+}
 
-        /// Override [summarize].max_depth for this run.
-        #[arg(long, value_name = "N")]
-        max_depth: Option<usize>,
+#[derive(Subcommand, Debug)]
+pub enum QueueCommand {
+    /// List queued and currently-running jobs (subset of `status`).
+    List,
+
+    /// Remove a queued job by id, or cancel the running job if its id
+    /// matches. Accepts the short 8-char prefix shown by `status`/`queue
+    /// list`.
+    Delete {
+        /// Full UUID or any unambiguous prefix of one.
+        id: String,
     },
+
+    /// Cancel the current cancellable job (if any) and drop every queued
+    /// job.
+    Clear,
+
+    /// Scan the DB for orphaned rows left behind by interrupted summarize
+    /// runs from older versions and repair them in place.
+    Cleanup,
 }
 
 #[derive(Subcommand, Debug)]

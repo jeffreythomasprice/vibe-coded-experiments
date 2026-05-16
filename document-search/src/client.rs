@@ -11,7 +11,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
 use crate::config::Config;
-use crate::protocol::{Event, OutputMode, ProgressEvent, RequestEnvelope, StatusSnapshot};
+use crate::protocol::{Event, OutputMode, ProgressEvent, Request, RequestEnvelope, StatusSnapshot};
 
 #[derive(thiserror::Error, Debug)]
 pub enum ClientError {
@@ -48,12 +48,17 @@ pub async fn run(
     let mut reader = BufReader::new(read_half);
 
     let output_mode = envelope.output_mode;
+    let watch_mode = matches!(envelope.request, Request::Status { watch: true, .. });
+    let watch_interval_ms = match envelope.request {
+        Request::Status { interval_ms, .. } => interval_ms,
+        _ => 0,
+    };
     let mut line = serde_json::to_string(&envelope).map_err(ClientError::Encode)?;
     line.push('\n');
     write_half.write_all(line.as_bytes()).await?;
     write_half.flush().await?;
 
-    render_events(&mut reader, output_mode).await
+    render_events(&mut reader, output_mode, watch_mode, watch_interval_ms).await
 }
 
 async fn connect_or_spawn(
@@ -119,17 +124,23 @@ unsafe extern "C" {
 async fn render_events<R>(
     reader: &mut BufReader<R>,
     output_mode: OutputMode,
+    watch_mode: bool,
+    watch_interval_ms: u64,
 ) -> Result<(), ClientError>
 where
     R: tokio::io::AsyncRead + Unpin,
 {
     match output_mode {
-        OutputMode::Text => render_events_text(reader).await,
+        OutputMode::Text => render_events_text(reader, watch_mode, watch_interval_ms).await,
         OutputMode::Json => render_events_json(reader).await,
     }
 }
 
-async fn render_events_text<R>(reader: &mut BufReader<R>) -> Result<(), ClientError>
+async fn render_events_text<R>(
+    reader: &mut BufReader<R>,
+    watch_mode: bool,
+    watch_interval_ms: u64,
+) -> Result<(), ClientError>
 where
     R: tokio::io::AsyncRead + Unpin,
 {
@@ -187,7 +198,19 @@ where
             }
             Event::StatusSnapshot(s) => {
                 pb.finish_and_clear();
-                print_status(&s);
+                if watch_mode {
+                    // Clear screen + move cursor home so the snapshot replaces
+                    // the previous one in place.
+                    print!("\x1b[2J\x1b[H");
+                    print_status(&s);
+                    println!(
+                        "\n(refreshing every {watch_interval_ms}ms — Ctrl-C to exit)"
+                    );
+                    use std::io::Write;
+                    let _ = std::io::stdout().flush();
+                } else {
+                    print_status(&s);
+                }
             }
             Event::Final { ok, error } => {
                 pb.finish_and_clear();
@@ -248,10 +271,15 @@ where
                     "ok": true,
                     "uptime_secs": s.uptime_secs,
                     "current": s.current.as_ref().map(|c| serde_json::json!({
+                        "id": c.id,
                         "label": c.label,
                         "running_secs": c.running_secs,
                     })),
-                    "queued": s.queued,
+                    "queued": s.queued.iter().map(|q| serde_json::json!({
+                        "id": q.id,
+                        "label": q.label,
+                        "queued_secs": q.queued_secs,
+                    })).collect::<Vec<_>>(),
                 });
                 println!("{env}");
             }
@@ -278,7 +306,12 @@ where
 fn print_status(s: &StatusSnapshot) {
     println!("uptime: {}s", s.uptime_secs);
     match &s.current {
-        Some(c) => println!("current: {} (running {}s)", c.label, c.running_secs),
+        Some(c) => println!(
+            "current: [{}] {} (running {}s)",
+            short_id(&c.id),
+            c.label,
+            c.running_secs,
+        ),
         None => println!("current: idle"),
     }
     if s.queued.is_empty() {
@@ -286,7 +319,19 @@ fn print_status(s: &StatusSnapshot) {
     } else {
         println!("queued ({}):", s.queued.len());
         for (i, q) in s.queued.iter().enumerate() {
-            println!("  {}. {q}", i + 1);
+            println!(
+                "  {}. [{}] {} (queued {}s)",
+                i + 1,
+                short_id(&q.id),
+                q.label,
+                q.queued_secs,
+            );
         }
     }
+}
+
+fn short_id(id: &str) -> &str {
+    // 8 hex chars is plenty to disambiguate jobs in the queue and matches
+    // what `queue delete` accepts as a prefix.
+    if id.len() >= 8 { &id[..8] } else { id }
 }

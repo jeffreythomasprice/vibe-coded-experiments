@@ -498,16 +498,126 @@ pub async fn delete(db: &Db, raw_path: &Path) -> Result<(), CommandError> {
     let path = canonicalize(raw_path)?;
     // Surfaces DocumentNotFound when the path isn't ingested, instead of a
     // silent no-op DELETE.
-    let _ = lookup_document(db, &path).await?;
+    let row = lookup_document(db, &path).await?;
 
-    let path_str = path.to_string_lossy().to_string();
+    // Delete children explicitly bottom-up rather than relying on
+    // `ON DELETE CASCADE`. turso 0.4 cascades recursively on the call stack
+    // and overflows on documents with hundreds of chunks; one DELETE per
+    // child table keeps each statement non-recursive. turso also rejects
+    // `IN (SELECT …)`, so per-id deletes for the two vector tables.
+    let id = row.id;
+
+    let chunk_ids = collect_ids(
+        db,
+        "SELECT id FROM document_chunk WHERE document_id = ?",
+        id,
+        "delete.collect.chunk_ids",
+    )
+    .await?;
+    let summary_ids = collect_ids(
+        db,
+        "SELECT id FROM document_summary WHERE document_id = ?",
+        id,
+        "delete.collect.summary_ids",
+    )
+    .await?;
+
+    // Turn FK enforcement off for the duration of this delete. We're walking
+    // the child tables explicitly, so the engine doesn't need to do cascade
+    // bookkeeping — and in turso 0.4 that bookkeeping recurses on the call
+    // stack and blows it on documents with many chunks.
     db.conn
-        .execute("DELETE FROM document WHERE path = ?", (path_str,))
+        .execute("PRAGMA foreign_keys = OFF", ())
         .await
         .map_err(|source| CommandError::Db {
-            op: "delete_document",
+            op: "delete.pragma_off",
             source,
         })?;
+    let res = delete_inner(db, id, &chunk_ids, &summary_ids).await;
+    // Best-effort re-enable; if the connection survives we want it back on.
+    let _ = db.conn.execute("PRAGMA foreign_keys = ON", ()).await;
+    res
+}
+
+async fn delete_inner(
+    db: &Db,
+    id: i64,
+    chunk_ids: &[i64],
+    summary_ids: &[i64],
+) -> Result<(), CommandError> {
+    delete_by_ids(
+        db,
+        &db.chunks_table,
+        "chunk_id",
+        chunk_ids,
+        "delete.vector_chunks",
+    )
+    .await?;
+    delete_by_ids(
+        db,
+        &db.summary_vectors_table,
+        "summary_id",
+        summary_ids,
+        "delete.vector_summaries",
+    )
+    .await?;
+
+    let by_doc: &[(&'static str, &'static str)] = &[
+        ("delete.summaries", "DELETE FROM document_summary WHERE document_id = ?"),
+        ("delete.chunks", "DELETE FROM document_chunk WHERE document_id = ?"),
+        ("delete.pages", "DELETE FROM document_page WHERE document_id = ?"),
+        ("delete.tags", "DELETE FROM document_tag WHERE document_id = ?"),
+        ("delete.document", "DELETE FROM document WHERE id = ?"),
+    ];
+    for (op, sql) in by_doc {
+        db.conn
+            .execute(*sql, Params::Positional(vec![Value::Integer(id)]))
+            .await
+            .map_err(|source| CommandError::Db { op, source })?;
+    }
+    Ok(())
+}
+
+async fn collect_ids(
+    db: &Db,
+    sql: &str,
+    document_id: i64,
+    op: &'static str,
+) -> Result<Vec<i64>, CommandError> {
+    let mut rows = db
+        .conn
+        .query(sql, Params::Positional(vec![Value::Integer(document_id)]))
+        .await
+        .map_err(|source| CommandError::Db { op, source })?;
+    let mut ids = Vec::new();
+    while let Some(row) = rows
+        .next()
+        .await
+        .map_err(|source| CommandError::Db { op, source })?
+    {
+        let id: i64 = row.get(0).map_err(|source| CommandError::Db { op, source })?;
+        ids.push(id);
+    }
+    Ok(ids)
+}
+
+async fn delete_by_ids(
+    db: &Db,
+    table: &str,
+    id_col: &str,
+    ids: &[i64],
+    op: &'static str,
+) -> Result<(), CommandError> {
+    // One-row-at-a-time. turso 0.4 parses large `IN (…)` lists recursively
+    // and overflows the stack at a few hundred entries, and `IN (SELECT …)`
+    // isn't supported either.
+    let sql = format!("DELETE FROM {table} WHERE {id_col} = ?");
+    for id in ids {
+        db.conn
+            .execute(&sql, Params::Positional(vec![Value::Integer(*id)]))
+            .await
+            .map_err(|source| CommandError::Db { op, source })?;
+    }
     Ok(())
 }
 
@@ -552,10 +662,15 @@ pub async fn list_json(
         "ok": true,
         "documents": documents,
         "current": snapshot.current.as_ref().map(|c| serde_json::json!({
+            "id": c.id,
             "label": c.label,
             "running_secs": c.running_secs,
         })),
-        "queued": snapshot.queued,
+        "queued": snapshot.queued.iter().map(|q| serde_json::json!({
+            "id": q.id,
+            "label": q.label,
+            "queued_secs": q.queued_secs,
+        })).collect::<Vec<_>>(),
     });
     Ok(env.to_string())
 }
@@ -567,12 +682,73 @@ pub fn status_json(snapshot: &StatusSnapshot) -> String {
         "ok": true,
         "uptime_secs": snapshot.uptime_secs,
         "current": snapshot.current.as_ref().map(|c| serde_json::json!({
+            "id": c.id,
             "label": c.label,
             "running_secs": c.running_secs,
         })),
-        "queued": snapshot.queued,
+        "queued": snapshot.queued.iter().map(|q| serde_json::json!({
+            "id": q.id,
+            "label": q.label,
+            "queued_secs": q.queued_secs,
+        })).collect::<Vec<_>>(),
     });
     env.to_string()
+}
+
+/// Render just the queue + current job from a snapshot, for `queue list`.
+pub fn queue_list_text(snapshot: &StatusSnapshot) -> String {
+    let mut out = String::new();
+    match &snapshot.current {
+        Some(c) => {
+            let _ = writeln!(
+                out,
+                "current: [{}] {} (running {}s)",
+                short_id(&c.id),
+                c.label,
+                c.running_secs,
+            );
+        }
+        None => {
+            let _ = writeln!(out, "current: idle");
+        }
+    }
+    if snapshot.queued.is_empty() {
+        let _ = writeln!(out, "queued: (empty)");
+    } else {
+        let _ = writeln!(out, "queued ({}):", snapshot.queued.len());
+        for (i, q) in snapshot.queued.iter().enumerate() {
+            let _ = writeln!(
+                out,
+                "  {}. [{}] {} (queued {}s)",
+                i + 1,
+                short_id(&q.id),
+                q.label,
+                q.queued_secs,
+            );
+        }
+    }
+    out
+}
+
+pub fn queue_list_json(snapshot: &StatusSnapshot) -> String {
+    let env = serde_json::json!({
+        "ok": true,
+        "current": snapshot.current.as_ref().map(|c| serde_json::json!({
+            "id": c.id,
+            "label": c.label,
+            "running_secs": c.running_secs,
+        })),
+        "queued": snapshot.queued.iter().map(|q| serde_json::json!({
+            "id": q.id,
+            "label": q.label,
+            "queued_secs": q.queued_secs,
+        })).collect::<Vec<_>>(),
+    });
+    env.to_string()
+}
+
+fn short_id(id: &str) -> &str {
+    if id.len() >= 8 { &id[..8] } else { id }
 }
 
 /// Wrap a raw extracted text response in the JSON envelope used by the
@@ -745,7 +921,14 @@ fn format_list(docs: &[ListedDocument], snapshot: &StatusSnapshot) -> String {
         let _ = writeln!(out);
         let _ = writeln!(out, "queued ({}):", snapshot.queued.len());
         for (i, q) in snapshot.queued.iter().enumerate() {
-            let _ = writeln!(out, "  {}. {q}", i + 1);
+            let _ = writeln!(
+                out,
+                "  {}. [{}] {} (queued {}s)",
+                i + 1,
+                short_id(&q.id),
+                q.label,
+                q.queued_secs,
+            );
         }
     }
 

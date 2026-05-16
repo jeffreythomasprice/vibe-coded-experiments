@@ -10,9 +10,10 @@
 //! skips every LLM call.
 //!
 //! Cancellable: each LLM call is wrapped in a cancel-watch select; on cancel,
-//! returns `SummarizeError::Cancelled` and leaves whatever has been committed
-//! in place (per-statement autocommit). A subsequent run picks up via the
-//! content-hash skip.
+//! returns `SummarizeError::Cancelled`. Any `document_summary` rows inserted
+//! during this run are rolled back before returning, so cancellation leaves
+//! the DB in the same state as if the run never started. A subsequent run
+//! picks up via the content-hash skip.
 
 use std::path::{Path, PathBuf};
 
@@ -118,6 +119,36 @@ pub async fn summarize(
     progress: Option<&mpsc::UnboundedSender<Event>>,
     cancel: Option<watch::Receiver<bool>>,
 ) -> Result<SummarizeStats, SummarizeError> {
+    let mut inserted: Vec<i64> = Vec::new();
+    let result = summarize_inner(
+        db, cfg, http, raw_path, max_depth_override, progress, cancel, &mut inserted,
+    )
+    .await;
+    if result.is_err() && !inserted.is_empty() {
+        if let Err(e) = rollback_inserted(db, &inserted).await {
+            // Best-effort cleanup; `queue cleanup` can repair later if this
+            // fails for any reason.
+            tracing::error!(
+                error = %e,
+                count = inserted.len(),
+                "summarize: failed to clean up partial summaries after error",
+            );
+        }
+    }
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn summarize_inner(
+    db: &Db,
+    cfg: &Config,
+    http: &reqwest::Client,
+    raw_path: &Path,
+    max_depth_override: Option<usize>,
+    progress: Option<&mpsc::UnboundedSender<Event>>,
+    cancel: Option<watch::Receiver<bool>>,
+    inserted: &mut Vec<i64>,
+) -> Result<SummarizeStats, SummarizeError> {
     let group_size = cfg.summarize.group_size;
     if group_size < 2 {
         return Err(SummarizeError::InvalidGroupSize(group_size));
@@ -213,6 +244,9 @@ pub async fn summarize(
                         &hash,
                     )
                     .await?;
+                    // Track for rollback BEFORE the vector insert: if that
+                    // fails, we still want to clean up the parent row.
+                    inserted.push(id);
                     insert_summary_vector(db, id, &embedding).await?;
                     stats.new_summaries += 1;
                     (id, false)
@@ -549,6 +583,43 @@ async fn update_summary_parent(
             op: "update_summary_parent",
             source,
         })?;
+    Ok(())
+}
+
+/// Undo summary rows inserted during this run.
+///
+/// Turso 0.4's `ON DELETE CASCADE` on `document_summary.parent_id` (a
+/// self-reference) overflows the runtime stack on any delete against this
+/// table, even for a single row with no children. We sidestep the cascade
+/// entirely by turning off `foreign_keys` on a dedicated connection and
+/// deleting dependents manually in the right order:
+///   1. summary_vectors_<N> rows for these ids
+///   2. detach children that were UPDATE'd to point at these ids
+///   3. delete the rows themselves
+async fn rollback_inserted(db: &Db, ids: &[i64]) -> Result<(), turso::Error> {
+    let conn = db.database.connect()?;
+    conn.execute("PRAGMA foreign_keys = OFF", ()).await?;
+
+    let vec_table = db.summary_vectors_table.as_str();
+    let del_vec_sql = format!("DELETE FROM {vec_table} WHERE summary_id = ?");
+
+    for &id in ids {
+        conn.execute(
+            &del_vec_sql,
+            Params::Positional(vec![Value::Integer(id)]),
+        )
+        .await?;
+        conn.execute(
+            "UPDATE document_summary SET parent_id = NULL WHERE parent_id = ?",
+            Params::Positional(vec![Value::Integer(id)]),
+        )
+        .await?;
+        conn.execute(
+            "DELETE FROM document_summary WHERE id = ?",
+            Params::Positional(vec![Value::Integer(id)]),
+        )
+        .await?;
+    }
     Ok(())
 }
 
