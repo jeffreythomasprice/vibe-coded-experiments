@@ -11,6 +11,9 @@ I want to introduce a cli system for working with character sheets. Some options
 	- did they spend less than or equal to their total xp for extra things
 
 
+redo the char gen for my actual character
+
+
 I want to introduce a tui that displays all fields in a character sheet. I'm not sure of the exact layout I need, and the full sheet is fairly complicated, so I'm willing to have this be fairly rough initially and we'll refine.
 
 

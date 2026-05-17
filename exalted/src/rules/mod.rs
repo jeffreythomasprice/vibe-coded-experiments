@@ -1,9 +1,12 @@
+pub mod anima;
 pub mod catalog;
 pub mod chargen;
 pub mod defense;
 pub mod dice;
+pub mod equipment;
 pub mod essence;
 pub mod health;
+pub mod languages;
 pub mod xp_costs;
 
 pub use catalog::{CharmCatalog, CharmDef, DefaultCatalog};
@@ -19,9 +22,15 @@ pub use defense::{
 pub use dice::dice_pool;
 pub use essence::{
     essence_personal_available, essence_peripheral_available, personal_essence_max,
-    peripheral_essence_max,
+    peripheral_essence_max, validate_pool_state,
 };
-pub use health::{health_track, wound_penalty, HealthLevel};
+pub use health::{
+    health_track, incap_index, is_incapacitated, wound_penalty, HealthLevel, HealthLevelKind,
+    OxBodyPattern,
+};
+pub use anima::{universal_powers, powers_for, AnimaPower, AnimaPowerKind};
+pub use equipment::{validate_artifacts, validate_hearthstones};
+pub use languages::validate_languages;
 pub use xp_costs::{
     xp_cost_ability_increase, xp_cost_attribute_increase, xp_cost_charm, xp_cost_essence_increase,
     xp_cost_new_ability, xp_cost_specialty, xp_cost_spell, xp_cost_virtue_increase,

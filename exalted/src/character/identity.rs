@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::traits::AbilityKind;
+use super::traits::{AbilityKind, VirtueKind};
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
@@ -78,6 +78,8 @@ pub struct Identity {
     pub concept: String,
     pub motivation: String,
     #[serde(default)]
+    pub personality: String,
+    #[serde(default)]
     pub anima: Anima,
     #[serde(default)]
     pub appearance: Appearance,
@@ -88,13 +90,33 @@ pub struct Identity {
 }
 
 /// The Virtue Flaw chosen at chargen, driving Limit Break.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VirtueFlaw {
     CompassionateMartyrdom,
-    HeartOfFlame,
+    HeartOfTears,
+    RedRageOfCompassion,
     DeliberateCruelty,
+    HeartOfFlint,
+    AsceticDrive,
+    ContemptOfTheVirtuous,
+    Overindulgence,
     BerserkAnger,
-    Contempt,
-    Cowardice,
-    Custom,
+    FoolhardyContempt,
+    Custom { name: String, virtue: VirtueKind },
+}
+
+impl VirtueFlaw {
+    pub fn flaw_virtue(&self) -> VirtueKind {
+        match self {
+            VirtueFlaw::CompassionateMartyrdom
+            | VirtueFlaw::HeartOfTears
+            | VirtueFlaw::RedRageOfCompassion => VirtueKind::Compassion,
+            VirtueFlaw::DeliberateCruelty | VirtueFlaw::HeartOfFlint => VirtueKind::Conviction,
+            VirtueFlaw::AsceticDrive
+            | VirtueFlaw::ContemptOfTheVirtuous
+            | VirtueFlaw::Overindulgence => VirtueKind::Temperance,
+            VirtueFlaw::BerserkAnger | VirtueFlaw::FoolhardyContempt => VirtueKind::Valor,
+            VirtueFlaw::Custom { virtue, .. } => *virtue,
+        }
+    }
 }

@@ -43,6 +43,21 @@ pub enum ValidationError {
     #[error("primary virtue {virtue} must be >= 3 dots (got {got})")]
     PrimaryVirtueTooLow { virtue: String, got: u8 },
 
+    #[error("primary virtue is unset")]
+    PrimaryVirtueUnset,
+
+    #[error("virtue flaw is unset")]
+    VirtueFlawUnset,
+
+    #[error(
+        "virtue flaw {flaw} belongs to {expected_virtue}, but primary virtue is {got_virtue}"
+    )]
+    VirtueFlawMismatch {
+        flaw: String,
+        expected_virtue: String,
+        got_virtue: String,
+    },
+
     #[error("virtue {virtue} > 4 from chargen priority alone (got {got})")]
     VirtueChargenOverFour { virtue: String, got: u8 },
 
@@ -54,8 +69,8 @@ pub enum ValidationError {
     #[error("background {background} has > 3 dots from chargen priority (got {got})")]
     BackgroundChargenOverThree { background: String, got: u8 },
 
-    #[error("Cult background > 2 dots at chargen (got {got})")]
-    CultOverTwoAtChargen { got: u8 },
+    #[error("Cult background > 2 dots at creation (chargen + BP) (got {got})")]
+    CultOverTwoAtCreation { got: u8 },
 
     #[error("charm count = {got}, expected 10 at chargen")]
     CharmCountWrong { got: usize },
@@ -121,6 +136,96 @@ pub enum ValidationError {
 
     #[error("note: charm {charm} not in catalog; prereqs not checked")]
     UnknownCharm { charm: String },
+
+    #[error("charm {charm} requires prerequisite charm {missing}")]
+    CharmPrereqMissing { charm: String, missing: String },
+
+    #[error("willpower base = {got}, expected {expected} (sum of two highest Virtues)")]
+    WillpowerNotFromVirtues { expected: u8, got: u8 },
+
+    #[error("willpower > 10 (got {got})")]
+    WillpowerOverTen { got: u8 },
+
+    #[error("alien (non-Solar) charm {charm} requires Eclipse caste")]
+    AlienCharmOnNonEclipse { charm: String },
+
+    #[error("ability {ability} has {got} specialties; max 3 (Linguistics is exempt)")]
+    SpecialtiesOverMax { ability: String, got: usize },
+
+    #[error("multiple native languages declared (got {got}); exactly 1 required")]
+    MultipleNativeLanguages { got: usize },
+
+    #[error("no native language declared")]
+    NoNativeLanguage,
+
+    #[error("known languages = {got}, exceeds 1 + Linguistics = {max}")]
+    TooManyLanguages { got: usize, max: usize },
+
+    #[error("tribal tongues = {got}, exceeds 4 × Linguistics = {max}")]
+    TooManyTribalTongues { got: u8, max: u8 },
+
+    #[error("Old Realm requires Lore >= 1 (got {lore})")]
+    OldRealmRequiresLore { lore: u8 },
+
+    #[error("Guild Cant requires Backing (Guild) >= 2 (got total Backing {backing})")]
+    GuildCantRequiresBacking { backing: u8 },
+
+    #[error("duplicate language family {family}")]
+    DuplicateLanguageFamily { family: String },
+
+    #[error(
+        "willpower permanent spent ({spent}) exceeds permanent rating ({permanent})"
+    )]
+    WillpowerPermanentOverspent { spent: u8, permanent: u8 },
+
+    #[error(
+        "willpower temporary ({temporary}) exceeds available permanent dots ({available})"
+    )]
+    WillpowerTemporaryOverAvailable { temporary: u8, available: u8 },
+
+    #[error(
+        "personal essence overspent: spent {spent} + committed {committed} > max {max}"
+    )]
+    PersonalEssenceOverspent { max: u16, spent: u16, committed: u16 },
+
+    #[error(
+        "peripheral essence overspent: spent {spent} + committed {committed} > max {max}"
+    )]
+    PeripheralEssenceOverspent { max: u16, spent: u16, committed: u16 },
+
+    #[error("hearthstones = {got}, exceeds total Manse background dots {max}")]
+    TooManyHearthstones { got: usize, max: u8 },
+
+    #[error("artifacts = {got}, exceeds total Artifact background dots {max}")]
+    TooManyArtifacts { got: usize, max: u8 },
+
+    #[error(
+        "artifact {artifact} has {socketed} socketed hearthstones but only {sockets} sockets"
+    )]
+    OversocketedArtifact {
+        artifact: String,
+        sockets: u8,
+        socketed: usize,
+    },
+
+    #[error(
+        "artifact {artifact} references socketed hearthstone {hearthstone} that does not exist"
+    )]
+    UnknownSocketedHearthstone {
+        artifact: String,
+        hearthstone: String,
+    },
+
+    #[error(
+        "{item} references artifact {artifact_name} that does not exist"
+    )]
+    MissingLinkedArtifact {
+        item: String,
+        artifact_name: String,
+    },
+
+    #[error("note: {message}")]
+    Note { message: String },
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

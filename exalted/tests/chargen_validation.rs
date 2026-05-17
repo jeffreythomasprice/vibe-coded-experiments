@@ -100,9 +100,13 @@ fn bonus_point_total_mismatch_caught() {
     let mut c = valid_dawn();
     // Add an extra BP-purchased dot of Resources (worth 2 BP since it's the
     // 5th dot, above the ≤3 threshold). Pushes total to 17.
-    c.backgrounds
-        .get_mut(&BackgroundKind::Resources)
-        .unwrap()
+    let resources = c
+        .backgrounds
+        .iter_mut()
+        .find(|b| b.kind == BackgroundKind::Resources)
+        .unwrap();
+    resources
+        .trait_
         .purchases
         .push(DotPurchase::new(DotSource::BonusPoints { spent: 2 }));
     let report = c.validate_chargen();

@@ -1,7 +1,8 @@
 //! Character-side helpers for reasoning about XP totals. The canonical XP
 //! cost table lives in `crate::rules::xp_costs`.
 
-use crate::character::Character;
+use crate::character::{Character, DotSource};
+use crate::rules::chargen::specialty_bp_cost_for_ability;
 
 /// Total XP spent across every rated trait, charm, and specialty.
 pub fn total_xp_spent(c: &Character) -> u32 {
@@ -25,8 +26,8 @@ pub fn total_xp_spent(c: &Character) -> u32 {
     for intimacy in &c.intimacies {
         total += intimacy.source.xp_spent();
     }
-    for bg in c.backgrounds.values() {
-        total += bg.xp_spent_on_dots();
+    for bg in &c.backgrounds {
+        total += bg.trait_.xp_spent_on_dots();
     }
     total
 }
@@ -36,11 +37,22 @@ pub fn total_bp_spent(c: &Character) -> u32 {
     let mut total: u32 = 0;
     for t in c.attributes.values() {
         total += t.bp_spent_on_dots();
-        total += t.bp_spent_on_specialties();
     }
-    for t in c.abilities.values() {
+    for (ab, t) in &c.abilities {
         total += t.bp_spent_on_dots();
-        total += t.bp_spent_on_specialties();
+        let cf = c.is_caste_or_favored_ability(*ab);
+        let (n_cf, n_oc) = t
+            .specialties
+            .iter()
+            .filter(|s| matches!(s.source, DotSource::BonusPoints { .. }))
+            .fold((0usize, 0usize), |(cf_count, oc_count), _| {
+                if cf {
+                    (cf_count + 1, oc_count)
+                } else {
+                    (cf_count, oc_count + 1)
+                }
+            });
+        total += specialty_bp_cost_for_ability(n_cf, n_oc);
     }
     for t in c.virtues.values() {
         total += t.bp_spent_on_dots();
@@ -53,8 +65,8 @@ pub fn total_bp_spent(c: &Character) -> u32 {
     for intimacy in &c.intimacies {
         total += intimacy.source.bp_spent();
     }
-    for bg in c.backgrounds.values() {
-        total += bg.bp_spent_on_dots();
+    for bg in &c.backgrounds {
+        total += bg.trait_.bp_spent_on_dots();
     }
     total
 }

@@ -12,13 +12,13 @@
 //! - Essence: 7 BP per dot.
 //! - Intimacy beyond Compassion baseline: 3 BP each.
 
-use std::collections::BTreeMap;
-
 use crate::character::{
-    AbilityKind, AttributeGroup, BackgroundKind, Character, VirtueKind,
+    AbilityKind, AttributeGroup, BackgroundKind, Caste, Character, VirtueKind,
 };
 use crate::error::{ValidationError, ValidationReport};
 use crate::rules::catalog::{CharmCatalog, DefaultCatalog};
+use crate::rules::defense::willpower_from_virtues;
+use crate::rules::xp_costs::NON_SOLAR_CHARM_XP_COST;
 
 pub const TOTAL_BONUS_POINTS: u32 = 15;
 pub const ABILITY_CHARGEN_POOL: u32 = 28;
@@ -38,10 +38,17 @@ pub fn ability_dot_bp_cost(_new_rating: u8, caste_or_favored: bool) -> u32 {
 }
 
 /// Specialty BP cost: 1 per specialty out of caste/favored. Within a
-/// caste/favored ability, two specialties cost 1 BP (so a single specialty
-/// is conceptually 0.5 BP). Aggregate at the validator level.
+/// caste/favored ability, two specialties cost 1 BP — callers must aggregate
+/// per-ability counts and use `specialty_bp_cost_for_ability` for the total.
 pub fn specialty_bp_cost(caste_or_favored: bool) -> f32 {
     if caste_or_favored { 0.5 } else { 1.0 }
+}
+
+/// Aggregate BP cost for `n_cf` caste/favored specialties + `n_oc` out-of-caste
+/// specialties on a single ability: `ceil(n_cf / 2) + n_oc`.
+pub fn specialty_bp_cost_for_ability(n_cf: usize, n_oc: usize) -> u32 {
+    let cf_cost = (n_cf as u32 + 1) / 2;
+    cf_cost + n_oc as u32
 }
 
 pub fn background_dot_bp_cost(new_rating: u8) -> u32 {
@@ -88,8 +95,12 @@ pub fn validate_chargen_with(
     check_charms(character, catalog, &mut report);
     check_intimacies(character, &mut report);
     check_essence_at_chargen(character, &mut report);
+    check_willpower_base(character, &mut report);
     check_willpower_bp_cap(character, &mut report);
     check_bonus_point_total(character, &mut report);
+    crate::rules::languages::validate_languages(character, &mut report);
+    report.extend(crate::rules::equipment::validate_hearthstones(character));
+    report.extend(crate::rules::equipment::validate_artifacts(character));
 
     report
 }
@@ -205,6 +216,15 @@ fn check_abilities(c: &Character, report: &mut ValidationReport) {
             });
         }
     }
+
+    for (a, t) in &c.abilities {
+        if *a != AbilityKind::Linguistics && t.specialties.len() > 3 {
+            report.push(ValidationError::SpecialtiesOverMax {
+                ability: format!("{a:?}"),
+                got: t.specialties.len(),
+            });
+        }
+    }
 }
 
 fn check_virtues(c: &Character, report: &mut ValidationReport) {
@@ -219,13 +239,32 @@ fn check_virtues(c: &Character, report: &mut ValidationReport) {
         });
     }
 
-    // Primary virtue must be ≥ 3.
-    let primary_dots = c.virtue(c.primary_virtue);
-    if primary_dots < 3 {
-        report.push(ValidationError::PrimaryVirtueTooLow {
-            virtue: format!("{:?}", c.primary_virtue),
-            got: primary_dots,
-        });
+    match c.primary_virtue {
+        Some(primary) => {
+            let primary_dots = c.virtue(primary);
+            if primary_dots < 3 {
+                report.push(ValidationError::PrimaryVirtueTooLow {
+                    virtue: format!("{primary:?}"),
+                    got: primary_dots,
+                });
+            }
+        }
+        None => report.push(ValidationError::PrimaryVirtueUnset),
+    }
+
+    match (&c.virtue_flaw, c.primary_virtue) {
+        (None, _) => report.push(ValidationError::VirtueFlawUnset),
+        (Some(flaw), Some(primary)) => {
+            let expected = flaw.flaw_virtue();
+            if expected != primary {
+                report.push(ValidationError::VirtueFlawMismatch {
+                    flaw: format!("{flaw:?}"),
+                    expected_virtue: format!("{expected:?}"),
+                    got_virtue: format!("{primary:?}"),
+                });
+            }
+        }
+        (Some(_), None) => {}
     }
 
     // No virtue > 4 from chargen priority + base alone.
@@ -243,8 +282,8 @@ fn check_virtues(c: &Character, report: &mut ValidationReport) {
 fn check_backgrounds(c: &Character, report: &mut ValidationReport) {
     let chargen_total: u32 = c
         .backgrounds
-        .values()
-        .map(|t| t.chargen_priority_dots() as u32)
+        .iter()
+        .map(|b| b.trait_.chargen_priority_dots() as u32)
         .sum();
     if chargen_total != BACKGROUND_CHARGEN_POOL {
         report.push(ValidationError::BackgroundChargenDotsWrong {
@@ -252,19 +291,28 @@ fn check_backgrounds(c: &Character, report: &mut ValidationReport) {
         });
     }
 
-    for (bg, t) in &c.backgrounds {
-        if t.chargen_priority_dots() > 3 {
+    for bg in &c.backgrounds {
+        if bg.trait_.chargen_priority_dots() > 3 {
+            let label = if bg.label.is_empty() {
+                format!("{:?}", bg.kind)
+            } else {
+                format!("{:?}({})", bg.kind, bg.label)
+            };
             report.push(ValidationError::BackgroundChargenOverThree {
-                background: format!("{bg:?}"),
-                got: t.chargen_priority_dots(),
+                background: label,
+                got: bg.trait_.chargen_priority_dots(),
             });
         }
     }
 
-    if let Some(cult) = c.backgrounds.get(&BackgroundKind::Cult) {
-        if cult.dots() > 2 {
-            report.push(ValidationError::CultOverTwoAtChargen { got: cult.dots() });
-        }
+    let cult_creation_dots: u8 = c
+        .backgrounds_of(BackgroundKind::Cult)
+        .map(|b| b.trait_.chargen_priority_dots() + b.trait_.bonus_point_dots())
+        .sum();
+    if cult_creation_dots > 2 {
+        report.push(ValidationError::CultOverTwoAtCreation {
+            got: cult_creation_dots,
+        });
     }
 }
 
@@ -284,6 +332,11 @@ fn check_charms(c: &Character, catalog: &dyn CharmCatalog, report: &mut Validati
 
     let mut cf_chargen_count = 0usize;
     for charm in &c.charms {
+        if charm.non_solar && c.caste != Caste::Eclipse {
+            report.push(ValidationError::AlienCharmOnNonEclipse {
+                charm: charm.name.clone(),
+            });
+        }
         match catalog.lookup(&charm.name) {
             Some(def) => {
                 let ability_dots = c.ability(def.ability);
@@ -302,6 +355,14 @@ fn check_charms(c: &Character, catalog: &dyn CharmCatalog, report: &mut Validati
                         got: c.essence_dots(),
                     });
                 }
+                for prereq in &def.prereqs {
+                    if !c.charms.iter().any(|ch| &ch.name == prereq) {
+                        report.push(ValidationError::CharmPrereqMissing {
+                            charm: charm.name.clone(),
+                            missing: prereq.clone(),
+                        });
+                    }
+                }
                 if charm.source.is_chargen_priority()
                     && c.is_caste_or_favored_ability(def.ability)
                 {
@@ -311,6 +372,17 @@ fn check_charms(c: &Character, catalog: &dyn CharmCatalog, report: &mut Validati
             None => {
                 report.push_note(ValidationError::UnknownCharm {
                     charm: charm.name.clone(),
+                });
+            }
+        }
+
+        if let crate::character::DotSource::BonusPoints { spent } = charm.source {
+            let expected = charm_bp_cost(c.is_caste_or_favored_ability(charm.ability));
+            if spent as u32 != expected {
+                report.push(ValidationError::XpCostWrong {
+                    trait_name: format!("Charm::{} (BP)", charm.name),
+                    paid: spent as u32,
+                    expected,
                 });
             }
         }
@@ -347,6 +419,19 @@ fn check_essence_at_chargen(c: &Character, report: &mut ValidationReport) {
     }
 }
 
+fn check_willpower_base(c: &Character, report: &mut ValidationReport) {
+    let expected = willpower_from_virtues(c);
+    let base = c.willpower.base_dots;
+    if base != expected {
+        report.push(ValidationError::WillpowerNotFromVirtues { expected, got: base });
+    }
+    if c.willpower_dots() > 10 {
+        report.push(ValidationError::WillpowerOverTen {
+            got: c.willpower_dots(),
+        });
+    }
+}
+
 fn check_willpower_bp_cap(c: &Character, report: &mut ValidationReport) {
     let virtues_at_four_plus = VirtueKind::ALL
         .iter()
@@ -363,14 +448,6 @@ fn check_willpower_bp_cap(c: &Character, report: &mut ValidationReport) {
 
 fn check_bonus_point_total(c: &Character, report: &mut ValidationReport) {
     let total = crate::character::xp::total_bp_spent(c);
-
-    // Specialties at C/F rate need rounding up — the per-Trait helper sums
-    // raw values per spent: for a 0.5 BP specialty, callers must encode the
-    // spent value as 0 (free if paired) or 1 (single). We compute exact
-    // expected BP based on caste/favored counts to make this deterministic.
-    let mut adjusted = total;
-    let _ = &mut adjusted; // see note below — we trust per-purchase `spent`.
-
     if total != TOTAL_BONUS_POINTS {
         report.push(ValidationError::BonusPointsWrong { got: total });
     }
@@ -519,14 +596,13 @@ pub fn validate_xp(c: &Character) -> ValidationReport {
     }
 
     // Charms (post-chargen XP-bought)
-    let catalog = DefaultCatalog::new();
     for charm in &c.charms {
         if let crate::character::DotSource::Xp { spent } = charm.source {
-            let favored_or_caste = catalog
-                .lookup(&charm.name)
-                .map(|def| c.is_caste_or_favored_ability(def.ability))
-                .unwrap_or(false);
-            let canonical = xp_costs::xp_cost_charm(favored_or_caste);
+            let canonical = if charm.non_solar {
+                NON_SOLAR_CHARM_XP_COST
+            } else {
+                xp_costs::xp_cost_charm(c.is_caste_or_favored_ability(charm.ability))
+            };
             if spent != canonical {
                 report.push(ValidationError::XpCostWrong {
                     trait_name: format!("Charm::{}", charm.name),
@@ -555,9 +631,6 @@ pub fn validate_xp(c: &Character) -> ValidationReport {
             expected: expected_banked,
         });
     }
-
-    // Silence unused-variable warnings while we're at it.
-    let _ = BTreeMap::<AbilityKind, ()>::new();
 
     report
 }

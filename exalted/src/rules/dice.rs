@@ -18,7 +18,11 @@ pub fn dice_pool(
             .get(&ability)
             .map(|t| {
                 let matching = t.specialties.iter().filter(|s| s.name == name).count();
-                matching.min(3) as u8
+                if ability == AbilityKind::Linguistics {
+                    matching as u8
+                } else {
+                    matching.min(3) as u8
+                }
             })
             .unwrap_or(0),
     };

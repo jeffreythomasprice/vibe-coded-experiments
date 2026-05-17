@@ -1,8 +1,10 @@
 pub mod backgrounds;
 pub mod charms;
 pub mod equipment;
+pub mod hearthstone;
 pub mod identity;
 pub mod intimacies;
+pub mod languages;
 pub mod state;
 pub mod traits;
 pub mod xp;
@@ -11,11 +13,13 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-pub use backgrounds::BackgroundKind;
+pub use backgrounds::{BackgroundInstance, BackgroundKind};
 pub use charms::ChosenCharm;
-pub use equipment::{Armor, Equipment, Weapon};
+pub use equipment::{Armor, Artifact, Equipment, Possession, Weapon};
+pub use hearthstone::Hearthstone;
 pub use identity::{Anima, Appearance, Caste, Identity, VirtueFlaw};
 pub use intimacies::{Intimacy, IntimacyKind};
+pub use languages::{KnownLanguage, LanguageFamily};
 pub use state::{HealthDamage, MoteCommitment, MotePool, PoolState};
 pub use traits::{
     AbilityGroup, AbilityKind, AttributeGroup, AttributeKind, AttributePriority, DotPurchase,
@@ -31,18 +35,25 @@ pub struct Character {
     pub attribute_priority: AttributePriority,
     pub abilities: BTreeMap<AbilityKind, RatedTrait>,
     pub virtues: BTreeMap<VirtueKind, RatedTrait>,
-    pub primary_virtue: VirtueKind,
-    pub virtue_flaw: VirtueFlaw,
+    pub primary_virtue: Option<VirtueKind>,
+    pub virtue_flaw: Option<VirtueFlaw>,
     pub willpower: RatedTrait,
     pub essence: RatedTrait,
     pub charms: Vec<ChosenCharm>,
-    pub backgrounds: BTreeMap<BackgroundKind, RatedTrait>,
+    #[serde(default)]
+    pub backgrounds: Vec<BackgroundInstance>,
     pub intimacies: Vec<Intimacy>,
     pub equipment: Equipment,
     pub xp_earned: u32,
     pub xp_banked: u32,
     pub pool_state: PoolState,
     pub notes: BTreeMap<String, String>,
+    #[serde(default)]
+    pub languages: Vec<KnownLanguage>,
+    #[serde(default)]
+    pub tribal_tongues: u8,
+    #[serde(default)]
+    pub hearthstones: Vec<Hearthstone>,
 }
 
 impl Character {
@@ -63,10 +74,6 @@ impl Character {
         for v in VirtueKind::ALL {
             virtues.insert(*v, RatedTrait::with_base(1));
         }
-        let mut backgrounds = BTreeMap::new();
-        for b in BackgroundKind::ALL {
-            backgrounds.insert(*b, RatedTrait::with_base(0));
-        }
         Self {
             identity: Identity {
                 name: name.into(),
@@ -78,18 +85,21 @@ impl Character {
             attribute_priority: AttributePriority::default(),
             abilities,
             virtues,
-            primary_virtue: VirtueKind::Compassion,
-            virtue_flaw: VirtueFlaw::CompassionateMartyrdom,
+            primary_virtue: None,
+            virtue_flaw: None,
             willpower: RatedTrait::with_base(0),
             essence: RatedTrait::with_base(2),
             charms: Vec::new(),
-            backgrounds,
+            backgrounds: Vec::new(),
             intimacies: Vec::new(),
             equipment: Equipment::default(),
             xp_earned: 0,
             xp_banked: 0,
             pool_state: PoolState::default(),
             notes: BTreeMap::new(),
+            languages: Vec::new(),
+            tribal_tongues: 0,
+            hearthstones: Vec::new(),
         }
     }
 
@@ -108,8 +118,20 @@ impl Character {
         self.virtues.get(&kind).map(|t| t.dots()).unwrap_or(0)
     }
 
+    /// Sum of dots across every `BackgroundInstance` of the given kind.
     pub fn background(&self, kind: BackgroundKind) -> u8 {
-        self.backgrounds.get(&kind).map(|t| t.dots()).unwrap_or(0)
+        self.backgrounds
+            .iter()
+            .filter(|b| b.kind == kind)
+            .map(|b| b.trait_.dots())
+            .sum()
+    }
+
+    pub fn backgrounds_of(
+        &self,
+        kind: BackgroundKind,
+    ) -> impl Iterator<Item = &BackgroundInstance> {
+        self.backgrounds.iter().filter(move |b| b.kind == kind)
     }
 
     pub fn essence_dots(&self) -> u8 {

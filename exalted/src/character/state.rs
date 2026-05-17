@@ -37,6 +37,8 @@ pub struct PoolState {
     #[serde(default)]
     pub willpower_temporary: u8,
     #[serde(default)]
+    pub willpower_permanent_spent: u8,
+    #[serde(default)]
     pub health_damage: HealthDamage,
 }
 
@@ -47,5 +49,11 @@ impl PoolState {
             .filter(|c| c.pool == pool)
             .map(|c| c.motes)
             .sum()
+    }
+
+    /// Permanent Willpower dots still available given a character's permanent
+    /// Willpower rating.
+    pub fn willpower_available(&self, permanent: u8) -> i32 {
+        permanent as i32 - self.willpower_permanent_spent as i32
     }
 }

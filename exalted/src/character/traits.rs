@@ -113,10 +113,6 @@ impl RatedTrait {
         self.purchases.iter().map(|p| p.source.xp_spent()).sum()
     }
 
-    pub fn bp_spent_on_specialties(&self) -> u32 {
-        self.specialties.iter().map(|s| s.source.bp_spent()).sum()
-    }
-
     pub fn xp_spent_on_specialties(&self) -> u32 {
         self.specialties.iter().map(|s| s.source.xp_spent()).sum()
     }

@@ -25,6 +25,8 @@ pub struct Weapon {
     pub tags: Vec<String>,
     #[serde(default)]
     pub attunement_motes: Option<u8>,
+    #[serde(default)]
+    pub artifact_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,6 +43,16 @@ pub struct Armor {
     pub fatigue: u8,
     #[serde(default)]
     pub attunement_motes: Option<u8>,
+    #[serde(default)]
+    pub artifact_name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Possession {
+    pub name: String,
+    pub primary_location: String,
+    #[serde(default)]
+    pub secondary_location: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,7 +61,22 @@ pub struct Equipment {
     pub weapons: Vec<Weapon>,
     #[serde(default)]
     pub armor: Option<Armor>,
-    /// Extra carried gear (free text — name + brief description).
     #[serde(default)]
-    pub other: Vec<String>,
+    pub other: Vec<Possession>,
+    #[serde(default)]
+    pub artifacts: Vec<Artifact>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Artifact {
+    pub name: String,
+    pub rating: u8,
+    #[serde(default)]
+    pub attunement_motes: u8,
+    #[serde(default)]
+    pub hearthstone_sockets: u8,
+    #[serde(default)]
+    pub socketed_hearthstones: Vec<String>,
+    #[serde(default)]
+    pub description: String,
 }

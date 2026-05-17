@@ -15,8 +15,8 @@
 use exalted::Character;
 use exalted::character::{
     AbilityKind, Anima, Appearance, AttributeGroup, AttributeKind, AttributePriority,
-    BackgroundKind, Caste, ChosenCharm, DotSource, Identity, Intimacy, IntimacyKind,
-    RatedTrait, Specialty, VirtueKind,
+    BackgroundInstance, BackgroundKind, Caste, ChosenCharm, DotSource, Identity, Intimacy,
+    IntimacyKind, KnownLanguage, LanguageFamily, RatedTrait, Specialty, VirtueKind,
 };
 use exalted::character::identity::VirtueFlaw;
 
@@ -37,6 +37,7 @@ fn abu_nuwas() -> Character {
         name: "Abu Nuwas".to_string(),
         concept: "Diplomat and spy from Chiaroscuro".to_string(),
         motivation: "Protect the common people".to_string(),
+        personality: String::new(),
         anima: Anima {
             totem: "Desert owl, ghostly white with glowing purple eyes".to_string(),
             iconic_image: "A swift and silent desert owl".to_string(),
@@ -128,37 +129,54 @@ fn abu_nuwas() -> Character {
     add_chargen(c.virtues.get_mut(&VirtueKind::Compassion).unwrap(), 2);
     add_chargen(c.virtues.get_mut(&VirtueKind::Conviction).unwrap(), 2);
     add_chargen(c.virtues.get_mut(&VirtueKind::Valor).unwrap(), 1);
-    c.primary_virtue = VirtueKind::Compassion;
-    c.virtue_flaw = VirtueFlaw::CompassionateMartyrdom;
+    c.primary_virtue = Some(VirtueKind::Compassion);
+    c.virtue_flaw = Some(VirtueFlaw::CompassionateMartyrdom);
 
     // Backgrounds: 7 chargen dots + Manse 4 from BP + Artifact 2 (1 chargen + 1 BP).
-    add_chargen(c.backgrounds.get_mut(&BackgroundKind::Backing).unwrap(), 3);
-    add_chargen(c.backgrounds.get_mut(&BackgroundKind::Resources).unwrap(), 3);
-    add_chargen(c.backgrounds.get_mut(&BackgroundKind::Artifact).unwrap(), 1);
-    add_bp(c.backgrounds.get_mut(&BackgroundKind::Artifact).unwrap(), 1);
-    // Manse 4 from BP: 1+1+1+2 BP for dots 1,2,3,4.
-    {
-        let manse = c.backgrounds.get_mut(&BackgroundKind::Manse).unwrap();
-        manse.add_bonus(1);
-        manse.add_bonus(1);
-        manse.add_bonus(1);
-        manse.add_bonus(2);
+    let mut backing = RatedTrait::with_base(0);
+    for _ in 0..3 {
+        backing.add_chargen();
     }
+    c.backgrounds
+        .push(BackgroundInstance::new(BackgroundKind::Backing, "", backing));
+
+    let mut resources = RatedTrait::with_base(0);
+    for _ in 0..3 {
+        resources.add_chargen();
+    }
+    c.backgrounds
+        .push(BackgroundInstance::new(BackgroundKind::Resources, "", resources));
+
+    let mut artifact = RatedTrait::with_base(0);
+    artifact.add_chargen();
+    artifact.add_bonus(1);
+    c.backgrounds
+        .push(BackgroundInstance::new(BackgroundKind::Artifact, "", artifact));
+
+    // Manse 4 from BP: 1+1+1+2 BP for dots 1,2,3,4.
+    let mut manse = RatedTrait::with_base(0);
+    manse.add_bonus(1);
+    manse.add_bonus(1);
+    manse.add_bonus(1);
+    manse.add_bonus(2);
+    c.backgrounds
+        .push(BackgroundInstance::new(BackgroundKind::Manse, "", manse));
 
     // Charms: 10 from chargen + 1 from BP (Flawless Pickpocketing — 4 BP, Caste).
     c.charms = vec![
-        ChosenCharm::new("Shadow Over Water", DotSource::ChargenPriority),
-        ChosenCharm::new("Second Dodge Excellency", DotSource::ChargenPriority),
-        ChosenCharm::new("Body-Mending Meditation", DotSource::ChargenPriority),
-        ChosenCharm::new("Ox-Body Technique", DotSource::ChargenPriority),
-        ChosenCharm::new("First Awareness Excellency", DotSource::ChargenPriority),
-        ChosenCharm::new("Keen Hearing and Touch Technique", DotSource::ChargenPriority),
-        ChosenCharm::new("Second Stealth Excellency", DotSource::ChargenPriority),
-        ChosenCharm::new("Graceful Crane Stance", DotSource::ChargenPriority),
-        ChosenCharm::new("Second Socialize Excellency", DotSource::ChargenPriority),
-        ChosenCharm::new("Lock-Opening Touch", DotSource::ChargenPriority),
+        ChosenCharm::new("Shadow Over Water", AbilityKind::Dodge, DotSource::ChargenPriority),
+        ChosenCharm::new("Second Dodge Excellency", AbilityKind::Dodge, DotSource::ChargenPriority),
+        ChosenCharm::new("Body-Mending Meditation", AbilityKind::Resistance, DotSource::ChargenPriority),
+        ChosenCharm::new("Ox-Body Technique", AbilityKind::Resistance, DotSource::ChargenPriority),
+        ChosenCharm::new("First Awareness Excellency", AbilityKind::Awareness, DotSource::ChargenPriority),
+        ChosenCharm::new("Keen Hearing and Touch Technique", AbilityKind::Awareness, DotSource::ChargenPriority),
+        ChosenCharm::new("Second Stealth Excellency", AbilityKind::Stealth, DotSource::ChargenPriority),
+        ChosenCharm::new("Graceful Crane Stance", AbilityKind::Athletics, DotSource::ChargenPriority),
+        ChosenCharm::new("Second Socialize Excellency", AbilityKind::Socialize, DotSource::ChargenPriority),
+        ChosenCharm::new("Lock-Opening Touch", AbilityKind::Larceny, DotSource::ChargenPriority),
         ChosenCharm::new(
             "Flawless Pickpocketing Technique",
+            AbilityKind::Larceny,
             DotSource::BonusPoints { spent: 4 },
         ),
     ];
@@ -178,6 +196,31 @@ fn abu_nuwas() -> Character {
 
     // Willpower base = Compassion(3) + Conviction(3) = 6.
     c.willpower = RatedTrait::with_base(6);
+
+    // Languages: Chiaroscuro is in the Southern Threshold, so Flametongue is
+    // the native family; Linguistics 3 grants 3 additional families.
+    c.languages = vec![
+        KnownLanguage {
+            family: LanguageFamily::Flametongue,
+            dialect_specialty: Some("Chiaroscuran".to_string()),
+            native: true,
+        },
+        KnownLanguage {
+            family: LanguageFamily::Riverspeak,
+            dialect_specialty: None,
+            native: false,
+        },
+        KnownLanguage {
+            family: LanguageFamily::LowRealm,
+            dialect_specialty: None,
+            native: false,
+        },
+        KnownLanguage {
+            family: LanguageFamily::Seatongue,
+            dialect_specialty: None,
+            native: false,
+        },
+    ];
 
     // Essence stays at 2.
     c
