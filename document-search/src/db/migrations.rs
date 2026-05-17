@@ -10,9 +10,8 @@ use turso::Connection;
 use super::DbError;
 
 /// `(version, name, sql)` — `version` must be monotonically increasing.
-const MIGRATIONS: &[(u32, &str, &str)] = &[
-    (1, "initial", include_str!("migrations/0001_initial.sql")),
-];
+const MIGRATIONS: &[(u32, &str, &str)] =
+    &[(1, "initial", include_str!("migrations/0001_initial.sql"))];
 
 pub async fn run(conn: &Connection) -> Result<(), DbError> {
     ensure_bookkeeping(conn).await?;
@@ -67,7 +66,12 @@ async fn applied_versions(conn: &Connection) -> Result<Vec<u32>, DbError> {
     Ok(out)
 }
 
-async fn apply_one(conn: &Connection, version: u32, name: &'static str, sql: &str) -> Result<(), DbError> {
+async fn apply_one(
+    conn: &Connection,
+    version: u32,
+    name: &'static str,
+    sql: &str,
+) -> Result<(), DbError> {
     // turso 0.4 has no async transaction handle, so BEGIN/COMMIT/ROLLBACK
     // run as plain statements. Single shared connection means these are
     // strictly ordered against any other call on this `Connection`.
