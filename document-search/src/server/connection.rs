@@ -146,6 +146,43 @@ pub(crate) async fn handle(
         return Ok(());
     }
 
+    if let Request::TaskLog { limit } = &req {
+        let n = limit.unwrap_or(10);
+        let db = {
+            let g = state.lock().unwrap();
+            Arc::clone(&g.db)
+        };
+        let result = match output_mode {
+            OutputMode::Text => commands::task_log_text(&db, n).await,
+            OutputMode::Json => commands::task_log_json(&db, n).await,
+        };
+        match result {
+            Ok(text) => {
+                write_event(&mut write_half, &Event::Output { text }).await?;
+                write_event(
+                    &mut write_half,
+                    &Event::Final {
+                        ok: true,
+                        error: None,
+                    },
+                )
+                .await?;
+            }
+            Err(e) => {
+                write_event(
+                    &mut write_half,
+                    &Event::Final {
+                        ok: false,
+                        error: Some(e.to_string()),
+                    },
+                )
+                .await?;
+            }
+        }
+        let _ = write_half.shutdown().await;
+        return Ok(());
+    }
+
     if matches!(req, Request::TagList) {
         let db = {
             let g = state.lock().unwrap();
@@ -182,132 +219,9 @@ pub(crate) async fn handle(
         return Ok(());
     }
 
-    if let Request::Search {
-        term,
-        path,
-        tags,
-        match_all,
-        limit,
-        cutoff,
-        no_truncate,
-        include_summaries,
-    } = &req
-    {
-        let (db, http, cfg) = {
-            let g = state.lock().unwrap();
-            (Arc::clone(&g.db), g.http.clone(), Arc::clone(&g.cfg))
-        };
-        let result = match output_mode {
-            OutputMode::Text => {
-                commands::search_text(
-                    &db,
-                    &http,
-                    &cfg,
-                    term,
-                    path.as_deref(),
-                    tags,
-                    *match_all,
-                    *limit,
-                    *cutoff,
-                    *no_truncate,
-                    *include_summaries,
-                )
-                .await
-            }
-            OutputMode::Json => {
-                commands::search_json(
-                    &db,
-                    &http,
-                    &cfg,
-                    term,
-                    path.as_deref(),
-                    tags,
-                    *match_all,
-                    *limit,
-                    *cutoff,
-                    *no_truncate,
-                    *include_summaries,
-                )
-                .await
-            }
-        };
-        match result {
-            Ok(text) => {
-                write_event(&mut write_half, &Event::Output { text }).await?;
-                write_event(
-                    &mut write_half,
-                    &Event::Final {
-                        ok: true,
-                        error: None,
-                    },
-                )
-                .await?;
-            }
-            Err(e) => {
-                write_event(
-                    &mut write_half,
-                    &Event::Final {
-                        ok: false,
-                        error: Some(e.to_string()),
-                    },
-                )
-                .await?;
-            }
-        }
-        let _ = write_half.shutdown().await;
-        return Ok(());
-    }
-
-    if matches!(req, Request::Cancel) {
-        let outcome: Result<String, String> = {
-            let mut g = state.lock().unwrap();
-            match g.current.as_mut() {
-                Some(j) if j.is_cancellable => {
-                    let _ = j.cancel_tx.send(true);
-                    Ok(j.label.clone())
-                }
-                Some(j) => Err(format!(
-                    "current job is not cancellable ({}); nothing to cancel",
-                    j.label
-                )),
-                None => Err("no job is currently running".to_string()),
-            }
-        };
-        match outcome {
-            Ok(label) => {
-                let text = match output_mode {
-                    OutputMode::Text => format!("cancellation requested for: {label}\n"),
-                    OutputMode::Json => {
-                        serde_json::json!({"ok": true, "cancelled": label}).to_string()
-                    }
-                };
-                write_event(&mut write_half, &Event::Output { text }).await?;
-                write_event(
-                    &mut write_half,
-                    &Event::Final {
-                        ok: true,
-                        error: None,
-                    },
-                )
-                .await?;
-            }
-            Err(msg) => {
-                write_event(
-                    &mut write_half,
-                    &Event::Final {
-                        ok: false,
-                        error: Some(msg),
-                    },
-                )
-                .await?;
-            }
-        }
-        let _ = write_half.shutdown().await;
-        return Ok(());
-    }
-
     let label = req.label();
     let job_id = Uuid::new_v4();
+    let is_detach = matches!(&req, Request::Ingest { detach: true, .. });
     let (event_tx, mut event_rx) = mpsc::unbounded_channel::<Event>();
 
     // Reserve a queue slot under the lock and capture the index this job
@@ -351,6 +265,19 @@ pub(crate) async fn handle(
         return Err(ConnectionError::WorkerGone);
     }
     drop(event_tx);
+
+    // Detached ingest: client is done as soon as the job is enqueued. The
+    // worker still owns its event_tx clone and will run the job to completion;
+    // its event sends just go into the void after we close here.
+    if is_detach {
+        write_event(
+            &mut write_half,
+            &Event::Final { ok: true, error: None },
+        )
+        .await?;
+        let _ = write_half.shutdown().await;
+        return Ok(());
+    }
 
     let mut watch_rx = completed_rx;
     let mut started = false;

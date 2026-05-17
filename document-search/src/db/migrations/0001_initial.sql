@@ -40,3 +40,53 @@ CREATE TABLE embedding_model_dimensions (
     dimensions INTEGER NOT NULL,
     probed_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE document_tag (
+    document_id  INTEGER NOT NULL REFERENCES document(id) ON DELETE CASCADE,
+    tag          TEXT    NOT NULL,
+    created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (document_id, tag)
+);
+
+CREATE INDEX document_tag_tag_idx ON document_tag (tag);
+
+CREATE TABLE document_summary (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id   INTEGER NOT NULL REFERENCES document(id) ON DELETE CASCADE,
+    parent_id     INTEGER          REFERENCES document_summary(id) ON DELETE CASCADE,
+    level         INTEGER NOT NULL,
+    byte_start    INTEGER NOT NULL,
+    byte_end      INTEGER NOT NULL,
+    page_first    INTEGER,
+    page_last     INTEGER,
+    text          TEXT    NOT NULL,
+    content_hash  TEXT    NOT NULL,
+    created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX document_summary_doc_level_idx
+    ON document_summary (document_id, level);
+
+CREATE INDEX document_summary_doc_range_idx
+    ON document_summary (document_id, level, byte_start, byte_end);
+
+CREATE INDEX document_summary_parent_idx
+    ON document_summary (parent_id);
+
+CREATE INDEX document_summary_hash_idx
+    ON document_summary (document_id, level, content_hash);
+
+CREATE TABLE task_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id      TEXT    NOT NULL UNIQUE,
+    task_name   TEXT    NOT NULL,
+    label       TEXT    NOT NULL,
+    path        TEXT,
+    tags        TEXT,
+    started_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    ended_at    TEXT,
+    status      TEXT    NOT NULL,
+    error       TEXT
+);
+
+CREATE INDEX task_log_started_at_idx ON task_log (started_at);

@@ -91,10 +91,20 @@ async fn run(args: Cli) -> Result<(), Error> {
 
 fn command_to_request(cmd: Command) -> Result<Request, Error> {
     match cmd {
-        Command::Ingest { path, no_summary, max_depth } => Ok(Request::Ingest {
+        Command::Ingest {
             path,
             no_summary,
             max_depth,
+            chunk_size,
+            overlap,
+            detach,
+        } => Ok(Request::Ingest {
+            path,
+            no_summary,
+            max_depth,
+            chunk_size,
+            overlap,
+            detach,
         }),
         Command::Info { path } => Ok(Request::Info { path }),
         Command::Text { path, range } => Ok(Request::Text {
@@ -111,7 +121,6 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
         },
         Command::List { tags, match_all } => Ok(Request::List { tags, match_all }),
         Command::Delete { path } => Ok(Request::Delete { path }),
-        Command::Cancel => Ok(Request::Cancel),
         Command::Tag { action } => match action {
             TagCommand::Add { path, tags } => Ok(Request::TagAdd { path, tags }),
             TagCommand::Remove { path, tags } => Ok(Request::TagRemove { path, tags }),
@@ -136,6 +145,7 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             no_truncate,
             include_summaries,
         }),
+        Command::TaskLog { limit } => Ok(Request::TaskLog { limit: Some(limit) }),
         Command::Server => unreachable!("Server is dispatched directly"),
     }
 }

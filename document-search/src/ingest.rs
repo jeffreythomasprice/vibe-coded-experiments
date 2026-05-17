@@ -7,12 +7,12 @@ use std::path::{Path, PathBuf};
 use tokio::sync::{mpsc, watch};
 use turso::{Value, params::Params};
 
-use crate::chunking::{self, ChunkSpan};
+use crate::chunking::{self, ChunkParams, ChunkSpan};
 use crate::config::Config;
 use crate::db::{Db, vector};
 use crate::ollama;
 use crate::pdf::{self, PageOffset, PdfText};
-use crate::protocol::{Event, ProgressEvent};
+use crate::protocol::{Event, ProgressEnvelope, ProgressEvent};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DocType {
@@ -64,6 +64,12 @@ pub enum IngestError {
     #[error("document {path} is already ingested")]
     AlreadyIngested { path: PathBuf },
 
+    #[error(
+        "invalid chunk override: overlap ({overlap}) must be smaller than \
+         chunk size ({size})"
+    )]
+    InvalidChunkOverride { size: usize, overlap: usize },
+
     #[error("embedding chunk {chunk_index} of {path}: {source}")]
     Embed {
         path: PathBuf,
@@ -101,9 +107,19 @@ pub async fn ingest(
     raw_path: &Path,
     no_summary: bool,
     summary_max_depth: Option<usize>,
+    chunk_size_override: Option<usize>,
+    overlap_override: Option<usize>,
     progress: Option<&mpsc::UnboundedSender<Event>>,
     cancel: Option<watch::Receiver<bool>>,
 ) -> Result<i64, IngestError> {
+    let chunk_target = chunk_size_override.unwrap_or(cfg.chunking.chunk_size_bytes);
+    let chunk_overlap = overlap_override.unwrap_or(cfg.chunking.overlap_bytes);
+    if chunk_overlap >= chunk_target {
+        return Err(IngestError::InvalidChunkOverride {
+            size: chunk_target,
+            overlap: chunk_overlap,
+        });
+    }
     let path = raw_path
         .canonicalize()
         .map_err(|source| IngestError::Canonicalize {
@@ -134,10 +150,11 @@ pub async fn ingest(
         }
         DocType::Pdf => {
             let mut emitted_ocr_stage = false;
+            let path_for_log = path.clone();
             let PdfText {
                 full_text,
                 page_offsets,
-            } = pdf::extract(&path, &cfg.ocr, |p| match p {
+            } = pdf::extract(&path, &cfg.ocr, cancel.as_ref(), |p| match p {
                 pdf::ExtractProgress::Pdftotext { current, total } => {
                     emit_extracting(progress, current, total);
                 }
@@ -145,10 +162,22 @@ pub async fn ingest(
                     if !emitted_ocr_stage {
                         emit_stage(progress, "ocr");
                         emitted_ocr_stage = true;
+                        tracing::info!(
+                            path = %path_for_log.display(),
+                            bad_pages = total,
+                            "ingest: OCR fallback starting",
+                        );
                     }
+                    tracing::info!(
+                        path = %path_for_log.display(),
+                        page = current,
+                        total_bad_pages = total,
+                        "ingest: OCR-ing page",
+                    );
                     emit_ocr(progress, current, total);
                 }
-            })?;
+            })
+            .await?;
             (full_text, page_offsets)
         }
     };
@@ -162,10 +191,26 @@ pub async fn ingest(
     };
 
     emit_stage(progress, "chunking");
-    let spans = chunking::chunk(
+    tracing::info!(
+        path = %path.display(),
+        doc_type = doc_type.as_str(),
+        total_size_bytes,
+        chunk_target_bytes = chunk_target,
+        chunk_overlap_bytes = chunk_overlap,
+        "ingest: chunking starting",
+    );
+    let page_break_positions: Vec<usize> = page_offsets
+        .iter()
+        .skip(1)
+        .map(|p| p.byte_start)
+        .collect();
+    let spans = chunking::chunk_semantic(
         &text,
-        cfg.chunking.chunk_size_bytes,
-        cfg.chunking.overlap_bytes,
+        ChunkParams {
+            target_bytes: chunk_target,
+            overlap_bytes: chunk_overlap,
+            page_break_positions: &page_break_positions,
+        },
         |current, total| {
             emit_chunking(progress, current, total);
         },
@@ -214,12 +259,22 @@ pub async fn ingest(
     Ok(doc_id)
 }
 
-fn emit_stage(progress: Option<&mpsc::UnboundedSender<Event>>, name: &str) {
+fn send_progress(progress: Option<&mpsc::UnboundedSender<Event>>, event: ProgressEvent) {
     if let Some(tx) = progress {
-        let _ = tx.send(Event::Progress(ProgressEvent::Stage {
-            name: name.to_string(),
+        let _ = tx.send(Event::Progress(ProgressEnvelope {
+            event,
+            overall: None,
         }));
     }
+}
+
+fn emit_stage(progress: Option<&mpsc::UnboundedSender<Event>>, name: &str) {
+    send_progress(
+        progress,
+        ProgressEvent::Stage {
+            name: name.to_string(),
+        },
+    );
 }
 
 fn emit_embedding(
@@ -227,9 +282,7 @@ fn emit_embedding(
     current: usize,
     total: usize,
 ) {
-    if let Some(tx) = progress {
-        let _ = tx.send(Event::Progress(ProgressEvent::Embedding { current, total }));
-    }
+    send_progress(progress, ProgressEvent::Embedding { current, total });
 }
 
 fn emit_extracting(
@@ -237,15 +290,11 @@ fn emit_extracting(
     current: u32,
     total: u32,
 ) {
-    if let Some(tx) = progress {
-        let _ = tx.send(Event::Progress(ProgressEvent::Extracting { current, total }));
-    }
+    send_progress(progress, ProgressEvent::Extracting { current, total });
 }
 
 fn emit_ocr(progress: Option<&mpsc::UnboundedSender<Event>>, current: u32, total: u32) {
-    if let Some(tx) = progress {
-        let _ = tx.send(Event::Progress(ProgressEvent::Ocr { current, total }));
-    }
+    send_progress(progress, ProgressEvent::Ocr { current, total });
 }
 
 fn emit_chunking(
@@ -253,9 +302,7 @@ fn emit_chunking(
     current: usize,
     total: usize,
 ) {
-    if let Some(tx) = progress {
-        let _ = tx.send(Event::Progress(ProgressEvent::Chunking { current, total }));
-    }
+    send_progress(progress, ProgressEvent::Chunking { current, total });
 }
 
 fn detect_type(path: &Path) -> Result<DocType, IngestError> {
@@ -429,6 +476,7 @@ async fn insert_all_inner(
             &cfg.ollama.url,
             &cfg.ollama.embedding_model,
             chunk_text,
+            cancel,
         )
         .await
         .map_err(|source| IngestError::Embed {

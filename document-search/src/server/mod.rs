@@ -2,6 +2,7 @@
 //! serializes work through a single worker, and auto-exits when idle.
 
 mod connection;
+mod tracker;
 
 use std::collections::{HashSet, VecDeque};
 use std::fs;
@@ -17,6 +18,8 @@ use crate::config::Config;
 use crate::db::{self, Db};
 use crate::protocol::{CurrentJob, Event, OutputMode, QueuedJob, Request, StatusSnapshot};
 use crate::{commands, config as cfg_mod, ingest};
+
+pub(crate) use tracker::JobTracker;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ServerError {
@@ -50,12 +53,6 @@ pub(crate) struct ServerState {
     /// Shared so inline handlers (status, list, cancel) can read without
     /// going through the worker's queue. Holds the same `Db` the worker uses.
     pub db: Arc<Db>,
-    /// Shared HTTP client for inline handlers that need to call Ollama
-    /// (e.g. `search`). `reqwest::Client` is internally `Arc`, so cloning is
-    /// cheap.
-    pub http: reqwest::Client,
-    /// Assembled config; inline handlers read `[search]`, `[ollama]`, etc.
-    pub cfg: Arc<Config>,
 }
 
 pub(crate) struct QueueEntry {
@@ -78,16 +75,27 @@ pub(crate) struct RunningJob {
     /// Currently true for `Ingest` (which polls during chunk embedding and
     /// during its post-chunk summarize phase).
     pub is_cancellable: bool,
+    /// Accumulates per-job progress: known phase totals, per-phase counters,
+    /// and the most-recent envelope emitted to the client. The same relay
+    /// task in `worker_loop` that forwards events to the client also feeds
+    /// every event into this tracker, so the inline `status` handler renders
+    /// the exact same envelope the foreground spinner saw.
+    pub tracker: Arc<Mutex<JobTracker>>,
 }
 
 impl ServerState {
     pub(crate) fn snapshot(&self) -> StatusSnapshot {
         StatusSnapshot {
             uptime_secs: self.started_at.elapsed().as_secs(),
-            current: self.current.as_ref().map(|c| CurrentJob {
-                id: c.id.to_string(),
-                label: c.label.clone(),
-                running_secs: c.started_at.elapsed().as_secs(),
+            current: self.current.as_ref().map(|c| {
+                let (progress, progress_age_secs) = c.tracker.lock().unwrap().latest();
+                CurrentJob {
+                    id: c.id.to_string(),
+                    label: c.label.clone(),
+                    running_secs: c.started_at.elapsed().as_secs(),
+                    progress,
+                    progress_age_secs,
+                }
             }),
             queued: self
                 .queued
@@ -146,16 +154,15 @@ pub async fn run(cfg: Config) -> Result<(), ServerError> {
         ),
         Err(e) => tracing::warn!(error = %e, "server: startup cleanup failed"),
     }
-    let cfg_arc = Arc::new(cfg.clone());
-
+    if let Err(e) = db.task_log_repair_abandoned().await {
+        tracing::warn!(error = %e, "server: task_log abandoned-row repair failed");
+    }
     let state = Arc::new(Mutex::new(ServerState {
         started_at: Instant::now(),
         queued: VecDeque::new(),
         current: None,
         cancelled_ids: HashSet::new(),
         db: Arc::clone(&db),
-        http: http.clone(),
-        cfg: Arc::clone(&cfg_arc),
     }));
 
     let (job_tx, job_rx) = mpsc::channel::<Job>(32);
@@ -307,21 +314,56 @@ async fn worker_loop(
         let label = job.req.label();
         let is_cancellable = matches!(job.req, Request::Ingest { .. });
         let (cancel_tx, cancel_rx) = watch::channel::<bool>(false);
+        // Keep our own handle on the cancel state so we can distinguish a
+        // cancelled-by-user failure from a real error after the handler returns.
+        let cancel_observer = cancel_rx.clone();
+        let job_started_at = Instant::now();
+        let tracker: Arc<Mutex<JobTracker>> = Arc::new(Mutex::new(JobTracker::new(job_started_at)));
         {
             let mut g = state.lock().unwrap();
             g.current = Some(RunningJob {
                 id: job.id,
                 label: label.clone(),
-                started_at: Instant::now(),
+                started_at: job_started_at,
                 cancel_tx,
                 is_cancellable,
+                tracker: Arc::clone(&tracker),
             });
         }
         let _ = job.event_tx.send(Event::Started);
 
+        let job_id_str = job.id.to_string();
+        if let Some((task_name, path, tags)) = job.req.task_metrics() {
+            if let Err(e) = db
+                .task_log_start(&job_id_str, task_name, &label, path.as_deref(), tags.as_deref())
+                .await
+            {
+                tracing::warn!(error = %e, job = %job_id_str, "task_log_start failed");
+            }
+        }
+
         let mode = job.output_mode;
         let result: Result<String, String> = match job.req {
-            Request::Ingest { path, no_summary, max_depth } => {
+            Request::Ingest {
+                path,
+                no_summary,
+                max_depth,
+                chunk_size,
+                overlap,
+                detach: _,
+            } => {
+                // Insert a relay between ingest and the connection. The
+                // tracker accumulates known totals + per-phase counters,
+                // then enriches each `ProgressEvent` with an `OverallProgress`
+                // summary. The same enriched envelope is stored on the
+                // tracker (so the inline `status` handler renders identical
+                // wording) and forwarded to the connection. The relay keeps
+                // feeding the tracker even after the client connection drops;
+                // see `run_progress_relay` for the rationale.
+                let (relay_tx, relay_rx) = mpsc::unbounded_channel::<Event>();
+                let out_tx = job.event_tx.clone();
+                let tracker_for_relay = Arc::clone(&tracker);
+                tokio::spawn(run_progress_relay(relay_rx, out_tx, tracker_for_relay));
                 ingest::ingest(
                     &db,
                     &cfg,
@@ -329,7 +371,9 @@ async fn worker_loop(
                     &path,
                     no_summary,
                     max_depth,
-                    Some(&job.event_tx),
+                    chunk_size,
+                    overlap,
+                    Some(&relay_tx),
                     Some(cancel_rx),
                 )
                 .await
@@ -403,11 +447,69 @@ async fn worker_loop(
             Request::TagList => {
                 unreachable!("tag list is handled inline by the connection task")
             }
-            Request::Cancel => unreachable!("cancel is handled inline by the connection task"),
-            Request::Search { .. } => {
-                unreachable!("search is handled inline by the connection task")
+            Request::Search {
+                term,
+                path,
+                tags,
+                match_all,
+                limit,
+                cutoff,
+                no_truncate,
+                include_summaries,
+            } => match mode {
+                OutputMode::Text => commands::search_text(
+                    &db,
+                    &http,
+                    &cfg,
+                    &term,
+                    path.as_deref(),
+                    &tags,
+                    match_all,
+                    limit,
+                    cutoff,
+                    no_truncate,
+                    include_summaries,
+                )
+                .await
+                .map_err(|e| e.to_string()),
+                OutputMode::Json => commands::search_json(
+                    &db,
+                    &http,
+                    &cfg,
+                    &term,
+                    path.as_deref(),
+                    &tags,
+                    match_all,
+                    limit,
+                    cutoff,
+                    no_truncate,
+                    include_summaries,
+                )
+                .await
+                .map_err(|e| e.to_string()),
+            },
+            Request::TaskLog { .. } => {
+                unreachable!("task-log is handled inline by the connection task")
             }
         };
+
+        let (log_status, log_error): (&str, Option<String>) = match &result {
+            Ok(_) => ("success", None),
+            Err(msg) => {
+                let was_cancelled = *cancel_observer.borrow();
+                if was_cancelled {
+                    ("failure", Some("cancelled".to_string()))
+                } else {
+                    ("failure", Some(msg.clone()))
+                }
+            }
+        };
+        if let Err(e) = db
+            .task_log_finish(&job_id_str, log_status, log_error.as_deref())
+            .await
+        {
+            tracing::warn!(error = %e, job = %job_id_str, "task_log_finish failed");
+        }
 
         match result {
             Ok(text) => {
@@ -506,5 +608,105 @@ struct SocketGuard {
 impl Drop for SocketGuard {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.path);
+    }
+}
+
+/// Drain `relay_rx`, feed every `ProgressEvent` into the tracker, then
+/// forward the enriched envelope to `out_tx`.
+///
+/// Keeps draining + observing even after `out_tx` is closed (i.e. the client
+/// disconnected). Otherwise a detached ingest — or any case where the
+/// foreground client exits before the ingest does — would freeze the tracker
+/// on whichever event was current at disconnect time, so subsequent `status`
+/// snapshots would all show the same stale event with an ever-growing "(Ns
+/// ago)" suffix instead of the live progress that's still flowing.
+///
+/// Exits when `relay_rx` is closed (its sole sender — held by the worker
+/// arm — drops when ingest returns).
+async fn run_progress_relay(
+    mut relay_rx: mpsc::UnboundedReceiver<Event>,
+    out_tx: mpsc::UnboundedSender<Event>,
+    tracker: Arc<Mutex<JobTracker>>,
+) {
+    let mut forward_alive = true;
+    while let Some(ev) = relay_rx.recv().await {
+        let out_ev = match ev {
+            Event::Progress(env_in) => {
+                let envelope = {
+                    let mut t = tracker.lock().unwrap();
+                    t.observe(&env_in.event);
+                    let env_out = t.build_envelope(env_in.event);
+                    t.set_latest(env_out.clone());
+                    env_out
+                };
+                Event::Progress(envelope)
+            }
+            other => other,
+        };
+        if forward_alive && out_tx.send(out_ev).is_err() {
+            forward_alive = false;
+        }
+    }
+}
+
+#[cfg(test)]
+mod relay_tests {
+    use super::*;
+    use crate::protocol::{ProgressEnvelope, ProgressEvent};
+
+    #[tokio::test]
+    async fn relay_keeps_updating_tracker_after_client_disconnects() {
+        let (relay_tx, relay_rx) = mpsc::unbounded_channel::<Event>();
+        let (out_tx, out_rx) = mpsc::unbounded_channel::<Event>();
+        let tracker = Arc::new(Mutex::new(JobTracker::new(Instant::now())));
+
+        let handle = tokio::spawn(run_progress_relay(
+            relay_rx,
+            out_tx,
+            Arc::clone(&tracker),
+        ));
+
+        // Simulate the very first event a real ingest emits — the "extracting"
+        // stage label. The relay should observe it and the client should
+        // receive it.
+        relay_tx
+            .send(Event::Progress(ProgressEnvelope {
+                event: ProgressEvent::Stage { name: "extracting".into() },
+                overall: None,
+            }))
+            .unwrap();
+
+        // Client disconnects.
+        drop(out_rx);
+
+        // Subsequent ingest events keep coming — pdftotext, then OCR.
+        for current in 1..=5u32 {
+            relay_tx
+                .send(Event::Progress(ProgressEnvelope {
+                    event: ProgressEvent::Extracting { current, total: 5 },
+                    overall: None,
+                }))
+                .unwrap();
+        }
+        relay_tx
+            .send(Event::Progress(ProgressEnvelope {
+                event: ProgressEvent::Ocr { current: 9, total: 365 },
+                overall: None,
+            }))
+            .unwrap();
+
+        // Closing the sender lets the relay loop exit so we can assert.
+        drop(relay_tx);
+        handle.await.unwrap();
+
+        let (latest, _age) = tracker.lock().unwrap().latest();
+        let env = latest.expect("tracker should have a latest envelope");
+        match env.event {
+            ProgressEvent::Ocr { current: 9, total: 365 } => {}
+            other => panic!(
+                "expected tracker latest to be the final OCR event \
+                 (post-disconnect drain), got {other:?}",
+            ),
+        }
     }
 }

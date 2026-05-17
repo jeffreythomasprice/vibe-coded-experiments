@@ -79,6 +79,182 @@ impl Db {
             })?;
         Ok(conn)
     }
+
+    /// Insert an `in-progress` row for a task the worker has just started.
+    pub async fn task_log_start(
+        &self,
+        job_id: &str,
+        task_name: &str,
+        label: &str,
+        path: Option<&str>,
+        tags: Option<&str>,
+    ) -> Result<(), DbError> {
+        self.conn
+            .execute(
+                "INSERT INTO task_log (job_id, task_name, label, path, tags, status) \
+                 VALUES (?, ?, ?, ?, ?, 'in-progress')",
+                turso::params::Params::Positional(vec![
+                    Value::Text(job_id.to_string()),
+                    Value::Text(task_name.to_string()),
+                    Value::Text(label.to_string()),
+                    match path {
+                        Some(p) => Value::Text(p.to_string()),
+                        None => Value::Null,
+                    },
+                    match tags {
+                        Some(t) => Value::Text(t.to_string()),
+                        None => Value::Null,
+                    },
+                ]),
+            )
+            .await
+            .map_err(|source| DbError::Query {
+                op: "task_log_start",
+                source,
+            })?;
+        Ok(())
+    }
+
+    /// Update a task_log row to its terminal state.
+    pub async fn task_log_finish(
+        &self,
+        job_id: &str,
+        status: &str,
+        error: Option<&str>,
+    ) -> Result<(), DbError> {
+        self.conn
+            .execute(
+                "UPDATE task_log \
+                    SET status = ?, error = ?, ended_at = datetime('now') \
+                  WHERE job_id = ?",
+                turso::params::Params::Positional(vec![
+                    Value::Text(status.to_string()),
+                    match error {
+                        Some(e) => Value::Text(e.to_string()),
+                        None => Value::Null,
+                    },
+                    Value::Text(job_id.to_string()),
+                ]),
+            )
+            .await
+            .map_err(|source| DbError::Query {
+                op: "task_log_finish",
+                source,
+            })?;
+        Ok(())
+    }
+
+    /// Mark any leftover `in-progress` rows as `failure` with an explanation.
+    /// Called once at server start so a previously crashed/killed run doesn't
+    /// leave rows stuck.
+    pub async fn task_log_repair_abandoned(&self) -> Result<(), DbError> {
+        self.conn
+            .execute(
+                "UPDATE task_log \
+                    SET status = 'failure', \
+                        ended_at = datetime('now'), \
+                        error = COALESCE(error, 'abandoned (server restart)') \
+                  WHERE status = 'in-progress'",
+                (),
+            )
+            .await
+            .map_err(|source| DbError::Query {
+                op: "task_log_repair_abandoned",
+                source,
+            })?;
+        Ok(())
+    }
+}
+
+/// One row from the `task_log` table, as returned to the client.
+#[derive(Debug, Clone)]
+pub struct TaskLogRow {
+    pub job_id: String,
+    pub task_name: String,
+    pub label: String,
+    pub path: Option<String>,
+    pub tags: Option<String>,
+    pub started_at: String,
+    pub ended_at: Option<String>,
+    pub status: String,
+    pub error: Option<String>,
+}
+
+/// Fetch the most-recent `limit` task_log rows in chronological order
+/// (oldest first, newest last). Uses a `fresh_conn` since this is called
+/// from the inline handler concurrently with the worker.
+pub async fn task_log_recent(db: &Db, limit: usize) -> Result<Vec<TaskLogRow>, DbError> {
+    let conn = db.fresh_conn().await?;
+    let mut rows = conn
+        .query(
+            "SELECT job_id, task_name, label, path, tags, started_at, ended_at, status, error \
+               FROM task_log \
+              ORDER BY started_at DESC, id DESC \
+              LIMIT ?",
+            (limit as i64,),
+        )
+        .await
+        .map_err(|source| DbError::Query {
+            op: "task_log_recent",
+            source,
+        })?;
+    let mut out: Vec<TaskLogRow> = Vec::new();
+    while let Some(row) = rows.next().await.map_err(|source| DbError::Query {
+        op: "task_log_recent.next",
+        source,
+    })? {
+        let job_id: String = row.get(0).map_err(|source| DbError::Query {
+            op: "task_log_recent.job_id",
+            source,
+        })?;
+        let task_name: String = row.get(1).map_err(|source| DbError::Query {
+            op: "task_log_recent.task_name",
+            source,
+        })?;
+        let label: String = row.get(2).map_err(|source| DbError::Query {
+            op: "task_log_recent.label",
+            source,
+        })?;
+        let path = nullable_text(&row, 3, "task_log_recent.path")?;
+        let tags = nullable_text(&row, 4, "task_log_recent.tags")?;
+        let started_at: String = row.get(5).map_err(|source| DbError::Query {
+            op: "task_log_recent.started_at",
+            source,
+        })?;
+        let ended_at = nullable_text(&row, 6, "task_log_recent.ended_at")?;
+        let status: String = row.get(7).map_err(|source| DbError::Query {
+            op: "task_log_recent.status",
+            source,
+        })?;
+        let error = nullable_text(&row, 8, "task_log_recent.error")?;
+        out.push(TaskLogRow {
+            job_id,
+            task_name,
+            label,
+            path,
+            tags,
+            started_at,
+            ended_at,
+            status,
+            error,
+        });
+    }
+    // Reverse so the oldest of the N is first and the newest is last.
+    out.reverse();
+    Ok(out)
+}
+
+fn nullable_text(
+    row: &turso::Row,
+    idx: usize,
+    op: &'static str,
+) -> Result<Option<String>, DbError> {
+    match row.get_value(idx) {
+        Ok(Value::Null) => Ok(None),
+        Ok(Value::Text(s)) => Ok(Some(s)),
+        Ok(other) => panic!("unexpected non-text value for {op}: {other:?}"),
+        Err(source) => Err(DbError::Query { op, source }),
+    }
 }
 
 /// Returns the SQL table name for chunks of a given embedding dimension.

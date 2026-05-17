@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use turso::{Value, params::Params};
 
 use crate::config::Config;
-use crate::db::{Db, vector};
+use crate::db::{Db, TaskLogRow, vector};
 use crate::ollama;
 use crate::protocol::{StatusSnapshot, TextRangeReq};
 
@@ -55,6 +55,12 @@ pub enum CommandError {
 
     #[error("opening read connection: {source}")]
     FreshConn {
+        #[source]
+        source: crate::db::DbError,
+    },
+
+    #[error("reading task_log: {source}")]
+    TaskLog {
         #[source]
         source: crate::db::DbError,
     },
@@ -681,11 +687,20 @@ pub fn status_json(snapshot: &StatusSnapshot) -> String {
     let env = serde_json::json!({
         "ok": true,
         "uptime_secs": snapshot.uptime_secs,
-        "current": snapshot.current.as_ref().map(|c| serde_json::json!({
-            "id": c.id,
-            "label": c.label,
-            "running_secs": c.running_secs,
-        })),
+        "current": snapshot.current.as_ref().map(|c| {
+            let mut obj = serde_json::json!({
+                "id": c.id,
+                "label": c.label,
+                "running_secs": c.running_secs,
+            });
+            if let Some(p) = &c.progress {
+                obj["progress"] = serde_json::to_value(p).unwrap_or(serde_json::Value::Null);
+            }
+            if let Some(age) = c.progress_age_secs {
+                obj["progress_age_secs"] = serde_json::Value::from(age);
+            }
+            obj
+        }),
         "queued": snapshot.queued.iter().map(|q| serde_json::json!({
             "id": q.id,
             "label": q.label,
@@ -1565,7 +1580,7 @@ async fn gather_search_hits(
         docs
     };
 
-    let embedding = ollama::embed(http, &cfg.ollama.url, &cfg.ollama.embedding_model, term)
+    let embedding = ollama::embed(http, &cfg.ollama.url, &cfg.ollama.embedding_model, term, None)
         .await
         .map_err(|source| CommandError::EmbedQuery { source })?;
     if embedding.len() != db.embedding_dimensions {
@@ -2169,6 +2184,135 @@ fn snippet_with_flag(text: &str, max_chars: Option<usize>) -> (String, bool) {
                 (format!("{truncated}\u{2026}"), true)
             }
         }
+    }
+}
+
+pub async fn task_log_text(db: &Db, limit: usize) -> Result<String, CommandError> {
+    let rows = crate::db::task_log_recent(db, limit)
+        .await
+        .map_err(|source| CommandError::TaskLog { source })?;
+    Ok(render_task_log(&rows))
+}
+
+pub async fn task_log_json(db: &Db, limit: usize) -> Result<String, CommandError> {
+    let rows = crate::db::task_log_recent(db, limit)
+        .await
+        .map_err(|source| CommandError::TaskLog { source })?;
+    let entries: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "job_id": r.job_id,
+                "task_name": r.task_name,
+                "label": r.label,
+                "path": r.path,
+                "tags": r.tags,
+                "started_at": r.started_at,
+                "ended_at": r.ended_at,
+                "duration_secs": duration_secs(&r.started_at, r.ended_at.as_deref()),
+                "status": r.status,
+                "error": r.error,
+            })
+        })
+        .collect();
+    Ok(serde_json::json!({
+        "ok": true,
+        "tasks": entries,
+    })
+    .to_string())
+}
+
+fn render_task_log(rows: &[TaskLogRow]) -> String {
+    let mut out = String::new();
+    if rows.is_empty() {
+        let _ = writeln!(out, "no tasks logged yet");
+        return out;
+    }
+
+    let durations: Vec<String> = rows
+        .iter()
+        .map(|r| match r.status.as_str() {
+            "in-progress" => "-".to_string(),
+            _ => match duration_secs(&r.started_at, r.ended_at.as_deref()) {
+                Some(s) => format_duration(s),
+                None => "-".to_string(),
+            },
+        })
+        .collect();
+
+    let started_w = rows.iter().map(|r| r.started_at.len()).max().unwrap_or(0).max(7);
+    let duration_w = durations.iter().map(|d| d.len()).max().unwrap_or(0).max(8);
+    let status_w = rows.iter().map(|r| r.status.len()).max().unwrap_or(0).max(6);
+
+    let _ = writeln!(
+        out,
+        "{:<started_w$}  {:<duration_w$}  {:<status_w$}  TASK",
+        "STARTED",
+        "DURATION",
+        "STATUS",
+    );
+    for (r, dur) in rows.iter().zip(durations.iter()) {
+        let _ = writeln!(
+            out,
+            "{started:<started_w$}  {dur:<duration_w$}  {status:<status_w$}  {label}",
+            started = r.started_at,
+            status = r.status,
+            label = r.label,
+        );
+        if let Some(err) = &r.error {
+            let indent = " ".repeat(started_w + 2 + duration_w + 2 + status_w + 2);
+            let _ = writeln!(out, "{indent}error: {err}");
+        }
+    }
+
+    out
+}
+
+/// `started_at` and `ended_at` are SQLite `datetime('now')` strings, e.g.
+/// `"2026-05-16 18:23:01"`. Returns whole seconds between them, or None if
+/// `ended_at` is missing or unparseable.
+fn duration_secs(started_at: &str, ended_at: Option<&str>) -> Option<i64> {
+    let end = ended_at?;
+    let start_ts = parse_sqlite_datetime(started_at)?;
+    let end_ts = parse_sqlite_datetime(end)?;
+    Some(end_ts - start_ts)
+}
+
+fn parse_sqlite_datetime(s: &str) -> Option<i64> {
+    // Format: "YYYY-MM-DD HH:MM:SS" (UTC, as datetime('now') produces).
+    let bytes = s.as_bytes();
+    if bytes.len() < 19 {
+        return None;
+    }
+    let year: i64 = s.get(0..4)?.parse().ok()?;
+    let month: i64 = s.get(5..7)?.parse().ok()?;
+    let day: i64 = s.get(8..10)?.parse().ok()?;
+    let hour: i64 = s.get(11..13)?.parse().ok()?;
+    let minute: i64 = s.get(14..16)?.parse().ok()?;
+    let second: i64 = s.get(17..19)?.parse().ok()?;
+    Some(days_from_civil(year, month, day) * 86400 + hour * 3600 + minute * 60 + second)
+}
+
+/// Howard Hinnant's `days_from_civil` (returns days since 1970-01-01 for a
+/// proleptic Gregorian (Y, M, D)). Used purely to compute durations between
+/// two SQLite datetime strings; no calendar/wall-clock semantics matter.
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = (y - era * 400) as i64;
+    let mp = if m > 2 { m - 3 } else { m + 9 };
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe - 719468
+}
+
+fn format_duration(secs: i64) -> String {
+    if secs < 60 {
+        format!("{secs}s")
+    } else if secs < 3600 {
+        format!("{}m{:02}s", secs / 60, secs % 60)
+    } else {
+        format!("{}h{:02}m", secs / 3600, (secs % 3600) / 60)
     }
 }
 

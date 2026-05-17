@@ -13,7 +13,7 @@ use crate::protocol::OutputMode;
 pub struct Cli {
     /// Path to config.toml. Defaults to ./config.toml or
     /// ~/.config/document-search/config.toml.
-    #[arg(long, value_name = "PATH")]
+    #[arg(short = 'c', long, value_name = "PATH")]
     pub config: Option<PathBuf>,
 
     /// Output format. `text` (default) is human-readable; `json` makes the
@@ -43,6 +43,23 @@ pub enum Command {
         /// Override [summarize].max_depth for this ingest's summary phase.
         #[arg(long, value_name = "N")]
         max_depth: Option<usize>,
+
+        /// Override [chunking].chunk_size_bytes for this ingest. The
+        /// semantic chunker treats this as a target size and may grow up
+        /// to ~1.5× while searching for a structural boundary.
+        #[arg(long, value_name = "N")]
+        chunk_size: Option<usize>,
+
+        /// Override [chunking].overlap_bytes for this ingest. Must be
+        /// smaller than --chunk-size (or the configured default if that
+        /// flag is omitted).
+        #[arg(long, value_name = "N")]
+        overlap: Option<usize>,
+
+        /// Queue the ingest and return immediately without waiting for it
+        /// to finish. Use `status` or `queue list` to monitor progress.
+        #[arg(short = 'd', long)]
+        detach: bool,
     },
 
     /// Print metadata for a document by path.
@@ -75,7 +92,7 @@ pub enum Command {
         /// Stream live updates until interrupted with Ctrl-C. The screen is
         /// cleared and redrawn on each refresh in text mode; in JSON mode
         /// one snapshot is printed per line (NDJSON).
-        #[arg(long)]
+        #[arg(short = 'w', long)]
         watch: bool,
 
         /// Refresh interval in milliseconds (only meaningful with --watch).
@@ -93,7 +110,7 @@ pub enum Command {
     /// Bypasses the queue.
     List {
         /// Filter to documents that have this tag. Repeatable.
-        #[arg(long = "tag", value_name = "TAG")]
+        #[arg(short = 't', long = "tag", value_name = "TAG")]
         tags: Vec<String>,
 
         /// With multiple --tag, require ALL tags to match (default: ANY).
@@ -106,9 +123,6 @@ pub enum Command {
         /// Path of an already-ingested document.
         path: PathBuf,
     },
-
-    /// Cancel the currently-running ingest, if any. Bypasses the queue.
-    Cancel,
 
     /// Manage tags on ingested documents.
     Tag {
@@ -125,12 +139,12 @@ pub enum Command {
 
         /// Restrict to a single document by exact ingested path. Mutually
         /// exclusive with --tag/--match-all.
-        #[arg(long, value_name = "PATH", conflicts_with_all = ["tags", "match_all"])]
+        #[arg(short = 'p', long, value_name = "PATH", conflicts_with_all = ["tags", "match_all"])]
         path: Option<PathBuf>,
 
         /// Restrict to documents that have this tag. Repeatable.
         /// Default: match ANY given tag. Use --match-all to tighten.
-        #[arg(long = "tag", value_name = "TAG")]
+        #[arg(short = 't', long = "tag", value_name = "TAG")]
         tags: Vec<String>,
 
         /// With multiple --tag, require ALL tags to match (default: ANY).
@@ -139,7 +153,7 @@ pub enum Command {
 
         /// Max chunks to return per in-scope document. Overrides
         /// [search].default_results_per_document.
-        #[arg(long, value_name = "N")]
+        #[arg(short = 'n', long, value_name = "N")]
         limit: Option<usize>,
 
         /// Drop chunks whose similarity (1.0 - cosine_distance) is below
@@ -164,6 +178,13 @@ pub enum Command {
         include_summaries: bool,
     },
 
+    /// Show the most recent tasks the server has executed, oldest first.
+    /// Bypasses the queue.
+    TaskLog {
+        /// Number of most-recent entries to return. Default 10.
+        #[arg(short = 'n', long, value_name = "N", default_value_t = 10)]
+        limit: usize,
+    },
 }
 
 #[derive(Subcommand, Debug)]

@@ -25,11 +25,15 @@ use crate::config::Config;
 use crate::db::{Db, vector};
 use crate::llm;
 use crate::ollama;
-use crate::protocol::{Event, ProgressEvent};
+use crate::protocol::{Event, ProgressEnvelope, ProgressEvent};
 
-/// Hard cap on input bytes per LLM call. Errors out (rather than silently
-/// splitting) so the user can fix their `summarize.group_size` or chunk size.
-const INPUT_BUDGET_BYTES: usize = 32_000;
+/// Hard cap on input bytes per LLM call. Sized to leave headroom above the
+/// worst-case group at default settings (`chunk_size_bytes` 5000 × `group_size`
+/// 6 × 1.5 grow-factor ≈ 45 KB) while staying well under the ~32K-token
+/// context window of common local chat models (qwen2.5:14b, llama3.1:8b, …).
+/// Errors out (rather than silently splitting) when exceeded, so the user can
+/// shrink `summarize.group_size` or `chunking.chunk_size_bytes`.
+const INPUT_BUDGET_BYTES: usize = 100_000;
 
 const SYSTEM_PROMPT: &str = "\
 You are summarizing a section of a longer document so a downstream search \
@@ -166,17 +170,31 @@ async fn summarize_inner(
         levels: 0,
     };
 
+    // We have to load level 0 inputs to count chunks before we can estimate
+    // total_levels; cheaper to just load them here and reuse them below.
+    let level0_inputs = load_chunks_as_nodes(db, document_id).await?;
+    if level0_inputs.is_empty() {
+        return Err(SummarizeError::NoChunks { path: path.clone() });
+    }
+    let total_levels = estimate_total_levels(level0_inputs.len(), group_size, max_depth);
+    let started_at = std::time::Instant::now();
+    tracing::info!(
+        path = %path.display(),
+        chunk_count = level0_inputs.len(),
+        group_size,
+        max_depth,
+        total_levels,
+        "summarize: starting tree build",
+    );
+
     let mut level: usize = 0;
+    let mut level0_inputs = Some(level0_inputs);
     loop {
         let inputs = if level == 0 {
-            load_chunks_as_nodes(db, document_id).await?
+            level0_inputs.take().expect("level 0 inputs loaded above")
         } else {
             load_summaries_as_nodes(db, document_id, level - 1).await?
         };
-
-        if level == 0 && inputs.is_empty() {
-            return Err(SummarizeError::NoChunks { path: path.clone() });
-        }
 
         // Single-node level means the tree already has a root at level-1.
         if inputs.len() <= 1 {
@@ -195,9 +213,16 @@ async fn summarize_inner(
         // parent_id; that linkage is implicit via byte ranges.
         let mut parent_ids: Vec<i64> = Vec::with_capacity(groups.len());
         let total = groups.len();
+        tracing::info!(
+            path = %path.display(),
+            level = level + 1,
+            total_levels,
+            groups = total,
+            "summarize: starting level",
+        );
         for (group_index, group) in groups.iter().enumerate() {
             check_cancel(cancel.as_ref())?;
-            emit_progress(progress, level, group_index + 1, total);
+            emit_progress(progress, level, total_levels, group_index + 1, total);
 
             let concat = concat_texts(group);
             if concat.len() > INPUT_BUDGET_BYTES {
@@ -228,6 +253,7 @@ async fn summarize_inner(
                         &cfg.ollama.url,
                         &cfg.ollama.embedding_model,
                         &text,
+                        cancel.as_ref(),
                     )
                     .await?;
 
@@ -251,12 +277,15 @@ async fn summarize_inner(
                     stats.new_summaries += 1;
                     (id, false)
                 };
-            tracing::debug!(
-                level,
-                group_index,
+            tracing::info!(
+                level = level + 1,
+                total_levels,
+                group = group_index + 1,
+                total_groups = total,
                 reused,
                 summary_id,
-                "summarize: group complete"
+                elapsed_secs = started_at.elapsed().as_secs(),
+                "summarize: group complete",
             );
             parent_ids.push(summary_id);
         }
@@ -275,6 +304,27 @@ async fn summarize_inner(
     }
 
     Ok(stats)
+}
+
+/// Estimate how many summary levels the tree will end up with for a document
+/// of `chunk_count` chunks, given `group_size` and `max_depth`. Returns at
+/// least 1 so the formatter never divides by zero.
+pub(crate) fn estimate_total_levels(
+    chunk_count: usize,
+    group_size: usize,
+    max_depth: usize,
+) -> usize {
+    if chunk_count <= 1 || max_depth == 0 {
+        return 1;
+    }
+    let g = group_size.max(2);
+    let mut n = chunk_count;
+    let mut levels = 0;
+    while n > 1 && levels < max_depth {
+        n = n.div_ceil(g);
+        levels += 1;
+    }
+    levels.max(1)
 }
 
 fn canonicalize(p: &Path) -> Result<PathBuf, SummarizeError> {
@@ -634,8 +684,11 @@ fn check_cancel(rx: Option<&watch::Receiver<bool>>) -> Result<(), SummarizeError
 
 fn emit_stage(progress: Option<&mpsc::UnboundedSender<Event>>, name: &str) {
     if let Some(tx) = progress {
-        let _ = tx.send(Event::Progress(ProgressEvent::Stage {
-            name: name.to_string(),
+        let _ = tx.send(Event::Progress(ProgressEnvelope {
+            event: ProgressEvent::Stage {
+                name: name.to_string(),
+            },
+            overall: None,
         }));
     }
 }
@@ -643,14 +696,19 @@ fn emit_stage(progress: Option<&mpsc::UnboundedSender<Event>>, name: &str) {
 fn emit_progress(
     progress: Option<&mpsc::UnboundedSender<Event>>,
     level: usize,
+    total_levels: usize,
     current: usize,
     total: usize,
 ) {
     if let Some(tx) = progress {
-        let _ = tx.send(Event::Progress(ProgressEvent::Summarizing {
-            level,
-            current,
-            total,
+        let _ = tx.send(Event::Progress(ProgressEnvelope {
+            event: ProgressEvent::Summarizing {
+                level,
+                total_levels,
+                current,
+                total,
+            },
+            overall: None,
         }));
     }
 }
@@ -743,5 +801,31 @@ mod tests {
     fn concat_uses_double_newline_separator() {
         let group = vec![node(1, 0, 1, "alpha"), node(2, 1, 2, "beta")];
         assert_eq!(concat_texts(&group), "alpha\n\nbeta");
+    }
+
+    #[test]
+    fn estimate_total_levels_geometric_decay() {
+        // 77 chunks → 13 groups at level 0 → 3 at level 1 → 1 at level 2.
+        // 3 levels of *summary work* (level 2 produces 1 summary).
+        assert_eq!(estimate_total_levels(77, 6, 4), 3);
+    }
+
+    #[test]
+    fn estimate_total_levels_clamps_to_max_depth() {
+        // Very deep tree truncated by max_depth.
+        assert_eq!(estimate_total_levels(10_000, 2, 3), 3);
+    }
+
+    #[test]
+    fn estimate_total_levels_handles_tiny_inputs() {
+        assert_eq!(estimate_total_levels(0, 6, 4), 1);
+        assert_eq!(estimate_total_levels(1, 6, 4), 1);
+        // 2 chunks → one group of 2 → one summary → one level.
+        assert_eq!(estimate_total_levels(2, 6, 4), 1);
+    }
+
+    #[test]
+    fn estimate_total_levels_degenerate_max_depth_zero() {
+        assert_eq!(estimate_total_levels(100, 6, 0), 1);
     }
 }

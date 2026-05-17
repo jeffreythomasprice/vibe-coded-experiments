@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use tokio::sync::watch;
 
 #[derive(thiserror::Error, Debug)]
 pub enum OllamaError {
@@ -25,6 +26,9 @@ pub enum OllamaError {
 
     #[error("ollama returned an empty embedding for model {model:?}")]
     EmptyEmbedding { model: String },
+
+    #[error("embedding request cancelled")]
+    Cancelled,
 }
 
 #[derive(Serialize)]
@@ -41,7 +45,44 @@ struct EmbedResponse {
 /// POST `<url>/api/embeddings` with `{"model": ..., "prompt": ...}` and return
 /// the resulting vector. Uses the legacy single-input endpoint, which all
 /// versions of Ollama with embedding support accept.
+///
+/// If `cancel` is provided and fires before the HTTP call finishes, the request
+/// future is dropped (reqwest aborts the underlying connection) and
+/// `OllamaError::Cancelled` is returned.
 pub async fn embed(
+    client: &reqwest::Client,
+    url: &str,
+    model: &str,
+    text: &str,
+    cancel: Option<&watch::Receiver<bool>>,
+) -> Result<Vec<f32>, OllamaError> {
+    if let Some(rx) = cancel {
+        if *rx.borrow() {
+            return Err(OllamaError::Cancelled);
+        }
+    }
+    let fut = embed_inner(client, url, model, text);
+    match cancel {
+        Some(rx) => {
+            let mut rx = rx.clone();
+            tokio::select! {
+                res = fut => res,
+                changed = rx.changed() => {
+                    if changed.is_ok() && *rx.borrow() {
+                        Err(OllamaError::Cancelled)
+                    } else {
+                        // Sender dropped without a cancel signal — finish the
+                        // call uncancellable rather than failing spuriously.
+                        embed_inner(client, url, model, text).await
+                    }
+                }
+            }
+        }
+        None => fut.await,
+    }
+}
+
+async fn embed_inner(
     client: &reqwest::Client,
     url: &str,
     model: &str,
@@ -88,6 +129,6 @@ pub async fn probe_dimensions(
     url: &str,
     model: &str,
 ) -> Result<usize, OllamaError> {
-    let v = embed(client, url, model, " ").await?;
+    let v = embed(client, url, model, " ", None).await?;
     Ok(v.len())
 }

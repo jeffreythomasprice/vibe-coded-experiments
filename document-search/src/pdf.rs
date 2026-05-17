@@ -15,8 +15,11 @@
 
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::Instant;
+
+use tokio::process::Command;
+use tokio::sync::watch;
 
 use crate::config::OcrConfig;
 use crate::ingest::IngestError;
@@ -54,9 +57,10 @@ pub enum ExtractProgress {
 /// (one page at a time). After OCR, pages still below the threshold are
 /// fatal: we return `IngestError::PdfExtract` so the caller can refuse the
 /// ingest rather than indexing garbage.
-pub fn extract<F>(
+pub async fn extract<F>(
     path: &Path,
     ocr: &OcrConfig,
+    cancel: Option<&watch::Receiver<bool>>,
     mut on_progress: F,
 ) -> Result<PdfText, IngestError>
 where
@@ -75,7 +79,9 @@ where
             OsStr::new("-"),
         ],
         "poppler-utils",
-    )?;
+        cancel,
+    )
+    .await?;
 
     // pdftotext emits each page followed by a form-feed. Strip the trailing
     // one so a 3-page doc becomes "p1<FF>p2<FF>p3" rather than "...p3<FF>",
@@ -141,7 +147,7 @@ where
                 current: k as u32 + 1,
                 total: bad_total,
             });
-            let ocr_text = ocr_page(path, page_num, ocr)?;
+            let ocr_text = ocr_page(path, page_num, ocr, cancel).await?;
             tracing::debug!(
                 page = page_num,
                 pre_score = decodability_score(&pages[idx]),
@@ -219,7 +225,12 @@ where
 /// OCR a single page: rasterize via pdftoppm into a temp dir, then run
 /// tesseract on the resulting PNG. The temp dir is dropped (and cleaned up)
 /// at the end of this function, so only one PNG is ever on disk per call.
-fn ocr_page(pdf_path: &Path, page_number: u32, ocr: &OcrConfig) -> Result<String, IngestError> {
+async fn ocr_page(
+    pdf_path: &Path,
+    page_number: u32,
+    ocr: &OcrConfig,
+    cancel: Option<&watch::Receiver<bool>>,
+) -> Result<String, IngestError> {
     let tmp = tempfile::tempdir().map_err(|e| IngestError::PdfExtract {
         source: format!("creating temp dir for OCR: {e}").into(),
     })?;
@@ -242,7 +253,9 @@ fn ocr_page(pdf_path: &Path, page_number: u32, ocr: &OcrConfig) -> Result<String
             stem.as_os_str(),
         ],
         "poppler-utils",
-    )?;
+        cancel,
+    )
+    .await?;
 
     // pdftoppm appends `-NNN.png` (with variable zero-padding based on the
     // document's total page count) to the stem. Find the single PNG it
@@ -263,7 +276,9 @@ fn ocr_page(pdf_path: &Path, page_number: u32, ocr: &OcrConfig) -> Result<String
             OsStr::new(&psm_arg),
         ],
         "tesseract-ocr; on Debian/Ubuntu: apt install tesseract-ocr",
-    )?;
+        cancel,
+    )
+    .await?;
 
     Ok(String::from_utf8_lossy(&stdout).into_owned())
 }
@@ -287,15 +302,51 @@ fn find_single_png(dir: &Path) -> std::io::Result<PathBuf> {
 
 /// Run a binary and return its stdout. Maps a missing binary to a friendly
 /// "install <hint>" message. On non-zero exit, includes stderr in the error.
-fn run_cmd(name: &'static str, args: &[&OsStr], install_hint: &str) -> Result<Vec<u8>, IngestError> {
+///
+/// If `cancel` fires before the child exits, the child is killed via
+/// `kill_on_drop` (we drop the `wait_with_output` future, which owns the
+/// `Child`) and `IngestError::Cancelled` is returned.
+async fn run_cmd(
+    name: &'static str,
+    args: &[&OsStr],
+    install_hint: &str,
+    cancel: Option<&watch::Receiver<bool>>,
+) -> Result<Vec<u8>, IngestError> {
+    if let Some(rx) = cancel {
+        if *rx.borrow() {
+            return Err(IngestError::Cancelled);
+        }
+    }
     let owned: Vec<OsString> = args.iter().map(|a| a.to_os_string()).collect();
-    let output = Command::new(name)
+    let child = Command::new(name)
         .args(&owned)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .output()
+        .kill_on_drop(true)
+        .spawn()
         .map_err(|e| spawn_err(name, install_hint, e))?;
+
+    let wait_fut = child.wait_with_output();
+    let output = match cancel {
+        Some(rx) => {
+            let mut rx = rx.clone();
+            tokio::select! {
+                res = wait_fut => res.map_err(|e| IngestError::PdfExtract {
+                    source: format!("waiting on {name}: {e}").into(),
+                })?,
+                _ = rx.changed() => {
+                    // Either cancel fired or the sender was dropped (server
+                    // shutdown); either way, kill the child (drop did so) and
+                    // bail.
+                    return Err(IngestError::Cancelled);
+                }
+            }
+        }
+        None => wait_fut.await.map_err(|e| IngestError::PdfExtract {
+            source: format!("waiting on {name}: {e}").into(),
+        })?,
+    };
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
