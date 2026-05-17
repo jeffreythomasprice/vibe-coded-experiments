@@ -1,21 +1,6 @@
-I want to bulid a tool that works with exalted character sheets. We need to track everything about a character.
+Evaluate this code against @rules/character_creation.md and the kinds of things the text of the character sheet pdf mentions in @assets/character-sheet/voidstate-fillin-ex2-solar-v1.8.txt. What's missing?
 
-Some examples:
-- choices made from game mechanics (e.g. which charms they have selected)
-- how many dots in various attributes and virtues and abilities
-- how many dots in things they have selected at character generation time, how many bonus points they spent to get that thing, or how many xp they had to spend to get that thing
-- extra text for various things, e.g. name, description, background info, etc.
 
-I want to be able to track numbers and rules for various things. Some examples:
-- add up all the points spent and prove that this is a "valid" character at chargen time, or how much xp was spent on top of that after some play
-- figure out how many dice I get for various actions
-
-Our initial goal is a data structure that can hold all information about a character, that can:
-- be serialized and deserialized to json
-- be validated against the rules (e.g. too many dots picked at chargen, or spent more xp than earned)
-- be used to generate answers to questions like: how many dice do I get when evaluating an attribute / ability check, or for the various combat rules
-
-For now we just need the ability to work with character sheets plus unit tests. We'll add a cli commands or a UI later.
 
 
 
@@ -26,5 +11,23 @@ I want to introduce a cli system for working with character sheets. Some options
 	- did they spend less than or equal to their total xp for extra things
 
 
+I want to introduce a tui that displays all fields in a character sheet. I'm not sure of the exact layout I need, and the full sheet is fairly complicated, so I'm willing to have this be fairly rough initially and we'll refine.
 
-tui
+
+
+we left out per-scene or ephemeral combat stuff like:
+tick clock, onslaught counters, anima level, DV penalty stack.
+
+we left out the full charm catalog, need to go over the rulebook and extract all of them
+this should be a data file we load, currently the tiny partial catalog is hard-coded
+
+spell catalog
+sorcery/spellcasting mechanics, rules
+
+limit/virtue/flaw mechanics
+
+mass combat
+
+social combat
+
+mortal/heroic-mortal variants
