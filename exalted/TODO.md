@@ -1,16 +1,3 @@
-Evaluate this code against @rules/character_creation.md and the kinds of things the text of the character sheet pdf mentions in @assets/character-sheet/voidstate-fillin-ex2-solar-v1.8.txt. What's missing?
-
-
-
-
-
-I want to introduce a cli system for working with character sheets. Some options:
-- cli command to turn the json representation of the character sheet into a markdown document
-- cli command that "validates" a character:
-	- do they have the right number of things at character creation
-	- did they spend less than or equal to their total xp for extra things
-
-
 redo the char gen for my actual character
 
 

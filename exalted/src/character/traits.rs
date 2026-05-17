@@ -329,17 +329,6 @@ impl AbilityKind {
     ];
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
-pub enum AbilityGroup {
-    Combat,
-    Physical,
-    Social,
-    Mental,
-    Other,
-}
-
 // ---------------------------------------------------------------------------
 // Virtues
 // ---------------------------------------------------------------------------

@@ -55,8 +55,11 @@ pub fn xp_cost_charm(favored_or_caste: bool) -> u32 {
 }
 
 /// Eclipse-only non-Solar Charm (spirit charms, alien charms). Rulebook OCR
-/// was corrupted ("Ai pectit"); needs verification. Encoded as a named
-/// constant for easy fix.
+/// was corrupted ("Ai pectit") on p.275; both our document-search query
+/// (2026-05-17) and `character_creation.md` §6.4 still show the corrupted
+/// cell. The working estimate is "roughly double the out-of-Caste Solar
+/// cost" → 20 XP. TODO(web-search): confirm against a clean PDF or the
+/// White Wolf errata.
 pub const NON_SOLAR_CHARM_XP_COST: u32 = 20;
 
 /// Cost to learn a spell. Occult favored/caste = 8, otherwise = 10.

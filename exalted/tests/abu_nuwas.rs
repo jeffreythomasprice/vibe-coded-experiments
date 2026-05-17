@@ -40,7 +40,6 @@ fn abu_nuwas() -> Character {
         personality: String::new(),
         anima: Anima {
             totem: "Desert owl, ghostly white with glowing purple eyes".to_string(),
-            iconic_image: "A swift and silent desert owl".to_string(),
         },
         appearance: Appearance {
             hair: "Black".to_string(),

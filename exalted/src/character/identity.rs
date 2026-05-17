@@ -55,10 +55,13 @@ impl Caste {
     }
 }
 
+/// The Solar's anima totem — the burning iconic image (great golden bull,
+/// sun-mandala, lion, etc.) that surrounds her at the 16+ Peripheral display
+/// level. Single free-text field; the rules summary (p.75, p.117) treats
+/// "Anima Totem" and "iconic image" as the same concept.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Anima {
     pub totem: String,
-    pub iconic_image: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,6 +80,10 @@ pub struct Identity {
     pub name: String,
     pub concept: String,
     pub motivation: String,
+    /// Free-text disposition / temperament. The rules summary
+    /// (`character_creation.md` §1) subsumes "personality" into Concept,
+    /// but the Voidstate fillable sheet has a separate slot, so we expose
+    /// it here for sheet fidelity.
     #[serde(default)]
     pub personality: String,
     #[serde(default)]
@@ -89,18 +96,41 @@ pub struct Identity {
     pub chronicle: String,
 }
 
-/// The Virtue Flaw chosen at chargen, driving Limit Break.
+/// The Virtue Flaw chosen at chargen, driving Limit Break (p.103-107).
+/// Trigger / duration notes per variant are summarised from
+/// `character_creation.md` §8; full per-flaw partial-control text is not
+/// encoded here (runtime mechanic).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VirtueFlaw {
+    /// Compassion. Trigger: innocents suffering through no fault of their
+    /// own. Duration: 1 scene (combat) / 1 day (otherwise).
     CompassionateMartyrdom,
+    /// Compassion. Trigger: innocents suffering she cannot help. Duration:
+    /// 1 scene / 1 day.
     HeartOfTears,
+    /// Compassion. Trigger: innocents suffering, cannot effectively
+    /// intervene. Duration: 1 scene (combat) / Compassion hours otherwise.
     RedRageOfCompassion,
+    /// Conviction. Trigger: severe stress or backed into a corner.
+    /// Duration: 1 full day.
     DeliberateCruelty,
+    /// Conviction. Trigger: frustration with intemperate world. Duration:
+    /// 1 full day.
     HeartOfFlint,
+    /// Temperance. Trigger: confronted with own / others' weakness.
+    /// Duration: 1 full day.
     AsceticDrive,
+    /// Temperance. Trigger: hindered by the self-indulgent. Duration:
+    /// 1 full day.
     ContemptOfTheVirtuous,
+    /// Temperance. Trigger: a favoured pleasure/vice must be passed up to
+    /// act morally. Duration: 1 full day.
     Overindulgence,
+    /// Valor. Trigger: insulted, demeaned, or deliberately frustrated.
+    /// Duration: 1 full scene.
     BerserkAnger,
+    /// Valor. Trigger: losing odds, single combat, any chance to prove
+    /// bravery. Duration: 1 full day.
     FoolhardyContempt,
     Custom { name: String, virtue: VirtueKind },
 }

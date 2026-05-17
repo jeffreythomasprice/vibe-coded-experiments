@@ -13,7 +13,7 @@
 //! - Intimacy beyond Compassion baseline: 3 BP each.
 
 use crate::character::{
-    AbilityKind, AttributeGroup, BackgroundKind, Caste, Character, VirtueKind,
+    AbilityKind, AttributeGroup, BackgroundKind, Caste, Character, SpellCircle, VirtueKind,
 };
 use crate::error::{ValidationError, ValidationReport};
 use crate::rules::catalog::{CharmCatalog, DefaultCatalog};
@@ -98,7 +98,9 @@ pub fn validate_chargen_with(
     check_willpower_base(character, &mut report);
     check_willpower_bp_cap(character, &mut report);
     check_bonus_point_total(character, &mut report);
+    validate_bp(character, &mut report);
     crate::rules::languages::validate_languages(character, &mut report);
+    crate::rules::backgrounds::validate_backgrounds(character, &mut report);
     report.extend(crate::rules::equipment::validate_hearthstones(character));
     report.extend(crate::rules::equipment::validate_artifacts(character));
 
@@ -317,18 +319,37 @@ fn check_backgrounds(c: &Character, report: &mut ValidationReport) {
 }
 
 fn check_charms(c: &Character, catalog: &dyn CharmCatalog, report: &mut ValidationReport) {
-    // 10 "starting" charms come out of the chargen pool. BP-bought charms
-    // are optional extras and don't count toward this total.
-    let chargen_charms: usize = c
+    // 10 "starting" picks come out of the chargen pool. Spells acquired via
+    // the sorcery swap (`character_creation.md` §6.2) compete for those same
+    // 10 slots — each `ChargenPriority` spell replaces one Charm. BP-bought
+    // charms/spells are optional extras and don't count toward this total.
+    let chargen_charms = c
         .charms
         .iter()
         .filter(|ch| ch.source.is_chargen_priority())
         .count();
-    if chargen_charms != TOTAL_CHARMS_AT_CHARGEN {
-        report.push(ValidationError::CharmCountWrong {
-            got: chargen_charms,
-        });
+    let chargen_spells = c
+        .spells
+        .iter()
+        .filter(|sp| sp.source.is_chargen_priority())
+        .count();
+    let chargen_picks = chargen_charms + chargen_spells;
+    if chargen_picks != TOTAL_CHARMS_AT_CHARGEN {
+        report.push(ValidationError::CharmCountWrong { got: chargen_picks });
     }
+
+    // p.77: Solar Circle spells are forbidden at character creation —
+    // neither via the sorcery swap nor BP.
+    for spell in &c.spells {
+        if spell.circle == SpellCircle::Solar
+            && (spell.source.is_chargen_priority() || spell.source.is_bonus_points())
+        {
+            report.push(ValidationError::SolarCircleAtChargen {
+                spell: spell.name.clone(),
+            });
+        }
+    }
+
 
     let mut cf_chargen_count = 0usize;
     for charm in &c.charms {
@@ -376,21 +397,28 @@ fn check_charms(c: &Character, catalog: &dyn CharmCatalog, report: &mut Validati
             }
         }
 
-        if let crate::character::DotSource::BonusPoints { spent } = charm.source {
-            let expected = charm_bp_cost(c.is_caste_or_favored_ability(charm.ability));
-            if spent as u32 != expected {
-                report.push(ValidationError::XpCostWrong {
-                    trait_name: format!("Charm::{} (BP)", charm.name),
-                    paid: spent as u32,
-                    expected,
-                });
-            }
-        }
     }
 
     if cf_chargen_count < MIN_CASTE_FAVORED_CHARMS {
         report.push(ValidationError::CasteFavoredCharmsTooFew {
             got: cf_chargen_count,
+        });
+    }
+
+    // p.209 / character_creation.md §5.5: Ox-Body Technique stacks up to the
+    // character's Resistance rating. Extra picks were previously silently
+    // dropped by health::ox_body_patterns; flag them so the player notices
+    // that BP/XP and a Charm slot are being wasted.
+    let resistance = c.ability(AbilityKind::Resistance);
+    let ox_body_picks = c
+        .charms
+        .iter()
+        .filter(|ch| ch.name.eq_ignore_ascii_case("Ox-Body Technique"))
+        .count();
+    if ox_body_picks > resistance as usize {
+        report.push(ValidationError::OxBodyOverResistance {
+            got: ox_body_picks,
+            max: resistance,
         });
     }
 }
@@ -475,6 +503,201 @@ pub fn recompute_xp_for_increases(
         }
     }
     (total, mismatches)
+}
+
+/// Validate the BP ledger: every `BonusPoints { spent }` purchase costs the
+/// canonical amount for its trait. Mirrors `validate_xp` but for chargen
+/// bonus points. Called from `validate_chargen_with`.
+///
+/// Note: this does **not** check that the total BP spent equals
+/// [`TOTAL_BONUS_POINTS`] — `check_bonus_point_total` already does that.
+pub fn validate_bp(c: &Character, report: &mut ValidationReport) {
+    // Attributes
+    for (attr, t) in &c.attributes {
+        let mut rating = t.base_dots;
+        for p in &t.purchases {
+            rating += 1;
+            if let crate::character::DotSource::BonusPoints { spent } = p.source {
+                let expected = attribute_dot_bp_cost(rating);
+                if spent as u32 != expected {
+                    report.push(ValidationError::BpCostWrong {
+                        trait_name: format!("Attribute::{attr:?}"),
+                        paid: spent as u32,
+                        expected,
+                    });
+                }
+            }
+        }
+    }
+
+    // Abilities (dots)
+    for (ab, t) in &c.abilities {
+        let mut rating = t.base_dots;
+        let cf = c.is_caste_or_favored_ability(*ab);
+        for p in &t.purchases {
+            rating += 1;
+            if let crate::character::DotSource::BonusPoints { spent } = p.source {
+                let expected = ability_dot_bp_cost(rating, cf);
+                if spent as u32 != expected {
+                    report.push(ValidationError::BpCostWrong {
+                        trait_name: format!("Ability::{ab:?}"),
+                        paid: spent as u32,
+                        expected,
+                    });
+                }
+            }
+        }
+    }
+
+    // Specialties: aggregate per ability. C/F abilities cost 1 BP per 2
+    // specialties (so two BP-spec entries at 1+0 BP each is correct); out-of
+    // C/F abilities cost 1 BP per specialty.
+    for (ab, t) in &c.abilities {
+        let cf = c.is_caste_or_favored_ability(*ab);
+        let mut bp_specs_n = 0usize;
+        let mut bp_specs_spent = 0u32;
+        for s in &t.specialties {
+            if let crate::character::DotSource::BonusPoints { spent } = s.source {
+                bp_specs_n += 1;
+                bp_specs_spent += spent as u32;
+            }
+        }
+        if bp_specs_n == 0 {
+            continue;
+        }
+        let expected = if cf {
+            specialty_bp_cost_for_ability(bp_specs_n, 0)
+        } else {
+            specialty_bp_cost_for_ability(0, bp_specs_n)
+        };
+        if bp_specs_spent != expected {
+            report.push(ValidationError::BpCostWrong {
+                trait_name: format!("Specialties::{ab:?} ({} entries)", bp_specs_n),
+                paid: bp_specs_spent,
+                expected,
+            });
+        }
+    }
+
+    // Backgrounds
+    for bg in &c.backgrounds {
+        let mut rating = bg.trait_.base_dots;
+        for p in &bg.trait_.purchases {
+            rating += 1;
+            if let crate::character::DotSource::BonusPoints { spent } = p.source {
+                let expected = background_dot_bp_cost(rating);
+                if spent as u32 != expected {
+                    let label = if bg.label.is_empty() {
+                        format!("Background::{:?}", bg.kind)
+                    } else {
+                        format!("Background::{:?}({})", bg.kind, bg.label)
+                    };
+                    report.push(ValidationError::BpCostWrong {
+                        trait_name: label,
+                        paid: spent as u32,
+                        expected,
+                    });
+                }
+            }
+        }
+    }
+
+    // Virtues
+    for (v, t) in &c.virtues {
+        let mut rating = t.base_dots;
+        for p in &t.purchases {
+            rating += 1;
+            if let crate::character::DotSource::BonusPoints { spent } = p.source {
+                let expected = virtue_dot_bp_cost(rating);
+                if spent as u32 != expected {
+                    report.push(ValidationError::BpCostWrong {
+                        trait_name: format!("Virtue::{v:?}"),
+                        paid: spent as u32,
+                        expected,
+                    });
+                }
+            }
+        }
+    }
+
+    // Willpower
+    {
+        let mut rating = c.willpower.base_dots;
+        for p in &c.willpower.purchases {
+            rating += 1;
+            if let crate::character::DotSource::BonusPoints { spent } = p.source {
+                let expected = willpower_dot_bp_cost(rating);
+                if spent as u32 != expected {
+                    report.push(ValidationError::BpCostWrong {
+                        trait_name: "Willpower".to_string(),
+                        paid: spent as u32,
+                        expected,
+                    });
+                }
+            }
+        }
+    }
+
+    // Essence
+    {
+        let mut rating = c.essence.base_dots;
+        for p in &c.essence.purchases {
+            rating += 1;
+            if let crate::character::DotSource::BonusPoints { spent } = p.source {
+                let expected = essence_dot_bp_cost(rating);
+                if spent as u32 != expected {
+                    report.push(ValidationError::BpCostWrong {
+                        trait_name: "Essence".to_string(),
+                        paid: spent as u32,
+                        expected,
+                    });
+                }
+            }
+        }
+    }
+
+    // Charms
+    for charm in &c.charms {
+        if let crate::character::DotSource::BonusPoints { spent } = charm.source {
+            let expected = charm_bp_cost(c.is_caste_or_favored_ability(charm.ability));
+            if spent as u32 != expected {
+                report.push(ValidationError::BpCostWrong {
+                    trait_name: format!("Charm::{}", charm.name),
+                    paid: spent as u32,
+                    expected,
+                });
+            }
+        }
+    }
+
+    // Spells (same cost as Charms; Occult discount).
+    let occult_cf = c.is_caste_or_favored_ability(AbilityKind::Occult);
+    for spell in &c.spells {
+        if let crate::character::DotSource::BonusPoints { spent } = spell.source {
+            let expected = charm_bp_cost(occult_cf);
+            if spent as u32 != expected {
+                report.push(ValidationError::BpCostWrong {
+                    trait_name: format!("Spell::{}", spell.name),
+                    paid: spent as u32,
+                    expected,
+                });
+            }
+        }
+    }
+
+    // Intimacies
+    for intimacy in &c.intimacies {
+        if let crate::character::DotSource::BonusPoints { spent } = intimacy.source {
+            let expected = intimacy_bp_cost();
+            if spent as u32 != expected {
+                report.push(ValidationError::BpCostWrong {
+                    trait_name: format!("Intimacy::{}", intimacy.description),
+                    paid: spent as u32,
+                    expected,
+                });
+            }
+        }
+    }
 }
 
 /// Validate the XP ledger: every `Xp { spent }` purchase costs the canonical
@@ -606,6 +829,22 @@ pub fn validate_xp(c: &Character) -> ValidationReport {
             if spent != canonical {
                 report.push(ValidationError::XpCostWrong {
                     trait_name: format!("Charm::{}", charm.name),
+                    paid: spent,
+                    expected: canonical,
+                });
+            }
+        }
+    }
+
+    // Spells (post-chargen XP-bought). Occult discount applies; no Solar
+    // Circle restriction post-chargen.
+    let occult_cf = c.is_caste_or_favored_ability(AbilityKind::Occult);
+    for spell in &c.spells {
+        if let crate::character::DotSource::Xp { spent } = spell.source {
+            let canonical = xp_costs::xp_cost_spell(occult_cf);
+            if spent != canonical {
+                report.push(ValidationError::XpCostWrong {
+                    trait_name: format!("Spell::{}", spell.name),
                     paid: spent,
                     expected: canonical,
                 });

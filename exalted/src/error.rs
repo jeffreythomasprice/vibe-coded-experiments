@@ -162,7 +162,7 @@ pub enum ValidationError {
     TooManyLanguages { got: usize, max: usize },
 
     #[error("tribal tongues = {got}, exceeds 4 × Linguistics = {max}")]
-    TooManyTribalTongues { got: u8, max: u8 },
+    TooManyTribalTongues { got: usize, max: usize },
 
     #[error("Old Realm requires Lore >= 1 (got {lore})")]
     OldRealmRequiresLore { lore: u8 },
@@ -172,6 +172,30 @@ pub enum ValidationError {
 
     #[error("duplicate language family {family}")]
     DuplicateLanguageFamily { family: String },
+
+    #[error("native language {family} is missing its dialect specialty (rules p.112)")]
+    NativeLanguageMissingDialect { family: String },
+
+    #[error("Ox-Body Technique stacked {got} times, exceeds Resistance cap {max}")]
+    OxBodyOverResistance { got: usize, max: u8 },
+
+    #[error("Solar Circle spell {spell} cannot be chosen at character creation")]
+    SolarCircleAtChargen { spell: String },
+
+    #[error(
+        "Followers {followers} requires Resources, Backing, or Influence \
+         >= {followers} to support (max found: {support}) (rules p.114)"
+    )]
+    FollowersWithoutSupport { followers: u8, support: u8 },
+
+    #[error(
+        "bonus-point purchase for {trait_name} cost {paid} BP, canonical cost is {expected}"
+    )]
+    BpCostWrong {
+        trait_name: String,
+        paid: u32,
+        expected: u32,
+    },
 
     #[error(
         "willpower permanent spent ({spent}) exceeds permanent rating ({permanent})"

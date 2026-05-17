@@ -5,6 +5,7 @@ pub mod hearthstone;
 pub mod identity;
 pub mod intimacies;
 pub mod languages;
+pub mod spells;
 pub mod state;
 pub mod traits;
 pub mod xp;
@@ -20,10 +21,11 @@ pub use hearthstone::Hearthstone;
 pub use identity::{Anima, Appearance, Caste, Identity, VirtueFlaw};
 pub use intimacies::{Intimacy, IntimacyKind};
 pub use languages::{KnownLanguage, LanguageFamily};
+pub use spells::{Spell, SpellCircle};
 pub use state::{HealthDamage, MoteCommitment, MotePool, PoolState};
 pub use traits::{
-    AbilityGroup, AbilityKind, AttributeGroup, AttributeKind, AttributePriority, DotPurchase,
-    DotSource, RatedTrait, Specialty, VirtueKind,
+    AbilityKind, AttributeGroup, AttributeKind, AttributePriority, DotPurchase, DotSource,
+    RatedTrait, Specialty, VirtueKind,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,6 +43,8 @@ pub struct Character {
     pub essence: RatedTrait,
     pub charms: Vec<ChosenCharm>,
     #[serde(default)]
+    pub spells: Vec<Spell>,
+    #[serde(default)]
     pub backgrounds: Vec<BackgroundInstance>,
     pub intimacies: Vec<Intimacy>,
     pub equipment: Equipment,
@@ -50,8 +54,6 @@ pub struct Character {
     pub notes: BTreeMap<String, String>,
     #[serde(default)]
     pub languages: Vec<KnownLanguage>,
-    #[serde(default)]
-    pub tribal_tongues: u8,
     #[serde(default)]
     pub hearthstones: Vec<Hearthstone>,
 }
@@ -90,6 +92,7 @@ impl Character {
             willpower: RatedTrait::with_base(0),
             essence: RatedTrait::with_base(2),
             charms: Vec::new(),
+            spells: Vec::new(),
             backgrounds: Vec::new(),
             intimacies: Vec::new(),
             equipment: Equipment::default(),
@@ -98,7 +101,6 @@ impl Character {
             pool_state: PoolState::default(),
             notes: BTreeMap::new(),
             languages: Vec::new(),
-            tribal_tongues: 0,
             hearthstones: Vec::new(),
         }
     }

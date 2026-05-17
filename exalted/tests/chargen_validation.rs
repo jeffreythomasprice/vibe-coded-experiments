@@ -1,7 +1,10 @@
 mod common;
 
 use common::valid_dawn;
-use exalted::character::{AbilityKind, BackgroundKind, DotPurchase, DotSource};
+use exalted::character::{
+    AbilityKind, BackgroundInstance, BackgroundKind, ChosenCharm, DotPurchase, DotSource,
+    KnownLanguage, LanguageFamily, RatedTrait,
+};
 use exalted::error::ValidationError;
 
 fn err_kinds(report: &exalted::error::ValidationReport) -> Vec<&ValidationError> {
@@ -175,6 +178,130 @@ fn essence_over_chargen_max_caught() {
         e,
         ValidationError::EssenceOverMaxAtChargen { .. }
     )));
+}
+
+#[test]
+fn ox_body_over_resistance_caught() {
+    let mut c = valid_dawn();
+    // valid_dawn has Resistance 0. Swap in an Ox-Body charm to trigger the
+    // cap (got 1, max 0).
+    if let Some(charm) = c.charms.iter_mut().find(|ch| ch.name == "First War Excellency") {
+        *charm = ChosenCharm::new(
+            "Ox-Body Technique",
+            AbilityKind::Resistance,
+            DotSource::ChargenPriority,
+        );
+    }
+    let report = c.validate_chargen();
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::OxBodyOverResistance { got: 1, max: 0 })),
+        "expected OxBodyOverResistance, got {:#?}",
+        report.errors
+    );
+}
+
+#[test]
+fn followers_without_support_caught() {
+    let mut c = valid_dawn();
+    // valid_dawn has Resources 4 (3 chargen + 1 BP), Mentor 3, Contacts 3,
+    // and no Backing / Influence / Followers. Add a Followers 5 instance
+    // (chargen-priority dots) — Resources is the highest support at 4, so
+    // Followers 5 > 4 should fire FollowersWithoutSupport.
+    // Use BP for clarity (we don't care about the chargen pool here; the
+    // test is about the interlock).
+    let mut followers = RatedTrait::with_base(0);
+    for _ in 0..3 {
+        followers.add_chargen();
+    }
+    followers.add_bonus(1);
+    followers.add_bonus(2);
+    c.backgrounds.push(BackgroundInstance::new(
+        BackgroundKind::Followers,
+        "",
+        followers,
+    ));
+    let report = c.validate_chargen();
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::FollowersWithoutSupport { followers: 5, support: 4 })),
+        "expected FollowersWithoutSupport, got {:#?}",
+        report.errors
+    );
+}
+
+#[test]
+fn native_language_missing_dialect_caught() {
+    let mut c = valid_dawn();
+    c.languages = vec![KnownLanguage {
+        family: LanguageFamily::Riverspeak,
+        dialect_specialty: None, // missing!
+        native: true,
+    }];
+    let report = c.validate_chargen();
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::NativeLanguageMissingDialect { .. })),
+        "expected NativeLanguageMissingDialect, got {:#?}",
+        report.errors
+    );
+}
+
+#[test]
+fn bp_cost_mismatch_caught_on_attribute() {
+    let mut c = valid_dawn();
+    // valid_dawn pays 4 BP for Dex 4→5. Change it to a wrong amount.
+    let dex = c.attributes.get_mut(&exalted::character::AttributeKind::Dexterity).unwrap();
+    for p in dex.purchases.iter_mut() {
+        if let DotSource::BonusPoints { spent } = p.source {
+            // Wrong BP cost: should be 4, say it was 3.
+            p.source = DotSource::BonusPoints { spent: spent - 1 };
+        }
+    }
+    let report = c.validate_chargen();
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::BpCostWrong { trait_name, .. } if trait_name.starts_with("Attribute::"))),
+        "expected BpCostWrong on Attribute, got {:#?}",
+        report.errors
+    );
+}
+
+#[test]
+fn tribal_tongues_counted_separately_from_families() {
+    let mut c = valid_dawn();
+    // Linguistics 0 → max 1 family + 0 tribal tongues. Add a tribal tongue:
+    // should error on tribal cap but NOT on family cap.
+    c.languages.push(KnownLanguage {
+        family: LanguageFamily::TribalTongue("Marukan".to_string()),
+        dialect_specialty: None,
+        native: false,
+    });
+    let report = c.validate_chargen();
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::TooManyTribalTongues { got: 1, max: 0 })),
+        "expected TooManyTribalTongues, got {:#?}",
+        report.errors
+    );
+    assert!(
+        !report
+            .errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::TooManyLanguages { .. })),
+        "tribal tongue should not count against family cap; got {:#?}",
+        report.errors
+    );
 }
 
 #[test]
