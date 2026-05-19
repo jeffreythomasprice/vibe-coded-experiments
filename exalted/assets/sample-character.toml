@@ -1,0 +1,709 @@
+caste = "Dawn"
+favored_abilities = [
+    "Awareness",
+    "Dodge",
+    "Stealth",
+    "Survival",
+    "Athletics",
+]
+primary_virtue = "Compassion"
+virtue_flaw = "CompassionateMartyrdom"
+spells = []
+xp_earned = 0
+xp_banked = 0
+hearthstones = []
+
+[identity]
+name = "Test Solar"
+concept = ""
+motivation = ""
+personality = ""
+player = ""
+chronicle = ""
+
+[identity.anima]
+totem = ""
+
+[identity.appearance]
+hair = ""
+eyes = ""
+skin = ""
+distinguishing_features = ""
+homeland = ""
+sex = ""
+
+[attributes.Strength]
+base_dots = 1
+specialties = []
+
+[[attributes.Strength.purchases]]
+
+[attributes.Strength.purchases.source]
+kind = "ChargenPriority"
+
+[[attributes.Strength.purchases]]
+
+[attributes.Strength.purchases.source]
+kind = "ChargenPriority"
+
+[[attributes.Strength.purchases]]
+
+[attributes.Strength.purchases.source]
+kind = "ChargenPriority"
+
+[attributes.Dexterity]
+base_dots = 1
+specialties = []
+
+[[attributes.Dexterity.purchases]]
+
+[attributes.Dexterity.purchases.source]
+kind = "ChargenPriority"
+
+[[attributes.Dexterity.purchases]]
+
+[attributes.Dexterity.purchases.source]
+kind = "ChargenPriority"
+
+[[attributes.Dexterity.purchases]]
+
+[attributes.Dexterity.purchases.source]
+kind = "ChargenPriority"
+
+[[attributes.Dexterity.purchases]]
+
+[attributes.Dexterity.purchases.source]
+kind = "BonusPoints"
+spent = 4
+
+[attributes.Stamina]
+base_dots = 1
+specialties = []
+
+[[attributes.Stamina.purchases]]
+
+[attributes.Stamina.purchases.source]
+kind = "ChargenPriority"
+
+[[attributes.Stamina.purchases]]
+
+[attributes.Stamina.purchases.source]
+kind = "ChargenPriority"
+
+[attributes.Charisma]
+base_dots = 1
+specialties = []
+
+[[attributes.Charisma.purchases]]
+
+[attributes.Charisma.purchases.source]
+kind = "ChargenPriority"
+
+[[attributes.Charisma.purchases]]
+
+[attributes.Charisma.purchases.source]
+kind = "ChargenPriority"
+
+[attributes.Manipulation]
+base_dots = 1
+specialties = []
+
+[[attributes.Manipulation.purchases]]
+
+[attributes.Manipulation.purchases.source]
+kind = "ChargenPriority"
+
+[[attributes.Manipulation.purchases]]
+
+[attributes.Manipulation.purchases.source]
+kind = "ChargenPriority"
+
+[attributes.Appearance]
+base_dots = 1
+specialties = []
+
+[[attributes.Appearance.purchases]]
+
+[attributes.Appearance.purchases.source]
+kind = "ChargenPriority"
+
+[[attributes.Appearance.purchases]]
+
+[attributes.Appearance.purchases.source]
+kind = "ChargenPriority"
+
+[attributes.Perception]
+base_dots = 1
+specialties = []
+
+[[attributes.Perception.purchases]]
+
+[attributes.Perception.purchases.source]
+kind = "ChargenPriority"
+
+[[attributes.Perception.purchases]]
+
+[attributes.Perception.purchases.source]
+kind = "ChargenPriority"
+
+[attributes.Intelligence]
+base_dots = 1
+specialties = []
+
+[[attributes.Intelligence.purchases]]
+
+[attributes.Intelligence.purchases.source]
+kind = "ChargenPriority"
+
+[attributes.Wits]
+base_dots = 1
+specialties = []
+
+[[attributes.Wits.purchases]]
+
+[attributes.Wits.purchases.source]
+kind = "ChargenPriority"
+
+[attribute_priority]
+primary = "Physical"
+secondary = "Social"
+tertiary = "Mental"
+
+[abilities.Archery]
+base_dots = 0
+specialties = []
+
+[[abilities.Archery.purchases]]
+
+[abilities.Archery.purchases.source]
+kind = "ChargenPriority"
+
+[abilities.MartialArts]
+base_dots = 0
+specialties = []
+
+[[abilities.MartialArts.purchases]]
+
+[abilities.MartialArts.purchases.source]
+kind = "ChargenPriority"
+
+[abilities.Melee]
+base_dots = 0
+specialties = []
+
+[[abilities.Melee.purchases]]
+
+[abilities.Melee.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Melee.purchases]]
+
+[abilities.Melee.purchases.source]
+kind = "BonusPoints"
+spent = 1
+
+[abilities.Thrown]
+base_dots = 0
+specialties = []
+
+[[abilities.Thrown.purchases]]
+
+[abilities.Thrown.purchases.source]
+kind = "ChargenPriority"
+
+[abilities.War]
+base_dots = 0
+specialties = []
+
+[[abilities.War.purchases]]
+
+[abilities.War.purchases.source]
+kind = "ChargenPriority"
+
+[abilities.Integrity]
+base_dots = 0
+purchases = []
+specialties = []
+
+[abilities.Performance]
+base_dots = 0
+purchases = []
+specialties = []
+
+[abilities.Presence]
+base_dots = 0
+purchases = []
+specialties = []
+
+[abilities.Resistance]
+base_dots = 0
+purchases = []
+specialties = []
+
+[abilities.Survival]
+base_dots = 0
+specialties = []
+
+[[abilities.Survival.purchases]]
+
+[abilities.Survival.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Survival.purchases]]
+
+[abilities.Survival.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Survival.purchases]]
+
+[abilities.Survival.purchases.source]
+kind = "ChargenPriority"
+
+[abilities.Craft]
+base_dots = 0
+purchases = []
+specialties = []
+
+[abilities.Investigation]
+base_dots = 0
+specialties = []
+
+[[abilities.Investigation.purchases]]
+
+[abilities.Investigation.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Investigation.purchases]]
+
+[abilities.Investigation.purchases.source]
+kind = "ChargenPriority"
+
+[abilities.Lore]
+base_dots = 0
+specialties = []
+
+[[abilities.Lore.purchases]]
+
+[abilities.Lore.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Lore.purchases]]
+
+[abilities.Lore.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Lore.purchases]]
+
+[abilities.Lore.purchases.source]
+kind = "ChargenPriority"
+
+[abilities.Medicine]
+base_dots = 0
+purchases = []
+specialties = []
+
+[abilities.Occult]
+base_dots = 0
+specialties = []
+
+[[abilities.Occult.purchases]]
+
+[abilities.Occult.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Occult.purchases]]
+
+[abilities.Occult.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Occult.purchases]]
+
+[abilities.Occult.purchases.source]
+kind = "ChargenPriority"
+
+[abilities.Athletics]
+base_dots = 0
+specialties = []
+
+[[abilities.Athletics.purchases]]
+
+[abilities.Athletics.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Athletics.purchases]]
+
+[abilities.Athletics.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Athletics.purchases]]
+
+[abilities.Athletics.purchases.source]
+kind = "ChargenPriority"
+
+[abilities.Awareness]
+base_dots = 0
+specialties = []
+
+[[abilities.Awareness.purchases]]
+
+[abilities.Awareness.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Awareness.purchases]]
+
+[abilities.Awareness.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Awareness.purchases]]
+
+[abilities.Awareness.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Awareness.purchases]]
+
+[abilities.Awareness.purchases.source]
+kind = "BonusPoints"
+spent = 1
+
+[abilities.Dodge]
+base_dots = 0
+specialties = []
+
+[[abilities.Dodge.purchases]]
+
+[abilities.Dodge.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Dodge.purchases]]
+
+[abilities.Dodge.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Dodge.purchases]]
+
+[abilities.Dodge.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Dodge.purchases]]
+
+[abilities.Dodge.purchases.source]
+kind = "BonusPoints"
+spent = 1
+
+[abilities.Larceny]
+base_dots = 0
+purchases = []
+specialties = []
+
+[abilities.Stealth]
+base_dots = 0
+specialties = []
+
+[[abilities.Stealth.purchases]]
+
+[abilities.Stealth.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Stealth.purchases]]
+
+[abilities.Stealth.purchases.source]
+kind = "ChargenPriority"
+
+[[abilities.Stealth.purchases]]
+
+[abilities.Stealth.purchases.source]
+kind = "ChargenPriority"
+
+[abilities.Bureaucracy]
+base_dots = 0
+purchases = []
+specialties = []
+
+[abilities.Linguistics]
+base_dots = 0
+purchases = []
+specialties = []
+
+[abilities.Ride]
+base_dots = 0
+purchases = []
+specialties = []
+
+[abilities.Sail]
+base_dots = 0
+purchases = []
+specialties = []
+
+[abilities.Socialize]
+base_dots = 0
+purchases = []
+specialties = []
+
+[virtues.Compassion]
+base_dots = 1
+specialties = []
+
+[[virtues.Compassion.purchases]]
+
+[virtues.Compassion.purchases.source]
+kind = "ChargenPriority"
+
+[[virtues.Compassion.purchases]]
+
+[virtues.Compassion.purchases.source]
+kind = "ChargenPriority"
+
+[virtues.Conviction]
+base_dots = 1
+specialties = []
+
+[[virtues.Conviction.purchases]]
+
+[virtues.Conviction.purchases.source]
+kind = "ChargenPriority"
+
+[[virtues.Conviction.purchases]]
+
+[virtues.Conviction.purchases.source]
+kind = "ChargenPriority"
+
+[virtues.Temperance]
+base_dots = 1
+purchases = []
+specialties = []
+
+[virtues.Valor]
+base_dots = 1
+specialties = []
+
+[[virtues.Valor.purchases]]
+
+[virtues.Valor.purchases.source]
+kind = "ChargenPriority"
+
+[willpower]
+base_dots = 6
+purchases = []
+specialties = []
+
+[essence]
+base_dots = 2
+purchases = []
+specialties = []
+
+[[charms]]
+kind = "lookup"
+id = "first-awareness-excellency"
+non_solar = false
+
+[charms.source]
+kind = "ChargenPriority"
+
+[[charms]]
+kind = "lookup"
+id = "first-dodge-excellency"
+non_solar = false
+
+[charms.source]
+kind = "ChargenPriority"
+
+[[charms]]
+kind = "lookup"
+id = "first-stealth-excellency"
+non_solar = false
+
+[charms.source]
+kind = "ChargenPriority"
+
+[[charms]]
+kind = "lookup"
+id = "first-survival-excellency"
+non_solar = false
+
+[charms.source]
+kind = "ChargenPriority"
+
+[[charms]]
+kind = "lookup"
+id = "first-athletics-excellency"
+non_solar = false
+
+[charms.source]
+kind = "ChargenPriority"
+
+[[charms]]
+kind = "lookup"
+id = "first-archery-excellency"
+non_solar = false
+
+[charms.source]
+kind = "ChargenPriority"
+
+[[charms]]
+kind = "lookup"
+id = "first-martial-arts-excellency"
+non_solar = false
+
+[charms.source]
+kind = "ChargenPriority"
+
+[[charms]]
+kind = "lookup"
+id = "first-melee-excellency"
+non_solar = false
+
+[charms.source]
+kind = "ChargenPriority"
+
+[[charms]]
+kind = "lookup"
+id = "first-thrown-excellency"
+non_solar = false
+
+[charms.source]
+kind = "ChargenPriority"
+
+[[charms]]
+kind = "lookup"
+id = "first-war-excellency"
+non_solar = false
+
+[charms.source]
+kind = "ChargenPriority"
+
+[[charms]]
+kind = "lookup"
+id = "second-martial-arts-excellency"
+non_solar = false
+
+[charms.source]
+kind = "BonusPoints"
+spent = 4
+
+[[backgrounds]]
+kind = "Resources"
+label = ""
+description = ""
+
+[backgrounds.trait]
+base_dots = 0
+specialties = []
+
+[[backgrounds.trait.purchases]]
+
+[backgrounds.trait.purchases.source]
+kind = "ChargenPriority"
+
+[[backgrounds.trait.purchases]]
+
+[backgrounds.trait.purchases.source]
+kind = "ChargenPriority"
+
+[[backgrounds.trait.purchases]]
+
+[backgrounds.trait.purchases.source]
+kind = "ChargenPriority"
+
+[[backgrounds.trait.purchases]]
+
+[backgrounds.trait.purchases.source]
+kind = "BonusPoints"
+spent = 2
+
+[[backgrounds]]
+kind = "Mentor"
+label = ""
+description = ""
+
+[backgrounds.trait]
+base_dots = 0
+specialties = []
+
+[[backgrounds.trait.purchases]]
+
+[backgrounds.trait.purchases.source]
+kind = "ChargenPriority"
+
+[[backgrounds.trait.purchases]]
+
+[backgrounds.trait.purchases.source]
+kind = "ChargenPriority"
+
+[[backgrounds.trait.purchases]]
+
+[backgrounds.trait.purchases.source]
+kind = "BonusPoints"
+spent = 1
+
+[[backgrounds]]
+kind = "Contacts"
+label = ""
+description = ""
+
+[backgrounds.trait]
+base_dots = 0
+specialties = []
+
+[[backgrounds.trait.purchases]]
+
+[backgrounds.trait.purchases.source]
+kind = "ChargenPriority"
+
+[[backgrounds.trait.purchases]]
+
+[backgrounds.trait.purchases.source]
+kind = "ChargenPriority"
+
+[[backgrounds.trait.purchases]]
+
+[backgrounds.trait.purchases.source]
+kind = "BonusPoints"
+spent = 1
+
+[[intimacies]]
+description = "The downtrodden"
+kind = "Cause"
+
+[intimacies.source]
+kind = "Base"
+
+[[intimacies]]
+description = "My dojo"
+kind = "Cause"
+
+[intimacies.source]
+kind = "Base"
+
+[[intimacies]]
+description = "Honor"
+kind = "Cause"
+
+[intimacies.source]
+kind = "Base"
+
+[equipment]
+weapons = []
+other = []
+artifacts = []
+
+[pool_state]
+personal_motes_spent = 0
+peripheral_motes_spent = 0
+committed_motes = []
+willpower_temporary = 0
+willpower_permanent_spent = 0
+limit = 0
+
+[pool_state.health_damage]
+bashing = 0
+lethal = 0
+aggravated = 0
+
+[pool_state.virtue_channels_used]
+
+[notes]
+
+[[languages]]
+family = "Riverspeak"
+dialect_specialty = "Nexus"
+native = true

@@ -16,6 +16,7 @@ use crate::character::{
     AbilityKind, AttributeGroup, BackgroundKind, Caste, Character, SpellCircle, VirtueKind,
 };
 use crate::error::{ValidationError, ValidationReport};
+use crate::rules::database::prereq::{self, Prereq};
 use crate::rules::defense::willpower_from_virtues;
 use crate::rules::xp_costs::NON_SOLAR_CHARM_XP_COST;
 
@@ -344,6 +345,26 @@ fn check_charms(c: &Character, report: &mut ValidationReport) {
         }
     }
 
+    // Every known spell requires the matching Sorcery initiation charm.
+    // Necromancy circles aren't in the database yet, so only the three
+    // Sorcery circles are gated here.
+    for spell in &c.spells {
+        let required = match spell.circle(db) {
+            Some(SpellCircle::Terrestrial) => Some("terrestrial-circle-sorcery"),
+            Some(SpellCircle::Celestial) => Some("celestial-circle-sorcery"),
+            Some(SpellCircle::Solar) => Some("solar-circle-sorcery"),
+            _ => None,
+        };
+        if let Some(req) = required
+            && !c.charms.iter().any(|ch| ch.is_id(req))
+        {
+            report.push(ValidationError::SpellRequiresSorceryCharm {
+                spell: spell.display_name(db).to_string(),
+                charm: req.to_string(),
+            });
+        }
+    }
+
 
     let mut cf_chargen_count = 0usize;
     for charm in &c.charms {
@@ -381,18 +402,63 @@ fn check_charms(c: &Character, report: &mut ValidationReport) {
                         got: c.essence_dots(),
                     });
                 }
-                // Prereqs are by id. Some are placeholders like
-                // `any-archery-excellency` that aren't real db entries —
-                // smarter "any of" resolution is out of scope, so any missing
-                // prereq id is emitted as a soft note instead of an error.
-                // TODO: resolve `any-<ability>-excellency` against actual
-                // Excellency entries on the character.
-                for prereq in &def.prerequisites {
-                    if !c.charms.iter().any(|ch| ch.is_id(prereq)) {
-                        report.push_note(ValidationError::CharmPrereqMissing {
+                for (attr, &required) in &def.mins_attribute {
+                    let got = c.attribute(*attr);
+                    if got < required {
+                        report.push(ValidationError::CharmAttributeBelowMin {
                             charm: display.clone(),
-                            missing: prereq.clone(),
+                            attribute: format!("{attr:?}"),
+                            required,
+                            got,
                         });
+                    }
+                }
+                // Resolve each prereq string into a structured `Prereq` and
+                // hard-error if unsatisfied. Plain charm ids look up the
+                // character's charm list; `any-X-excellency` and
+                // `any-N-X-excellencies` patterns match against the five
+                // derived Excellencies for that ability.
+                for raw in &def.prerequisites {
+                    let p = prereq::parse_prereq(raw);
+                    if prereq::satisfied_by(&p, c, db) {
+                        continue;
+                    }
+                    match p {
+                        Prereq::Charm(id) => {
+                            report.push(ValidationError::CharmPrereqMissing {
+                                charm: display.clone(),
+                                missing: id,
+                            });
+                        }
+                        Prereq::AnyExcellencies { ability, count } if count <= 1 => {
+                            report.push(
+                                ValidationError::CharmPrereqAnyExcellencyMissing {
+                                    charm: display.clone(),
+                                    ability: crate::rules::database::ability_display_name(
+                                        ability,
+                                    )
+                                    .to_string(),
+                                },
+                            );
+                        }
+                        Prereq::AnyExcellencies { ability, count } => {
+                            let ids = prereq::excellency_ids_for(ability);
+                            let got = ids
+                                .iter()
+                                .filter(|id| c.charms.iter().any(|ch| ch.is_id(id)))
+                                .count() as u8;
+                            report.push(
+                                ValidationError::CharmPrereqNExcellenciesMissing {
+                                    charm: display.clone(),
+                                    ability: crate::rules::database::ability_display_name(
+                                        ability,
+                                    )
+                                    .to_string(),
+                                    required: count,
+                                    got,
+                                },
+                            );
+                        }
                     }
                 }
             }

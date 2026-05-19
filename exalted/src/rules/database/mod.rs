@@ -15,13 +15,15 @@
 //! time into 25 derived entries each — one per AbilityKind. The character
 //! sheet references the derived ids (e.g. `first-archery-excellency`).
 
-use std::collections::HashMap;
+pub mod prereq;
+
+use std::collections::{BTreeMap, HashMap};
 use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::character::{AbilityKind, SpellCircle};
+use crate::character::{AbilityKind, AttributeKind, SpellCircle};
 
 const CHARMS_TOML: &str = include_str!("../../../rules/charms.toml");
 const SPELLS_TOML: &str = include_str!("../../../rules/spells.toml");
@@ -64,6 +66,12 @@ pub struct CharmEntry {
     pub keywords: Vec<String>,
     pub duration: String,
     pub prerequisites: Vec<String>,
+    /// Minimum attribute dots required, by attribute. Defaulted empty so the
+    /// vast majority of charms (which gate on ability + essence) don't need to
+    /// declare it. Authoritative for any charm whose rule-book header table
+    /// names a minimum attribute (typically non-Solar splats).
+    #[serde(default)]
+    pub mins_attribute: BTreeMap<AttributeKind, u8>,
     pub source: String,
     pub pages: String,
     pub description: String,
@@ -218,6 +226,14 @@ fn expand_excellency_templates(entries: Vec<CharmEntry>) -> Vec<CharmEntry> {
 fn specialize_excellency(template: &CharmEntry, ability: AbilityKind) -> CharmEntry {
     let kebab = ability_kebab_name(ability);
     let display = ability_display_name(ability);
+    // Substitute "ability" → kebab into each prereq string so that templated
+    // prereqs like "any-ability-excellency" become "any-archery-excellency"
+    // on the derived entry. Without this, the resolver can never match.
+    let prerequisites = template
+        .prerequisites
+        .iter()
+        .map(|p| p.replace("ability", kebab))
+        .collect();
     CharmEntry {
         id: template.id.replace("ability", kebab),
         name: template.name.replace("(Ability)", display),
@@ -232,7 +248,8 @@ fn specialize_excellency(template: &CharmEntry, ability: AbilityKind) -> CharmEn
         type_detail: template.type_detail.clone(),
         keywords: template.keywords.clone(),
         duration: template.duration.clone(),
-        prerequisites: template.prerequisites.clone(),
+        prerequisites,
+        mins_attribute: template.mins_attribute.clone(),
         source: template.source.clone(),
         pages: template.pages.clone(),
     }

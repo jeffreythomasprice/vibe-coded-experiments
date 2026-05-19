@@ -18,9 +18,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Render a character JSON file as markdown to stdout (or `-o FILE`).
+    /// Render a character TOML file as markdown to stdout (or `-o FILE`).
     Render {
-        /// Path to the character JSON file.
+        /// Path to the character TOML file.
         file: PathBuf,
         /// Optional output path. If omitted, writes to stdout.
         #[arg(short, long)]
@@ -32,7 +32,7 @@ enum Cmd {
     /// non-zero if any validation errors are found or the file cannot be
     /// parsed.
     Validate {
-        /// Path to the character JSON file.
+        /// Path to the character TOML file.
         file: PathBuf,
     },
 }
@@ -50,9 +50,9 @@ fn main() -> ExitCode {
 }
 
 fn load_character(path: &PathBuf) -> Result<Character, String> {
-    let bytes = fs::read(path)
+    let text = fs::read_to_string(path)
         .map_err(|e| format!("could not read {}: {}", path.display(), e))?;
-    serde_json::from_slice(&bytes)
+    toml::from_str(&text)
         .map_err(|e| format!("could not parse {} as a Character: {}", path.display(), e))
 }
 

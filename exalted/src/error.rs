@@ -95,6 +95,32 @@ pub enum ValidationError {
         got: u8,
     },
 
+    #[error(
+        "charm {charm} requires Attribute {attribute} >= {required} (character has {got})"
+    )]
+    CharmAttributeBelowMin {
+        charm: String,
+        attribute: String,
+        required: u8,
+        got: u8,
+    },
+
+    #[error("charm {charm} requires at least one {ability} Excellency")]
+    CharmPrereqAnyExcellencyMissing { charm: String, ability: String },
+
+    #[error(
+        "charm {charm} requires at least {required} {ability} Excellencies (has {got})"
+    )]
+    CharmPrereqNExcellenciesMissing {
+        charm: String,
+        ability: String,
+        required: u8,
+        got: u8,
+    },
+
+    #[error("spell {spell} requires the {charm} charm")]
+    SpellRequiresSorceryCharm { spell: String, charm: String },
+
     #[error("intimacies = {got} exceeds max ({max} = Willpower + Compassion)")]
     IntimaciesOverMax { got: usize, max: u8 },
 
