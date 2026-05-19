@@ -1,8 +1,5 @@
 active:
 
-validate should have a text vs json output mode
-
-
 todo:
 
 tell me a story using a bit of lore from the book
