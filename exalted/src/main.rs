@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 
 use exalted::error::{ValidationError, ValidationReport};
 use exalted::render::character_to_markdown;
+use exalted::rules::database::init_database;
 use exalted::Character;
 
 #[derive(Parser)]
@@ -37,6 +38,10 @@ enum Cmd {
 }
 
 fn main() -> ExitCode {
+    if let Err(e) = init_database() {
+        eprintln!("failed to load rules database: {}", e);
+        return ExitCode::from(2);
+    }
     let cli = Cli::parse();
     match cli.command {
         Cmd::Render { file, output } => run_render(file, output),

@@ -15,7 +15,7 @@
 use exalted::Character;
 use exalted::character::{
     AbilityKind, Anima, Appearance, AttributeGroup, AttributeKind, AttributePriority,
-    BackgroundInstance, BackgroundKind, Caste, ChosenCharm, DotSource, Identity, Intimacy,
+    BackgroundInstance, BackgroundKind, Caste, CharmRef, DotSource, Identity, Intimacy,
     IntimacyKind, KnownLanguage, LanguageFamily, RatedTrait, Specialty, VirtueKind,
 };
 use exalted::character::identity::VirtueFlaw;
@@ -162,20 +162,22 @@ fn abu_nuwas() -> Character {
         .push(BackgroundInstance::new(BackgroundKind::Manse, "", manse));
 
     // Charms: 10 from chargen + 1 from BP (Flawless Pickpocketing — 4 BP, Caste).
+    // The rulebook lists "Keen Hearing and Touch Technique" as a separate
+    // Charm; in 2E it is one of three modes of the unified "Keen (Sense)
+    // Technique" entry (id `keen-sense-technique`). Using the parent here.
     c.charms = vec![
-        ChosenCharm::new("Shadow Over Water", AbilityKind::Dodge, DotSource::ChargenPriority),
-        ChosenCharm::new("Second Dodge Excellency", AbilityKind::Dodge, DotSource::ChargenPriority),
-        ChosenCharm::new("Body-Mending Meditation", AbilityKind::Resistance, DotSource::ChargenPriority),
-        ChosenCharm::new("Ox-Body Technique", AbilityKind::Resistance, DotSource::ChargenPriority),
-        ChosenCharm::new("First Awareness Excellency", AbilityKind::Awareness, DotSource::ChargenPriority),
-        ChosenCharm::new("Keen Hearing and Touch Technique", AbilityKind::Awareness, DotSource::ChargenPriority),
-        ChosenCharm::new("Second Stealth Excellency", AbilityKind::Stealth, DotSource::ChargenPriority),
-        ChosenCharm::new("Graceful Crane Stance", AbilityKind::Athletics, DotSource::ChargenPriority),
-        ChosenCharm::new("Second Socialize Excellency", AbilityKind::Socialize, DotSource::ChargenPriority),
-        ChosenCharm::new("Lock-Opening Touch", AbilityKind::Larceny, DotSource::ChargenPriority),
-        ChosenCharm::new(
-            "Flawless Pickpocketing Technique",
-            AbilityKind::Larceny,
+        CharmRef::lookup("shadow-over-water", DotSource::ChargenPriority),
+        CharmRef::lookup("second-dodge-excellency", DotSource::ChargenPriority),
+        CharmRef::lookup("body-mending-meditation", DotSource::ChargenPriority),
+        CharmRef::lookup("ox-body-technique", DotSource::ChargenPriority),
+        CharmRef::lookup("first-awareness-excellency", DotSource::ChargenPriority),
+        CharmRef::lookup("keen-sense-technique", DotSource::ChargenPriority),
+        CharmRef::lookup("second-stealth-excellency", DotSource::ChargenPriority),
+        CharmRef::lookup("graceful-crane-stance", DotSource::ChargenPriority),
+        CharmRef::lookup("second-socialize-excellency", DotSource::ChargenPriority),
+        CharmRef::lookup("lock-opening-touch", DotSource::ChargenPriority),
+        CharmRef::lookup(
+            "flawless-pickpocketing-technique",
             DotSource::BonusPoints { spent: 4 },
         ),
     ];
@@ -282,7 +284,7 @@ fn abu_nuwas_charm_count_eleven() {
     let chargen_count = abu
         .charms
         .iter()
-        .filter(|c| c.source.is_chargen_priority())
+        .filter(|c| c.source().is_chargen_priority())
         .count();
     assert_eq!(chargen_count, 10);
 }

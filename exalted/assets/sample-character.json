@@ -546,95 +546,96 @@
   },
   "charms": [
     {
-      "name": "First Awareness Excellency",
+      "kind": "lookup",
+      "id": "first-awareness-excellency",
       "source": {
         "kind": "ChargenPriority"
       },
-      "ability": "Awareness",
       "non_solar": false
     },
     {
-      "name": "First Dodge Excellency",
+      "kind": "lookup",
+      "id": "first-dodge-excellency",
       "source": {
         "kind": "ChargenPriority"
       },
-      "ability": "Dodge",
       "non_solar": false
     },
     {
-      "name": "First Stealth Excellency",
+      "kind": "lookup",
+      "id": "first-stealth-excellency",
       "source": {
         "kind": "ChargenPriority"
       },
-      "ability": "Stealth",
       "non_solar": false
     },
     {
-      "name": "First Survival Excellency",
+      "kind": "lookup",
+      "id": "first-survival-excellency",
       "source": {
         "kind": "ChargenPriority"
       },
-      "ability": "Survival",
       "non_solar": false
     },
     {
-      "name": "First Athletics Excellency",
+      "kind": "lookup",
+      "id": "first-athletics-excellency",
       "source": {
         "kind": "ChargenPriority"
       },
-      "ability": "Athletics",
       "non_solar": false
     },
     {
-      "name": "First Archery Excellency",
+      "kind": "lookup",
+      "id": "first-archery-excellency",
       "source": {
         "kind": "ChargenPriority"
       },
-      "ability": "Archery",
       "non_solar": false
     },
     {
-      "name": "First Martial Arts Excellency",
+      "kind": "lookup",
+      "id": "first-martial-arts-excellency",
       "source": {
         "kind": "ChargenPriority"
       },
-      "ability": "MartialArts",
       "non_solar": false
     },
     {
-      "name": "First Melee Excellency",
+      "kind": "lookup",
+      "id": "first-melee-excellency",
       "source": {
         "kind": "ChargenPriority"
       },
-      "ability": "Melee",
       "non_solar": false
     },
     {
-      "name": "First Thrown Excellency",
+      "kind": "lookup",
+      "id": "first-thrown-excellency",
       "source": {
         "kind": "ChargenPriority"
       },
-      "ability": "Thrown",
       "non_solar": false
     },
     {
-      "name": "First War Excellency",
+      "kind": "lookup",
+      "id": "first-war-excellency",
       "source": {
         "kind": "ChargenPriority"
       },
-      "ability": "War",
       "non_solar": false
     },
     {
-      "name": "Second Martial Arts Excellency",
+      "kind": "lookup",
+      "id": "second-martial-arts-excellency",
       "source": {
         "kind": "BonusPoints",
         "spent": 4
       },
-      "ability": "MartialArts",
       "non_solar": false
     }
   ],
+  "spells": [],
   "backgrounds": [
     {
       "kind": "Resources",
@@ -764,7 +765,9 @@
       "bashing": 0,
       "lethal": 0,
       "aggravated": 0
-    }
+    },
+    "limit": 0,
+    "virtue_channels_used": {}
   },
   "notes": {},
   "languages": [

@@ -1,11 +1,7 @@
-turn rules/charms.toml and rules/spells.toml into databases that we can look up in code
-this includes a rust type that they deserialize into, with some minimal validation
-all database entries must have unique ids
-remove any hard-coded database of spells or charms that we were using, if any
-all spells and charms that a character uses should be one of two forms:
-- a reference to a database entry by id, optionally with an extra bit of descriptive text
-- a complete one off custom that follows the same schema as the database entry
+active:
 
+
+todo:
 
 sorcery/spellcasting mechanics, rules
 

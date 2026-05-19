@@ -1,7 +1,7 @@
 pub mod anima;
 pub mod backgrounds;
-pub mod catalog;
 pub mod chargen;
+pub mod database;
 pub mod defense;
 pub mod derived;
 pub mod dice;
@@ -11,7 +11,10 @@ pub mod health;
 pub mod languages;
 pub mod xp_costs;
 
-pub use catalog::{CharmCatalog, CharmDef, DefaultCatalog};
+pub use database::{
+    ability_display_name, ability_kebab_name, database, init_database, CharmEntry, CharmType,
+    LoadError, RulesDatabase, SpellEntry,
+};
 pub use backgrounds::validate_backgrounds;
 pub use chargen::{
     ability_dot_bp_cost, attribute_dot_bp_cost, background_dot_bp_cost, charm_bp_cost,

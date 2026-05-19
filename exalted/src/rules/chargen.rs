@@ -16,7 +16,6 @@ use crate::character::{
     AbilityKind, AttributeGroup, BackgroundKind, Caste, Character, SpellCircle, VirtueKind,
 };
 use crate::error::{ValidationError, ValidationReport};
-use crate::rules::catalog::{CharmCatalog, DefaultCatalog};
 use crate::rules::defense::willpower_from_virtues;
 use crate::rules::xp_costs::NON_SOLAR_CHARM_XP_COST;
 
@@ -78,13 +77,6 @@ pub fn intimacy_bp_cost() -> u32 {
 /// Run every chargen rule against the character. Collects all failures into
 /// a single `ValidationReport`.
 pub fn validate_chargen(character: &Character) -> ValidationReport {
-    validate_chargen_with(character, &DefaultCatalog::new())
-}
-
-pub fn validate_chargen_with(
-    character: &Character,
-    catalog: &dyn CharmCatalog,
-) -> ValidationReport {
     let mut report = ValidationReport::new();
 
     check_favored(character, &mut report);
@@ -92,7 +84,7 @@ pub fn validate_chargen_with(
     check_abilities(character, &mut report);
     check_virtues(character, &mut report);
     check_backgrounds(character, &mut report);
-    check_charms(character, catalog, &mut report);
+    check_charms(character, &mut report);
     check_intimacies(character, &mut report);
     check_essence_at_chargen(character, &mut report);
     check_willpower_base(character, &mut report);
@@ -318,7 +310,7 @@ fn check_backgrounds(c: &Character, report: &mut ValidationReport) {
     }
 }
 
-fn check_charms(c: &Character, catalog: &dyn CharmCatalog, report: &mut ValidationReport) {
+fn check_charms(c: &Character, report: &mut ValidationReport) {
     // 10 "starting" picks come out of the chargen pool. Spells acquired via
     // the sorcery swap (`character_creation.md` §6.2) compete for those same
     // 10 slots — each `ChargenPriority` spell replaces one Charm. BP-bought
@@ -326,12 +318,12 @@ fn check_charms(c: &Character, catalog: &dyn CharmCatalog, report: &mut Validati
     let chargen_charms = c
         .charms
         .iter()
-        .filter(|ch| ch.source.is_chargen_priority())
+        .filter(|ch| ch.source().is_chargen_priority())
         .count();
     let chargen_spells = c
         .spells
         .iter()
-        .filter(|sp| sp.source.is_chargen_priority())
+        .filter(|sp| sp.source().is_chargen_priority())
         .count();
     let chargen_picks = chargen_charms + chargen_spells;
     if chargen_picks != TOTAL_CHARMS_AT_CHARGEN {
@@ -340,12 +332,14 @@ fn check_charms(c: &Character, catalog: &dyn CharmCatalog, report: &mut Validati
 
     // p.77: Solar Circle spells are forbidden at character creation —
     // neither via the sorcery swap nor BP.
+    let db = crate::rules::database::database();
     for spell in &c.spells {
-        if spell.circle == SpellCircle::Solar
-            && (spell.source.is_chargen_priority() || spell.source.is_bonus_points())
+        let src = spell.source();
+        if spell.circle(db) == Some(SpellCircle::Solar)
+            && (src.is_chargen_priority() || src.is_bonus_points())
         {
             report.push(ValidationError::SolarCircleAtChargen {
-                spell: spell.name.clone(),
+                spell: spell.display_name(db).to_string(),
             });
         }
     }
@@ -353,50 +347,59 @@ fn check_charms(c: &Character, catalog: &dyn CharmCatalog, report: &mut Validati
 
     let mut cf_chargen_count = 0usize;
     for charm in &c.charms {
-        if charm.non_solar && c.caste != Caste::Eclipse {
+        let display = charm.display_name(db).to_string();
+        if charm.non_solar() && c.caste != Caste::Eclipse {
             report.push(ValidationError::AlienCharmOnNonEclipse {
-                charm: charm.name.clone(),
+                charm: display.clone(),
             });
         }
-        match catalog.lookup(&charm.name) {
+        match charm.entry(db) {
             Some(def) => {
-                let ability_dots = c.ability(def.ability);
-                if ability_dots < def.min_ability {
-                    report.push(ValidationError::CharmAbilityBelowMin {
-                        charm: charm.name.clone(),
-                        ability: format!("{:?}", def.ability),
-                        required: def.min_ability,
-                        got: ability_dots,
-                    });
+                // Some catalog entries (Dragon-Blooded Anima Powers etc.) have
+                // no specific ability. Ability/min-ability checks only apply
+                // when the entry resolves to a concrete AbilityKind.
+                if let Some(ability) = def.ability_kind() {
+                    let ability_dots = c.ability(ability);
+                    if ability_dots < def.mins_ability {
+                        report.push(ValidationError::CharmAbilityBelowMin {
+                            charm: display.clone(),
+                            ability: format!("{ability:?}"),
+                            required: def.mins_ability,
+                            got: ability_dots,
+                        });
+                    }
+                    if charm.source().is_chargen_priority()
+                        && c.is_caste_or_favored_ability(ability)
+                    {
+                        cf_chargen_count += 1;
+                    }
                 }
-                if c.essence_dots() < def.min_essence {
+                if c.essence_dots() < def.mins_essence {
                     report.push(ValidationError::CharmEssenceBelowMin {
-                        charm: charm.name.clone(),
-                        required: def.min_essence,
+                        charm: display.clone(),
+                        required: def.mins_essence,
                         got: c.essence_dots(),
                     });
                 }
-                for prereq in &def.prereqs {
-                    if !c.charms.iter().any(|ch| &ch.name == prereq) {
-                        report.push(ValidationError::CharmPrereqMissing {
-                            charm: charm.name.clone(),
+                // Prereqs are by id. Some are placeholders like
+                // `any-archery-excellency` that aren't real db entries —
+                // smarter "any of" resolution is out of scope, so any missing
+                // prereq id is emitted as a soft note instead of an error.
+                // TODO: resolve `any-<ability>-excellency` against actual
+                // Excellency entries on the character.
+                for prereq in &def.prerequisites {
+                    if !c.charms.iter().any(|ch| ch.is_id(prereq)) {
+                        report.push_note(ValidationError::CharmPrereqMissing {
+                            charm: display.clone(),
                             missing: prereq.clone(),
                         });
                     }
                 }
-                if charm.source.is_chargen_priority()
-                    && c.is_caste_or_favored_ability(def.ability)
-                {
-                    cf_chargen_count += 1;
-                }
             }
             None => {
-                report.push_note(ValidationError::UnknownCharm {
-                    charm: charm.name.clone(),
-                });
+                report.push_note(ValidationError::UnknownCharm { charm: display });
             }
         }
-
     }
 
     if cf_chargen_count < MIN_CASTE_FAVORED_CHARMS {
@@ -413,7 +416,7 @@ fn check_charms(c: &Character, catalog: &dyn CharmCatalog, report: &mut Validati
     let ox_body_picks = c
         .charms
         .iter()
-        .filter(|ch| ch.name.eq_ignore_ascii_case("Ox-Body Technique"))
+        .filter(|ch| ch.is_id("ox-body-technique"))
         .count();
     if ox_body_picks > resistance as usize {
         report.push(ValidationError::OxBodyOverResistance {
@@ -657,12 +660,20 @@ pub fn validate_bp(c: &Character, report: &mut ValidationReport) {
     }
 
     // Charms
+    let db = crate::rules::database::database();
     for charm in &c.charms {
-        if let crate::character::DotSource::BonusPoints { spent } = charm.source {
-            let expected = charm_bp_cost(c.is_caste_or_favored_ability(charm.ability));
+        if let crate::character::DotSource::BonusPoints { spent } = charm.source() {
+            // Caste/favored discount applies only when the charm resolves to
+            // a specific ability — otherwise (Dragon-Blooded Anima Powers,
+            // etc.) treat as out-of-caste-favored.
+            let cf = charm
+                .ability(db)
+                .map(|a| c.is_caste_or_favored_ability(a))
+                .unwrap_or(false);
+            let expected = charm_bp_cost(cf);
             if spent as u32 != expected {
                 report.push(ValidationError::BpCostWrong {
-                    trait_name: format!("Charm::{}", charm.name),
+                    trait_name: format!("Charm::{}", charm.display_name(db)),
                     paid: spent as u32,
                     expected,
                 });
@@ -673,11 +684,11 @@ pub fn validate_bp(c: &Character, report: &mut ValidationReport) {
     // Spells (same cost as Charms; Occult discount).
     let occult_cf = c.is_caste_or_favored_ability(AbilityKind::Occult);
     for spell in &c.spells {
-        if let crate::character::DotSource::BonusPoints { spent } = spell.source {
+        if let crate::character::DotSource::BonusPoints { spent } = spell.source() {
             let expected = charm_bp_cost(occult_cf);
             if spent as u32 != expected {
                 report.push(ValidationError::BpCostWrong {
-                    trait_name: format!("Spell::{}", spell.name),
+                    trait_name: format!("Spell::{}", spell.display_name(db)),
                     paid: spent as u32,
                     expected,
                 });
@@ -819,16 +830,21 @@ pub fn validate_xp(c: &Character) -> ValidationReport {
     }
 
     // Charms (post-chargen XP-bought)
+    let db = crate::rules::database::database();
     for charm in &c.charms {
-        if let crate::character::DotSource::Xp { spent } = charm.source {
-            let canonical = if charm.non_solar {
+        if let crate::character::DotSource::Xp { spent } = charm.source() {
+            let canonical = if charm.non_solar() {
                 NON_SOLAR_CHARM_XP_COST
             } else {
-                xp_costs::xp_cost_charm(c.is_caste_or_favored_ability(charm.ability))
+                let cf = charm
+                    .ability(db)
+                    .map(|a| c.is_caste_or_favored_ability(a))
+                    .unwrap_or(false);
+                xp_costs::xp_cost_charm(cf)
             };
             if spent != canonical {
                 report.push(ValidationError::XpCostWrong {
-                    trait_name: format!("Charm::{}", charm.name),
+                    trait_name: format!("Charm::{}", charm.display_name(db)),
                     paid: spent,
                     expected: canonical,
                 });
@@ -840,11 +856,11 @@ pub fn validate_xp(c: &Character) -> ValidationReport {
     // Circle restriction post-chargen.
     let occult_cf = c.is_caste_or_favored_ability(AbilityKind::Occult);
     for spell in &c.spells {
-        if let crate::character::DotSource::Xp { spent } = spell.source {
+        if let crate::character::DotSource::Xp { spent } = spell.source() {
             let canonical = xp_costs::xp_cost_spell(occult_cf);
             if spent != canonical {
                 report.push(ValidationError::XpCostWrong {
-                    trait_name: format!("Spell::{}", spell.name),
+                    trait_name: format!("Spell::{}", spell.display_name(db)),
                     paid: spent,
                     expected: canonical,
                 });

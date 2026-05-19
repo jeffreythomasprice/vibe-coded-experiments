@@ -4,7 +4,7 @@
 use exalted::Character;
 use exalted::character::{
     AbilityKind, AttributeGroup, AttributeKind, AttributePriority, BackgroundInstance,
-    BackgroundKind, Caste, ChosenCharm, DotSource, Intimacy, IntimacyKind, KnownLanguage,
+    BackgroundKind, Caste, CharmRef, DotSource, Intimacy, IntimacyKind, KnownLanguage,
     LanguageFamily, RatedTrait, VirtueKind,
 };
 use exalted::character::identity::VirtueFlaw;
@@ -102,16 +102,16 @@ pub fn valid_dawn() -> Character {
 
     // 10 charms: 5 favored excellencies + 5 caste excellencies.
     c.charms = vec![
-        ChosenCharm::new("First Awareness Excellency", AbilityKind::Awareness, DotSource::ChargenPriority),
-        ChosenCharm::new("First Dodge Excellency", AbilityKind::Dodge, DotSource::ChargenPriority),
-        ChosenCharm::new("First Stealth Excellency", AbilityKind::Stealth, DotSource::ChargenPriority),
-        ChosenCharm::new("First Survival Excellency", AbilityKind::Survival, DotSource::ChargenPriority),
-        ChosenCharm::new("First Athletics Excellency", AbilityKind::Athletics, DotSource::ChargenPriority),
-        ChosenCharm::new("First Archery Excellency", AbilityKind::Archery, DotSource::ChargenPriority),
-        ChosenCharm::new("First Martial Arts Excellency", AbilityKind::MartialArts, DotSource::ChargenPriority),
-        ChosenCharm::new("First Melee Excellency", AbilityKind::Melee, DotSource::ChargenPriority),
-        ChosenCharm::new("First Thrown Excellency", AbilityKind::Thrown, DotSource::ChargenPriority),
-        ChosenCharm::new("First War Excellency", AbilityKind::War, DotSource::ChargenPriority),
+        CharmRef::lookup("first-awareness-excellency", DotSource::ChargenPriority),
+        CharmRef::lookup("first-dodge-excellency", DotSource::ChargenPriority),
+        CharmRef::lookup("first-stealth-excellency", DotSource::ChargenPriority),
+        CharmRef::lookup("first-survival-excellency", DotSource::ChargenPriority),
+        CharmRef::lookup("first-athletics-excellency", DotSource::ChargenPriority),
+        CharmRef::lookup("first-archery-excellency", DotSource::ChargenPriority),
+        CharmRef::lookup("first-martial-arts-excellency", DotSource::ChargenPriority),
+        CharmRef::lookup("first-melee-excellency", DotSource::ChargenPriority),
+        CharmRef::lookup("first-thrown-excellency", DotSource::ChargenPriority),
+        CharmRef::lookup("first-war-excellency", DotSource::ChargenPriority),
     ];
 
     // Intimacies: Compassion-baseline (3).
@@ -139,9 +139,8 @@ pub fn valid_dawn() -> Character {
     add_bp(c.abilities.get_mut(&AbilityKind::Melee).unwrap(), 1);
     add_bp(c.abilities.get_mut(&AbilityKind::Awareness).unwrap(), 1);
     add_bp(c.abilities.get_mut(&AbilityKind::Dodge).unwrap(), 1);
-    c.charms.push(ChosenCharm::new(
-        "Second Martial Arts Excellency",
-        AbilityKind::MartialArts,
+    c.charms.push(CharmRef::lookup(
+        "second-martial-arts-excellency",
         DotSource::BonusPoints { spent: 4 },
     ));
 

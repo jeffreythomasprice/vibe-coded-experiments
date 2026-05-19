@@ -1,7 +1,7 @@
 mod common;
 
 use common::valid_dawn;
-use exalted::character::{DotSource, Spell, SpellCircle};
+use exalted::character::{DotSource, SpellRef};
 use exalted::error::ValidationError;
 
 #[test]
@@ -9,12 +9,9 @@ fn solar_circle_spell_rejected_at_chargen() {
     let mut c = valid_dawn();
     // Replace one chargen-priority charm with a chargen-priority Solar Circle
     // spell, keeping the 10-pick budget balanced.
-    c.charms.retain(|ch| ch.name != "First Awareness Excellency");
-    c.spells.push(Spell::new(
-        "Total Annihilation",
-        SpellCircle::Solar,
-        DotSource::ChargenPriority,
-    ));
+    c.charms.retain(|ch| !ch.is_id("first-awareness-excellency"));
+    c.spells
+        .push(SpellRef::lookup("total-annihilation", DotSource::ChargenPriority));
     let report = c.validate_chargen();
     assert!(
         report
@@ -30,10 +27,9 @@ fn solar_circle_spell_rejected_at_chargen() {
 fn terrestrial_circle_spell_counts_toward_ten_picks() {
     let mut c = valid_dawn();
     // Swap a Charm for a Terrestrial spell — the count should still be 10.
-    c.charms.retain(|ch| ch.name != "First Awareness Excellency");
-    c.spells.push(Spell::new(
-        "Death of Obsidian Butterflies",
-        SpellCircle::Terrestrial,
+    c.charms.retain(|ch| !ch.is_id("first-awareness-excellency"));
+    c.spells.push(SpellRef::lookup(
+        "death-of-obsidian-butterflies",
         DotSource::ChargenPriority,
     ));
     let report = c.validate_chargen();
@@ -52,9 +48,8 @@ fn spell_without_charm_swap_breaks_pick_budget() {
     let mut c = valid_dawn();
     // Add a Terrestrial spell at ChargenPriority WITHOUT removing a charm —
     // should now report 11 picks.
-    c.spells.push(Spell::new(
-        "Death of Obsidian Butterflies",
-        SpellCircle::Terrestrial,
+    c.spells.push(SpellRef::lookup(
+        "death-of-obsidian-butterflies",
         DotSource::ChargenPriority,
     ));
     let report = c.validate_chargen();
@@ -73,9 +68,8 @@ fn bp_spell_cost_validated_against_occult_caste_favored() {
     // valid_dawn() does not have Occult as Caste or Favored (Dawn caste is
     // combat). So a BP spell should cost 5 BP. Paying 4 BP should error.
     let mut c = valid_dawn();
-    c.spells.push(Spell::new(
-        "Cirrus Skiff",
-        SpellCircle::Terrestrial,
+    c.spells.push(SpellRef::lookup(
+        "cirrus-skiff",
         DotSource::BonusPoints { spent: 4 },
     ));
     let report = c.validate_chargen();
@@ -95,9 +89,8 @@ fn xp_spell_cost_validated() {
     // XP-bought spell, wrong cost. Out-of-Occult-CF: should be 10 XP.
     c.xp_earned = 100;
     c.xp_banked = 92;
-    c.spells.push(Spell::new(
-        "Cirrus Skiff",
-        SpellCircle::Terrestrial,
+    c.spells.push(SpellRef::lookup(
+        "cirrus-skiff",
         DotSource::Xp { spent: 8 }, // Wrong: should be 10
     ));
     let report = c.validate_xp();

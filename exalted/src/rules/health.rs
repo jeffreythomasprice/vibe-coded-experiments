@@ -48,8 +48,8 @@ fn ox_body_patterns(character: &Character) -> Vec<OxBodyPattern> {
     character
         .charms
         .iter()
-        .filter(|c| c.name.eq_ignore_ascii_case("Ox-Body Technique"))
-        .map(|c| c.ox_body_pattern.unwrap_or_default())
+        .filter(|c| c.is_id("ox-body-technique"))
+        .map(|c| c.ox_body_pattern().unwrap_or_default())
         .take(resistance)
         .collect()
 }

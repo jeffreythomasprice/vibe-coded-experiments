@@ -134,7 +134,7 @@ pub enum ValidationError {
         expected: i64,
     },
 
-    #[error("note: charm {charm} not in catalog; prereqs not checked")]
+    #[error("note: charm {charm} not in rules database; prereqs not checked")]
     UnknownCharm { charm: String },
 
     #[error("charm {charm} requires prerequisite charm {missing}")]

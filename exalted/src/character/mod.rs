@@ -15,13 +15,13 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 pub use backgrounds::{BackgroundInstance, BackgroundKind};
-pub use charms::ChosenCharm;
+pub use charms::CharmRef;
 pub use equipment::{Armor, Artifact, Equipment, Possession, Weapon};
 pub use hearthstone::Hearthstone;
 pub use identity::{Anima, Appearance, Caste, Identity, VirtueFlaw};
 pub use intimacies::{Intimacy, IntimacyKind};
 pub use languages::{KnownLanguage, LanguageFamily};
-pub use spells::{Spell, SpellCircle};
+pub use spells::{SpellCircle, SpellRef};
 pub use state::{HealthDamage, MoteCommitment, MotePool, PoolState};
 pub use traits::{
     AbilityKind, AttributeGroup, AttributeKind, AttributePriority, DotPurchase, DotSource,
@@ -41,9 +41,9 @@ pub struct Character {
     pub virtue_flaw: Option<VirtueFlaw>,
     pub willpower: RatedTrait,
     pub essence: RatedTrait,
-    pub charms: Vec<ChosenCharm>,
+    pub charms: Vec<CharmRef>,
     #[serde(default)]
-    pub spells: Vec<Spell>,
+    pub spells: Vec<SpellRef>,
     #[serde(default)]
     pub backgrounds: Vec<BackgroundInstance>,
     pub intimacies: Vec<Intimacy>,

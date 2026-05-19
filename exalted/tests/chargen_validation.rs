@@ -2,7 +2,7 @@ mod common;
 
 use common::valid_dawn;
 use exalted::character::{
-    AbilityKind, BackgroundInstance, BackgroundKind, ChosenCharm, DotPurchase, DotSource,
+    AbilityKind, BackgroundInstance, BackgroundKind, CharmRef, DotPurchase, DotSource,
     KnownLanguage, LanguageFamily, RatedTrait,
 };
 use exalted::error::ValidationError;
@@ -123,7 +123,7 @@ fn bonus_point_total_mismatch_caught() {
 fn charm_count_wrong_caught() {
     let mut c = valid_dawn();
     // Remove the second-to-last chargen charm; leaves 9 ChargenPriority charms.
-    c.charms.retain(|ch| ch.name != "First Athletics Excellency");
+    c.charms.retain(|ch| !ch.is_id("first-athletics-excellency"));
     let report = c.validate_chargen();
     assert!(report.errors.iter().any(|e| matches!(
         e,
@@ -137,23 +137,23 @@ fn caste_favored_charm_minimum_caught() {
     // Replace 6 of the 10 chargen-priority C/F charms with charms outside
     // caste/favored. Lore is non-caste, non-favored.
     let replacements = [
-        "First Lore Excellency",
-        "First Medicine Excellency",
-        "First Investigation Excellency",
-        "First Occult Excellency",
-        "First Craft Excellency",
-        "First Performance Excellency",
+        "first-lore-excellency",
+        "first-medicine-excellency",
+        "first-investigation-excellency",
+        "first-occult-excellency",
+        "first-craft-excellency",
+        "first-performance-excellency",
     ];
     let mut idx = 0;
     for charm in c.charms.iter_mut() {
-        if !charm.source.is_chargen_priority() {
+        if !charm.source().is_chargen_priority() {
             continue;
         }
         if idx >= replacements.len() {
             break;
         }
         // Don't replace charms that are already non-C/F.
-        charm.name = replacements[idx].to_string();
+        *charm = CharmRef::lookup(replacements[idx], charm.source());
         idx += 1;
     }
     let report = c.validate_chargen();
@@ -185,12 +185,12 @@ fn ox_body_over_resistance_caught() {
     let mut c = valid_dawn();
     // valid_dawn has Resistance 0. Swap in an Ox-Body charm to trigger the
     // cap (got 1, max 0).
-    if let Some(charm) = c.charms.iter_mut().find(|ch| ch.name == "First War Excellency") {
-        *charm = ChosenCharm::new(
-            "Ox-Body Technique",
-            AbilityKind::Resistance,
-            DotSource::ChargenPriority,
-        );
+    if let Some(charm) = c
+        .charms
+        .iter_mut()
+        .find(|ch| ch.is_id("first-war-excellency"))
+    {
+        *charm = CharmRef::lookup("ox-body-technique", DotSource::ChargenPriority);
     }
     let report = c.validate_chargen();
     assert!(
@@ -307,27 +307,22 @@ fn tribal_tongues_counted_separately_from_families() {
 #[test]
 fn report_notes_unknown_charm_softly() {
     let mut c = valid_dawn();
-    if let Some(ch) = c.charms.iter_mut().find(|ch| ch.name == "First Lore Excellency") {
-        ch.name = "Some Made Up Charm".to_string();
-    } else {
-        // valid_dawn doesn't put a Lore Excellency at chargen; pick the last
-        // chargen charm and rename it.
-        let last = c
-            .charms
-            .iter_mut()
-            .rev()
-            .find(|ch| ch.source.is_chargen_priority())
-            .unwrap();
-        last.name = "Some Made Up Charm".to_string();
-    }
+    // Replace the last chargen-priority charm with one whose id doesn't
+    // appear in the rules database. The validator should emit a soft note,
+    // not an error, for the unknown id.
+    let last = c
+        .charms
+        .iter_mut()
+        .rev()
+        .find(|ch| ch.source().is_chargen_priority())
+        .unwrap();
+    *last = CharmRef::lookup("some-made-up-charm", DotSource::ChargenPriority);
     let report = c.validate_chargen();
-    // The unknown charm shows up as a *note*, not an error. We don't care
-    // about the rest of the report — just that this note exists.
     assert!(
         report
             .notes
             .iter()
-            .any(|n| matches!(n, ValidationError::UnknownCharm { charm } if charm == "Some Made Up Charm")),
+            .any(|n| matches!(n, ValidationError::UnknownCharm { charm } if charm == "some-made-up-charm")),
         "expected UnknownCharm note, got notes {:?}",
         report.notes
     );

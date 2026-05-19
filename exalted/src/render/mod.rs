@@ -3,10 +3,11 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
+use crate::rules::database::database;
 use crate::character::{
-    AbilityKind, AttributeGroup, AttributeKind, Caste, Character, ChosenCharm, DotSource,
+    AbilityKind, AttributeGroup, AttributeKind, Caste, Character, CharmRef, DotSource,
     Equipment, Hearthstone, IntimacyKind, KnownLanguage, LanguageFamily, MotePool, RatedTrait,
-    Spell, SpellCircle, VirtueKind,
+    SpellCircle, SpellRef, VirtueKind,
 };
 use crate::character::xp::total_xp_spent;
 use crate::rules::derived::{knockdown, movement, stunning, EXALT_HEALING_TABLE};
@@ -407,23 +408,23 @@ fn section_charms(c: &Character, out: &mut String) {
         writeln!(out).unwrap();
         return;
     }
-    // Group charms by ability for readability.
-    let mut grouped: BTreeMap<&'static str, Vec<&ChosenCharm>> = BTreeMap::new();
+    let db = database();
+    // Group charms by ability for readability. Charms without a concrete
+    // ability (anima powers etc.) land under "Other".
+    let mut grouped: BTreeMap<&'static str, Vec<&CharmRef>> = BTreeMap::new();
     for charm in &c.charms {
-        grouped
-            .entry(ability_name(charm.ability))
-            .or_default()
-            .push(charm);
+        let label = charm.ability(db).map(ability_name).unwrap_or("Other");
+        grouped.entry(label).or_default().push(charm);
     }
     for (ability, charms) in &grouped {
         writeln!(out, "### {}", ability).unwrap();
         for charm in charms {
-            let mut suffix = format!(" *[{}]*", source_tag(charm.source));
-            if charm.non_solar {
+            let mut suffix = format!(" *[{}]*", source_tag(charm.source()));
+            if charm.non_solar() {
                 suffix.push_str(" *(non-Solar)*");
             }
-            writeln!(out, "- {}{}", charm.name, suffix).unwrap();
-            if let Some(notes) = &charm.notes {
+            writeln!(out, "- {}{}", charm.display_name(db), suffix).unwrap();
+            if let Some(notes) = charm.notes() {
                 writeln!(out, "  - {}", notes).unwrap();
             }
         }
@@ -431,32 +432,40 @@ fn section_charms(c: &Character, out: &mut String) {
     writeln!(out).unwrap();
 }
 
-fn section_spells(spells: &[Spell], out: &mut String) {
+fn section_spells(spells: &[SpellRef], out: &mut String) {
     writeln!(out, "## Spells ({})", spells.len()).unwrap();
     if spells.is_empty() {
         writeln!(out, "(none)").unwrap();
         writeln!(out).unwrap();
         return;
     }
+    let db = database();
     for s in spells {
-        let circle = match s.circle {
-            SpellCircle::Terrestrial => "Terrestrial",
-            SpellCircle::Celestial => "Celestial",
-            SpellCircle::Solar => "Solar",
-        };
+        let circle_label = s.circle(db).map(spell_circle_label).unwrap_or("?");
         writeln!(
             out,
             "- **{}** ({} Circle) *[{}]*",
-            s.name,
-            circle,
-            source_tag(s.source)
+            s.display_name(db),
+            circle_label,
+            source_tag(s.source())
         )
         .unwrap();
-        if let Some(notes) = &s.notes {
+        if let Some(notes) = s.notes() {
             writeln!(out, "  - {}", notes).unwrap();
         }
     }
     writeln!(out).unwrap();
+}
+
+fn spell_circle_label(c: SpellCircle) -> &'static str {
+    match c {
+        SpellCircle::Terrestrial => "Terrestrial",
+        SpellCircle::Celestial => "Celestial",
+        SpellCircle::Solar => "Solar",
+        SpellCircle::Shadowlands => "Shadowlands",
+        SpellCircle::Void => "Void",
+        SpellCircle::Labyrinth => "Labyrinth",
+    }
 }
 
 fn background_name(kind: crate::character::BackgroundKind) -> &'static str {
@@ -824,14 +833,15 @@ fn collect_xp_purchases(c: &Character) -> Vec<(String, u32)> {
         };
         push_xp_dot_rows(&mut rows, &label, &bg.trait_);
     }
+    let db = database();
     for charm in &c.charms {
-        if let DotSource::Xp { spent } = charm.source {
-            rows.push((format!("Charm: {}", charm.name), spent));
+        if let DotSource::Xp { spent } = charm.source() {
+            rows.push((format!("Charm: {}", charm.display_name(db)), spent));
         }
     }
     for spell in &c.spells {
-        if let DotSource::Xp { spent } = spell.source {
-            rows.push((format!("Spell: {}", spell.name), spent));
+        if let DotSource::Xp { spent } = spell.source() {
+            rows.push((format!("Spell: {}", spell.display_name(db)), spent));
         }
     }
     for intimacy in &c.intimacies {
