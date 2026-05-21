@@ -292,10 +292,23 @@ fn check_virtues(c: &Character, report: &mut ValidationReport) {
 }
 
 fn check_backgrounds(c: &Character, report: &mut ValidationReport) {
+    let db = crate::rules::database::database();
+
+    // Flag any Lookup ref whose id isn't in the database. This catches typos
+    // and stale references early — the entry can't be resolved so subsequent
+    // kind-based checks would silently treat it as not-of-any-kind.
+    for bg in &c.backgrounds {
+        if let crate::character::BackgroundRef::Lookup { id, .. } = bg {
+            if db.background(id).is_none() {
+                report.push(ValidationError::UnknownBackgroundId { id: id.clone() });
+            }
+        }
+    }
+
     let chargen_total: u32 = c
         .backgrounds
         .iter()
-        .map(|b| b.trait_.chargen_priority_dots() as u32)
+        .map(|b| b.trait_().chargen_priority_dots() as u32)
         .sum();
     if chargen_total != BACKGROUND_CHARGEN_POOL {
         report.push(ValidationError::BackgroundChargenDotsWrong {
@@ -304,22 +317,23 @@ fn check_backgrounds(c: &Character, report: &mut ValidationReport) {
     }
 
     for bg in &c.backgrounds {
-        if bg.trait_.chargen_priority_dots() > 3 {
-            let label = if bg.label.is_empty() {
-                format!("{:?}", bg.kind)
+        if bg.trait_().chargen_priority_dots() > 3 {
+            let name = bg.display_name(db);
+            let label = if bg.label().is_empty() {
+                name.to_string()
             } else {
-                format!("{:?}({})", bg.kind, bg.label)
+                format!("{}({})", name, bg.label())
             };
             report.push(ValidationError::BackgroundChargenOverThree {
                 background: label,
-                got: bg.trait_.chargen_priority_dots(),
+                got: bg.trait_().chargen_priority_dots(),
             });
         }
     }
 
     let cult_creation_dots: u8 = c
         .backgrounds_of(BackgroundKind::Cult)
-        .map(|b| b.trait_.chargen_priority_dots() + b.trait_.bonus_point_dots())
+        .map(|b| b.trait_().chargen_priority_dots() + b.trait_().bonus_point_dots())
         .sum();
     if cult_creation_dots > 2 {
         report.push(ValidationError::CultOverTwoAtCreation {
@@ -666,17 +680,20 @@ pub fn validate_bp(c: &Character, report: &mut ValidationReport) {
     }
 
     // Backgrounds
+    let db = crate::rules::database::database();
     for bg in &c.backgrounds {
-        let mut rating = bg.trait_.base_dots;
-        for p in &bg.trait_.purchases {
+        let t = bg.trait_();
+        let mut rating = t.base_dots;
+        for p in &t.purchases {
             rating += 1;
             if let crate::character::DotSource::BonusPoints { spent } = p.source {
                 let expected = background_dot_bp_cost(rating);
                 if spent as u32 != expected {
-                    let label = if bg.label.is_empty() {
-                        format!("Background::{:?}", bg.kind)
+                    let name = bg.display_name(db);
+                    let label = if bg.label().is_empty() {
+                        format!("Background::{}", name)
                     } else {
-                        format!("Background::{:?}({})", bg.kind, bg.label)
+                        format!("Background::{}({})", name, bg.label())
                     };
                     report.push(ValidationError::BpCostWrong {
                         trait_name: label,

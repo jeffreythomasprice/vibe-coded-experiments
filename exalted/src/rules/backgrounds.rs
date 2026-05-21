@@ -16,7 +16,7 @@ pub fn validate_backgrounds(c: &Character, report: &mut ValidationReport) {
         .max(c.background(BackgroundKind::Influence));
 
     for followers in c.backgrounds_of(BackgroundKind::Followers) {
-        let dots = followers.trait_.dots();
+        let dots = followers.trait_().dots();
         if dots > support {
             report.push(ValidationError::FollowersWithoutSupport {
                 followers: dots,

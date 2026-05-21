@@ -4,8 +4,8 @@
 //! strings. They don't depend on any rendering format.
 
 use crate::character::{
-    AbilityKind, AttributeGroup, AttributeKind, BackgroundKind, Caste, DotSource, IntimacyKind,
-    SpellCircle, VirtueKind,
+    AbilityKind, AttributeGroup, AttributeKind, Caste, DotSource, IntimacyKind, SpellCircle,
+    VirtueKind,
 };
 
 pub(crate) fn caste_name(caste: Caste) -> &'static str {
@@ -96,23 +96,6 @@ pub(crate) fn spell_circle_label(c: SpellCircle) -> &'static str {
         SpellCircle::Shadowlands => "Shadowlands",
         SpellCircle::Void => "Void",
         SpellCircle::Labyrinth => "Labyrinth",
-    }
-}
-
-pub(crate) fn background_name(kind: BackgroundKind) -> &'static str {
-    use BackgroundKind::*;
-    match kind {
-        Allies => "Allies",
-        Artifact => "Artifact",
-        Backing => "Backing",
-        Contacts => "Contacts",
-        Cult => "Cult",
-        Familiar => "Familiar",
-        Followers => "Followers",
-        Influence => "Influence",
-        Manse => "Manse",
-        Mentor => "Mentor",
-        Resources => "Resources",
     }
 }
 

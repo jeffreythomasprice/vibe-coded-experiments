@@ -15,7 +15,7 @@
 use exalted::Character;
 use exalted::character::{
     AbilityKind, Anima, Appearance, AttributeGroup, AttributeKind, AttributePriority,
-    BackgroundInstance, BackgroundKind, Caste, CharmRef, DotSource, Identity, Intimacy,
+    BackgroundKind, BackgroundRef, Caste, CharmRef, DotSource, Identity, Intimacy,
     IntimacyKind, KnownLanguage, LanguageFamily, RatedTrait, Specialty, VirtueKind,
 };
 use exalted::character::identity::VirtueFlaw;
@@ -137,20 +137,20 @@ fn abu_nuwas() -> Character {
         backing.add_chargen();
     }
     c.backgrounds
-        .push(BackgroundInstance::new(BackgroundKind::Backing, "", backing));
+        .push(BackgroundRef::lookup_kind(BackgroundKind::Backing, backing));
 
     let mut resources = RatedTrait::with_base(0);
     for _ in 0..3 {
         resources.add_chargen();
     }
     c.backgrounds
-        .push(BackgroundInstance::new(BackgroundKind::Resources, "", resources));
+        .push(BackgroundRef::lookup_kind(BackgroundKind::Resources, resources));
 
     let mut artifact = RatedTrait::with_base(0);
     artifact.add_chargen();
     artifact.add_bonus(1);
     c.backgrounds
-        .push(BackgroundInstance::new(BackgroundKind::Artifact, "", artifact));
+        .push(BackgroundRef::lookup_kind(BackgroundKind::Artifact, artifact));
 
     // Manse 4 from BP: 1+1+1+2 BP for dots 1,2,3,4.
     let mut manse = RatedTrait::with_base(0);
@@ -159,7 +159,7 @@ fn abu_nuwas() -> Character {
     manse.add_bonus(1);
     manse.add_bonus(2);
     c.backgrounds
-        .push(BackgroundInstance::new(BackgroundKind::Manse, "", manse));
+        .push(BackgroundRef::lookup_kind(BackgroundKind::Manse, manse));
 
     // Charms: 10 from chargen + 1 from BP (Flawless Pickpocketing — 4 BP, Caste).
     // The rulebook lists "Keen Hearing and Touch Technique" as a separate

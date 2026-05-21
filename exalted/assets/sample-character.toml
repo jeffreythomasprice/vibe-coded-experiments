@@ -581,9 +581,9 @@ kind = "BonusPoints"
 spent = 4
 
 [[backgrounds]]
-kind = "Resources"
+kind_tag = "lookup"
+id = "resources"
 label = ""
-description = ""
 
 [backgrounds.trait]
 base_dots = 0
@@ -611,9 +611,9 @@ kind = "BonusPoints"
 spent = 2
 
 [[backgrounds]]
-kind = "Mentor"
+kind_tag = "lookup"
+id = "mentor"
 label = ""
-description = ""
 
 [backgrounds.trait]
 base_dots = 0
@@ -636,9 +636,9 @@ kind = "BonusPoints"
 spent = 1
 
 [[backgrounds]]
-kind = "Contacts"
+kind_tag = "lookup"
+id = "contacts"
 label = ""
-description = ""
 
 [backgrounds.trait]
 base_dots = 0

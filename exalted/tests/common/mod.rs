@@ -3,9 +3,9 @@
 
 use exalted::Character;
 use exalted::character::{
-    AbilityKind, AttributeGroup, AttributeKind, AttributePriority, BackgroundInstance,
-    BackgroundKind, Caste, CharmRef, DotSource, Intimacy, IntimacyKind, KnownLanguage,
-    LanguageFamily, RatedTrait, VirtueKind,
+    AbilityKind, AttributeGroup, AttributeKind, AttributePriority, BackgroundKind, BackgroundRef,
+    Caste, CharmRef, DotSource, Intimacy, IntimacyKind, KnownLanguage, LanguageFamily, RatedTrait,
+    VirtueKind,
 };
 use exalted::character::identity::VirtueFlaw;
 
@@ -82,7 +82,7 @@ pub fn valid_dawn() -> Character {
     }
     resources.add_bonus(2);
     c.backgrounds
-        .push(BackgroundInstance::new(BackgroundKind::Resources, "", resources));
+        .push(BackgroundRef::lookup_kind(BackgroundKind::Resources, resources));
 
     let mut mentor = RatedTrait::with_base(0);
     for _ in 0..2 {
@@ -90,7 +90,7 @@ pub fn valid_dawn() -> Character {
     }
     mentor.add_bonus(1);
     c.backgrounds
-        .push(BackgroundInstance::new(BackgroundKind::Mentor, "", mentor));
+        .push(BackgroundRef::lookup_kind(BackgroundKind::Mentor, mentor));
 
     let mut contacts = RatedTrait::with_base(0);
     for _ in 0..2 {
@@ -98,7 +98,7 @@ pub fn valid_dawn() -> Character {
     }
     contacts.add_bonus(1);
     c.backgrounds
-        .push(BackgroundInstance::new(BackgroundKind::Contacts, "", contacts));
+        .push(BackgroundRef::lookup_kind(BackgroundKind::Contacts, contacts));
 
     // 10 charms: 5 favored excellencies + 5 caste excellencies.
     c.charms = vec![

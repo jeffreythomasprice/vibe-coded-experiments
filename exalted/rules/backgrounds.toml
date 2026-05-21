@@ -1,0 +1,157 @@
+[[background]]
+id = "allies"
+name = "Allies"
+kind = "Allies"
+source = "Exalted 2E"
+pages = "112"
+description = """Allies are the character's close friends and trusted companions. Unlike followers, allies are never extras. Most are either Exalted (of any type), small gods, Fair Folk, or other magical beings, typically at least as powerful as one of the Terrestrial Exalted. Alternatively, they might be exotic beings such as intelligent animals, or exceptionally skilled mortals (masterful thaumaturges, wealthy nobles, crime lords, Guild factors). Allies are independent people with their own lives and goals; if the character only ever asks for aid and never reciprocates, they will soon desert her. They will not risk their lives lightly.
+
+Trait Effects: Each dot typically represents one ally roughly equal in power to a starting character. More powerful allies require higher ratings. Depending on the rating and the power of the allies involved, a character can have between one and five allies."""
+
+[[background]]
+id = "artifact"
+name = "Artifact"
+kind = "Artifact"
+source = "Exalted 2E"
+pages = "112-113"
+description = """In both the First Age and the modern day, Exalts created all manner of items of power — magical weapons and armor, flying vehicles, enchanted disguises. A character with the Artifact Background possesses one or more such items. Most First Age artifacts were lost or destroyed centuries ago, and much of the knowledge of how to make them has been lost as well; today, all artifacts are rare and precious.
+
+Trait Effects: A character can purchase this Background multiple times, once for each artifact she owns. Each artifact has a rating from 1 to 5; that rating is the Background cost of that artifact. Artifacts of rating 4 or 5 are exceptionally rare and will be greatly coveted by other Exalts and gods. For details on specific artifacts, see Chapter Eight."""
+
+[[background]]
+id = "backing"
+name = "Backing"
+kind = "Backing"
+source = "Exalted 2E"
+pages = "113"
+description = """The character is an important member of an organization — a government, an army, the Guild, a powerful crime syndicate such as the Lintha Family. The higher her Backing, the higher her rank. At the Storyteller's discretion, she may take Backing multiple times to represent rank in different organizations. High Backing brings responsibility for many people and resources; neglecting one's duties can lead to demotion — or worse.
+
+Trait Effects:
+- 1: Lower officer or minor functionary.
+- 2: Mid-level officer, head of a small department, or a similar intermediate position.
+- 3: Moderately powerful with many people working under her.
+- 4: Extremely powerful — only one or two rungs below the people at the top.
+- 5: One of the leaders of her organization (general, admiral, Guild factor, Lintha Family father/mother, etc.)."""
+
+[[background]]
+id = "contacts"
+name = "Contacts"
+kind = "Contacts"
+source = "Exalted 2E"
+pages = "113"
+description = """Beyond friends and allies, the character knows people throughout various sectors of society. Contacts use their talents, information or resources to help her, but they always expect a favor in return — a service, a trade, payment. They aid her out of mutual self-interest, not love or loyalty.
+
+Each dot represents both major and minor contacts. Major contacts are named individuals with positions that make them useful: a Guild factor, a high-ranking officer, a powerful courtier, a small god, a Dynast of the Realm. Minor contacts represent the character's overall connectedness — useful for finding people willing to talk, but not personally known.
+
+Trait Effects: Each dot provides one major contact and one additional die for locating minor ones."""
+
+[[background]]
+id = "cult"
+name = "Cult"
+kind = "Cult"
+source = "Exalted 2E"
+pages = "114"
+description = """Gods know that worship grants them power. The character has learned this and has worshipers who honor her as their patron. Whether they love or fear her matters less than that they make regular offerings and prayers. Cults built on love endure persecution better than those built on fear. Active aid grows the cult; the Wyld Hunt actively destroys Solar cults.
+
+Trait Effects:
+- 1: A small but devoted cult; +1 temporary Willpower each morning.
+- 2: One large community or several small ones; +1 Willpower/morning, +2 motes/hour.
+- 3: Venerated across a large region; +1 Willpower per 24h reflexively, +3 motes/hour.
+- 4: An entire nation honors her; +1 Willpower per 12h, +4 motes/hour. The Wyld Hunt is coming.
+- 5: One of the four quarters of Creation worships her; +1 Willpower per 6h, +6 motes/hour. The Realm will mobilize.
+
+Note: No Solar Exalt can start a series with a Cult rating higher than 2."""
+
+[[background]]
+id = "familiar"
+name = "Familiar"
+kind = "Familiar"
+source = "Exalted 2E"
+pages = "114"
+description = """Creation is filled with exotic beasts — intelligent animals, semi-intelligent Haltan pets, small gods in animal form. Some animals sensitive to Essence are drawn to magical beings like the Exalted. The familiar draws on the character's Essence to supplement its own; it will not age or die until the character does.
+
+Trait Effects:
+- 1: A small animal (cat, stray dog) offering companionship and warning of danger.
+- 2: Impressive pet (wolf, eagle) or preternaturally intelligent small pet that understands posture and expression and can perform simple tasks.
+- 3: A powerful or dangerous pet (tiger, dire wolf), or a small but child-intelligent animal. While touching the character, makes 5 extra motes available (regenerates after personal Essence). Senses can be shared within 100 yards.
+- 4: A larger pet (eagle, wolf) with all the properties of a Familiar 3 small animal.
+- 5: A powerful or dangerous pet with all the properties of a Familiar 3 small animal."""
+
+[[background]]
+id = "followers"
+name = "Followers"
+kind = "Followers"
+source = "Exalted 2E"
+pages = "114-115"
+description = """The character has one or more loyal assistants, oathbound warriors, devoted acolytes, or similar companions, exceptionally devoted to her. Followers are almost always extras; though they can be as competent as elite soldiers, they are never Exalted, small gods, or other magical beings. Poor treatment or neglect erodes loyalty; care and respect produces followers who will lay down their lives. The character must have Resources, Backing, or Influence equal to her dots in Followers to support them all.
+
+Trait Effects:
+- 1: Up to 5 followers.
+- 2: 20 followers.
+- 3: A loyal band of 100.
+- 4: A small army of 1,000.
+- 5: A mighty force of 10,000."""
+
+[[background]]
+id = "influence"
+name = "Influence"
+kind = "Influence"
+source = "Exalted 2E"
+pages = "115"
+description = """In time, almost every Exalt becomes famous. Influence reflects the character's pull and status in society — her political power, whether derived from office, entertainment, religion, or openly living as one of the Chosen. People pay attention to her words and deeds. Influence can garner favors, promote a personal agenda, or simply bask in fame. It does not cover rank in any specific organization — that is Backing.
+
+Trait Effects:
+- 1: Some local fame in her town or district.
+- 2: Well-known in her home city-state or satrapy.
+- 3: Famous across neighboring states; the Dragon-Blooded have heard of her.
+- 4: Her words carry weight throughout much of an entire quarter of Creation; she might rule a town or small city. The Wyld Hunt is coming.
+- 5: Rules an entire nation or has great pull across several. The Realm will move against her."""
+
+[[background]]
+id = "manse"
+name = "Manse"
+kind = "Manse"
+source = "Exalted 2E"
+pages = "115"
+description = """Dragon lines of Essence run through Creation. Where this energy pools naturally, demesnes form; when occult architecture controls and focuses one, it becomes a manse. Characters inside an attuned manse or demesne regain 4× the site's level in motes per hour. Controlling a demesne, a character can build a manse to channel its power into a hearthstone — a crystal the size of a chicken egg. Hearthstones let the Exalt regain Essence at twice the Background level even away from the manse, and grant special powers when set into a specific artifact. Manse can be taken multiple times to control more than one site.
+
+Trait Effects:
+- 1: A level-1 manse or level-2 demesne.
+- 2: A level-2 manse or level-3 demesne.
+- 3: A level-3 manse or level-4 demesne.
+- 4: A level-4 manse or level-5 demesne.
+- 5: A level-5 manse."""
+
+[[background]]
+id = "mentor"
+name = "Mentor"
+kind = "Mentor"
+source = "Exalted 2E"
+pages = "115-116"
+description = """Most Chosen meet their new life without a guide; the character is one of the lucky few who found one. The mentor is patron, teacher, defender and friend, but expects to be obeyed — or at least listened to. The character is her mentor's student, ward or apprentice, not her equal. The relationship can be a fertile source of conflict and roleplaying.
+
+A mentor may be one of the Exalted, an important prince, a Guild factor, a god, or one of the Fair Folk. In addition to advice and assistance she may teach Abilities, Charms, and possibly sorcery, and occasionally save the character from dire fates. Asking too often annoys mentors and invites discipline.
+
+Trait Effects:
+- 1: Just a bit more worldly and wise than the character.
+- 2: A figure of some note, but with little time for the character.
+- 3: Wise, influential, considerably more powerful than the character.
+- 4: An exceedingly important individual whose words and deeds shape nations.
+- 5: Exceedingly powerful, takes great interest in the character's welfare, but expects obeisance and greatness — and likely has powerful enemies who will attack the character to get to her."""
+
+[[background]]
+id = "resources"
+name = "Resources"
+kind = "Resources"
+source = "Exalted 2E"
+pages = "116"
+description = """Resources represents the character's wealth — land, factories, mines, shipping shares, gold and jewels. It includes property, clothing and basic equipment, and shows how easily she can acquire more. Possessions can be sold for money, though doing so can take time. Each dot conveys an income beyond any gear or wealth gained during play; the source (rents, sharecropping, stipend, mercantile interest, tax farming) must be specified and can be increased, reduced, or cut off based on events.
+
+Trait Effects:
+- 1: An apartment or hut; possibly a shoddy suit of armor and a notched weapon. Meat once a week; a family often goes hungry.
+- 2: A comfortable cottage or apartment; perhaps a poor riding animal, light armor and a weapon. Family eats filling, if boring, meals; alone the character can eat meat every other day.
+- 3: A townhouse or prosperous farm; one fine riding animal plus a backup. Any armor and any two weapons. A domestic servant or two; family never goes hungry.
+- 4: Exceedingly wealthy — a townhouse and country estate, the finest arms, a fine mount. Possibly a private yacht and a dozen servants. The family will never know hunger or want for medical care.
+- 5: A fabulously wealthy merchant prince, bandit king, mercenary lord, or potentate. Commands or could rent an army. At least one excellent ship; an army of attentive servants.
+
+Note: Almost everyone in Creation has at least one dot in this Background. Those who do not are both homeless and destitute."""

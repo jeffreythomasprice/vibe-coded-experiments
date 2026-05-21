@@ -2,9 +2,12 @@
 //! health track, limit track, caste/favored marks, willpower-temp track,
 //! virtue channels, and the personal/peripheral essence mote pools.
 
+use std::collections::{HashMap, HashSet};
+
 use lopdf::Document;
 
 use crate::character::{AbilityKind, Character, VirtueKind};
+use crate::rules::health::{health_track, HealthLevelKind};
 
 use super::acroform::{set_checkbox, FieldIndex};
 use super::dot_map;
@@ -67,11 +70,56 @@ fn fill_health_track(
     index: &FieldIndex,
     c: &Character,
 ) -> Result<(), PdfRenderError> {
+    let track = health_track(c);
     let damage = c.pool_state.health_damage.total() as usize;
-    for (i, field) in dot_map::HEALTH_TRACK.iter().enumerate() {
-        if index.has(field) {
-            set_checkbox(doc, index, field, i < damage)?;
+
+    let mut cursor: HashMap<(i8, HealthLevelKind), usize> = HashMap::new();
+    let mut touched: HashSet<&'static str> = HashSet::new();
+    let mut dropped_dying: usize = 0;
+    let mut overflow: HashMap<(i8, HealthLevelKind), usize> = HashMap::new();
+
+    for (i, level) in track.iter().enumerate() {
+        let bucket = (level.penalty, level.kind);
+        let n = cursor.entry(bucket).or_insert(0);
+
+        if level.kind == HealthLevelKind::Dying {
+            dropped_dying += 1;
+            *n += 1;
+            continue;
         }
+
+        let slots = dot_map::health_slots(level.penalty, level.kind);
+        if let Some(field) = slots.get(*n).copied() {
+            if index.has(field) {
+                set_checkbox(doc, index, field, i < damage)?;
+                touched.insert(field);
+            }
+        } else {
+            *overflow.entry(bucket).or_insert(0) += 1;
+        }
+        *n += 1;
+    }
+
+    // Clear any slots the per-bucket walk didn't write to. Without this,
+    // a stale check from the template (or a future re-render) could leak
+    // through, since different Ox-Body layouts use different slot subsets.
+    for field in dot_map::ALL_HEALTH_SLOTS.iter() {
+        if !touched.contains(field) && index.has(field) {
+            set_checkbox(doc, index, field, false)?;
+        }
+    }
+
+    if dropped_dying > 0 {
+        eprintln!(
+            "warning: {} Dying health row(s) not rendered (PDF template has no slots for them)",
+            dropped_dying
+        );
+    }
+    for ((penalty, kind), n) in overflow {
+        eprintln!(
+            "warning: {} health level(s) at penalty {} kind {:?} could not be rendered (PDF row is full)",
+            n, penalty, kind
+        );
     }
     Ok(())
 }

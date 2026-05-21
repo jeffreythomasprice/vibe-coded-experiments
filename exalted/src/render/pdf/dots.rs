@@ -146,7 +146,7 @@ fn fill_background_dots(
         .take(dot_map::BACKGROUND_SLOT_DOTS.len())
         .enumerate()
     {
-        let rating = bg.trait_.dots() as usize;
+        let rating = bg.trait_().dots() as usize;
         let row = &dot_map::BACKGROUND_SLOT_DOTS[slot];
         for (i, field) in row.iter().enumerate() {
             if index.has(field) {

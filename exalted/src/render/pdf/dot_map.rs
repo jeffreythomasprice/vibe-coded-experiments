@@ -49,6 +49,7 @@
 //! coordinate dump if the template ever changes.
 
 use crate::character::{AbilityKind, AttributeKind, VirtueKind};
+use crate::rules::health::HealthLevelKind;
 
 // ---------------------------------------------------------------------------
 // Attributes — dot1..dot45
@@ -168,6 +169,15 @@ pub(super) const fn specialty_caste_mark(row: usize) -> Option<&'static str> {
 
 pub(super) const fn virtue_dots(kind: VirtueKind) -> [&'static str; 5] {
     match kind {
+        VirtueKind::Compassion => ["xtdot1", "xtdot2", "xtdot3", "xtdot4", "xtdot5"],
+        VirtueKind::Conviction => ["xtdot11", "xtdot12", "xtdot13", "xtdot14", "xtdot15"],
+        VirtueKind::Temperance => ["xtdot6", "xtdot7", "xtdot8", "xtdot9", "xtdot10"],
+        VirtueKind::Valor => ["xtdot16", "xtdot17", "xtdot18", "xtdot19", "xtdot20"],
+    }
+}
+
+pub(super) const fn virtue_channels(kind: VirtueKind) -> [&'static str; 5] {
+    match kind {
         VirtueKind::Compassion => [
             "virtuecheck1",
             "virtuecheck2",
@@ -176,18 +186,18 @@ pub(super) const fn virtue_dots(kind: VirtueKind) -> [&'static str; 5] {
             "virtuecheck5",
         ],
         VirtueKind::Conviction => [
-            "virtuecheck6",
-            "virtuecheck7",
-            "virtuecheck8",
-            "virtuecheck9",
-            "virtuecheck10",
-        ],
-        VirtueKind::Temperance => [
             "virtuecheck11",
             "virtuecheck12",
             "virtuecheck13",
             "virtuecheck14",
             "virtuecheck15",
+        ],
+        VirtueKind::Temperance => [
+            "virtuecheck6",
+            "virtuecheck7",
+            "virtuecheck8",
+            "virtuecheck9",
+            "virtuecheck10",
         ],
         VirtueKind::Valor => [
             "virtuecheck16",
@@ -196,15 +206,6 @@ pub(super) const fn virtue_dots(kind: VirtueKind) -> [&'static str; 5] {
             "virtuecheck19",
             "virtuecheck20",
         ],
-    }
-}
-
-pub(super) const fn virtue_channels(kind: VirtueKind) -> [&'static str; 5] {
-    match kind {
-        VirtueKind::Compassion => ["xtdot1", "xtdot2", "xtdot3", "xtdot4", "xtdot5"],
-        VirtueKind::Conviction => ["xtdot6", "xtdot7", "xtdot8", "xtdot9", "xtdot10"],
-        VirtueKind::Temperance => ["xtdot11", "xtdot12", "xtdot13", "xtdot14", "xtdot15"],
-        VirtueKind::Valor => ["xtdot16", "xtdot17", "xtdot18", "xtdot19", "xtdot20"],
     }
 }
 
@@ -264,10 +265,50 @@ pub(super) const LIMIT_TRACK: [&str; 10] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Health (22 boxes)
+// Health (22 boxes, grouped by wound penalty / kind)
+//
+// The MrGone sheet lays out the health track in semantic rows: each row
+// holds the *default* level(s) at a given penalty plus reserved slots for
+// Ox-Body Technique extras. `-2` is split visually across two PDF rows
+// (5+5) but is one logical bucket. There are no PDF slots for Dying rows.
 // ---------------------------------------------------------------------------
 
-pub(super) const HEALTH_TRACK: [&str; 22] = [
+pub(super) const HEALTH_SLOTS_ZERO: [&str; 5] = [
+    "healthcheck1",
+    "healthcheck2",
+    "healthcheck3",
+    "healthcheck4",
+    "healthcheck5",
+];
+
+pub(super) const HEALTH_SLOTS_MINUS_ONE: [&str; 5] = [
+    "healthcheck6",
+    "healthcheck7",
+    "healthcheck8",
+    "healthcheck9",
+    "healthcheck10",
+];
+
+pub(super) const HEALTH_SLOTS_MINUS_TWO: [&str; 10] = [
+    "healthcheck11",
+    "healthcheck12",
+    "healthcheck13",
+    "healthcheck14",
+    "healthcheck15",
+    "healthcheck16",
+    "healthcheck17",
+    "healthcheck18",
+    "healthcheck19",
+    "healthcheck20",
+];
+
+pub(super) const HEALTH_SLOTS_MINUS_FOUR: [&str; 1] = ["healthcheck21"];
+
+pub(super) const HEALTH_SLOTS_INCAP: [&str; 1] = ["healthcheck22"];
+
+/// Every PDF health checkbox in template order. Used by the "fields exist"
+/// test and by the fill code's clear-unused pass.
+pub(super) const ALL_HEALTH_SLOTS: [&str; 22] = [
     "healthcheck1",
     "healthcheck2",
     "healthcheck3",
@@ -291,6 +332,20 @@ pub(super) const HEALTH_TRACK: [&str; 22] = [
     "healthcheck21",
     "healthcheck22",
 ];
+
+/// Slots available for a given `(penalty, kind)` bucket. Returns an empty
+/// slice for buckets the PDF can't render (Dying rows).
+pub(super) fn health_slots(penalty: i8, kind: HealthLevelKind) -> &'static [&'static str] {
+    match (kind, penalty) {
+        (HealthLevelKind::Wound, 0) => &HEALTH_SLOTS_ZERO,
+        (HealthLevelKind::Wound, -1) => &HEALTH_SLOTS_MINUS_ONE,
+        (HealthLevelKind::Wound, -2) => &HEALTH_SLOTS_MINUS_TWO,
+        (HealthLevelKind::Wound, -4) => &HEALTH_SLOTS_MINUS_FOUR,
+        (HealthLevelKind::Wound, _) => &[],
+        (HealthLevelKind::Incap, _) => &HEALTH_SLOTS_INCAP,
+        (HealthLevelKind::Dying, _) => &[],
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Backgrounds — 8 slots × 5 dots (dot241..dot280)
@@ -406,9 +461,29 @@ mod tests {
         for f in &LIMIT_TRACK {
             check(f);
         }
-        for f in &HEALTH_TRACK {
+        for f in &ALL_HEALTH_SLOTS {
             check(f);
         }
+    }
+
+    #[test]
+    fn health_buckets_partition_all_health_slots() {
+        let mut bucketed: Vec<&'static str> = Vec::new();
+        bucketed.extend_from_slice(&HEALTH_SLOTS_ZERO);
+        bucketed.extend_from_slice(&HEALTH_SLOTS_MINUS_ONE);
+        bucketed.extend_from_slice(&HEALTH_SLOTS_MINUS_TWO);
+        bucketed.extend_from_slice(&HEALTH_SLOTS_MINUS_FOUR);
+        bucketed.extend_from_slice(&HEALTH_SLOTS_INCAP);
+
+        let bucketed_set: HashSet<&'static str> = bucketed.iter().copied().collect();
+        let all_set: HashSet<&'static str> = ALL_HEALTH_SLOTS.iter().copied().collect();
+
+        assert_eq!(
+            bucketed.len(),
+            bucketed_set.len(),
+            "duplicate field across health buckets"
+        );
+        assert_eq!(bucketed_set, all_set, "buckets do not cover ALL_HEALTH_SLOTS");
     }
 
     #[test]
@@ -456,7 +531,7 @@ mod tests {
             .chain(WILLPOWER_TEMP.iter())
             .chain(ESSENCE_DOTS.iter())
             .chain(LIMIT_TRACK.iter())
-            .chain(HEALTH_TRACK.iter())
+            .chain(ALL_HEALTH_SLOTS.iter())
         {
             probe(f);
         }

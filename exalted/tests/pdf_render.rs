@@ -293,3 +293,118 @@ fn specialty_caste_mark_tracks_parent_ability() {
     let lore_row = read_checkbox(&doc, "skillscheck27").expect("row 2 C/F box");
     assert_eq!(lore_row, "Off", "Lore specialty should not be C/F-marked");
 }
+
+// ---------------------------------------------------------------------------
+// Health track. Slots are grouped by penalty: -0 is `healthcheck1..5`,
+// -1 is `healthcheck6..10`, -2 is `healthcheck11..20`, -4 is `healthcheck21`,
+// Incap is `healthcheck22`. Each bucket holds the default level(s) at the
+// low end and reserves the rest for Ox-Body Technique purchases.
+// ---------------------------------------------------------------------------
+
+fn assert_health_checks(doc: &Document, expected_checked: &[&str]) {
+    use std::collections::HashSet;
+    let want: HashSet<&str> = expected_checked.iter().copied().collect();
+    for n in 1..=22 {
+        let field = format!("healthcheck{}", n);
+        let v = read_checkbox(doc, &field).unwrap_or_else(|| {
+            panic!("{} missing from rendered PDF", field);
+        });
+        let expected = if want.contains(field.as_str()) { "Yes" } else { "Off" };
+        assert_eq!(
+            v, expected,
+            "{}: expected {}, got {}", field, expected, v
+        );
+    }
+}
+
+#[test]
+fn health_track_no_ox_body_three_damage() {
+    // Base track: -0, -1, -1, -2, -2, -4, Incap. With 3 damage the first
+    // three wound levels (the -0 and the two -1s) should be checked.
+    let doc = render_with(|c| {
+        c.pool_state.health_damage.bashing = 3;
+    });
+    assert_health_checks(&doc, &["healthcheck1", "healthcheck6", "healthcheck7"]);
+}
+
+#[test]
+fn health_track_no_ox_body_overflows_into_incap() {
+    // 8 damage > 7 base levels: fills every base wound row plus Incap.
+    // The 8th point of damage corresponds to the first Dying row, which
+    // has no PDF slot.
+    let doc = render_with(|c| {
+        c.pool_state.health_damage.bashing = 8;
+    });
+    assert_health_checks(
+        &doc,
+        &[
+            "healthcheck1",  // -0
+            "healthcheck6",  // -1
+            "healthcheck7",  // -1
+            "healthcheck11", // -2
+            "healthcheck12", // -2
+            "healthcheck21", // -4
+            "healthcheck22", // Incap
+        ],
+    );
+}
+
+#[test]
+fn health_track_ox_body_one_zero_extends_minus_zero_row() {
+    // One OneZero Ox-Body purchase adds a second -0 level. With 2 damage
+    // both -0 slots should be checked and the -1 row should stay empty.
+    use exalted::character::{CharmRef, DotSource};
+    use exalted::rules::health::OxBodyPattern;
+
+    let doc = render_with(|c| {
+        // Resistance must be ≥ 1 to permit one Ox-Body purchase.
+        c.abilities
+            .get_mut(&AbilityKind::Resistance)
+            .unwrap()
+            .add_chargen();
+        c.charms.push(CharmRef::Lookup {
+            id: "ox-body-technique".to_string(),
+            source: DotSource::BonusPoints { spent: 4 },
+            non_solar: false,
+            notes: None,
+            ox_body_pattern: Some(OxBodyPattern::OneZero),
+        });
+        c.pool_state.health_damage.bashing = 2;
+    });
+    assert_health_checks(&doc, &["healthcheck1", "healthcheck2"]);
+}
+
+#[test]
+fn health_track_ox_body_minus_one_two_minus_two_routes_by_penalty() {
+    // OneMinusOneTwoMinusTwo adds one -1 and two -2 levels. With 5 damage
+    // the order is: -0, -1, -1, -1 (ox-body extra), -2 — i.e. the
+    // ox-body -1 fills the third -1 slot (healthcheck8) and the first
+    // damage in the -2 row hits healthcheck11.
+    use exalted::character::{CharmRef, DotSource};
+    use exalted::rules::health::OxBodyPattern;
+
+    let doc = render_with(|c| {
+        c.abilities
+            .get_mut(&AbilityKind::Resistance)
+            .unwrap()
+            .add_chargen();
+        c.charms.push(CharmRef::Lookup {
+            id: "ox-body-technique".to_string(),
+            source: DotSource::BonusPoints { spent: 4 },
+            non_solar: false,
+            notes: None,
+            ox_body_pattern: Some(OxBodyPattern::OneMinusOneTwoMinusTwo),
+        });
+        c.pool_state.health_damage.bashing = 5;
+    });
+    assert_health_checks(
+        &doc,
+        &[
+            "healthcheck1",  // -0
+            "healthcheck6",  // base -1
+            "healthcheck7",  // base -1
+            "healthcheck8",  // ox-body -1
+            "healthcheck11", // base -2
+        ],
+    );
+}

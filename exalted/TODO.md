@@ -6,17 +6,12 @@ compare output:
 code /tmp/exalted-dots.txt
 evince assets/character-sheet/Exalted2ndED4-Page_TheSolarsV2_Editable.pdf
 
-
-next up is backgrounds
-page 1, row 14
-
+todo: page 2
+todo: page 4
 
 
 
 todo:
-
-backgrounds
-
 
 make sure we handle favored abilities correctly
 e.g. Edd telling Daz that, "you have one more Favored ability to check off, since you only picked 4 out of 5."

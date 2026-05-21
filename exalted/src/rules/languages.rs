@@ -62,8 +62,8 @@ pub fn validate_languages(c: &Character, report: &mut ValidationReport) {
     if c.languages.iter().any(|l| l.family == LanguageFamily::GuildCant) {
         let guild_backing = c
             .backgrounds_of(BackgroundKind::Backing)
-            .filter(|b| b.label.eq_ignore_ascii_case("guild"))
-            .map(|b| b.trait_.dots())
+            .filter(|b| b.label().eq_ignore_ascii_case("guild"))
+            .map(|b| b.trait_().dots())
             .max()
             .unwrap_or(0);
         if guild_backing < 2 {

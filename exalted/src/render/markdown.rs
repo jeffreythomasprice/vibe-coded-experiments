@@ -14,8 +14,8 @@ use crate::rules::essence::{personal_essence_max, peripheral_essence_max};
 use crate::rules::health::{health_track, wound_penalty, HealthLevelKind};
 
 use super::names::{
-    ability_name, attr_name, background_name, caste_name, group_name, intimacy_kind,
-    source_tag, spell_circle_label, virtue_name,
+    ability_name, attr_name, caste_name, group_name, intimacy_kind, source_tag,
+    spell_circle_label, virtue_name,
 };
 
 pub fn character_to_markdown(c: &Character) -> String {
@@ -378,18 +378,19 @@ fn section_backgrounds(c: &Character, out: &mut String) {
         writeln!(out).unwrap();
         return;
     }
-    writeln!(out, "| Background | Label | Dots | Description |").unwrap();
+    let db = database();
+    writeln!(out, "| Background | Label | Dots | Notes |").unwrap();
     writeln!(out, "|---|---|---|---|").unwrap();
     for bg in &c.backgrounds {
-        let n = bg.trait_.dots();
+        let n = bg.trait_().dots();
         writeln!(
             out,
             "| {} | {} | {} ({}) | {} |",
-            background_name(bg.kind),
-            if bg.label.is_empty() { "—" } else { &bg.label },
+            bg.display_name(db),
+            if bg.label().is_empty() { "—" } else { bg.label() },
             dots(n, 5),
             n,
-            bg.description,
+            bg.notes().unwrap_or(""),
         )
         .unwrap();
     }
@@ -701,15 +702,15 @@ fn collect_xp_purchases(c: &Character) -> Vec<(String, u32)> {
     }
     push_xp_dot_rows(&mut rows, "Willpower", &c.willpower);
     push_xp_dot_rows(&mut rows, "Essence", &c.essence);
-    for bg in &c.backgrounds {
-        let label = if bg.label.is_empty() {
-            background_name(bg.kind).to_string()
-        } else {
-            format!("{} ({})", background_name(bg.kind), bg.label)
-        };
-        push_xp_dot_rows(&mut rows, &label, &bg.trait_);
-    }
     let db = database();
+    for bg in &c.backgrounds {
+        let label = if bg.label().is_empty() {
+            bg.display_name(db).to_string()
+        } else {
+            format!("{} ({})", bg.display_name(db), bg.label())
+        };
+        push_xp_dot_rows(&mut rows, &label, bg.trait_());
+    }
     for charm in &c.charms {
         if let DotSource::Xp { spent } = charm.source() {
             rows.push((format!("Charm: {}", charm.display_name(db)), spent));

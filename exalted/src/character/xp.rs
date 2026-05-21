@@ -30,7 +30,7 @@ pub fn total_xp_spent(c: &Character) -> u32 {
         total += intimacy.source.xp_spent();
     }
     for bg in &c.backgrounds {
-        total += bg.trait_.xp_spent_on_dots();
+        total += bg.trait_().xp_spent_on_dots();
     }
     total
 }
@@ -72,7 +72,7 @@ pub fn total_bp_spent(c: &Character) -> u32 {
         total += intimacy.source.bp_spent();
     }
     for bg in &c.backgrounds {
-        total += bg.trait_.bp_spent_on_dots();
+        total += bg.trait_().bp_spent_on_dots();
     }
     total
 }

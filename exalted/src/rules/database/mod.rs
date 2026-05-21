@@ -23,10 +23,11 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::character::{AbilityKind, AttributeKind, SpellCircle};
+use crate::character::{AbilityKind, AttributeKind, BackgroundKind, SpellCircle};
 
 const CHARMS_TOML: &str = include_str!("../../../rules/charms.toml");
 const SPELLS_TOML: &str = include_str!("../../../rules/spells.toml");
+const BACKGROUNDS_TOML: &str = include_str!("../../../rules/backgrounds.toml");
 
 static DATABASE: OnceLock<RulesDatabase> = OnceLock::new();
 
@@ -36,10 +37,14 @@ pub enum LoadError {
     ParseCharms(toml::de::Error),
     #[error("failed to parse spells.toml: {0}")]
     ParseSpells(toml::de::Error),
+    #[error("failed to parse backgrounds.toml: {0}")]
+    ParseBackgrounds(toml::de::Error),
     #[error("duplicate charm id: {0}")]
     DuplicateCharmId(String),
     #[error("duplicate spell id: {0}")]
     DuplicateSpellId(String),
+    #[error("duplicate background id: {0}")]
+    DuplicateBackgroundId(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -101,6 +106,16 @@ pub struct SpellEntry {
     pub description: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BackgroundEntry {
+    pub id: String,
+    pub name: String,
+    pub kind: BackgroundKind,
+    pub source: String,
+    pub pages: String,
+    pub description: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct CharmsFile {
     #[serde(default)]
@@ -113,22 +128,35 @@ struct SpellsFile {
     spell: Vec<SpellEntry>,
 }
 
+#[derive(Debug, Deserialize)]
+struct BackgroundsFile {
+    #[serde(default)]
+    background: Vec<BackgroundEntry>,
+}
+
 #[derive(Debug, Clone)]
 pub struct RulesDatabase {
     charms: HashMap<String, CharmEntry>,
     spells: HashMap<String, SpellEntry>,
+    backgrounds: HashMap<String, BackgroundEntry>,
 }
 
 impl RulesDatabase {
     pub fn from_embedded() -> Result<Self, LoadError> {
-        Self::from_strings(CHARMS_TOML, SPELLS_TOML)
+        Self::from_strings(CHARMS_TOML, SPELLS_TOML, BACKGROUNDS_TOML)
     }
 
-    pub fn from_strings(charms_toml: &str, spells_toml: &str) -> Result<Self, LoadError> {
+    pub fn from_strings(
+        charms_toml: &str,
+        spells_toml: &str,
+        backgrounds_toml: &str,
+    ) -> Result<Self, LoadError> {
         let charms_file: CharmsFile =
             toml::from_str(charms_toml).map_err(LoadError::ParseCharms)?;
         let spells_file: SpellsFile =
             toml::from_str(spells_toml).map_err(LoadError::ParseSpells)?;
+        let backgrounds_file: BackgroundsFile =
+            toml::from_str(backgrounds_toml).map_err(LoadError::ParseBackgrounds)?;
 
         let expanded_charms = expand_excellency_templates(charms_file.charm);
 
@@ -148,7 +176,19 @@ impl RulesDatabase {
             spells.insert(entry.id.clone(), entry);
         }
 
-        Ok(Self { charms, spells })
+        let mut backgrounds = HashMap::new();
+        for entry in backgrounds_file.background {
+            if backgrounds.contains_key(&entry.id) {
+                return Err(LoadError::DuplicateBackgroundId(entry.id));
+            }
+            backgrounds.insert(entry.id.clone(), entry);
+        }
+
+        Ok(Self {
+            charms,
+            spells,
+            backgrounds,
+        })
     }
 
     pub fn charm(&self, id: &str) -> Option<&CharmEntry> {
@@ -159,6 +199,10 @@ impl RulesDatabase {
         self.spells.get(id)
     }
 
+    pub fn background(&self, id: &str) -> Option<&BackgroundEntry> {
+        self.backgrounds.get(id)
+    }
+
     pub fn charm_count(&self) -> usize {
         self.charms.len()
     }
@@ -167,12 +211,20 @@ impl RulesDatabase {
         self.spells.len()
     }
 
+    pub fn background_count(&self) -> usize {
+        self.backgrounds.len()
+    }
+
     pub fn iter_charms(&self) -> impl Iterator<Item = &CharmEntry> {
         self.charms.values()
     }
 
     pub fn iter_spells(&self) -> impl Iterator<Item = &SpellEntry> {
         self.spells.values()
+    }
+
+    pub fn iter_backgrounds(&self) -> impl Iterator<Item = &BackgroundEntry> {
+        self.backgrounds.values()
     }
 }
 
@@ -344,6 +396,21 @@ mod tests {
         // After Excellency expansion: 272 source - 5 templates + 5*25 derived = 392.
         assert!(db.charm_count() >= 380, "got {} charms", db.charm_count());
         assert_eq!(db.spell_count(), 223, "got {} spells", db.spell_count());
+        assert_eq!(
+            db.background_count(),
+            11,
+            "got {} backgrounds",
+            db.background_count()
+        );
+        // Every BackgroundKind variant should be represented by at least one
+        // entry whose `kind` matches.
+        for &kind in BackgroundKind::ALL {
+            assert!(
+                db.iter_backgrounds().any(|b| b.kind == kind),
+                "no background entry for kind {:?}",
+                kind
+            );
+        }
     }
 
     #[test]
@@ -423,8 +490,31 @@ source = "test"
 pages = "1"
 description = "test"
 "#;
-        let err = RulesDatabase::from_strings(dup, "").unwrap_err();
+        let err = RulesDatabase::from_strings(dup, "", "").unwrap_err();
         assert!(matches!(err, LoadError::DuplicateCharmId(ref id) if id == "x"));
+    }
+
+    #[test]
+    fn duplicate_background_id_rejected() {
+        let dup = r#"
+[[background]]
+id = "bg-x"
+name = "X"
+kind = "Allies"
+source = "test"
+pages = "1"
+description = "test"
+
+[[background]]
+id = "bg-x"
+name = "X again"
+kind = "Allies"
+source = "test"
+pages = "1"
+description = "test"
+"#;
+        let err = RulesDatabase::from_strings("", "", dup).unwrap_err();
+        assert!(matches!(err, LoadError::DuplicateBackgroundId(ref id) if id == "bg-x"));
     }
 
     #[test]
@@ -447,7 +537,7 @@ prerequisites = []
 source = "test"
 pages = "1"
 "#;
-        let err = RulesDatabase::from_strings(bad, "").unwrap_err();
+        let err = RulesDatabase::from_strings(bad, "", "").unwrap_err();
         assert!(matches!(err, LoadError::ParseCharms(_)));
     }
 

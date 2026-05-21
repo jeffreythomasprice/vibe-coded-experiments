@@ -72,6 +72,9 @@ pub enum ValidationError {
     #[error("Cult background > 2 dots at creation (chargen + BP) (got {got})")]
     CultOverTwoAtCreation { got: u8 },
 
+    #[error("unknown background id: {id}")]
+    UnknownBackgroundId { id: String },
+
     #[error("charm count = {got}, expected 10 at chargen")]
     CharmCountWrong { got: usize },
 

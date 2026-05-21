@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-pub use backgrounds::{BackgroundInstance, BackgroundKind};
+pub use backgrounds::{canonical_id as background_canonical_id, BackgroundKind, BackgroundRef};
 pub use charms::CharmRef;
 pub use equipment::{Armor, Artifact, Equipment, Possession, Weapon};
 pub use hearthstone::Hearthstone;
@@ -45,7 +45,7 @@ pub struct Character {
     #[serde(default)]
     pub spells: Vec<SpellRef>,
     #[serde(default)]
-    pub backgrounds: Vec<BackgroundInstance>,
+    pub backgrounds: Vec<BackgroundRef>,
     pub intimacies: Vec<Intimacy>,
     pub equipment: Equipment,
     pub xp_earned: u32,
@@ -120,20 +120,26 @@ impl Character {
         self.virtues.get(&kind).map(|t| t.dots()).unwrap_or(0)
     }
 
-    /// Sum of dots across every `BackgroundInstance` of the given kind.
+    /// Sum of dots across every `BackgroundRef` resolving to the given kind.
+    /// Lookup refs whose id isn't in the database contribute zero; chargen
+    /// validation flags them separately as `UnknownBackgroundId`.
     pub fn background(&self, kind: BackgroundKind) -> u8 {
+        let db = crate::rules::database::database();
         self.backgrounds
             .iter()
-            .filter(|b| b.kind == kind)
-            .map(|b| b.trait_.dots())
+            .filter(|b| b.kind(db) == Some(kind))
+            .map(|b| b.trait_().dots())
             .sum()
     }
 
     pub fn backgrounds_of(
         &self,
         kind: BackgroundKind,
-    ) -> impl Iterator<Item = &BackgroundInstance> {
-        self.backgrounds.iter().filter(move |b| b.kind == kind)
+    ) -> impl Iterator<Item = &BackgroundRef> {
+        let db = crate::rules::database::database();
+        self.backgrounds
+            .iter()
+            .filter(move |b| b.kind(db) == Some(kind))
     }
 
     pub fn essence_dots(&self) -> u8 {

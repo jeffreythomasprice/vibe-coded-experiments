@@ -2,7 +2,7 @@ mod common;
 
 use common::valid_dawn;
 use exalted::character::{
-    AbilityKind, BackgroundInstance, BackgroundKind, CharmRef, DotPurchase, DotSource,
+    AbilityKind, BackgroundKind, BackgroundRef, CharmRef, DotPurchase, DotSource,
     KnownLanguage, LanguageFamily, RatedTrait, Specialty,
 };
 use exalted::error::ValidationError;
@@ -103,13 +103,14 @@ fn bonus_point_total_mismatch_caught() {
     let mut c = valid_dawn();
     // Add an extra BP-purchased dot of Resources (worth 2 BP since it's the
     // 5th dot, above the ≤3 threshold). Pushes total to 17.
+    let db = exalted::rules::database::database();
     let resources = c
         .backgrounds
         .iter_mut()
-        .find(|b| b.kind == BackgroundKind::Resources)
+        .find(|b| b.kind(db) == Some(BackgroundKind::Resources))
         .unwrap();
     resources
-        .trait_
+        .trait_mut()
         .purchases
         .push(DotPurchase::new(DotSource::BonusPoints { spent: 2 }));
     let report = c.validate_chargen();
@@ -218,11 +219,8 @@ fn followers_without_support_caught() {
     }
     followers.add_bonus(1);
     followers.add_bonus(2);
-    c.backgrounds.push(BackgroundInstance::new(
-        BackgroundKind::Followers,
-        "",
-        followers,
-    ));
+    c.backgrounds
+        .push(BackgroundRef::lookup_kind(BackgroundKind::Followers, followers));
     let report = c.validate_chargen();
     assert!(
         report

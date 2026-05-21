@@ -11,10 +11,9 @@ use lopdf::Document;
 
 use crate::character::xp::total_xp_spent;
 use crate::character::{
-    AbilityKind, AttributeKind, BackgroundInstance, Character, KnownLanguage, LanguageFamily,
-    Weapon,
+    AbilityKind, AttributeKind, BackgroundRef, Character, KnownLanguage, LanguageFamily, Weapon,
 };
-use crate::rules::database::database;
+use crate::rules::database::{database, RulesDatabase};
 use crate::rules::defense::{
     dodge_dv, join_battle, mdv_dodge, parry_dv, soak_aggravated, soak_bashing, soak_lethal,
 };
@@ -22,9 +21,7 @@ use crate::rules::derived::movement;
 use crate::rules::essence::{personal_essence_max, peripheral_essence_max};
 
 use super::acroform::{set_text_field, FieldIndex};
-use super::super::names::{
-    ability_name, background_name, caste_name, intimacy_kind, spell_circle_label,
-};
+use super::super::names::{ability_name, caste_name, intimacy_kind, spell_circle_label};
 use super::PdfRenderError;
 
 pub(super) fn fill(
@@ -127,14 +124,10 @@ fn fill_backgrounds(
     c: &Character,
 ) -> Result<(), PdfRenderError> {
     // The sheet has 8 slots × 5 dots for backgrounds (handled in `dots.rs`).
-    // The text label for each slot uses a separate `backgrounds*` field. We
-    // don't know the exact text-field naming without trial; the PDF reports
-    // `backgrounds` x18 (likely 8 slot labels + extras). Try both
-    // `backgrounds1`–`backgrounds8` and `backgrounds{1..}` joined as a
-    // newline string into a single field if present.
+    // The text label for each slot uses a separate `backgrounds*` field.
+    let db = database();
     for (i, bg) in c.backgrounds.iter().take(8).enumerate() {
-        let label = format_background_label(bg);
-        // Try the obvious numbered field first.
+        let label = format_background_label(bg, db);
         let numbered = format!("backgrounds{}", i + 1);
         if index.has(&numbered) {
             write(doc, index, &numbered, &label)?;
@@ -143,11 +136,11 @@ fn fill_backgrounds(
     Ok(())
 }
 
-fn format_background_label(bg: &BackgroundInstance) -> String {
-    if bg.label.is_empty() {
-        background_name(bg.kind).to_string()
+fn format_background_label(bg: &BackgroundRef, db: &RulesDatabase) -> String {
+    if bg.label().is_empty() {
+        bg.display_name(db).to_string()
     } else {
-        format!("{} ({})", background_name(bg.kind), bg.label)
+        format!("{} ({})", bg.display_name(db), bg.label())
     }
 }
 
