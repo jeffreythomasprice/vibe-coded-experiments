@@ -5,6 +5,12 @@ cargo run -- render assets/sample-character.toml
 cargo run -- render --format markdown assets/sample-character.toml
 cargo run -- render --format pdf assets/sample-character.toml -o /tmp/sample-character.pdf
 
+markdown things essence dots are out of 10, but pdf has it out of 6
+
+things that are wrong in the pdf renderer:
+- backgrounds have dots, but no text
+- charms aren't filled in at all
+
 
 
 todo:
