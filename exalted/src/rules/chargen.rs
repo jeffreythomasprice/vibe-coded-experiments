@@ -212,12 +212,29 @@ fn check_abilities(c: &Character, report: &mut ValidationReport) {
         }
     }
 
+    // Specialty caps: rules p.77 — max 3 distinct specialties per Ability,
+    // and max 3 dots within any one specialty. Linguistics is exempt on both
+    // (each dialect is its own specialty, with no dot cap on the dialect
+    // dice bonus — see `rules::dice::dice_pool`).
     for (a, t) in &c.abilities {
-        if *a != AbilityKind::Linguistics && t.specialties.len() > 3 {
+        if *a == AbilityKind::Linguistics {
+            continue;
+        }
+        let aggregated = t.aggregated_specialties();
+        if aggregated.len() > 3 {
             report.push(ValidationError::SpecialtiesOverMax {
                 ability: format!("{a:?}"),
-                got: t.specialties.len(),
+                got: aggregated.len(),
             });
+        }
+        for (name, dots) in aggregated {
+            if dots > 3 {
+                report.push(ValidationError::SpecialtyOverMaxDots {
+                    ability: format!("{a:?}"),
+                    specialty: name,
+                    got: dots,
+                });
+            }
         }
     }
 }

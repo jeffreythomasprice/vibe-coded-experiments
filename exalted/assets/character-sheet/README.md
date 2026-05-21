@@ -1,1 +1,1 @@
-https://voidstate.com/rpg/voidstate-fillin-ex2-solar-v1.8.pdf
+https://mrgone.rocksolidshells.com/pdf/Exalted/Exalted2ndED4-Page_TheSolarsV2_Editable.pdf

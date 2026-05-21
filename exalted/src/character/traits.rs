@@ -117,6 +117,21 @@ impl RatedTrait {
         self.specialties.iter().map(|s| s.source.xp_spent()).sum()
     }
 
+    /// Collapse `specialties` into one entry per distinct name, preserving
+    /// first-seen order. The `u8` is the count of `Specialty` rows sharing
+    /// that name — i.e. its rating in dots.
+    pub fn aggregated_specialties(&self) -> Vec<(String, u8)> {
+        let mut out: Vec<(String, u8)> = Vec::new();
+        for s in &self.specialties {
+            if let Some(entry) = out.iter_mut().find(|(n, _)| n == &s.name) {
+                entry.1 = entry.1.saturating_add(1);
+            } else {
+                out.push((s.name.clone(), 1));
+            }
+        }
+        out
+    }
+
     /// Push a single dot from a chargen pool. Convenience helper for tests
     /// and chargen builders.
     pub fn add_chargen(&mut self) -> &mut Self {

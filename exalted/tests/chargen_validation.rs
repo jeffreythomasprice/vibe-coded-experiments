@@ -3,7 +3,7 @@ mod common;
 use common::valid_dawn;
 use exalted::character::{
     AbilityKind, BackgroundInstance, BackgroundKind, CharmRef, DotPurchase, DotSource,
-    KnownLanguage, LanguageFamily, RatedTrait,
+    KnownLanguage, LanguageFamily, RatedTrait, Specialty,
 };
 use exalted::error::ValidationError;
 
@@ -327,4 +327,137 @@ fn report_notes_unknown_charm_softly() {
         report.notes
     );
     let _ = err_kinds(&report);
+}
+
+// ---------------------------------------------------------------------------
+// Specialty caps (rules p.77): max 3 distinct specialties per Ability, max 3
+// dots within any one specialty. Linguistics is exempt from both.
+// ---------------------------------------------------------------------------
+
+/// Push `n` `Specialty` entries with the same name and the given source.
+/// Each entry counts as one rating dot for that specialty.
+fn add_spec(t: &mut RatedTrait, name: &str, n: u8, source: DotSource) {
+    for _ in 0..n {
+        t.specialties.push(Specialty {
+            name: name.to_string(),
+            source,
+        });
+    }
+}
+
+#[test]
+fn three_dot_specialty_in_caste_ability_validates() {
+    let mut c = valid_dawn();
+    // Awareness is favored. Add a 3-dot specialty paid for with BP: in a
+    // C/F ability, 3 dots cost ⌈3/2⌉ = 2 BP. Encode as 1 + 1 + 0.
+    add_spec(
+        c.abilities.get_mut(&AbilityKind::Awareness).unwrap(),
+        "Listening",
+        1,
+        DotSource::BonusPoints { spent: 1 },
+    );
+    add_spec(
+        c.abilities.get_mut(&AbilityKind::Awareness).unwrap(),
+        "Listening",
+        1,
+        DotSource::BonusPoints { spent: 1 },
+    );
+    add_spec(
+        c.abilities.get_mut(&AbilityKind::Awareness).unwrap(),
+        "Listening",
+        1,
+        DotSource::BonusPoints { spent: 0 },
+    );
+    // Rebalance BP: remove the 2 BP we now spent on the specialty from the
+    // Dexterity 4→5 purchase (drop one BP-dot there).
+    let dex = c
+        .attributes
+        .get_mut(&exalted::character::AttributeKind::Dexterity)
+        .unwrap();
+    // valid_dawn pushes a single 4-BP dot on Dex. Replace it with a 2-BP one
+    // and add a chargen rebalance elsewhere is hard; simpler: remove the BP
+    // entirely and accept that this character has Dex 4. That changes the
+    // chargen-priority math too, so just drop the BP and accept the report
+    // may still flag bonus-point total — we only care about the specialty
+    // cap not firing.
+    dex.purchases
+        .retain(|p| !matches!(p.source, DotSource::BonusPoints { .. }));
+
+    let report = c.validate_chargen();
+    assert!(
+        !report.errors.iter().any(|e| matches!(
+            e,
+            ValidationError::SpecialtiesOverMax { .. }
+                | ValidationError::SpecialtyOverMaxDots { .. }
+        )),
+        "3-dot specialty should be within caps, but got: {:?}",
+        report.errors
+    );
+}
+
+#[test]
+fn four_dot_specialty_caught() {
+    let mut c = valid_dawn();
+    add_spec(
+        c.abilities.get_mut(&AbilityKind::Melee).unwrap(),
+        "Sword",
+        4,
+        DotSource::Xp { spent: 0 },
+    );
+    let report = c.validate_chargen();
+    let found = report.errors.iter().any(|e| matches!(
+        e,
+        ValidationError::SpecialtyOverMaxDots { ability, specialty, got }
+            if ability == "Melee" && specialty == "Sword" && *got == 4
+    ));
+    assert!(
+        found,
+        "expected SpecialtyOverMaxDots on Melee::Sword=4, got: {:?}",
+        report.errors
+    );
+}
+
+#[test]
+fn linguistics_specialty_dots_uncapped() {
+    let mut c = valid_dawn();
+    // 5 dots in a single Linguistics dialect specialty is fine — Linguistics
+    // is exempt from the per-specialty dot cap.
+    add_spec(
+        c.abilities.get_mut(&AbilityKind::Linguistics).unwrap(),
+        "Old Realm",
+        5,
+        DotSource::Xp { spent: 0 },
+    );
+    let report = c.validate_chargen();
+    assert!(
+        !report
+            .errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::SpecialtyOverMaxDots { .. })),
+        "Linguistics should be exempt; got: {:?}",
+        report.errors
+    );
+}
+
+#[test]
+fn four_distinct_specialties_caught() {
+    let mut c = valid_dawn();
+    // Athletics is favored; 4 distinct 1-dot specialties exceeds the cap.
+    let ath = c.abilities.get_mut(&AbilityKind::Athletics).unwrap();
+    for name in ["Running", "Climbing", "Swimming", "Jumping"] {
+        ath.specialties.push(Specialty {
+            name: name.to_string(),
+            source: DotSource::Xp { spent: 0 },
+        });
+    }
+    let report = c.validate_chargen();
+    assert!(
+        report.errors.iter().any(|e| matches!(
+            e,
+            ValidationError::SpecialtiesOverMax { ability, got }
+                if ability == "Athletics" && *got == 4
+        )),
+        "expected SpecialtiesOverMax on Athletics=4, got: {:?}",
+        report.errors
+    );
 }

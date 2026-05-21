@@ -1,0 +1,375 @@
+//! Fill named text fields on the MrGone sheet from a `Character`.
+//!
+//! See `dot_map.rs` for the dot/checkbox half. This module handles fields
+//! that the sheet has given a meaningful name to: identity (`name`, `caste`,
+//! `concept`, `MOTIVATION`, `anima`), attribute/ability values
+//! (`attributes1`–`9`, `skills1`–`25`), defensive stats (`soak1`–`3`,
+//! `dv1`–`3`), weapon lines, charm/spell lines, backgrounds, intimacies,
+//! languages, and XP.
+
+use lopdf::Document;
+
+use crate::character::xp::total_xp_spent;
+use crate::character::{
+    AbilityKind, AttributeKind, BackgroundInstance, Character, KnownLanguage, LanguageFamily,
+    Weapon,
+};
+use crate::rules::database::database;
+use crate::rules::defense::{
+    dodge_dv, join_battle, mdv_dodge, parry_dv, soak_aggravated, soak_bashing, soak_lethal,
+};
+use crate::rules::derived::movement;
+use crate::rules::essence::{personal_essence_max, peripheral_essence_max};
+
+use super::acroform::{set_text_field, FieldIndex};
+use super::super::names::{
+    ability_name, background_name, caste_name, intimacy_kind, spell_circle_label,
+};
+use super::PdfRenderError;
+
+pub(super) fn fill(
+    doc: &mut Document,
+    index: &FieldIndex,
+    c: &Character,
+) -> Result<(), PdfRenderError> {
+    fill_identity(doc, index, c)?;
+    fill_attributes(doc, index, c)?;
+    fill_abilities(doc, index, c)?;
+    fill_specialties(doc, index, c)?;
+    fill_backgrounds(doc, index, c)?;
+    fill_intimacies(doc, index, c)?;
+    fill_languages(doc, index, c)?;
+    fill_weapons(doc, index, c)?;
+    fill_armor_and_defense(doc, index, c)?;
+    fill_charms_and_spells(doc, index, c)?;
+    fill_xp_and_essence(doc, index, c)?;
+    fill_virtue_flaw(doc, index, c)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+fn fill_identity(
+    doc: &mut Document,
+    index: &FieldIndex,
+    c: &Character,
+) -> Result<(), PdfRenderError> {
+    let id = &c.identity;
+    write(doc, index, "name", &id.name)?;
+    write(doc, index, "caste", caste_name(c.caste))?;
+    write(doc, index, "concept", &id.concept)?;
+    write(doc, index, "MOTIVATION", &id.motivation)?;
+    write(doc, index, "anima", &id.anima.totem)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Attributes (numeric)
+// ---------------------------------------------------------------------------
+
+fn fill_attributes(
+    doc: &mut Document,
+    index: &FieldIndex,
+    c: &Character,
+) -> Result<(), PdfRenderError> {
+    // Sheet ordering matches `AttributeKind::ALL`:
+    //   1=Str, 2=Dex, 3=Sta, 4=Cha, 5=Man, 6=App, 7=Per, 8=Int, 9=Wits
+    for (i, kind) in AttributeKind::ALL.iter().enumerate() {
+        let field = format!("attributes{}", i + 1);
+        write(doc, index, &field, &c.attribute(*kind).to_string())?;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Abilities (numeric values + caste/favored marks set elsewhere)
+// ---------------------------------------------------------------------------
+
+fn fill_abilities(
+    doc: &mut Document,
+    index: &FieldIndex,
+    c: &Character,
+) -> Result<(), PdfRenderError> {
+    for (i, kind) in AbilityKind::ALL.iter().enumerate() {
+        let field = format!("skills{}", i + 1);
+        write(doc, index, &field, &c.ability(*kind).to_string())?;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Specialties — at most 5 rows; duplicate-name entries are aggregated into
+// a single row whose rating is the count of those entries (the row's dot
+// bubbles are filled in `dots.rs`).
+// ---------------------------------------------------------------------------
+
+fn fill_specialties(
+    doc: &mut Document,
+    index: &FieldIndex,
+    c: &Character,
+) -> Result<(), PdfRenderError> {
+    for (i, row) in super::specialties::rows(c).iter().enumerate() {
+        let text = format!("{}: {}", ability_name(row.ability), row.name);
+        write(doc, index, &format!("specialties{}", i + 1), &text)?;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Backgrounds
+// ---------------------------------------------------------------------------
+
+fn fill_backgrounds(
+    doc: &mut Document,
+    index: &FieldIndex,
+    c: &Character,
+) -> Result<(), PdfRenderError> {
+    // The sheet has 8 slots × 5 dots for backgrounds (handled in `dots.rs`).
+    // The text label for each slot uses a separate `backgrounds*` field. We
+    // don't know the exact text-field naming without trial; the PDF reports
+    // `backgrounds` x18 (likely 8 slot labels + extras). Try both
+    // `backgrounds1`–`backgrounds8` and `backgrounds{1..}` joined as a
+    // newline string into a single field if present.
+    for (i, bg) in c.backgrounds.iter().take(8).enumerate() {
+        let label = format_background_label(bg);
+        // Try the obvious numbered field first.
+        let numbered = format!("backgrounds{}", i + 1);
+        if index.has(&numbered) {
+            write(doc, index, &numbered, &label)?;
+        }
+    }
+    Ok(())
+}
+
+fn format_background_label(bg: &BackgroundInstance) -> String {
+    if bg.label.is_empty() {
+        background_name(bg.kind).to_string()
+    } else {
+        format!("{} ({})", background_name(bg.kind), bg.label)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Intimacies
+// ---------------------------------------------------------------------------
+
+fn fill_intimacies(
+    doc: &mut Document,
+    index: &FieldIndex,
+    c: &Character,
+) -> Result<(), PdfRenderError> {
+    // The sheet has 10 named intimacy slots.
+    for (i, intimacy) in c.intimacies.iter().take(10).enumerate() {
+        let text = if matches!(intimacy.kind, crate::character::IntimacyKind::Other) {
+            intimacy.description.clone()
+        } else {
+            format!("{} [{}]", intimacy.description, intimacy_kind(intimacy.kind))
+        };
+        let field = format!("intimacies{}", i + 1);
+        if index.has(&field) {
+            write(doc, index, &field, &text)?;
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Languages
+// ---------------------------------------------------------------------------
+
+fn fill_languages(
+    doc: &mut Document,
+    index: &FieldIndex,
+    c: &Character,
+) -> Result<(), PdfRenderError> {
+    for (i, lang) in c.languages.iter().take(15).enumerate() {
+        let text = format_language(lang);
+        let field = format!("languages{}", i + 1);
+        if index.has(&field) {
+            write(doc, index, &field, &text)?;
+        }
+    }
+    Ok(())
+}
+
+fn format_language(l: &KnownLanguage) -> String {
+    let family = match &l.family {
+        LanguageFamily::TribalTongue(name) => format!("Tribal Tongue: {}", name),
+        other => format!("{:?}", other),
+    };
+    let native = if l.native { " (native)" } else { "" };
+    let dialect = l
+        .dialect_specialty
+        .as_ref()
+        .map(|d| format!(" — {}", d))
+        .unwrap_or_default();
+    format!("{}{}{}", family, dialect, native)
+}
+
+// ---------------------------------------------------------------------------
+// Weapons
+// ---------------------------------------------------------------------------
+
+fn fill_weapons(
+    doc: &mut Document,
+    index: &FieldIndex,
+    c: &Character,
+) -> Result<(), PdfRenderError> {
+    for (i, w) in c.equipment.weapons.iter().take(4).enumerate() {
+        let field = format!("weapons{}", i + 1);
+        if index.has(&field) {
+            write(doc, index, &field, &format_weapon_line(w))?;
+        }
+    }
+    Ok(())
+}
+
+fn format_weapon_line(w: &Weapon) -> String {
+    let dmg_type = match w.damage_type {
+        crate::character::equipment::DamageType::Bashing => "B",
+        crate::character::equipment::DamageType::Lethal => "L",
+        crate::character::equipment::DamageType::Aggravated => "A",
+    };
+    format!(
+        "{} (Spd {:+} / Acc {:+} / Dmg {:+}{} / Def {:+} / Rate {})",
+        w.name, w.speed, w.accuracy, w.damage, dmg_type, w.defense, w.rate
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Armor, soak, DVs
+// ---------------------------------------------------------------------------
+
+fn fill_armor_and_defense(
+    doc: &mut Document,
+    index: &FieldIndex,
+    c: &Character,
+) -> Result<(), PdfRenderError> {
+    write(doc, index, "soak1", &soak_bashing(c).to_string())?;
+    write(doc, index, "soak2", &soak_lethal(c).to_string())?;
+    write(doc, index, "soak3", &soak_aggravated(c).to_string())?;
+
+    // dv1=Dodge DV, dv2=parry DV (best melee weapon), dv3=mental dodge DV.
+    write(doc, index, "dv1", &dodge_dv(c).to_string())?;
+    let parry = c
+        .equipment
+        .weapons
+        .iter()
+        .map(|w| parry_dv(c, w))
+        .max()
+        .unwrap_or(0);
+    write(doc, index, "dv2", &parry.to_string())?;
+    write(doc, index, "dv3", &mdv_dodge(c).to_string())?;
+
+    if index.has("armor") {
+        if let Some(a) = &c.equipment.armor {
+            let line = format!(
+                "{} (B/L/A {}/{}/{}, mob -{}, fat {})",
+                a.name,
+                a.soak_bashing,
+                a.soak_lethal,
+                a.soak_aggravated,
+                a.mobility_penalty,
+                a.fatigue
+            );
+            write(doc, index, "armor", &line)?;
+        }
+    }
+
+    if index.has("combat") {
+        let m = movement(c);
+        let line = format!(
+            "Join Battle {} · Move {} / Dash {} · Jump {}v / {}h",
+            join_battle(c),
+            m.move_,
+            m.dash,
+            m.jump_vertical,
+            m.jump_horizontal
+        );
+        write(doc, index, "combat", &line)?;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Charms + spells (combined list)
+// ---------------------------------------------------------------------------
+
+fn fill_charms_and_spells(
+    doc: &mut Document,
+    index: &FieldIndex,
+    c: &Character,
+) -> Result<(), PdfRenderError> {
+    let db = database();
+    let mut lines: Vec<String> = Vec::new();
+    for charm in &c.charms {
+        lines.push(charm.display_name(db).to_string());
+    }
+    for spell in &c.spells {
+        let circle = spell.circle(db).map(spell_circle_label).unwrap_or("?");
+        lines.push(format!("{} ({})", spell.display_name(db), circle));
+    }
+    // Write up to 70 charm/sorcery slots.
+    for (i, line) in lines.iter().take(70).enumerate() {
+        let field = format!("charms/sorcery{}", i + 1);
+        if index.has(&field) {
+            write(doc, index, &field, line)?;
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// XP and essence pool labels
+// ---------------------------------------------------------------------------
+
+fn fill_xp_and_essence(
+    doc: &mut Document,
+    index: &FieldIndex,
+    c: &Character,
+) -> Result<(), PdfRenderError> {
+    if index.has("exp") {
+        let spent = total_xp_spent(c);
+        let remaining = c.xp_earned.saturating_sub(spent);
+        write(doc, index, "exp", &format!("{} (spent {} of {})", remaining, spent, c.xp_earned))?;
+    }
+    // EP = Personal Essence pool max; AP = Peripheral Essence pool max.
+    write(doc, index, "EP", &personal_essence_max(c).to_string())?;
+    write(doc, index, "AP", &peripheral_essence_max(c).to_string())?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Virtue flaw line(s)
+// ---------------------------------------------------------------------------
+
+fn fill_virtue_flaw(
+    doc: &mut Document,
+    index: &FieldIndex,
+    c: &Character,
+) -> Result<(), PdfRenderError> {
+    if let Some(flaw) = &c.virtue_flaw {
+        if index.has("virtueflaw1") {
+            write(doc, index, "virtueflaw1", &format!("{:?}", flaw))?;
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn write(
+    doc: &mut Document,
+    index: &FieldIndex,
+    name: &str,
+    value: &str,
+) -> Result<(), PdfRenderError> {
+    if index.has(name) {
+        set_text_field(doc, index, name, value)?;
+    }
+    Ok(())
+}

@@ -175,8 +175,15 @@ pub enum ValidationError {
     #[error("alien (non-Solar) charm {charm} requires Eclipse caste")]
     AlienCharmOnNonEclipse { charm: String },
 
-    #[error("ability {ability} has {got} specialties; max 3 (Linguistics is exempt)")]
+    #[error("ability {ability} has {got} distinct specialties; max 3 (Linguistics is exempt)")]
     SpecialtiesOverMax { ability: String, got: usize },
+
+    #[error("ability {ability} specialty {specialty:?} has {got} dots; max 3 (Linguistics is exempt)")]
+    SpecialtyOverMaxDots {
+        ability: String,
+        specialty: String,
+        got: u8,
+    },
 
     #[error("multiple native languages declared (got {got}); exactly 1 required")]
     MultipleNativeLanguages { got: usize },

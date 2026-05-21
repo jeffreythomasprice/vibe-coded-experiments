@@ -1,6 +1,26 @@
 active:
 
+cargo run --example dump_dots > /tmp/exalted-dots.txt
+
+compare output:
+code /tmp/exalted-dots.txt
+evince assets/character-sheet/Exalted2ndED4-Page_TheSolarsV2_Editable.pdf
+
+
+next up is backgrounds
+page 1, row 14
+
+
+
+
 todo:
+
+backgrounds
+
+
+make sure we handle favored abilities correctly
+e.g. Edd telling Daz that, "you have one more Favored ability to check off, since you only picked 4 out of 5."
+
 
 tell me a story using a bit of lore from the book
 
@@ -9,9 +29,6 @@ redo the char gen for my actual character
 
 
 I want to introduce a tui that displays all fields in a character sheet. I'm not sure of the exact layout I need, and the full sheet is fairly complicated, so I'm willing to have this be fairly rough initially and we'll refine.
-
-
-pdf rendering
 
 
 we left out per-scene or ephemeral combat stuff like:

@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 
 use exalted::error::{ValidationError, ValidationReport};
-use exalted::render::character_to_markdown;
+use exalted::render::{character_to_markdown, character_to_pdf};
 use exalted::rules::database::init_database;
 use exalted::Character;
 
@@ -37,15 +37,29 @@ enum OutputFormat {
     Json,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+enum RenderFormat {
+    Markdown,
+    Pdf,
+}
+
 #[derive(Subcommand)]
 enum Cmd {
-    /// Render a character TOML file as markdown to stdout (or `-o FILE`).
+    /// Render a character TOML file as markdown or a filled PDF.
+    ///
+    /// Markdown (default) writes to stdout unless `-o` is given.
+    /// PDF requires `-o FILE` because PDF bytes are binary and not safe to
+    /// write to a TTY.
     Render {
         /// Path to the character TOML file.
         file: PathBuf,
-        /// Optional output path. If omitted, writes to stdout.
+        /// Optional output path. Required when `--format pdf` is selected;
+        /// for markdown, omitting it writes to stdout.
         #[arg(short, long)]
         output: Option<PathBuf>,
+        /// Rendered output format.
+        #[arg(long = "format", value_enum, default_value_t = RenderFormat::Markdown)]
+        format: RenderFormat,
     },
     /// Validate a character against chargen and XP rules.
     ///
@@ -66,7 +80,7 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     }
     match cli.command {
-        Cmd::Render { file, output } => run_render(file, output, fmt),
+        Cmd::Render { file, output, format } => run_render(file, output, format, fmt),
         Cmd::Validate { file } => run_validate(file, fmt),
     }
 }
@@ -85,7 +99,12 @@ fn load_character(path: &PathBuf) -> Result<Character, String> {
         .map_err(|e| format!("could not parse {} as a Character: {}", path.display(), e))
 }
 
-fn run_render(file: PathBuf, output: Option<PathBuf>, fmt: OutputFormat) -> ExitCode {
+fn run_render(
+    file: PathBuf,
+    output: Option<PathBuf>,
+    format: RenderFormat,
+    fmt: OutputFormat,
+) -> ExitCode {
     let character = match load_character(&file) {
         Ok(c) => c,
         Err(e) => {
@@ -93,19 +112,49 @@ fn run_render(file: PathBuf, output: Option<PathBuf>, fmt: OutputFormat) -> Exit
             return ExitCode::from(2);
         }
     };
-    let md = character_to_markdown(&character);
-    match output {
-        Some(path) => {
-            if let Err(e) = fs::write(&path, md.as_bytes()) {
+    match format {
+        RenderFormat::Markdown => {
+            let md = character_to_markdown(&character);
+            match output {
+                Some(path) => {
+                    if let Err(e) = fs::write(&path, md.as_bytes()) {
+                        emit_error(
+                            &format!("could not write {}: {}", path.display(), e),
+                            fmt,
+                        );
+                        return ExitCode::from(2);
+                    }
+                }
+                None => {
+                    print!("{}", md);
+                }
+            }
+        }
+        RenderFormat::Pdf => {
+            let path = match output {
+                Some(p) => p,
+                None => {
+                    emit_error(
+                        "PDF output requires -o FILE (refusing to write binary to stdout)",
+                        fmt,
+                    );
+                    return ExitCode::from(2);
+                }
+            };
+            let bytes = match character_to_pdf(&character) {
+                Ok(b) => b,
+                Err(e) => {
+                    emit_error(&format!("pdf render failed: {}", e), fmt);
+                    return ExitCode::from(2);
+                }
+            };
+            if let Err(e) = fs::write(&path, &bytes) {
                 emit_error(
                     &format!("could not write {}: {}", path.display(), e),
                     fmt,
                 );
                 return ExitCode::from(2);
             }
-        }
-        None => {
-            print!("{}", md);
         }
     }
     ExitCode::SUCCESS
