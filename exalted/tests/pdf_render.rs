@@ -5,7 +5,7 @@ mod common;
 use std::path::PathBuf;
 
 use common::valid_dawn;
-use exalted::character::{AbilityKind, AttributeKind};
+use exalted::character::{AbilityKind, AttributeKind, KnownLanguage, LanguageFamily};
 use exalted::render::character_to_pdf;
 use exalted::rules::database::init_database;
 use lopdf::{Document, Object};
@@ -119,11 +119,45 @@ fn strength_dots_checked_correctly() {
     }
 }
 
+/// Abilities in the order the MrGone PDF lays them out (column-major by
+/// caste pair). This is NOT the same as `AbilityKind::ALL` — the sheet
+/// groups Dawn+Night in column 1, Zenith+Eclipse in column 2, Twilight
+/// alone in column 3, whereas `ALL` orders castes Dawn, Zenith, Twilight,
+/// Night, Eclipse. Field numbering (`skillscheck1..25`, `dot46..170`)
+/// follows the column-major layout.
+const PDF_ABILITY_ORDER: [AbilityKind; 25] = [
+    AbilityKind::Archery,
+    AbilityKind::MartialArts,
+    AbilityKind::Melee,
+    AbilityKind::Thrown,
+    AbilityKind::War,
+    AbilityKind::Athletics,
+    AbilityKind::Awareness,
+    AbilityKind::Dodge,
+    AbilityKind::Larceny,
+    AbilityKind::Stealth,
+    AbilityKind::Integrity,
+    AbilityKind::Performance,
+    AbilityKind::Presence,
+    AbilityKind::Resistance,
+    AbilityKind::Survival,
+    AbilityKind::Bureaucracy,
+    AbilityKind::Linguistics,
+    AbilityKind::Ride,
+    AbilityKind::Sail,
+    AbilityKind::Socialize,
+    AbilityKind::Craft,
+    AbilityKind::Investigation,
+    AbilityKind::Lore,
+    AbilityKind::Medicine,
+    AbilityKind::Occult,
+];
+
 #[test]
 fn ability_caste_marks_match_character() {
     let c = valid_dawn();
     let doc = render();
-    for (i, kind) in AbilityKind::ALL.iter().enumerate() {
+    for (i, kind) in PDF_ABILITY_ORDER.iter().enumerate() {
         let field = format!("skillscheck{}", i + 1);
         let v = read_checkbox(&doc, &field).expect("caste mark has value");
         let expected = if c.is_caste_or_favored_ability(*kind) {
@@ -143,10 +177,8 @@ fn ability_caste_marks_match_character() {
 fn ability_dots_match_character() {
     let c = valid_dawn();
     let doc = render();
-    // Spot-check every ability against the character's actual rating.
-    for kind in AbilityKind::ALL {
+    for (pos, kind) in PDF_ABILITY_ORDER.iter().enumerate() {
         let rating = c.ability(*kind) as usize;
-        let pos = AbilityKind::ALL.iter().position(|k| *k == *kind).unwrap();
         for dot_idx in 0..5 {
             let dot_n = 46 + pos * 5 + dot_idx;
             let field = format!("dot{}", dot_n);
@@ -407,4 +439,229 @@ fn health_track_ox_body_minus_one_two_minus_two_routes_by_penalty() {
             "healthcheck11", // base -2
         ],
     );
+}
+
+// ---------------------------------------------------------------------------
+// Languages. Each row has a "languagesN" text field and an "LCheckN"
+// checkbox. The checkbox is ticked iff the language in slot N is the
+// character's native tongue (analogous to the C/F mark on an ability row).
+// ---------------------------------------------------------------------------
+
+fn assert_only_native_checked(doc: &Document, native_slot: usize) {
+    for n in 1..=15 {
+        let field = format!("LCheck{}", n);
+        let v = read_checkbox(doc, &field)
+            .unwrap_or_else(|| panic!("{} missing from rendered PDF", field));
+        let expected = if n == native_slot { "Yes" } else { "Off" };
+        assert_eq!(
+            v, expected,
+            "{}: expected {}, got {}",
+            field, expected, v
+        );
+    }
+}
+
+#[test]
+fn language_native_checkbox_marks_only_native_slot() {
+    // valid_dawn has exactly one language (Riverspeak) marked native in
+    // slot 1. LCheck1 should be ticked; LCheck2..15 should be clear.
+    let doc = render();
+    assert_only_native_checked(&doc, 1);
+}
+
+#[test]
+fn language_text_no_longer_appends_native_suffix() {
+    // The native flag is now conveyed by LCheck, so the text field for
+    // the native language must not contain the legacy "(native)" suffix.
+    let doc = render();
+    let v = read_text_field(&doc, "languages1").expect("languages1 written");
+    assert!(
+        !v.contains("(native)"),
+        "languages1 should not contain '(native)' suffix, got: {:?}",
+        v
+    );
+}
+
+#[test]
+fn language_native_checkbox_tracks_native_at_non_first_slot() {
+    // Native language can be at any slot; ordering in c.languages is
+    // preserved by the renderer. Put native at slot 3 and confirm only
+    // LCheck3 is ticked.
+    let doc = render_with(|c| {
+        c.languages = vec![
+            KnownLanguage {
+                family: LanguageFamily::HighRealm,
+                dialect_specialty: None,
+                native: false,
+            },
+            KnownLanguage {
+                family: LanguageFamily::OldRealm,
+                dialect_specialty: None,
+                native: false,
+            },
+            KnownLanguage {
+                family: LanguageFamily::Riverspeak,
+                dialect_specialty: Some("Nexus".to_string()),
+                native: true,
+            },
+        ];
+    });
+    assert_only_native_checked(&doc, 3);
+}
+
+// ---------------------------------------------------------------------------
+// Page-4 spillover: background slots 9–18 use `backgrounds9..18` text fields
+// and `e2dot1..e2dot50` dot fields; specialty rows 6–15 use `specx1..specx10`
+// text fields and `e2dot51..e2dot100` dot fields.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn background_9_spills_to_page4_dot_and_text_fields() {
+    use exalted::character::{BackgroundKind, BackgroundRef, RatedTrait};
+
+    let doc = render_with(|c| {
+        // valid_dawn starts with a few backgrounds; push enough total so a
+        // 9th exists. We use a known background with a 3-dot rating so we
+        // can assert against a specific dot count.
+        while c.backgrounds.len() < 8 {
+            c.backgrounds.push(BackgroundRef::lookup_kind(
+                BackgroundKind::Resources,
+                RatedTrait::with_base(1),
+            ));
+        }
+        c.backgrounds.push(
+            BackgroundRef::lookup_kind(BackgroundKind::Allies, RatedTrait::with_base(3))
+                .with_label("Page 4 ally"),
+        );
+    });
+
+    // 9th background → `backgrounds9` text + `e2dot1..e2dot5` dots.
+    let label = read_text_field(&doc, "backgrounds9").expect("backgrounds9 written");
+    assert!(
+        label.contains("Page 4 ally"),
+        "backgrounds9 should include label, got: {:?}",
+        label
+    );
+    for (i, field) in ["e2dot1", "e2dot2", "e2dot3", "e2dot4", "e2dot5"]
+        .iter()
+        .enumerate()
+    {
+        let v = read_checkbox(&doc, field).expect("e2dot has value");
+        let expected = if i < 3 { "Yes" } else { "Off" };
+        assert_eq!(v, expected, "{}: expected {}, got {}", field, expected, v);
+    }
+}
+
+#[test]
+fn specialty_row_6_uses_page4_specx_and_e2dot51() {
+    use exalted::character::{DotSource, Specialty};
+
+    // Push enough specialties across distinct abilities so row 6 is filled.
+    // `super::specialties::rows()` walks AbilityKind::ALL and yields one
+    // row per (ability, name); 6 different abilities with one specialty
+    // each gives us 6 rows.
+    let doc = render_with(|c| {
+        let abilities = [
+            AbilityKind::Archery,
+            AbilityKind::MartialArts,
+            AbilityKind::Melee,
+            AbilityKind::Thrown,
+            AbilityKind::War,
+            AbilityKind::Athletics,
+        ];
+        for (i, kind) in abilities.iter().enumerate() {
+            c.abilities.get_mut(kind).unwrap().specialties.push(Specialty {
+                name: format!("Spec{}", i + 1),
+                source: DotSource::Xp { spent: 0 },
+            });
+        }
+    });
+
+    // The 6th row should land in specx1 + e2dot51..e2dot55.
+    let text = read_text_field(&doc, "specx1").expect("specx1 written");
+    assert!(
+        text.contains("Athletics"),
+        "specx1 should describe the 6th specialty (Athletics: Spec6), got: {:?}",
+        text
+    );
+    for (i, field) in ["e2dot51", "e2dot52", "e2dot53", "e2dot54", "e2dot55"]
+        .iter()
+        .enumerate()
+    {
+        let v = read_checkbox(&doc, field).expect("e2dot specialty dot has value");
+        let expected = if i < 1 { "Yes" } else { "Off" };
+        assert_eq!(v, expected, "{}: expected {}, got {}", field, expected, v);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Intimacy rating dots (Idot1..Idot100, 10 rows × 10 dots).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn intimacy_rating_fills_idot_row() {
+    use exalted::character::{DotSource, Intimacy, IntimacyKind};
+
+    let doc = render_with(|c| {
+        c.intimacies.clear();
+        c.intimacies.push(Intimacy {
+            description: "Test target".to_string(),
+            kind: IntimacyKind::Cause,
+            source: DotSource::Base,
+            rating: 4,
+        });
+    });
+
+    for (i, field) in [
+        "Idot1", "Idot2", "Idot3", "Idot4", "Idot5", "Idot6", "Idot7", "Idot8", "Idot9", "Idot10",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let v = read_checkbox(&doc, field).expect("Idot has value");
+        let expected = if i < 4 { "Yes" } else { "Off" };
+        assert_eq!(v, expected, "{}: expected {}, got {}", field, expected, v);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Familiar — name in `fam1`, total damage drives `Fcheck1..Fcheck30`.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn familiar_damage_fills_fcheck_track() {
+    use exalted::character::{state::HealthDamage, Familiar};
+
+    let doc = render_with(|c| {
+        c.familiar = Some(Familiar {
+            name: "Sparrow".to_string(),
+            health_damage: HealthDamage {
+                bashing: 2,
+                lethal: 1,
+                aggravated: 0,
+            },
+        });
+    });
+
+    let name = read_text_field(&doc, "fam1").expect("fam1 written");
+    assert_eq!(name, "Sparrow");
+
+    // 3 total points of damage → Fcheck1..Fcheck3 Yes, rest Off.
+    for n in 1..=30 {
+        let field = format!("Fcheck{}", n);
+        let v = read_checkbox(&doc, &field).expect("Fcheck has value");
+        let expected = if n <= 3 { "Yes" } else { "Off" };
+        assert_eq!(v, expected, "{}: expected {}, got {}", field, expected, v);
+    }
+}
+
+#[test]
+fn no_familiar_clears_fcheck_track() {
+    // valid_dawn has no familiar; every Fcheck box should be unchecked.
+    let doc = render();
+    for n in 1..=30 {
+        let field = format!("Fcheck{}", n);
+        let v = read_checkbox(&doc, &field).expect("Fcheck has value");
+        assert_eq!(v, "Off", "{}: expected Off, got {}", field, v);
+    }
 }

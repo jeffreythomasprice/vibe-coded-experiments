@@ -192,6 +192,7 @@ fn abu_nuwas() -> Character {
             description: desc.to_string(),
             kind: IntimacyKind::Cause,
             source: DotSource::Base,
+            rating: 1,
         });
     }
 

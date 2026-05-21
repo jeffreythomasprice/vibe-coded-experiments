@@ -1,17 +1,16 @@
 active:
 
-cargo run --example dump_dots > /tmp/exalted-dots.txt
-
-compare output:
-code /tmp/exalted-dots.txt
-evince assets/character-sheet/Exalted2ndED4-Page_TheSolarsV2_Editable.pdf
-
-todo: page 2
-todo: page 4
+retest with the sample character
+cargo run -- render assets/sample-character.toml
+cargo run -- render --format markdown assets/sample-character.toml
+cargo run -- render --format pdf assets/sample-character.toml -o /tmp/sample-character.pdf
 
 
 
 todo:
+
+why does running all tests take a while?
+
 
 make sure we handle favored abilities correctly
 e.g. Edd telling Daz that, "you have one more Favored ability to check off, since you only picked 4 out of 5."

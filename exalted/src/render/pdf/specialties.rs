@@ -7,7 +7,7 @@
 
 use crate::character::{AbilityKind, Character};
 
-use super::dot_map::SPECIALTY_ROWS;
+use super::field_map::SPECIALTY_ROWS;
 
 pub(super) struct SpecialtyRow {
     pub ability: AbilityKind,

@@ -1,5 +1,5 @@
-//! One-shot helper for deriving the `dot_map` tables in
-//! `src/render/pdf/dot_map.rs`.
+//! One-shot helper for deriving the dot tables in
+//! `src/render/pdf/field_map.rs`.
 //!
 //! Walks the embedded MrGone editable Solars sheet's AcroForm tree, finds
 //! every terminal field whose `/T` matches `^dot\d+$`, reads its widget
@@ -15,7 +15,7 @@
 //!
 //! The operator then uses the dump alongside the PDF to assign each row to
 //! its category (Strength's 5 dots, Dexterity's 5 dots, …) and updates
-//! `dot_map.rs` by hand.
+//! `field_map.rs` by hand.
 //!
 //! Run with: `cargo run --example dump_dots > /tmp/exalted-dots.txt`
 
@@ -37,12 +37,21 @@ struct Dot {
     cy: f64,
 }
 
+#[derive(Clone, Debug)]
+struct TextField {
+    name: String,
+    page: u32,
+    cx: f64,
+    cy: f64,
+}
+
 fn main() {
     let doc = Document::load_mem(TEMPLATE_BYTES).expect("parse template");
     let page_of_widget = build_widget_page_index(&doc);
 
     let mut dots = Vec::<Dot>::new();
-    walk_acroform(&doc, &page_of_widget, &mut dots);
+    let mut text_fields = Vec::<TextField>::new();
+    walk_acroform(&doc, &page_of_widget, &mut dots, &mut text_fields);
 
     dots.sort_by(|a, b| {
         a.page
@@ -111,6 +120,32 @@ fn main() {
     for line in &lines {
         println!("{}", line);
     }
+
+    // ------------------------------------------------------------------
+    // Text-field dump (non-dot AcroForm fields, e.g. `name`, `caste`,
+    // `backgrounds1`, `intimacies1`, plus page-4 spillover slots whose
+    // names we want to discover).
+    // ------------------------------------------------------------------
+    text_fields.sort_by(|a, b| {
+        a.page
+            .cmp(&b.page)
+            .then(b.cy.partial_cmp(&a.cy).unwrap_or(std::cmp::Ordering::Equal))
+            .then(a.cx.partial_cmp(&b.cx).unwrap_or(std::cmp::Ordering::Equal))
+    });
+
+    println!();
+    println!("# text-field dump — {} non-dot fields total", text_fields.len());
+    let mut current_page: Option<u32> = None;
+    for f in &text_fields {
+        if current_page != Some(f.page) {
+            current_page = Some(f.page);
+            println!("page {}", f.page + 1);
+        }
+        println!(
+            "  {:<28}  y={:>6.1}  x={:>6.1}",
+            f.name, f.cy, f.cx
+        );
+    }
 }
 
 /// Build a map from widget annotation `ObjectId` to 0-based page index by
@@ -146,6 +181,7 @@ fn walk_acroform(
     doc: &Document,
     widget_page: &HashMap<ObjectId, u32>,
     out: &mut Vec<Dot>,
+    text_out: &mut Vec<TextField>,
 ) {
     let Ok(catalog) = doc.catalog() else { return };
     let Ok(form_obj) = catalog.get(b"AcroForm") else {
@@ -164,7 +200,7 @@ fn walk_acroform(
     };
     for f in fields_arr {
         if let Ok(id) = f.as_reference() {
-            walk_field(doc, widget_page, id, None, out);
+            walk_field(doc, widget_page, id, None, out, text_out);
         }
     }
 }
@@ -175,6 +211,7 @@ fn walk_field(
     id: ObjectId,
     inherited: Option<&str>,
     out: &mut Vec<Dot>,
+    text_out: &mut Vec<TextField>,
 ) {
     let Ok(dict) = doc.get_dictionary(id) else {
         return;
@@ -202,21 +239,21 @@ fn walk_field(
         if has_child_field {
             for k in kids {
                 if let Ok(kid_id) = k.as_reference() {
-                    walk_field(doc, widget_page, kid_id, full_name.as_deref(), out);
+                    walk_field(doc, widget_page, kid_id, full_name.as_deref(), out, text_out);
                 }
             }
             return;
         }
     }
 
-    // Leaf field. Match dotN names.
+    // Leaf field. Sort into dots vs. other named fields.
     let Some(name) = full_name else { return };
-    if !is_dot_name(&name) {
-        return;
-    }
-
     let (cx, cy, page) = read_widget_rect(doc, widget_page, id, dict).unwrap_or((0.0, 0.0, 0));
-    out.push(Dot { name, page, cx, cy });
+    if is_dot_name(&name) {
+        out.push(Dot { name, page, cx, cy });
+    } else {
+        text_out.push(TextField { name, page, cx, cy });
+    }
 }
 
 fn is_dot_name(name: &str) -> bool {

@@ -1,6 +1,6 @@
 //! Fill named text fields on the MrGone sheet from a `Character`.
 //!
-//! See `dot_map.rs` for the dot/checkbox half. This module handles fields
+//! See `field_map.rs` for the dot/checkbox half. This module handles fields
 //! that the sheet has given a meaningful name to: identity (`name`, `caste`,
 //! `concept`, `MOTIVATION`, `anima`), attribute/ability values
 //! (`attributes1`–`9`, `skills1`–`25`), defensive stats (`soak1`–`3`,
@@ -21,6 +21,7 @@ use crate::rules::derived::movement;
 use crate::rules::essence::{personal_essence_max, peripheral_essence_max};
 
 use super::acroform::{set_text_field, FieldIndex};
+use super::field_map;
 use super::super::names::{ability_name, caste_name, intimacy_kind, spell_circle_label};
 use super::PdfRenderError;
 
@@ -41,6 +42,7 @@ pub(super) fn fill(
     fill_charms_and_spells(doc, index, c)?;
     fill_xp_and_essence(doc, index, c)?;
     fill_virtue_flaw(doc, index, c)?;
+    fill_familiar(doc, index, c)?;
     Ok(())
 }
 
@@ -108,8 +110,11 @@ fn fill_specialties(
     c: &Character,
 ) -> Result<(), PdfRenderError> {
     for (i, row) in super::specialties::rows(c).iter().enumerate() {
+        let Some(field) = field_map::specialty_text_field(i) else {
+            break;
+        };
         let text = format!("{}: {}", ability_name(row.ability), row.name);
-        write(doc, index, &format!("specialties{}", i + 1), &text)?;
+        write(doc, index, &field, &text)?;
     }
     Ok(())
 }
@@ -123,15 +128,25 @@ fn fill_backgrounds(
     index: &FieldIndex,
     c: &Character,
 ) -> Result<(), PdfRenderError> {
-    // The sheet has 8 slots × 5 dots for backgrounds (handled in `dots.rs`).
-    // The text label for each slot uses a separate `backgrounds*` field.
+    // 18 background slots total (8 on page 1, 10 on page 4). Dots are
+    // handled in `dots.rs`; text labels are `backgrounds1`..`backgrounds18`.
     let db = database();
-    for (i, bg) in c.backgrounds.iter().take(8).enumerate() {
+    let mut overflow = 0usize;
+    for (i, bg) in c.backgrounds.iter().enumerate() {
+        let Some(field) = field_map::background_text_field(i) else {
+            overflow += 1;
+            continue;
+        };
         let label = format_background_label(bg, db);
-        let numbered = format!("backgrounds{}", i + 1);
-        if index.has(&numbered) {
-            write(doc, index, &numbered, &label)?;
+        if index.has(&field) {
+            write(doc, index, &field, &label)?;
         }
+    }
+    if overflow > 0 {
+        eprintln!(
+            "warning: {} background label(s) beyond slot 18 not rendered",
+            overflow
+        );
     }
     Ok(())
 }
@@ -192,13 +207,12 @@ fn format_language(l: &KnownLanguage) -> String {
         LanguageFamily::TribalTongue(name) => format!("Tribal Tongue: {}", name),
         other => format!("{:?}", other),
     };
-    let native = if l.native { " (native)" } else { "" };
     let dialect = l
         .dialect_specialty
         .as_ref()
         .map(|d| format!(" — {}", d))
         .unwrap_or_default();
-    format!("{}{}{}", family, dialect, native)
+    format!("{}{}", family, dialect)
 }
 
 // ---------------------------------------------------------------------------
@@ -347,6 +361,22 @@ fn fill_virtue_flaw(
         if index.has("virtueflaw1") {
             write(doc, index, "virtueflaw1", &format!("{:?}", flaw))?;
         }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Familiar — only the name is wired up today; the rest of the `fam*` fields
+// on the sheet stay blank until the Familiar model grows.
+// ---------------------------------------------------------------------------
+
+fn fill_familiar(
+    doc: &mut Document,
+    index: &FieldIndex,
+    c: &Character,
+) -> Result<(), PdfRenderError> {
+    if let Some(fam) = &c.familiar {
+        write(doc, index, field_map::FAMILIAR_NAME_FIELD, &fam.name)?;
     }
     Ok(())
 }

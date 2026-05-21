@@ -134,24 +134,42 @@ pub(super) const fn ability_caste_mark(kind: AbilityKind) -> &'static str {
 }
 
 // ---------------------------------------------------------------------------
-// Specialties — 5 write-in rows at the bottom of column 3 of the ability grid.
-// Each row has a caste/favored tick box (`skillscheck26`–`skillscheck30`) and
-// 5 rating dots (`dot171`–`dot195`).
+// Specialties — 15 write-in rows total: 5 on page 1 (column 3 of the ability
+// grid) plus 10 on page 4. Page-1 rows have a caste/favored tick box; page-4
+// rows don't. Page-1 rating dots are `dot171`–`dot195`; page-4 dots are
+// `e2dot51`–`e2dot100` and text labels are `specx1`–`specx10`.
 // ---------------------------------------------------------------------------
 
-pub(super) const SPECIALTY_ROWS: usize = 5;
+pub(super) const SPECIALTY_ROWS: usize = 15;
+pub(super) const SPECIALTY_PAGE1_ROWS: usize = 5;
 
-pub(super) const fn specialty_dots(row: usize) -> Option<[&'static str; 5]> {
+pub(super) const SPECIALTY_PAGE4_DOTS: [[&str; 5]; 10] = [
+    ["e2dot51", "e2dot52", "e2dot53", "e2dot54", "e2dot55"],
+    ["e2dot56", "e2dot57", "e2dot58", "e2dot59", "e2dot60"],
+    ["e2dot61", "e2dot62", "e2dot63", "e2dot64", "e2dot65"],
+    ["e2dot66", "e2dot67", "e2dot68", "e2dot69", "e2dot70"],
+    ["e2dot71", "e2dot72", "e2dot73", "e2dot74", "e2dot75"],
+    ["e2dot76", "e2dot77", "e2dot78", "e2dot79", "e2dot80"],
+    ["e2dot81", "e2dot82", "e2dot83", "e2dot84", "e2dot85"],
+    ["e2dot86", "e2dot87", "e2dot88", "e2dot89", "e2dot90"],
+    ["e2dot91", "e2dot92", "e2dot93", "e2dot94", "e2dot95"],
+    ["e2dot96", "e2dot97", "e2dot98", "e2dot99", "e2dot100"],
+];
+
+pub(super) fn specialty_dots(row: usize) -> Option<[&'static str; 5]> {
     match row {
         0 => Some(["dot171", "dot172", "dot173", "dot174", "dot175"]),
         1 => Some(["dot176", "dot177", "dot178", "dot179", "dot180"]),
         2 => Some(["dot181", "dot182", "dot183", "dot184", "dot185"]),
         3 => Some(["dot186", "dot187", "dot188", "dot189", "dot190"]),
         4 => Some(["dot191", "dot192", "dot193", "dot194", "dot195"]),
+        5..=14 => Some(SPECIALTY_PAGE4_DOTS[row - SPECIALTY_PAGE1_ROWS]),
         _ => None,
     }
 }
 
+/// Page-1 specialty rows (0–4) have a caste/favored tick box; page-4 rows
+/// (5–14) don't.
 pub(super) const fn specialty_caste_mark(row: usize) -> Option<&'static str> {
     match row {
         0 => Some("skillscheck26"),
@@ -159,6 +177,16 @@ pub(super) const fn specialty_caste_mark(row: usize) -> Option<&'static str> {
         2 => Some("skillscheck28"),
         3 => Some("skillscheck29"),
         4 => Some("skillscheck30"),
+        _ => None,
+    }
+}
+
+/// Text label field for a given specialty row. Page-1 rows use the
+/// `specialties{N}` slots; page-4 rows use the separate `specx{N}` slots.
+pub(super) fn specialty_text_field(row: usize) -> Option<String> {
+    match row {
+        0..=4 => Some(format!("specialties{}", row + 1)),
+        5..=14 => Some(format!("specx{}", row - SPECIALTY_PAGE1_ROWS + 1)),
         _ => None,
     }
 }
@@ -264,6 +292,26 @@ pub(super) const LIMIT_TRACK: [&str; 10] = [
     "LBCheck10",
 ];
 
+/// Per-language checkboxes (15 rows). Ticked iff that slot's language
+/// is the character's native tongue.
+pub(super) const LANGUAGE_CHECKBOXES: [&str; 15] = [
+    "LCheck1",
+    "LCheck2",
+    "LCheck3",
+    "LCheck4",
+    "LCheck5",
+    "LCheck6",
+    "LCheck7",
+    "LCheck8",
+    "LCheck9",
+    "LCheck10",
+    "LCheck11",
+    "LCheck12",
+    "LCheck13",
+    "LCheck14",
+    "LCheck15",
+];
+
 // ---------------------------------------------------------------------------
 // Health (22 boxes, grouped by wound penalty / kind)
 //
@@ -348,11 +396,16 @@ pub(super) fn health_slots(penalty: i8, kind: HealthLevelKind) -> &'static [&'st
 }
 
 // ---------------------------------------------------------------------------
-// Backgrounds — 8 slots × 5 dots (dot241..dot280)
+// Backgrounds — 18 slots total: 8 on page 1 (dot241..dot280) and 10 on page 4
+// (e2dot1..e2dot50). Page-4 text labels use `backgrounds9`..`backgrounds18`.
 //
 // Backgrounds are chosen at character creation, so slots have no fixed
 // semantic identity — they stay indexed by position.
 // ---------------------------------------------------------------------------
+
+pub(super) const BACKGROUND_PAGE1_SLOTS: usize = 8;
+pub(super) const BACKGROUND_PAGE4_SLOTS: usize = 10;
+pub(super) const BACKGROUND_SLOTS: usize = BACKGROUND_PAGE1_SLOTS + BACKGROUND_PAGE4_SLOTS;
 
 pub(super) const BACKGROUND_SLOT_DOTS: [[&str; 5]; 8] = [
     ["dot241", "dot242", "dot243", "dot244", "dot245"],
@@ -364,6 +417,74 @@ pub(super) const BACKGROUND_SLOT_DOTS: [[&str; 5]; 8] = [
     ["dot271", "dot272", "dot273", "dot274", "dot275"],
     ["dot276", "dot277", "dot278", "dot279", "dot280"],
 ];
+
+pub(super) const BACKGROUND_PAGE4_DOTS: [[&str; 5]; 10] = [
+    ["e2dot1", "e2dot2", "e2dot3", "e2dot4", "e2dot5"],
+    ["e2dot6", "e2dot7", "e2dot8", "e2dot9", "e2dot10"],
+    ["e2dot11", "e2dot12", "e2dot13", "e2dot14", "e2dot15"],
+    ["e2dot16", "e2dot17", "e2dot18", "e2dot19", "e2dot20"],
+    ["e2dot21", "e2dot22", "e2dot23", "e2dot24", "e2dot25"],
+    ["e2dot26", "e2dot27", "e2dot28", "e2dot29", "e2dot30"],
+    ["e2dot31", "e2dot32", "e2dot33", "e2dot34", "e2dot35"],
+    ["e2dot36", "e2dot37", "e2dot38", "e2dot39", "e2dot40"],
+    ["e2dot41", "e2dot42", "e2dot43", "e2dot44", "e2dot45"],
+    ["e2dot46", "e2dot47", "e2dot48", "e2dot49", "e2dot50"],
+];
+
+/// Dot row for a given background slot (0..18). `None` past slot 17.
+pub(super) fn background_dots(slot: usize) -> Option<[&'static str; 5]> {
+    match slot {
+        0..=7 => Some(BACKGROUND_SLOT_DOTS[slot]),
+        8..=17 => Some(BACKGROUND_PAGE4_DOTS[slot - BACKGROUND_PAGE1_SLOTS]),
+        _ => None,
+    }
+}
+
+/// Text label field for a given background slot. Slots 0–7 use
+/// `backgrounds1`..`backgrounds8` on page 1; slots 8–17 use
+/// `backgrounds9`..`backgrounds18` on page 4.
+pub(super) fn background_text_field(slot: usize) -> Option<String> {
+    if slot < BACKGROUND_SLOTS {
+        Some(format!("backgrounds{}", slot + 1))
+    } else {
+        None
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Intimacies — 10 slots × 10 rating dots, on page 4. Text labels reuse the
+// existing `intimacies1`..`intimacies10` fields (also page 4 in this template).
+// ---------------------------------------------------------------------------
+
+pub(super) const INTIMACY_DOTS: [[&str; 10]; 10] = [
+    ["Idot1", "Idot2", "Idot3", "Idot4", "Idot5", "Idot6", "Idot7", "Idot8", "Idot9", "Idot10"],
+    ["Idot11", "Idot12", "Idot13", "Idot14", "Idot15", "Idot16", "Idot17", "Idot18", "Idot19", "Idot20"],
+    ["Idot21", "Idot22", "Idot23", "Idot24", "Idot25", "Idot26", "Idot27", "Idot28", "Idot29", "Idot30"],
+    ["Idot31", "Idot32", "Idot33", "Idot34", "Idot35", "Idot36", "Idot37", "Idot38", "Idot39", "Idot40"],
+    ["Idot41", "Idot42", "Idot43", "Idot44", "Idot45", "Idot46", "Idot47", "Idot48", "Idot49", "Idot50"],
+    ["Idot51", "Idot52", "Idot53", "Idot54", "Idot55", "Idot56", "Idot57", "Idot58", "Idot59", "Idot60"],
+    ["Idot61", "Idot62", "Idot63", "Idot64", "Idot65", "Idot66", "Idot67", "Idot68", "Idot69", "Idot70"],
+    ["Idot71", "Idot72", "Idot73", "Idot74", "Idot75", "Idot76", "Idot77", "Idot78", "Idot79", "Idot80"],
+    ["Idot81", "Idot82", "Idot83", "Idot84", "Idot85", "Idot86", "Idot87", "Idot88", "Idot89", "Idot90"],
+    ["Idot91", "Idot92", "Idot93", "Idot94", "Idot95", "Idot96", "Idot97", "Idot98", "Idot99", "Idot100"],
+];
+
+// ---------------------------------------------------------------------------
+// Familiar — page 4 has a 30-checkbox health track plus a `fam1` text field
+// for the familiar's name. Other `fam*` fields exist on the sheet but aren't
+// modeled yet.
+// ---------------------------------------------------------------------------
+
+pub(super) const FAMILIAR_HEALTH_SLOTS: [&str; 30] = [
+    "Fcheck1", "Fcheck2", "Fcheck3", "Fcheck4", "Fcheck5",
+    "Fcheck6", "Fcheck7", "Fcheck8", "Fcheck9", "Fcheck10",
+    "Fcheck11", "Fcheck12", "Fcheck13", "Fcheck14", "Fcheck15",
+    "Fcheck16", "Fcheck17", "Fcheck18", "Fcheck19", "Fcheck20",
+    "Fcheck21", "Fcheck22", "Fcheck23", "Fcheck24", "Fcheck25",
+    "Fcheck26", "Fcheck27", "Fcheck28", "Fcheck29", "Fcheck30",
+];
+
+pub(super) const FAMILIAR_NAME_FIELD: &str = "fam1";
 
 // ---------------------------------------------------------------------------
 // Essence pools (page 2)
@@ -434,12 +555,23 @@ mod tests {
             for f in specialty_dots(row).expect("specialty row in range") {
                 check(f);
             }
-            check(specialty_caste_mark(row).expect("specialty row in range"));
+            // Only page-1 specialty rows have caste/favored marks.
+            if let Some(field) = specialty_caste_mark(row) {
+                check(field);
+            }
         }
-        for row in &BACKGROUND_SLOT_DOTS {
+        for slot in 0..BACKGROUND_SLOTS {
+            for f in background_dots(slot).expect("background slot in range") {
+                check(f);
+            }
+        }
+        for row in &INTIMACY_DOTS {
             for f in row {
                 check(f);
             }
+        }
+        for f in &FAMILIAR_HEALTH_SLOTS {
+            check(f);
         }
         for kind in VirtueKind::ALL {
             for f in virtue_dots(*kind) {
@@ -459,6 +591,9 @@ mod tests {
             check(f);
         }
         for f in &LIMIT_TRACK {
+            check(f);
+        }
+        for f in &LANGUAGE_CHECKBOXES {
             check(f);
         }
         for f in &ALL_HEALTH_SLOTS {
@@ -511,13 +646,30 @@ mod tests {
             for f in specialty_dots(row).expect("specialty row in range") {
                 probe(f);
             }
-            probe(specialty_caste_mark(row).expect("specialty row in range"));
+            if let Some(field) = specialty_caste_mark(row) {
+                probe(field);
+            }
+            if let Some(field) = specialty_text_field(row) {
+                probe(&field);
+            }
         }
-        for row in &BACKGROUND_SLOT_DOTS {
+        for slot in 0..BACKGROUND_SLOTS {
+            for f in background_dots(slot).expect("background slot in range") {
+                probe(f);
+            }
+            if let Some(field) = background_text_field(slot) {
+                probe(&field);
+            }
+        }
+        for row in &INTIMACY_DOTS {
             for f in row {
                 probe(f);
             }
         }
+        for f in &FAMILIAR_HEALTH_SLOTS {
+            probe(f);
+        }
+        probe(FAMILIAR_NAME_FIELD);
         for kind in VirtueKind::ALL {
             for f in virtue_dots(*kind) {
                 probe(f);
@@ -531,6 +683,7 @@ mod tests {
             .chain(WILLPOWER_TEMP.iter())
             .chain(ESSENCE_DOTS.iter())
             .chain(LIMIT_TRACK.iter())
+            .chain(LANGUAGE_CHECKBOXES.iter())
             .chain(ALL_HEALTH_SLOTS.iter())
         {
             probe(f);

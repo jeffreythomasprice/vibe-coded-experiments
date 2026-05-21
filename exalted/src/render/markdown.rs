@@ -30,6 +30,7 @@ pub fn character_to_markdown(c: &Character) -> String {
     section_spells(&c.spells, &mut out);
     section_backgrounds(c, &mut out);
     section_intimacies(c, &mut out);
+    section_familiar(c, &mut out);
     section_equipment(&c.equipment, &mut out);
     section_hearthstones(&c.hearthstones, &mut out);
     section_languages(&c.languages, &mut out);
@@ -407,13 +408,35 @@ fn section_intimacies(c: &Character, out: &mut String) {
     for i in &c.intimacies {
         writeln!(
             out,
-            "- **{}** ({}) — *[{}]*",
+            "- **{}** ({}) — {} ({}/10) *[{}]*",
             i.description,
             intimacy_kind(i.kind),
+            dots(i.rating, 10),
+            i.rating,
             source_tag(i.source)
         )
         .unwrap();
     }
+    writeln!(out).unwrap();
+}
+
+fn section_familiar(c: &Character, out: &mut String) {
+    let Some(fam) = &c.familiar else {
+        return;
+    };
+    writeln!(out, "## Familiar").unwrap();
+    let name = if fam.name.is_empty() { "<unnamed>" } else { &fam.name };
+    writeln!(out, "- Name: {}", name).unwrap();
+    let d = &fam.health_damage;
+    writeln!(
+        out,
+        "- Damage: {}B / {}L / {}A ({} / 30)",
+        d.bashing,
+        d.lethal,
+        d.aggravated,
+        d.total()
+    )
+    .unwrap();
     writeln!(out).unwrap();
 }
 

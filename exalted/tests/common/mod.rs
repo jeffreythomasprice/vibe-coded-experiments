@@ -120,6 +120,7 @@ pub fn valid_dawn() -> Character {
             description: desc.to_string(),
             kind: IntimacyKind::Cause,
             source: DotSource::Base,
+            rating: 1,
         });
     }
 

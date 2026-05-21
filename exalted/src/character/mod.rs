@@ -1,6 +1,7 @@
 pub mod backgrounds;
 pub mod charms;
 pub mod equipment;
+pub mod familiar;
 pub mod hearthstone;
 pub mod identity;
 pub mod intimacies;
@@ -17,6 +18,7 @@ use serde::{Deserialize, Serialize};
 pub use backgrounds::{canonical_id as background_canonical_id, BackgroundKind, BackgroundRef};
 pub use charms::CharmRef;
 pub use equipment::{Armor, Artifact, Equipment, Possession, Weapon};
+pub use familiar::Familiar;
 pub use hearthstone::Hearthstone;
 pub use identity::{Anima, Appearance, Caste, Identity, VirtueFlaw};
 pub use intimacies::{Intimacy, IntimacyKind};
@@ -56,6 +58,8 @@ pub struct Character {
     pub languages: Vec<KnownLanguage>,
     #[serde(default)]
     pub hearthstones: Vec<Hearthstone>,
+    #[serde(default)]
+    pub familiar: Option<Familiar>,
 }
 
 impl Character {
@@ -102,6 +106,7 @@ impl Character {
             notes: BTreeMap::new(),
             languages: Vec::new(),
             hearthstones: Vec::new(),
+            familiar: None,
         }
     }
 

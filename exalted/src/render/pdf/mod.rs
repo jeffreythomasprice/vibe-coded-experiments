@@ -6,7 +6,7 @@
 
 mod acroform;
 mod checkboxes;
-mod dot_map;
+mod field_map;
 mod dots;
 mod specialties;
 mod template;

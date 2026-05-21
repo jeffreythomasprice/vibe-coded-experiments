@@ -663,6 +663,7 @@ spent = 1
 [[intimacies]]
 description = "The downtrodden"
 kind = "Cause"
+rating = 1
 
 [intimacies.source]
 kind = "Base"
@@ -670,6 +671,7 @@ kind = "Base"
 [[intimacies]]
 description = "My dojo"
 kind = "Cause"
+rating = 1
 
 [intimacies.source]
 kind = "Base"
@@ -677,6 +679,7 @@ kind = "Base"
 [[intimacies]]
 description = "Honor"
 kind = "Cause"
+rating = 1
 
 [intimacies.source]
 kind = "Base"
