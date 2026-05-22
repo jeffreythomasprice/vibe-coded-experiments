@@ -268,7 +268,10 @@ pub(super) const WILLPOWER_TEMP: [&str; 10] = [
     "willcheck10",
 ];
 
-/// Essence dots — the MrGone sheet caps at 6 (rather than 10).
+/// Essence dots — the MrGone sheet only carries six AcroForm dot fields,
+/// even though the rules scale runs 1–10 (Exalted 2E core, p.78–79).
+/// Positions 7–10 are drawn as overlay content by `dots.rs`, not via
+/// AcroForm fields.
 pub(super) const ESSENCE_DOTS: [&str; 6] = [
     "essencedot1",
     "essencedot2",

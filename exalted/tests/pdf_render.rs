@@ -199,6 +199,36 @@ fn ability_dots_match_character() {
     }
 }
 
+/// The renderer must bake an appearance stream for every text field it
+/// writes — viewers like pdf.js / Firefox don't honor `/NeedAppearances`
+/// and would otherwise show the field blank. Spot-check the `name` widget:
+/// it should have an `/AP /N` Form XObject whose content stream contains
+/// the literal text we wrote.
+#[test]
+fn text_field_has_baked_appearance_stream() {
+    let doc = render();
+    let widget_id = find_field(&doc, "name").expect("name field exists");
+    let widget = doc.get_dictionary(widget_id).expect("widget dict");
+    let ap = widget
+        .get(b"AP")
+        .expect("widget has /AP")
+        .as_dict()
+        .expect("/AP is a dict");
+    let n_ref = ap.get(b"N").expect("/AP has /N");
+    let xobject_id = n_ref.as_reference().expect("/N is an indirect ref");
+    let stream = doc
+        .get_object(xobject_id)
+        .expect("xobject exists")
+        .as_stream()
+        .expect("xobject is a stream");
+    let content = std::str::from_utf8(&stream.content).expect("ascii content");
+    assert!(
+        content.contains("Test Solar"),
+        "appearance stream should contain the field value, got: {:?}",
+        content
+    );
+}
+
 #[test]
 fn pdf_can_be_written_to_disk() {
     let c = valid_dawn();
@@ -655,6 +685,94 @@ fn familiar_damage_fills_fcheck_track() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Essence dots 7–10. The MrGone template only has six dot widgets, so dots
+// 7–10 are drawn as overlay content (a second row below the original six).
+// We assert by inspecting the appended page content stream, which carries a
+// `% exalted-essence-overflow` marker and four circle paths (filled with `f`
+// or stroked with `S`).
+// ---------------------------------------------------------------------------
+
+fn essence_overflow_stream_content(doc: &Document) -> String {
+    // Scan every stream object in the document and concatenate any that
+    // carry the overflow marker comment. The overlay is appended as an
+    // uncompressed stream (no `/Filter`), so we can read it byte-for-byte
+    // without decoding.
+    let mut combined = String::new();
+    for (_, obj) in &doc.objects {
+        if let Object::Stream(s) = obj {
+            // Try raw bytes first; fall back to decompressed for streams
+            // that picked up a /Filter on save.
+            let bytes = if let Ok(text) = std::str::from_utf8(&s.content) {
+                if text.contains("exalted-essence-overflow") {
+                    Some(s.content.clone())
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            let bytes = bytes.or_else(|| s.decompressed_content().ok());
+            if let Some(b) = bytes {
+                if let Ok(text) = std::str::from_utf8(&b) {
+                    if text.contains("exalted-essence-overflow") {
+                        combined.push_str(text);
+                    }
+                }
+            }
+        }
+    }
+    combined
+}
+
+#[test]
+fn essence_overflow_fills_dots_7_and_8_when_rating_is_8() {
+    use exalted::character::RatedTrait;
+    let doc = render_with(|c| {
+        c.essence = RatedTrait::with_base(8);
+    });
+    let s = essence_overflow_stream_content(&doc);
+    assert!(
+        s.contains("% exalted-essence-overflow"),
+        "overlay stream missing marker at Essence 8, got: {:?}",
+        s
+    );
+    // 4 dots in the overflow row → 4 circle paths, each terminated by `f`
+    // (filled) or `S` (stroked). With Essence 8, dots 7 and 8 are filled
+    // and 9 and 10 are stroked.
+    let fills = s.matches("\nf\n").count();
+    let strokes = s.matches("\nS\n").count();
+    assert_eq!(fills, 2, "expected 2 filled overflow dots, got {} (stream: {:?})", fills, s);
+    assert_eq!(strokes, 2, "expected 2 stroked overflow dots, got {} (stream: {:?})", strokes, s);
+}
+
+#[test]
+fn essence_overflow_not_drawn_when_rating_below_7() {
+    // valid_dawn has Essence 2 — none of dots 7–10 would be filled, so
+    // we don't render the overflow row at all.
+    let doc = render();
+    let s = essence_overflow_stream_content(&doc);
+    assert!(
+        s.is_empty(),
+        "expected no overflow stream below rating 7, got: {:?}",
+        s
+    );
+}
+
+#[test]
+fn essence_overflow_drawn_at_exactly_rating_7() {
+    // Boundary: rating 7 fills dot 7 and leaves 8–10 empty.
+    use exalted::character::RatedTrait;
+    let doc = render_with(|c| {
+        c.essence = RatedTrait::with_base(7);
+    });
+    let s = essence_overflow_stream_content(&doc);
+    let fills = s.matches("\nf\n").count();
+    let strokes = s.matches("\nS\n").count();
+    assert_eq!(fills, 1, "expected 1 filled overflow dot at Essence 7, got {}", fills);
+    assert_eq!(strokes, 3, "expected 3 stroked overflow dots at Essence 7, got {}", strokes);
+}
+
 #[test]
 fn no_familiar_clears_fcheck_track() {
     // valid_dawn has no familiar; every Fcheck box should be unchecked.
@@ -664,4 +782,144 @@ fn no_familiar_clears_fcheck_track() {
         let v = read_checkbox(&doc, &field).expect("Fcheck has value");
         assert_eq!(v, "Off", "{}: expected Off, got {}", field, v);
     }
+}
+
+// ---------------------------------------------------------------------------
+// CHARMS table: each row populates 5 columns
+// (NAME | TYPE | DURATION | COST | EFFECT).
+//
+// Row N (1..14) maps to fields:
+//   NAME      = charms/sorceryN
+//   TYPE      = charms/sorcery(N+14)
+//   DURATION  = charms/sorcery(N+28)
+//   COST      = charms/sorcery(N+42)
+//   EFFECT    = charms/sorcery(N+56)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn charm_row_fills_all_five_columns() {
+    use exalted::character::{CharmRef, DotSource};
+    use exalted::rules::database::{CharmEntry, CharmType};
+    use std::collections::BTreeMap;
+
+    // Use a Custom entry so the test is fully self-contained — no dependency
+    // on the bulk-authored effect strings in charms.toml.
+    let custom = CharmEntry {
+        id: "test-render-charm".to_string(),
+        name: "Test Render Charm".to_string(),
+        exalt_type: "solar".to_string(),
+        ability: "archery".to_string(),
+        cost: "3m, 1wp".to_string(),
+        mins_ability: 1,
+        mins_essence: 1,
+        charm_type: CharmType::Supplemental,
+        type_detail: "".to_string(),
+        keywords: vec![],
+        duration: "Instant".to_string(),
+        prerequisites: vec![],
+        mins_attribute: BTreeMap::new(),
+        source: "test".to_string(),
+        pages: "1".to_string(),
+        effect: "Test effect summary".to_string(),
+        description: "test".to_string(),
+    };
+    let doc = render_with(|c| {
+        c.charms.clear();
+        c.charms.push(CharmRef::Custom {
+            entry: custom,
+            source: DotSource::BonusPoints { spent: 4 },
+            non_solar: false,
+            notes: None,
+            ox_body_pattern: None,
+        });
+    });
+
+    assert_eq!(
+        read_text_field(&doc, "charms/sorcery1").as_deref(),
+        Some("Test Render Charm"),
+        "NAME column"
+    );
+    assert_eq!(
+        read_text_field(&doc, "charms/sorcery15").as_deref(),
+        Some("Supplemental"),
+        "TYPE column"
+    );
+    assert_eq!(
+        read_text_field(&doc, "charms/sorcery29").as_deref(),
+        Some("Instant"),
+        "DURATION column"
+    );
+    assert_eq!(
+        read_text_field(&doc, "charms/sorcery43").as_deref(),
+        Some("3m, 1wp"),
+        "COST column"
+    );
+    assert_eq!(
+        read_text_field(&doc, "charms/sorcery57").as_deref(),
+        Some("Test effect summary"),
+        "EFFECT column"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// SORCERY table: spells write to `charms/sorcery{M}x` fields, NOT into the
+// CHARMS rows. Row 1 of the SORCERY table uses M=10.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn spell_row_writes_to_sorcery_table_not_charms_table() {
+    use exalted::character::{DotSource, SpellCircle, SpellRef};
+    use exalted::rules::database::SpellEntry;
+
+    let custom = SpellEntry {
+        id: "test-render-spell".to_string(),
+        name: "Test Render Spell".to_string(),
+        circle: SpellCircle::Terrestrial,
+        cost: "15m".to_string(),
+        keywords: vec![],
+        duration: "One scene".to_string(),
+        target: "Caster".to_string(),
+        source: "test".to_string(),
+        pages: "1".to_string(),
+        effect: "Spell effect summary".to_string(),
+        description: "test".to_string(),
+    };
+    let doc = render_with(|c| {
+        c.charms.clear();
+        c.spells.push(SpellRef::Custom {
+            entry: custom,
+            source: DotSource::BonusPoints { spent: 7 },
+            notes: None,
+        });
+    });
+
+    // SORCERY table row 1 → M = 10.
+    assert_eq!(
+        read_text_field(&doc, "charms/sorcery10x").as_deref(),
+        Some("Test Render Spell"),
+        "SORCERY NAME column"
+    );
+    assert_eq!(
+        read_text_field(&doc, "charms/sorcery38x").as_deref(),
+        Some("One scene"),
+        "SORCERY DURATION column"
+    );
+    assert_eq!(
+        read_text_field(&doc, "charms/sorcery52x").as_deref(),
+        Some("15m"),
+        "SORCERY COST column"
+    );
+    assert_eq!(
+        read_text_field(&doc, "charms/sorcery66x").as_deref(),
+        Some("Spell effect summary"),
+        "SORCERY EFFECT column"
+    );
+
+    // The spell must NOT have leaked into the CHARMS table.
+    let charms_row1 = read_text_field(&doc, "charms/sorcery1").unwrap_or_default();
+    assert!(
+        !charms_row1.contains("Test Render Spell"),
+        "spell name leaked into CHARMS NAME row 1: {:?}",
+        charms_row1
+    );
 }

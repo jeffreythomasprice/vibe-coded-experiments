@@ -57,6 +57,19 @@ pub enum CharmType {
     Permanent,
 }
 
+impl CharmType {
+    /// Canonical label as printed on the character sheet's TYPE column.
+    pub fn display(&self) -> &'static str {
+        match self {
+            CharmType::Reflexive => "Reflexive",
+            CharmType::Supplemental => "Supplemental",
+            CharmType::Simple => "Simple",
+            CharmType::ExtraAction => "Extra Action",
+            CharmType::Permanent => "Permanent",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CharmEntry {
     pub id: String,
@@ -79,6 +92,10 @@ pub struct CharmEntry {
     pub mins_attribute: BTreeMap<AttributeKind, u8>,
     pub source: String,
     pub pages: String,
+    /// One-line summary suitable for the EFFECT column on the printed
+    /// character sheet (~25–40 characters reads cleanly; longer is
+    /// allowed and AcroForm auto-shrinks).
+    pub effect: String,
     pub description: String,
 }
 
@@ -103,6 +120,8 @@ pub struct SpellEntry {
     pub target: String,
     pub source: String,
     pub pages: String,
+    /// One-line summary for the EFFECT column on the printed sheet.
+    pub effect: String,
     pub description: String,
 }
 
@@ -291,6 +310,7 @@ fn specialize_excellency(template: &CharmEntry, ability: AbilityKind) -> CharmEn
         name: template.name.replace("(Ability)", display),
         ability: display.to_string(),
         description: template.description.replace("(Ability)", display),
+        effect: template.effect.replace("(Ability)", display),
         // Everything else copies through unchanged.
         exalt_type: template.exalt_type.clone(),
         cost: template.cost.clone(),
@@ -471,6 +491,7 @@ duration = "Instant"
 prerequisites = []
 source = "test"
 pages = "1"
+effect = "test"
 description = "test"
 
 [[charm]]
@@ -488,6 +509,7 @@ duration = "Instant"
 prerequisites = []
 source = "test"
 pages = "1"
+effect = "test"
 description = "test"
 "#;
         let err = RulesDatabase::from_strings(dup, "", "").unwrap_err();

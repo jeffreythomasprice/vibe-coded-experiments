@@ -96,6 +96,7 @@ fn any_n_excellencies_wildcard_counted() {
         mins_attribute: BTreeMap::new(),
         source: "test".to_string(),
         pages: "1".to_string(),
+        effect: "".to_string(),
         description: "test".to_string(),
     };
     let mut c = valid_dawn();
@@ -141,6 +142,7 @@ fn attribute_minimum_enforced() {
         mins_attribute: mins,
         source: "test".to_string(),
         pages: "1".to_string(),
+        effect: "".to_string(),
         description: "test".to_string(),
     };
     let mut c = valid_dawn();

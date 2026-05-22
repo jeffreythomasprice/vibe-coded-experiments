@@ -13,6 +13,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "183"
+effect = "+1 die per mote (cap A+A)"
 description = """
 Lawgivers with this Charm are known for their moments of brilliance. The Exalt's player can invoke this Charm when making a roll based on the relevant Ability. This Charm then adds one die to that roll for each mote spent. This Charm is the paradigmatic dice adder. The rule that Solars are prohibited from increasing a dice pool by more than their (Attribute + Ability) almost always refers to the purchase of dice through the use of this Charm.
 
@@ -36,6 +37,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "184"
+effect = "+1 success per 2m"
 description = """
 Solar Exalted with this Charm are known for their unwavering perfection. The Exalt's player can invoke this Charm when making a roll based on the relevant Ability. The Exalt then spends up to (Attribute + Ability) in motes. This Charm adds one success to a roll for every two motes spent. Each success purchased with Essence Triumphant is the equivalent of purchasing two dice with the First Excellency or some other dice adder.
 
@@ -59,6 +61,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "185"
+effect = "Reroll the action"
 description = """
 Exalted with this Charm recover smoothly from failure. An Exalt's player can invoke this Charm after making a roll based on the relevant Ability. This Charm allows her player to make the roll again, using the new result if the Exalt prefers it. The Exalt can also use this Charm to enhance static values derived from the relevant Ability. Doing so increases the character's effective (Attribute + Ability) rating for one task by the Ability rating. This means that the Essence Resurgent Excellency increases an applicable DV by half the relevant Ability.
 """
@@ -78,6 +81,7 @@ duration = "One scene"
 prerequisites = ["any-ability-excellency"]
 source = "Exalted 2E"
 pages = "185"
+effect = "Discount 1st-3rd Excellencies (2m=1m off)"
 description = """
 The Solar Exalted are infinite wells of talent. Each two motes committed to this Charm reduces the mote cost for the first three (Ability) Excellencies by one, to a minimum of 0. Exalted with Essence 3 can spend up to six motes on this Charm, while Exalted with Essence 4+ can spend as many motes as they like.
 
@@ -99,6 +103,7 @@ duration = "Permanent"
 prerequisites = ["any-ability-excellency"]
 source = "Exalted 2E"
 pages = "187"
+effect = "First 3 Excellencies as innate powers"
 description = """
 The Essence of the Solar Exalted flows through them and brings their intentions and their actions into perfect harmony. Purchasing this Charm allows the Solar to invoke the First, Second and Third Excellencies for the relevant Ability as innate powers rather than Charms. This means that the character can use them even with a Combo that does not contain them or when she has already used a Charm for an action. However, she cannot use them out of place on the order of combat actions, nor may she apply the same Charm repeatedly to a single roll.
 
@@ -122,6 +127,7 @@ duration = "Instant"
 prerequisites = ["any-archery-excellency"]
 source = "Exalted 2E"
 pages = "187"
+effect = "Ignore range/visibility/weather penalties"
 description = """
 The Solar's heart knows the arrow's path. She spends three motes and fires a single flawless shot, regardless of distance, visibility, weather and other prevailing conditions. This Charm nullifies all penalties, except wound and multiple action penalties, applying to a single Archery-based attack.
 
@@ -143,6 +149,7 @@ duration = "Instant"
 prerequisites = ["there-is-no-wind"]
 source = "Exalted 2E"
 pages = "187"
+effect = "Archery attack auto-hits"
 description = """
 The Solar fires a single perfect shot. The Exalt spends this Charm's cost and fires an arrow at a valid target. This Charm supplements the player's Archery roll and guarantees that the arrow hits. This Charm can be used in archery contests and for trick shots—such as severing a rope from afar—but it is most often used in attacks. Resolve such attacks normally. If the attack would have missed without this Charm, then it hits, calculating its raw damage based on an assumption of 0 attack successes. This Charm does not change the normal rules for valid targets—shooting "the gap in his armor" does not allow the Exalt to bypass armor soak, nor does this Charm allow the Exalt to fire through a stone wall or beyond the maximum Range of his bow without additional magic.
 """
@@ -162,6 +169,7 @@ duration = "Instant"
 prerequisites = ["there-is-no-wind"]
 source = "Exalted 2E"
 pages = "187"
+effect = "Hit knocks foe Essence yards back"
 description = """
 Essence imbues the Lawgiver's arrow with great force. This Charm supplements an Archery-based attack. If the attack hits and rolls even one die of damage, the enemy's player rolls (Stamina + Resistance) against a difficulty of (the attack's post-soak damage dice). On failure, the attack knocks the enemy away from the Exalt a number of yards equal to the Exalt's Essence. Objects do not get a roll, but are instead knocked back automatically if (the raw damage x 50) exceeds the object's weight in pounds.
 """
@@ -181,6 +189,7 @@ duration = "Instant"
 prerequisites = ["any-archery-excellency"]
 source = "Exalted 2E"
 pages = "187"
+effect = "Flurry of Essence+1 Archery attacks"
 description = """
 The ideal archer flows with soft and unhesitating grace through the motions of firing her weapon. This Charm is a magical flurry of two or more Archery-based attacks. Each attack costs two motes, including the first, and the Exalt can buy up to (her permanent Essence + 1) attacks. This Charm lets the Solar make these attacks regardless of the weapon's Rate, without multiple action penalties, and with a DV penalty equal to the highest penalty for any one attack.
 
@@ -204,6 +213,7 @@ duration = "Instant"
 prerequisites = ["trance-of-unhesitating-speed"]
 source = "Exalted 2E"
 pages = "187"
+effect = "One attack hits Essence×3 targets"
 description = """
 Against a single Solar, the armies of the unrighteous fall. This Charm enhances an Archery-based attack. The Solar can apply this attack (for which he rolls only once) against (his permanent Essence x 3) valid targets. He cannot apply this attack to a single person or human-sized object more than once, but he can apply it repeatedly against the same military unit or larger object. This Charm requires that the character have separate ammunition for each target. The character can use this Charm even with weapons such as firewands that would normally require a reloading action between shots.
 """
@@ -223,6 +233,7 @@ duration = "Instant"
 prerequisites = ["trance-of-unhesitating-speed"]
 source = "Exalted 2E"
 pages = "188"
+effect = "Reflexively draw bow; +Essence to Join Battle"
 description = """
 To assault the Chosen of the Unconquered Sun is folly. Their retribution is swift and terrible. The Exalt must have an Archery weapon available for use to invoke this Charm, but it need not be in her hands. This Charm enhances the Join Battle action, giving the Solar a number of bonus successes on the Join Battle roll equal to her Essence. This Charm immediately and reflexively draws and readies an available Archery weapon.
 """
@@ -242,6 +253,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "188"
+effect = "+Essence dmg; pick fire/holy/+4 dice variant"
 description = """
 The character charges an arrow with Essence. The effects are based on the character's fighting style and anima. This Charm always adds the character's Essence in damage to an Archery-based attack. In addition, players can pick one of the following effects when purchasing this Charm.
 
@@ -269,6 +281,7 @@ duration = "Permanent"
 prerequisites = ["essence-arrow-attack"]
 source = "Exalted 2E"
 pages = "189"
+effect = "Make arrows from Essence (1m each)"
 description = """
 The bane of the mortal archer is her dependence on ammunition, but Lawgivers can use this Charm to shape sparkling arrows of Essence. This Charm permits a Lawgiver to make ranged attacks without using ammunition. Each such attack costs one mote of Essence. The Exalt can attack as if using any form of ammunition without Resources cost, such as a broadhead, fowling, frog crotch or target arrow. This Charm permanently enhances the Exalt's capabilities. Therefore, shaping motes into ammunition is an unrolled reflexive action and not a Charm activation.
 """
@@ -288,6 +301,7 @@ duration = "Indefinite"
 prerequisites = ["phantom-arrow-technique"]
 source = "Exalted 2E"
 pages = "189"
+effect = "Banish/recall a ranged weapon to Elsewhere"
 description = """
 The Chosen may set aside their weapons for a time, but a life of peace can never be their fate. The Solar first draws a ranged weapon that he owns and has used to inflict damage in battle. This Charm banishes that weapon to Elsewhere. The Solar can then draw the weapon directly from Elsewhere later, using a miscellaneous action. The Charm ends when he does so. If he cancels the Essence committed to this Charm while the weapon is Elsewhere, the weapon falls to the ground at his side. This Charm can banish only objects (including artifacts) deliberately created as ranged weapons.
 """
@@ -307,6 +321,7 @@ duration = "One scene"
 prerequisites = ["phantom-arrow-technique"]
 source = "Exalted 2E"
 pages = "189"
+effect = "Conjure a bow (Acc/Dmg = Essence) for a scene"
 description = """
 The Solar shapes his Essence into a deadly bow. Each bow has an appearance unique to the Exalt who conjures it. It has a Range of 300 yards. It has Rate and Accuracy equal to the Lawgiver's permanent Essence score. It inflicts lethal damage, and its damage bonus is also equal to the character's permanent Essence. (The raw lethal damage of each shot equals [the character's Strength + Essence + extra successes + any bonus from arrows].)
 """
@@ -326,6 +341,7 @@ duration = "One scene"
 prerequisites = ["phantom-arrow-technique"]
 source = "Exalted 2E"
 pages = "189"
+effect = "Free Essence arrows for scene"
 description = """
 The Solar's quiver holds the arrows of the sun. This Charm allows the Solar to shape arrows from ambient Essence at will for the remainder of the scene. Doing so functions as Phantom Arrow Technique but does not cost one mote of Essence per arrow. This Charm can create firedust charges in addition to the normal ammunition options. Ammunition created by this Charm adds one die to its normal damage and never strikes an unintended target. It will stop in midair for an instant before vanishing rather than hurt someone the Solar wishes spared.
 """
@@ -345,6 +361,7 @@ duration = "One scene"
 prerequisites = ["inexhaustible-bolts-of-solar-fire"]
 source = "Exalted 2E"
 pages = "189"
+effect = "Conjure a 16L firewand for a scene"
 description = """
 The Solar shapes his Essence into a firewand. Each such weapon has an appearance unique to the Exalt who conjures it. It has a Range of 15 yards. It has Rate 2 and Accuracy equal to Lawgiver's permanent Essence score. Its raw damage equals 16L, plus extra successes.
 """
@@ -364,6 +381,7 @@ duration = "Instant"
 prerequisites = ["phantom-arrow-technique"]
 source = "Exalted 2E"
 pages = "189"
+effect = "Duplicate the shot (Essence copies)"
 description = """
 Essence multiplies the force of the Lawgiver's blow. This Charm creates duplicates of the Exalt's Archery-based attack, usually meaning that one arrow or firewand charge becomes several in flight.
 
@@ -387,6 +405,7 @@ duration = "Instant"
 prerequisites = ["fists-of-iron-technique"]
 source = "Exalted 2E"
 pages = "190"
+effect = "Surprise MA attack at start of combat"
 description = """
 When the Solar Exalt strikes, she is swifter than lightning. The character pours Essence into quickening her actions. She then makes an unarmed Martial Arts attack. This Charm has a lower Speed and DV penalty than normal attacks.
 """
@@ -406,6 +425,7 @@ duration = "Instant"
 prerequisites = ["solar-hero-form"]
 source = "Exalted 2E"
 pages = "190"
+effect = "Bashing MA attack downs mortals at any damage"
 description = """
 Solar Exalted with this Charm can topple even behemoths with a single punch. This Charm supplements an unarmed Martial Arts attack. This Charm takes effect if the attack hits and inflicts even one health level of damage. If [damage successes x Exalt's Essence] is greater than the target's remaining health levels, this Charm knocks the target unconscious, and the target remains so for a scene.
 """
@@ -427,6 +447,7 @@ duration = "Instant"
 prerequisites = ["any-melee-excellency"]
 source = "Exalted 2E"
 pages = "190"
+effect = "Convert attack successes to damage 1:1"
 description = """
 Solar warriors make themselves one with their blades. The Exalt spends one mote and makes a Melee-based attack. This Charm allows the Solar's player to count extra successes on the attack roll twice for the purposes of determining raw damage.
 """
@@ -446,6 +467,7 @@ duration = "Instant"
 prerequisites = ["hungry-tiger-technique"]
 source = "Exalted 2E"
 pages = "190"
+effect = "+1 die of dmg per mote (cap Melee)"
 description = """
 The Solar demonstrates his strength with a powerful Essence-fueled blow. The Exalt spends up to (his Strength score) motes and makes a Melee-based attack. If the attack hits, this Charm adds one die to the post-soak damage for each mote spent.
 """
@@ -465,6 +487,7 @@ duration = "One action"
 prerequisites = ["any-melee-excellency"]
 source = "Exalted 2E"
 pages = "191"
+effect = "Two Melee attacks at full dice pool"
 description = """
 The Solar warrior is as swift as the first rays of dawn. This Charm adds one to the Rate and one to the Accuracy of his weapon until his next action.
 """
@@ -484,6 +507,7 @@ duration = "Instant"
 prerequisites = ["one-weapon-two-blows"]
 source = "Exalted 2E"
 pages = "191"
+effect = "Flurry of Essence+1 Melee attacks"
 description = """
 The maneuver named Peony Blossom Attack burns significant Essence to unleash a powerful flurry of blows. The Lawgiver moves as smoothly and rapidly as ice on hot metal. This Charm is a magical flurry of two or more Melee-based attacks. Each attack costs two motes, including the first, and the Exalt can buy up to (her permanent Essence + 1) attacks. This Charm lets the Solar make these attacks regardless of the weapon's Rate, without multiple action penalties, and with a DV penalty equal to only the highest penalty for any one attack.
 """
@@ -503,6 +527,7 @@ duration = "Instant"
 prerequisites = ["peony-blossom-attack"]
 source = "Exalted 2E"
 pages = "191"
+effect = "Up to Melee+1 attacks; ignore Rate/MAP"
 description = """
 The maneuver named the Iron Whirlwind Attack conserves Essence but requires an utmost exertion of will. This Charm is a magical flurry of many Melee-based attacks. The Exalt makes a total number of attacks equal to (her Dexterity + 1). This Charm lets the Solar make these attacks regardless of the weapon's Rate, without multiple action penalties, and with a DV penalty equal to the highest penalty for any one attack.
 """
@@ -522,6 +547,7 @@ duration = "Permanent"
 prerequisites = ["iron-whirlwind-attack"]
 source = "Exalted 2E"
 pages = "191"
+effect = "Halve dice/damage penalty from foe count"
 description = """
 The Solar burns with holy prowess in battle and moves like lightning. This Charm increases the maximum number of attacks received from Peony Blossom Attack and Iron Whirlwind Attack by two. It may improve custom Melee extra-action Charms at the discretion of the Storyteller.
 """
@@ -541,6 +567,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "191"
+effect = "Summon a Melee weapon to hand"
 description = """
 The Solar's weapons know their master. The Solar holds out her hand and calls to the Essence of one of her weapons. If the desired weapon is within (Essence x 10) yards, and a flight path exists between the weapon and her hand, this Charm draws the weapon into her grasp. She must own the weapon she calls. This Charm can be used to draw and ready a sheathed weapon reflexively.
 """
@@ -560,6 +587,7 @@ duration = "Indefinite"
 prerequisites = ["call-the-blade-melee"]
 source = "Exalted 2E"
 pages = "192"
+effect = "Banish/recall a Melee weapon to Elsewhere"
 description = """
 This Charm functions exactly as the Archery Charm Summoning the Loyal Bow, save that it applies to hand-to-hand rather than ranged weapons. Characters are explicitly permitted to draw their stored weapons from Elsewhere using Charms such as Call the Blade.
 """
@@ -579,6 +607,7 @@ duration = "One scene"
 prerequisites = ["call-the-blade-melee"]
 source = "Exalted 2E"
 pages = "192"
+effect = "Conjure a melee weapon for a scene"
 description = """
 The Essence of the Lawgiver manifests in a gleaming blade of the sun. This blade is always a glowing weapon that inflicts aggravated damage against creatures of darkness and sheds sunlight as bright as a torch. The Exalt can summon this weapon to her hand from anywhere it has fallen, as a diceless miscellaneous action.
 
@@ -604,6 +633,7 @@ duration = "Instant"
 prerequisites = ["call-the-blade-melee"]
 source = "Exalted 2E"
 pages = "192"
+effect = "Make a Melee attack at thrown range"
 description = """
 The maneuver named Iron Raptor Technique extends the Solar's reach. Her weapon flies toward the enemy like a hungry bird of prey, then returns at the Solar's call. This Charm is a Melee-based attack that costs two motes and can attack enemies up to (Essence x 8) yards from the Solar. It is in all other ways treated as a normal Melee attack.
 
@@ -625,6 +655,7 @@ duration = "Instant"
 prerequisites = ["iron-raptor-technique"]
 source = "Exalted 2E"
 pages = "192"
+effect = "Melee attack adds (Ess) holy lethal dmg"
 description = """
 The Solar's Caste Mark blazes. She then casts solar fire from her weapon at her enemy. This Charm is a Melee-based attack. Its attack pool equals (Dexterity + Melee + Essence). It has a Range of (Essence x 10) yards and cannot exceed it. It cannot be blocked or dodged without the use of Charms or other magic. It ignores cover, including shields, but it cannot otherwise strike around obstacles. It deals lethal damage with a base damage, before adding attack successes, of (the Exalt's Strength + Willpower). It deals aggravated damage against creatures of darkness.
 """
@@ -644,6 +675,7 @@ duration = "Instant"
 prerequisites = ["any-melee-excellency"]
 source = "Exalted 2E"
 pages = "192"
+effect = "Perfect parry vs one Melee attack"
 description = """
 The maneuver named Dipping Swallow Defense restores defensive advantage to a beleaguered or overextended fighter. This Charm is used in response to an attack. It allows the Exalt to ignore all penalties that apply to her Parry DV when resolving that attack. Her Parry DV is still 0 if it's inapplicable, but it takes no further penalties.
 """
@@ -663,6 +695,7 @@ duration = "Until next action"
 prerequisites = ["dipping-swallow-defense"]
 source = "Exalted 2E"
 pages = "192"
+effect = "Parry unblockable attacks; +Ess soak"
 description = """
 Like a terrible war machine, the Solar walks through the field of his enemy's blades and is unmoved. This Charm causes the character to ignore penalties that apply to his Parry DV until his next action. This includes penalties invoked by his own attacks. Note that the effects of inapplicability are not a "penalty" on DV.
 """
@@ -682,6 +715,7 @@ duration = "Instant"
 prerequisites = ["bulwark-stance"]
 source = "Exalted 2E"
 pages = "192"
+effect = "Perfect parry, even unblockable, lethal"
 description = """
 The character invokes this Charm in response to an attack. The attack must not be unexpected, and the character must have a weapon in hand. This Charm is a parry that perfectly defends against any attack, even if it is unblockable.
 
@@ -705,6 +739,7 @@ duration = "One scene"
 prerequisites = ["bulwark-stance"]
 source = "Exalted 2E"
 pages = "194"
+effect = "All parries succeed for the scene"
 description = """
 The world weeps when the Chosen fall, and so, the Unconquered Sun has given them every mastery of defense. For the remainder of the scene, this Charm removes the onslaught penalty other characters' attacks impose on the Exalt's DV. It also reduces the defense penalty imposed by each action the Exalt takes by one, to a minimum of zero.
 """
@@ -724,6 +759,7 @@ duration = "Instant"
 prerequisites = ["dipping-swallow-defense"]
 source = "Exalted 2E"
 pages = "194"
+effect = "Reflexive counterattack on a missed strike"
 description = """
 Those who attack the Chosen of the Sun invite their own deaths. The Solar invokes this Charm after using her Parry DV against an attack. This Charm gives the Solar a counterattack, which is resolved in Step 9 of the initial attack's resolution.
 """
@@ -743,6 +779,7 @@ duration = "Until next action"
 prerequisites = ["solar-counterattack"]
 source = "Exalted 2E"
 pages = "194"
+effect = "Reflexive Join Battle, scene-long awareness"
 description = """
 The Solar stands ready to force back any foe. Until his next action, whenever he uses his Parry DV against an attack, this Charm provides him with the option to make a counterattack.
 """
@@ -762,6 +799,7 @@ duration = "Permanent"
 prerequisites = ["heavenly-guardian-defense"]
 source = "Exalted 2E"
 pages = "194"
+effect = "Reflexive perfect parry for an ally"
 description = """
 This Charm allows the character to prepare a single invocation of the Heavenly Guardian Defense maneuver in advance. The character can have at most one invocation prepared at any given time. The character invokes the Heavenly Guardian Defense Charm, paying the normal four motes. He can later use the Heavenly Guardian Defense against one attack of his choice, in any circumstance when using the Charm would be legitimate. Preparing the Charm counts as a Charm use, but invoking its abilities later does not. The motes remain committed until the Solar uses the Charm to block a single attack.
 
@@ -785,6 +823,7 @@ duration = "Instant"
 prerequisites = ["any-thrown-excellency"]
 source = "Exalted 2E"
 pages = "195"
+effect = "Hits cripple a limb until healed"
 description = """
 Even in a pitched battle, the Lawgivers strike with controlled precision. This Charm enhances a Thrown-based attack so that it stuns or cripples the Solar's opponent. For each health level of damage this attack inflicts, this Charm subtracts one die (as a -1 internal penalty) from the target's Physical Attribute dice pools and one point from the equivalent static ratings. This is a Crippling effect that lasts for the remainder of the scene. The players and Storyteller decide how the effect is inflicted—it could be an injured hand, slashed tendons or a stunning blow to the head.
 """
@@ -804,6 +843,7 @@ duration = "Instant"
 prerequisites = ["any-thrown-excellency"]
 source = "Exalted 2E"
 pages = "195"
+effect = "Throw an attack without revealing the source"
 description = """
 The Solars' opponents are often arrogant and attempt to predict how and when the Lawgivers will strike. Such is their folly that they cannot see the vengeance of the Unconquered Sun even when it comes upon them. This Charm conceals a Thrown-based attack. Characters watching the Solar need (the Solar's Essence) successes on a reflexive (Wits + Awareness) roll to notice him making the attack. This success requirement decreases by one each additional time the Solar uses this Charm in a scene. For characters not watching the Solar, all evidence indicates that the attack comes from a direction and distance named by the Solar when making the attack.
 """
@@ -823,6 +863,7 @@ duration = "Varies"
 prerequisites = ["observer-deceiving-attack"]
 source = "Exalted 2E"
 pages = "195"
+effect = "Foe DV does not apply to this attack"
 description = """
 This is a Charm of silent death that imbues the Solar's weapon with Essence. It supplements a Thrown-based attack and supernaturally cripples its target. Targets affected by this Charm cannot speak or cry out. This Charm silences their every action. The bells they ring make no noise, and if they fall off a wall, they will land silently. In short, their actions are not valid targets for hearing-based Awareness rolls. Should the attack kill the target, no one will notice the target's death until the Charm expires.
 
@@ -844,6 +885,7 @@ duration = "Instant"
 prerequisites = ["observer-deceiving-attack"]
 source = "Exalted 2E"
 pages = "196"
+effect = "+Ess raw damage to one Thrown attack"
 description = """
 Surprise is at the foundation of all military undertakings. The Sun's Chosen strike with secrecy and rapidity, confusing and confounding their enemies. Falling Icicle Strike enhances an unexpected attack. Count damage successes for this attack twice. If the player rolls five damage dice and gets two successes, it will strip away four of the target's health levels.
 """
@@ -863,6 +905,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "196"
+effect = "Triple weapon's Range bands"
 description = """
 The Solar imbues his weapon with Essence, so that it flies true. This Charm enhances a Thrown-based attack. The Exalt spends three motes and triples the Range of the weapon.
 
@@ -884,6 +927,7 @@ duration = "Instant"
 prerequisites = ["triple-distance-attack-technique"]
 source = "Exalted 2E"
 pages = "196"
+effect = "Flurry of Essence Thrown attacks"
 description = """
 In the First Age, not even the most elusive demons could escape the Solars' judgment. This Charm supplements a Thrown-based attack, filling the air with dozens or hundreds of duplicates of the Lawgiver's thrown weapon. This Charm renders the target's Dodge DV inapplicable against this attack. It also doubles the Solar's attack successes on the attack roll before comparing it to defense, in Step 3 of attack resolution.
 """
@@ -903,6 +947,7 @@ duration = "Permanent"
 prerequisites = []
 source = "Exalted 2E"
 pages = "196"
+effect = "Thrown weapon returns to hand"
 description = """
 The Solar cherishes his weapons. This Charm gives the character three bonus successes on any valid action that, if it succeeds, will physically reclaim one or more of the throwing weapons he owns—whether by yanking one back to him on a cord, snatching several up while running past, grabbing a knife from the lava's surface before it sinks or snatching a weapon physically from an enemy who has stolen it. This Charm does not affect attempts to reclaim throwing weapons by non-physical means such as persuasion, nor does it help when the character is taking preparatory actions such as running across a hair-thin bridge to where his weapon rests. Returning Weapon Concentration also makes any weapon slide free of any target without resistance, so that the lightest tug can reclaim even a knife sheathed to the hilt in a tree.
 """
@@ -922,6 +967,7 @@ duration = "Instant"
 prerequisites = ["returning-weapon-concentration"]
 source = "Exalted 2E"
 pages = "197"
+effect = "Summon a Thrown weapon to hand"
 description = """
 This Charm functions exactly as the Melee version of Call the Blade, save that it applies to thrown weapons.
 """
@@ -941,6 +987,7 @@ duration = "One scene"
 prerequisites = ["returning-weapon-concentration"]
 source = "Exalted 2E"
 pages = "197"
+effect = "Conjure Essence Thrown weapons for a scene"
 description = """
 The Exalt shapes weapons from shadows, Essence and light. This Charm permits a Lawgiver to create temporary throwing weapons. Each such weapon costs two motes of Essence to create. Each has the weapon qualities of a Thrown weapon costing at most Resources 2, such as an exceptional hatchet or throwing knife. These weapons last for one scene, but they thrive on the Essence of the Exalt who created them. If anyone else uses them to make an attack, these weapons fade away during Step 2 of the attack's resolution.
 """
@@ -962,6 +1009,7 @@ duration = "Until next action"
 prerequisites = ["any-war-excellency"]
 source = "Exalted 2E"
 pages = "197"
+effect = "Rally a routing unit reflexively"
 description = """
 The glory of the Solar Exalted steadies those who follow them. The Exalt can target up to her Essence in military units or (Essence x 100) scattered individuals with this Charm. The Exalt chooses the targets insofar as she cares to specify; otherwise, this Charm affects the closest non-enemy targets. Individual targets must be able to see or hear the Exalt. Targeted units must be able to see or hear some sort of Solar-sent signal. This Charm causes targets to succeed automatically on all Valor rolls. If used in the instant one or more targets fail a Valor roll, this Charm allows the targets that failed to reroll, but the reroll does not automatically succeed. This Charm's effects last until the Exalt's next combat or mass combat action.
 """
@@ -981,6 +1029,7 @@ duration = "Instant"
 prerequisites = ["rout-stemming-gesture"]
 source = "Exalted 2E"
 pages = "197"
+effect = "Mass-coordinate allies on a War roll"
 description = """
 The Lawgiver's forces know his will. The Solar calls out an order or message. It is still conveyed by his voice, his signal or by relays, but the message is effectively instantaneous—his troops find themselves reacting almost as an extension of the Solar's desires. This Charm conveys a message up to 12 words in length to one or more loyal units within (Essence x 100) yards and guarantees that the message is clearly understood. This Charm has special effects when used immediately before a roll to determine whether a targeted unit hesitates or can change order rapidly. If the Exalt gives an appropriate order, the roll succeeds automatically.
 """
@@ -1000,6 +1049,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "197"
+effect = "Force a mob to break and flee"
 description = """
 The Lawgiver chastises the unworthy rabble. This Charm forces the player of an enemy unit most of whose members are within (Essence x 100) yards to make an immediate check for rout. The difficulty of this roll is 1 if the unit has Magnitude greater than the Exalt's Essence, and 2 otherwise. This Charm can be used socially rather than in war, in which case the Exalt can treat any mob, gathering or social group he can reasonably chastise as the target military unit.
 """
@@ -1019,6 +1069,7 @@ duration = "One scene"
 prerequisites = ["mob-dispersing-rebuke"]
 source = "Exalted 2E"
 pages = "197"
+effect = "Goad enemies to attack you"
 description = """
 The righteous anger of the Lawgivers inspires mortals to service. The Exalt attempts to persuade everyone who can hear him to join him in righteous violence, his player rolling (Charisma + [Performance or War]). This Charm organizes all characters whom the Exalt successfully persuades and who do not resist the persuasion into an unordered military unit under the Exalt's direction. This unit dissolves if the Exalt abandons it for more than 15 long ticks.
 """
@@ -1038,6 +1089,7 @@ duration = "Instant"
 prerequisites = ["fury-inciting-presence"]
 source = "Exalted 2E"
 pages = "197"
+effect = "Reflexive overview of the battlefield"
 description = """
 The Solar Exalted do not abandon their forces. This Charm informs the Lawgiver of the position and status of all units within (Essence x 10) miles containing a commander, hero, relay or sorcerer loyal to the Solar or to a cause for which the Solar is fighting. This includes solo units, but not solo extras. The character determines only the strategic position of each unit—where units are located relative to one another and to major landmarks such as mountains, cities and rivers. The status information that the Solar learns is the unit's fatigue, order and current Magnitude. The Solar acquires this information as an instinct but can convert it mentally into a battle map if appropriate for the character.
 
@@ -1059,6 +1111,7 @@ duration = "One scene"
 prerequisites = ["rout-stemming-gesture", "fury-inciting-presence"]
 source = "Exalted 2E"
 pages = "197"
+effect = "Allies get +Ess dice for a turn"
 description = """
 The Chosen radiate the confidence and surety of the Unconquered Sun. This Charm affects any unit or social group that the Solar commands and every ally within (Essence x 5) yards. This Charm's targets no longer need to make Valor checks. In war, this Charm prevents rout and reduces the chance of fatigue.
 """
@@ -1078,6 +1131,7 @@ duration = "One week"
 prerequisites = ["heroism-encouraging-presence"]
 source = "Exalted 2E"
 pages = "198"
+effect = "Train mortals into elite warriors"
 description = """
 Under the banner of the Solar Exalted, even bandits and peasants become deadly warriors. This Charm involves training a military unit. This Charm requires five or more hours of effort in any given week to bear fruit. This Charm increases the Drill of a unit by one for each week of training, to a maximum of Drill 5. In each week of training, the trainer picks one trait to train: Valor, Strength, Dexterity, Stamina, Archery, Dodge, Martial Arts or Melee. This Charm increases that trait for each member of the unit by one dot, to a maximum of 4. The Solar can train with the unit or as a solo unit, increasing her own traits. She cannot increase others' traits past her own.
 """
@@ -1097,6 +1151,7 @@ duration = "Permanent"
 prerequisites = ["tiger-warrior-training-technique"]
 source = "Exalted 2E"
 pages = "198"
+effect = "Train mortals into heroic warriors"
 description = """
 Solar Exalted imbue their warriors with something of their own nature. This Charm enhances the Exalt's ability to train warriors. This Charm allows him to use Tiger Warrior Training Technique to train others in any of the following:
 
@@ -1122,6 +1177,7 @@ duration = "One scene"
 prerequisites = ["commanding-the-ideal-celestial-army", "general-of-the-all-seeing-sun"]
 source = "Exalted 2E"
 pages = "199-200"
+effect = "Read foe's stats with a glance"
 description = """
 Those who follow the Lawgivers work as one. Ideal Battle Knowledge Prana provides the Solar and those who follow her—units directly or indirectly under the Solar's command within (Essence x 10) miles—with an instinct for the battlefield and the Solar's desires. This Charm halves the number of relays necessary to order each targeted unit. It also increases the Drill of all such units by one and increases the Might of these units by one (to a maximum of 3).
 """
@@ -1143,6 +1199,7 @@ duration = "One day"
 prerequisites = []
 source = "Exalted 2E"
 pages = "201-202"
+effect = "Reject one shaping effect outright"
 description = """
 The Sun's Chosen define their own reality. This Charm protects the character from any Shaping effect that directly alters her mind, body, spirit or traits. This includes instantaneous Shaping effects and any new alterations caused by long-term Shaping effects. This Charm also protects the character from any undodgeable, unblockable Shaping attacks. Wyld energy cannot create a serpent inside the character's stomach or turn her armor to lava, whether it's manipulated by an enemy or its own random whims, because these effects inflict immediate damage and the character's DV is not applicable.
 
@@ -1164,6 +1221,7 @@ duration = "Permanent"
 prerequisites = ["integrity-protecting-prana"]
 source = "Exalted 2E"
 pages = "203-204"
+effect = "Treat a long task as if Essence higher"
 description = """
 A Solar forges her own destiny, and none gainsay her will. This Charm increases the difficulty of any rolled Shaping effect used against the character by two. Characters using Shaping effects that involve the character can remove this penalty with any stunt that reconciles the Shaping effect with the Lawgiver's sense of her own destiny. In the Wyld or the Labyrinth, this Charm reduces the frequency of random unfortunate incidents by a factor of 10. There is no cost to use this Charm—it is a permanent enhancement to the Exalt's nature.
 """
@@ -1183,6 +1241,7 @@ duration = "Permanent"
 prerequisites = []
 source = "Exalted 2E"
 pages = "201-202"
+effect = "Refuse social attack on Motivation"
 description = """
 To the Solar Exalted, "death" and "surrender" are almost the same thing. This Charm helps a character hold fast to her fundamental Intimacies in the face of temptation. The player picks one of the character's Intimacies when purchasing this Charm. For the purposes of this Solar Charm, this loyalty must be to an ideal—not to a person or a love, but sometimes to a relationship; not to a tribe or city, but sometimes to the nation she might build of them; not to a battle or a war, but to the extinction of one foe or the conquest of a great region.
 
@@ -1206,6 +1265,7 @@ duration = "Permanent"
 prerequisites = []
 source = "Exalted 2E"
 pages = "201-202"
+effect = "+Ess MDV vs unwanted Intimacy/persuasion"
 description = """
 Solar Exalted in Limit Break cannot temper their glory with wisdom. This Charm causes the character to treat all directives from unnatural mental influence as unacceptable orders while in Limit Break.
 """
@@ -1225,6 +1285,7 @@ duration = "Permanent"
 prerequisites = ["any-integrity-excellency"]
 source = "Exalted 2E"
 pages = "201-202"
+effect = "Stand from any damage short of Incap once/day"
 description = """
 From every Solar's heart flows an infinite stream of arete—excellence, Virtue and raw commitment to life. The player picks one Virtue when purchasing this Charm and can purchase this Charm multiple times to cover additional Virtues. Whenever the Solar would otherwise recover one or more Willpower points from stunts or natural recovery, this Charm gives the character the option to recover one point (one channel) of the chosen Virtue instead. The Storyteller may veto Virtue recovery from stunts opposed to that Virtue.
 """
@@ -1244,6 +1305,7 @@ duration = "One scene"
 prerequisites = ["any-integrity-excellency"]
 source = "Exalted 2E"
 pages = "201-202"
+effect = "Refuse a social attack on a Virtue"
 description = """
 In foul nests of demons whose ways of corruption assault the human mind; amidst the courts of faeries gluttonous for human souls; in Nexus, surrounded by a thousand temptations—though the whole world seeks to drag him down, the Lawgiver is unmoved. This Charm increases the character's Dodge MDV by his Temperance for the remainder of the scene. Storytellers can allow the Exalt to use his Conviction, Compassion or Valor score instead of Temperance if the character has appropriate motivation.
 """
@@ -1263,6 +1325,7 @@ duration = "Instant (Story)"
 prerequisites = ["temptation-resisting-stance"]
 source = "Exalted 2E"
 pages = "200"
+effect = "Perfect MDV vs one unnatural mental influence"
 description = """
 Like a dream slipping from a waking man's grasp, the Solar eludes others' attempts to chain his mind. The Solar uses this Charm in response to an attempt at mental influence, be it natural or unnatural. In addition to its core effects, this Charm perfectly negates that attempt at influence.
 
@@ -1284,6 +1347,7 @@ duration = "Instant"
 prerequisites = ["elusive-dream-defense"]
 source = "Exalted 2E"
 pages = "203-204"
+effect = "Convert a turn's damage into willpower"
 description = """
 The Lawgivers shatter delusions and see all things truly. This Charm shatters all long-term Compulsion, Illusion and Servitude effects upon the Solar. The character can ignore mental influence that would prevent her from using this Charm. Characters can substitute an unsoakable aggravated health level of damage for the mote portion of this Charm's cost if they are otherwise unable to pay.
 """
@@ -1303,6 +1367,7 @@ duration = "Permanent"
 prerequisites = ["elusive-dream-defense"]
 source = "Exalted 2E"
 pages = "206-207"
+effect = "Convert anima flare into Compassion channels"
 description = """
 Others look to the Lawgivers for strength against temptation. This Charm allows characters loyal to the Solar to replace their own Essence with the Solar's Integrity score when calculating mental defense. It subtracts two dice (as a -2 internal penalty) from the dice pools of characters loyal to the Solar when they are actively attempting to betray that loyalty. This Charm has no effect on Abyssal Exalted or other Solar Exalted.
 """
@@ -1322,6 +1387,7 @@ duration = "Instant"
 prerequisites = ["any-integrity-excellency"]
 source = "Exalted 2E"
 pages = "203-204"
+effect = "Refresh willpower with stirring oration"
 description = """
 The Solar Exalted draw on their unwavering desire and intention to survive sustained mental assault. This Charm allows the Exalt to refuse unnatural mind control effects and Virtue compulsions at a reduced Willpower cost. This Charm reduces the Willpower cost by one point for each five motes spent. If the Exalt pays the entire cost in Essence, she does not accumulate Limit. For example, if rejecting a supernaturally persuasive offer would normally require two Willpower, the Exalt can spend two Willpower; five motes, one Willpower; or 10 motes.
 """
@@ -1341,6 +1407,7 @@ duration = "Indefinite"
 prerequisites = ["righteous-lion-defense"]
 source = "Exalted 2E"
 pages = "203-204"
+effect = "Reflexive Performance roll boosts ally's action"
 description = """
 The Solar dedicates himself to a new goal or ideal. If the Solar has not already established an Intimacy to this ideal, this Charm allows him to do so instantly. This Charm lets the Solar treat this Intimacy as an additional Motivation, with all the benefits and drawbacks thereof. Lawgivers can invoke this Charm repeatedly but they can benefit from only a number of additional Motivations equal to their Conviction.
 """
@@ -1362,6 +1429,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "205-206"
+effect = "Bystanders show deference to the Solar"
 description = """
 Others listen when the Lawgivers speak. In ancient days, they commanded the attention of Primordials, beasts and gods. This Charm involves a performance or oration, and the Solar's player rolls (an appropriate Social Attribute + Performance) when invoking Respect Commanding Attitude. This Charm exerts unnatural mental influence on everyone who can see or hear the character. If the extra successes exceed a given target's MDV, that target suffers a compulsion to stay in the Exalt's company and respectfully observe the performance. Resisting this compulsion for five minutes costs one Willpower, up to a maximum of three Willpower per scene.
 """
@@ -1381,6 +1449,7 @@ duration = "Variable"
 prerequisites = ["any-performance-excellency"]
 source = "Exalted 2E"
 pages = "204-205"
+effect = "Illusions take shape from a tale"
 description = """
 Essence enhances the Solar's arts. This Charm allows the Solar to create ghostly images, Essence flares, ethereal music and strange sensory effects when using a Performance Excellency or Presence Excellency. These effects do not seem entirely real, they remain within (Essence x 10) yards of the Solar, and they cannot be used to confuse or deceive others without a stunt. This Charm has no cost, but the Solar need not use its effects.
 """
@@ -1400,6 +1469,7 @@ duration = "One scene"
 prerequisites = ["any-performance-excellency"]
 source = "Exalted 2E"
 pages = "204-205"
+effect = "Plant a non-conflicting Intimacy in a target"
 description = """
 The Solar Exalted rise above the common through their understanding of others' desires. This Charm supplements a Performance-based roll to rouse emotion in others. It exerts unnatural mental influence on every valid target of this roll. If their MDV is less than the extra successes on the roll, this Charm inspires the desired emotion intensely for a scene. Resisting the influence costs two Willpower.
 """
@@ -1419,6 +1489,7 @@ duration = "Instant"
 prerequisites = ["phantom-conjuring-performance", "heart-compelling-method"]
 source = "Exalted 2E"
 pages = "233-234"
+effect = "Edit a memory by retelling it"
 description = """
 The Lawgivers define others' reality. This Charm is a Performance-based social attack that encourages a specific belief—for example, overwriting the audience's memories and convincing them that the Solar has always lived in their town. This Charm exerts unnatural mental influence on every valid target of this roll. If their MDV is less than the extra successes on the roll, this Charm inspires them to believe. It also creates an instant commitment to that belief. Shaking off the illusion requires one Willpower per scene, and the effect lasts until the targets break their commitment to the false belief.
 """
@@ -1438,6 +1509,7 @@ duration = "Instant"
 prerequisites = ["heart-compelling-method"]
 source = "Exalted 2E"
 pages = "204-205"
+effect = "Compel onlookers to lust/follow"
 description = """
 In answer to the call of the Solar Exalted, in ancient times, people gave up their homes and families and marched to war. Some Lawgivers gave speeches and shone with the sun's radiance, but others called their servants with beauty—piping, dancing or playing at the harp, wordlessly and terribly calling their soldiers to their deaths.
 
@@ -1461,6 +1533,7 @@ duration = "Solar's Charisma in days"
 prerequisites = ["any-presence-excellency"]
 source = "Exalted 2E"
 pages = "235-236"
+effect = "Implant a post-hypnotic suggestion"
 description = """
 It is hard for mortals to resist the shining glory of the Solar Exalted. This Charm exerts unnatural mental influence to create a Compulsion effect. The Lawgiver's player rolls (Manipulation + Presence). If the result exceeds the target's Mental DV, the target receives a compulsion to follow one order given by the Solar. The order can be as complicated as the Solar desires. The target must spend one Willpower to resist the order but need pay this cost only once per day. The influence fades when the Charm expires.
 
@@ -1482,6 +1555,7 @@ duration = "One scene"
 prerequisites = ["any-presence-excellency"]
 source = "Exalted 2E"
 pages = "206-207"
+effect = "Cow crowds with Solar majesty"
 description = """
 The Solar burns with the incandescent radiance of the Unconquered Sun. This Charm intimidates others, negating any physical or social attack made against the Solar unless the attacker's player succeeds on a reflexive resistance roll. The Solar's player chooses when purchasing this Charm whether a difficulty 1 Valor roll or a difficulty 2 Willpower roll is the appropriate form of resistance. The attacker need succeed only once per action, no matter how many attacks she makes during a flurry. This Charm's effects are a form of unnatural mental influence, and characters can spend three Willpower to resist the effects of Majestic Radiant Presence for a scene.
 """
@@ -1501,6 +1575,7 @@ duration = "Instant"
 prerequisites = ["majestic-radiant-presence"]
 source = "Exalted 2E"
 pages = "205-206"
+effect = "Crowd flees in awe/terror"
 description = """
 The Solar burns with impossible glory. This Charm can supplement any attempt at natural mental influence. It renders the target's Dodge MDV inapplicable. This Charm is specifically permitted to supplement rolls for other Abilities. Reduce this Charm's cost to 2 motes if Majestic Radiant Presence is already active.
 """
@@ -1520,6 +1595,7 @@ duration = "One story"
 prerequisites = ["majestic-radiant-presence"]
 source = "Exalted 2E"
 pages = "205-206"
+effect = "Bind a mortal as a loyal underling"
 description = """
 Those who speak for a Solar share his majesty. This Charm imbues a target character with Solar Essence. When the target believes herself to be acting or speaking in the Solar's name, her player adds the Solar's Essence in dice to Presence rolls made for the character.
 """
@@ -1539,6 +1615,7 @@ duration = "One scene"
 prerequisites = ["majestic-radiant-presence"]
 source = "Exalted 2E"
 pages = "205-206"
+effect = "Treat as having Mandate of Heaven"
 description = """
 The Solar assumes the mantle of authority. This Charm is a form of unnatural mental influence. For the rest of the scene, each character who interacts personally with the Exalt and has a lower MDV than the Exalt's Presence suffers an unnatural Illusion effect. He believes that the Exalt is someone with authority over him. Recognizing this belief as an illusion costs two Willpower. This Charm, as a specific exception to the usual rules for unnatural effects, does not cost Limit to resist.
 """
@@ -1558,6 +1635,7 @@ duration = "Instant"
 prerequisites = ["any-presence-excellency"]
 source = "Exalted 2E"
 pages = "205-206"
+effect = "Convince target a deal is fair"
 description = """
 The glamour of the Lawgivers inspires others to dream of glorious things. This makes the Solars the ultimate salesmen and recruiters. Irresistible Salesman Spirit enhances a Presence-based roll to exert mental influence and make a favorable bargain or encourage a specific action. This Charm doubles the Solar's successes on the roll before comparing them to the target's MDV.
 """
@@ -1577,6 +1655,7 @@ duration = "Solar's Charisma in days"
 prerequisites = ["any-presence-excellency"]
 source = "Exalted 2E"
 pages = "232-233"
+effect = "Mortal pledges undying service"
 description = """
 The Solar Exalted surround themselves with the faithful. This Charm is a Presence-based social attack that inspires someone to recognize the Solar's greatness. The target chosen must be a valid target for persuasion attempts. The Solar's player rolls ([Charisma or Manipulation] + Presence), subtracting the target's MDV from the successes as an external penalty. If the Solar succeeds, this Charm exerts unnatural mental influence and creates a Servitude effect. It compels the target to serve the Solar loyally. This effect costs one Willpower per day to resist. This Charm creates an instant commitment to the Solar. The target cannot begin breaking faith with that commitment until the Charm's effects end.
 """
@@ -1596,6 +1675,7 @@ duration = "Instant"
 prerequisites = ["any-presence-excellency"]
 source = "Exalted 2E"
 pages = "205"
+effect = "Verbal attack inflicts unsoakable Conviction dmg"
 description = """
 The Solar ignites her spirit with the Essence of the Unconquered Sun. This Charm can enhance a physical attack. This Charm makes the attack Holy and causes the attack to inflict aggravated damage against creatures of darkness.
 
@@ -1621,6 +1701,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "207-209"
+effect = "Reflexively don any armor in a tick"
 description = """
 When the Solar armors himself for battle, there is no delay or fumbling—Essence smoothes his course. This Charm allows the Exalt to make one minute's progress on donning armor in a single action. The Solar Exalted normally use this Charm for a number of successive actions equal to the armor's mobility penalty in order to complete the armor-donning process. This Charm applies to personal worn items, including body armor, shields, clothing and warstriders.
 """
@@ -1640,6 +1721,7 @@ duration = "Indefinite"
 prerequisites = ["whirlwind-armor-donning-prana"]
 source = "Exalted 2E"
 pages = "207-209"
+effect = "Halve armor mobility/fatigue penalty"
 description = """
 Armor worn in countless battles becomes a part of the Solar's spirit. It is always on hand when its master calls. The Solar first dons a suit of armor that she owns and has worn in battle. This Charm banishes that armor to Elsewhere. The Solar can gird herself in that armor directly from Elsewhere. Doing so takes as much time as donning the armor normally would, and she can use Whirlwind Armor-Donning Prana to speed the process. The Charm ends when she does so. If she cancels the Essence committed to this Charm while the armor is fully or partially Elsewhere, any donned pieces return Elsewhere, and then, the entire suit appears within arm's reach. This Charm applies to body armor and shields, but not other worn items.
 """
@@ -1659,6 +1741,7 @@ duration = "One scene"
 prerequisites = ["hauberk-lightening-gesture"]
 source = "Exalted 2E"
 pages = "206-207"
+effect = "Conjure Essence armor for a scene"
 description = """
 The Solar armors herself in the blazing glory of the Unconquered Sun. This Charm creates a suit of golden body armor from the Solar's anima. The character can design the armor to suit his personal aesthetic and mood—it can be sleek, imposing, ornate or simple. Regardless of aesthetic, it is always unmistakably medium or heavy armor, and it always glows with a golden light resembling an 8-10 mote Solar anima display.
 
@@ -1680,6 +1763,7 @@ duration = "Indefinite"
 prerequisites = ["hauberk-lightening-gesture"]
 source = "Exalted 2E"
 pages = "207-209"
+effect = "Ignore armor mobility penalty for scene"
 description = """
 In these grim and degenerate times, the Chosen of the Sun must be as soldiers ready for a battle. For each three motes spent, this Charm reduces both the fatigue value and the mobility penalty of the Solar's armor by one, to a minimum of 0. A fatigue value of 0 means that the Solar's player need never roll to see whether her character becomes fatigued from wearing the armor. This Charm lasts until the character removes the armor in question. This Charm applies to any combination of worn items that give a mobility or fatigue penalty.
 """
@@ -1699,6 +1783,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "206"
+effect = "Ignore wound penalties for a scene"
 description = """
 A boy cannot cut down an oak tree with a kitchen knife. Nor can a mere mortal slay the Solar with petty blows of mortal steel. The Solar invokes this Charm after an attack hits but before damage is rolled. This Charm sets her Hardness against that attack to 8.
 """
@@ -1718,6 +1803,7 @@ duration = "Instant"
 prerequisites = ["durability-of-oak-meditation"]
 source = "Exalted 2E"
 pages = "207-209"
+effect = "Reflexive +Essence soak vs an attack"
 description = """
 The unconquerable flame of the Solar's spirit armors her against attack. She invokes this Charm after an attack hits her but before damage is rolled. This Charm reduces the raw (pre-soak) damage of the attack by one die for each mote spent. This Charm can reduce the damage of the attack to zero.
 """
@@ -1737,6 +1823,7 @@ duration = "Instant"
 prerequisites = ["durability-of-oak-meditation"]
 source = "Exalted 2E"
 pages = "207-209"
+effect = "Reflexive perfect soak vs one attack"
 description = """
 Mortal weapons are as the stings of wasps and hornets to the Lawgivers reborn. The Solar invokes this Charm after an attack hits him but before damage is rolled. Roll (his Stamina + Resistance) against a difficulty equal to the attacker's Essence (up to a maximum of 6). On a success, this Charm prevents all damage from the attack; on a failure, this Charm still gives him +4A/+8L/+8B soak.
 """
@@ -1756,6 +1843,7 @@ duration = "One scene"
 prerequisites = ["iron-skin-concentration"]
 source = "Exalted 2E"
 pages = "207-209"
+effect = "Convert lethal damage to bashing for scene"
 description = """
 The Lawgivers are armored in righteousness, and many need no other hauberk. This Charm gives the character +4A/+8L/+8B soak for the scene. This Charm cannot be used by characters wearing armor. The defense provided by this Charm is compatible with Iron Skin Concentration's effects.
 """
@@ -1775,6 +1863,7 @@ duration = "Instant"
 prerequisites = ["spirit-strengthens-the-skin", "iron-skin-concentration"]
 source = "Exalted 2E"
 pages = "207-209"
+effect = "Perfect lethal/agg soak vs one attack"
 description = """
 Driven by her purpose and her Virtues, the Exalt becomes invincible. The Solar invokes this Charm immediately before the damage of a physical attack or similar effect is rolled. This Charm is a perfect defense against the raw damage of the attack, reducing it to zero after all other effects. This Charm has one of the Four Flaws of Invulnerability.
 """
@@ -1794,6 +1883,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "209-210"
+effect = "Regain motes by taking damage"
 description = """
 The more terrible the enemies and adversities they face, the greater the power of a Solar's spirit. The Solar invokes this Charm when hit by an attack with the potential to damage her—that is, an attack with a calculated raw damage exceeding her Hardness, which therefore rolls at least one die of damage. The Solar's player rolls two dice for each damage die rolled. For each success on this roll, to a maximum of her Stamina in successes, the Lawgiver receives a number of motes of Essence equal to her permanent Essence score. This Charm cannot increase the Solar's Essence pool past its normal maximum, and the Solar can never gain more than 20 motes from any combination of Charms including Essence-Gathering Temper during a single one of her actions.
 """
@@ -1813,6 +1903,7 @@ duration = "Instant"
 prerequisites = ["essence-gathering-temper"]
 source = "Exalted 2E"
 pages = "209-210"
+effect = "Refresh 1 WP per damage taken (cap Ess)"
 description = """
 The Lawgiver draws inner strength from the challenges that face him. He invokes this Charm when hit by an attack that damaged him—that is, an attack that cost him at least one health level of damage. His player rolls one die for each health level lost. This Charm restores one point of temporary Willpower plus one point for each success rolled. This Charm cannot raise the Exalt's Willpower above its normal value.
 """
@@ -1832,6 +1923,7 @@ duration = "One scene"
 prerequisites = ["any-resistance-excellency"]
 source = "Exalted 2E"
 pages = "209-210"
+effect = "Ignore wound penalties and shock for scene"
 description = """
 The character steels herself for the struggle ahead. She awakens in her soul a deep and terrible passion—stoic dedication, primal rage, merciless justice or some other emotion appropriate to her nature—and lets it drive her into battle.
 
@@ -1853,6 +1945,7 @@ duration = "One scene"
 prerequisites = ["battle-fury-focus"]
 source = "Exalted 2E"
 pages = "209-210"
+effect = "Heal HL by inflicting damage"
 description = """
 When ordinary means have failed, and there is nothing left save life and death, then it befits the god-kings of legend to give themselves over to the battle-trance and make themselves implacable enemies to their foes. This Charm functions as Battle Fury Focus but is in all ways greater. It gives the character three extra dice to all combat-related pools and removes all wound penalties. The character's mind is consumed by the battle-trance. The character cannot speak coherently and cannot retreat. She may only take one or more of the following actions: moving toward her current target by the shortest route, attacking enemies within range, waiting for an attacker to engage her or selecting the nearest enemy as a new target when her previous target is incapacitated, dead or not locatable.
 
@@ -1874,6 +1967,7 @@ duration = "Permanent"
 prerequisites = []
 source = "Exalted 2E"
 pages = "207-209"
+effect = "Add health levels (varies by pattern)"
 description = """
 The Exalted are like the mountains: not easily worn down by such mortal things as men. This Charm gives the Lawgiver additional health levels.
 
@@ -1895,6 +1989,7 @@ duration = "Instant"
 prerequisites = ["any-resistance-excellency", "ox-body-technique"]
 source = "Exalted 2E"
 pages = "209-210"
+effect = "Refresh 1 HL per attack landed"
 description = """
 The Solar shakes off wounds that would cripple a lesser person. This Charm applies when someone uses an attack with a Crippling effect against the Solar. The Solar's player rolls (Stamina + Resistance) against a difficulty of the attacker's Essence. If she succeeds, this Charm negates the Crippling effect.
 """
@@ -1914,6 +2009,7 @@ duration = "One scene"
 prerequisites = ["any-resistance-excellency"]
 source = "Exalted 2E"
 pages = "209-210"
+effect = "Immune to poison/disease for scene"
 description = """
 Not easily are the Lawgivers slain. This Charm stops poison and sickness from doing further damage to the character for one scene. This Charm also prevents the character from suffering new Poison or Sickness effects during this scene. Effects that would poison or sicken him have no effect whatsoever. The character can walk hand-in-hand with plague victims, sprinkle poison on his food and eat ichneumon eggs as caviar. There are never ill effects later from these indiscretions.
 """
@@ -1933,6 +2029,7 @@ duration = "Until the day ends"
 prerequisites = []
 source = "Exalted 2E"
 pages = "210-211"
+effect = "Heal at 10× normal rate for a day"
 description = """
 Even wounded nigh unto death, a Lawgiver will marshal the strength to rise again. This Charm supplements a dramatic action to marshal the character's inner resources for recovery. This action requires one hour without a stunt or another Charm. The Solar's player rolls (Stamina + Resistance). Success speeds his healing rate by a factor of 10 or, if the character prefers, adds directly to the successes of a physician using Wound-Mending Care Technique on the character. Characters can activate Body-Mending Meditation when inactive.
 """
@@ -1954,6 +2051,7 @@ duration = "One scene"
 prerequisites = ["majestic-radiant-presence"]
 source = "Exalted 2E"
 pages = "211-212"
+effect = "Befriend any natural animal"
 description = """
 Even the beasts and birds recognize the heroes of the dawn. This Charm keeps natural animals from attacking the character unless they are provoked or driven by unusual pain or fear. It allows the Exalt to communicate with natural animals—with sounds and gestures—as if they shared a common language. Animals have limited capacity for comprehension, and the Exalt cannot convince an animal to adopt a belief or plan that it cannot understand. Characters can activate Friendship with Animals Approach when inactive.
 """
@@ -1973,6 +2071,7 @@ duration = "Instant"
 prerequisites = ["friendship-with-animals-approach"]
 source = "Exalted 2E"
 pages = "211-212"
+effect = "Bond a familiar to share Essence"
 description = """
 Since the First Age, the Lawgivers have forged magical bonds with their chosen beasts. The target of this Charm must be an animal loyal to the Exalt. The Exalt can only use this Charm if he has no familiar, and using it on a new animal for the first time removes his Familiar Background entirely. This Charm is a dramatic action requiring several hours of interaction with the target. It increases the Exalt's Familiar Background by one dot, to a maximum of five. When the Exalt's Familiar Background reaches a sufficient level to have the animal as a Familiar, it becomes his familiar. For example, a tiger requires three applications of this Charm to become the Exalt's familiar, and two more to give the Exalt the abilities conveyed by Familiar 5.
 """
@@ -1992,6 +2091,7 @@ duration = "One week"
 prerequisites = ["friendship-with-animals-approach"]
 source = "Exalted 2E"
 pages = "211-212"
+effect = "Gain animal trait (claws, scent, etc.)"
 description = """
 Animals trained by the Solar Exalted become more loyal and more powerful. This Charm involves training a natural animal or familiar. This Charm requires five or more hours of effort in any given week to bear fruit. In each week of training, the trainer picks one of the following to train: Strength, Dexterity, Stamina or Perception (increases by one dot, to a maximum of species average + 2); Valor (to a maximum of 4); Athletics, Awareness, Martial Arts, Resistance or Survival (to a maximum of the Solar's own rating); health and size (one additional -1 health level and optionally 10% size increase, to a maximum equal to Stamina); or Intelligence (giving the animal the effective intelligence of a six-year-old human). Using this Charm on a familiar increases all maximums by one and allows training to adult human intelligence.
 """
@@ -2011,6 +2111,7 @@ duration = "Indefinite"
 prerequisites = []
 source = "Exalted 2E"
 pages = "212-213"
+effect = "Need no food/water/sleep for a day"
 description = """
 The wilderness cannot subdue the heroes of the dawn. This Charm negates any environmental external penalties to Survival rolls made for the Solar. This means that the coldest glacier and the hottest desert are no more deadly for the Solar than the gentlest rolling plain. She can find food and water easily, she ignores inclement weather even when lightly dressed, and she does not suffer undue blisters, bug bites or plant poison even walking barefoot through the Far East. This Charm does not protect against environmental damage, however, so if the environment is deadly enough to force regular Resistance rolls, the Solar needs Element-Resisting Prana to endure it.
 """
@@ -2030,6 +2131,7 @@ duration = "Permanent"
 prerequisites = ["hardship-surviving-mendicant-spirit"]
 source = "Exalted 2E"
 pages = "210"
+effect = "Immune to one element for a scene"
 description = """
 This Charm enhances the character's Hardship-Surviving Mendicant Spirit. When using that Charm, the character now becomes immune to environmental hazards. She can survive in a bonfire, underwater, in a volcano's caldera or in a pool of boiling acid, all with ease. She takes damage or suffers Poison, Crippling or Sickness effects only when directly inflicted upon her by some character's action.
 """
@@ -2049,6 +2151,7 @@ duration = "Permanent"
 prerequisites = ["hardship-surviving-mendicant-spirit"]
 source = "Exalted 2E"
 pages = "212-213"
+effect = "Permanent immunity to environmental element"
 description = """
 This Charm enhances the character's Hardship-Surviving Mendicant Spirit. It reduces that Charm's cost to 5 motes and allows the character to activate Hardship-Surviving Mendicant Spirit even when she's inactive. If the Solar has Essence 6+, this Charm negates the cost for Hardship-Surviving Mendicant Spirit entirely.
 """
@@ -2068,6 +2171,7 @@ duration = "Instant"
 prerequisites = ["any-survival-excellency"]
 source = "Exalted 2E"
 pages = "211-212"
+effect = "Find food/water in any terrain"
 description = """
 The land gives its strength to the Lawgivers. This Charm affects the character or a group she leads with a Magnitude no greater than her Essence. The character or group may forage in the wild and find enough food for a small meal each. It takes five applications of this Charm per day to keep a group well fed. If the Solar has dependents not foraging with her, food found with this Charm can be brought back to them.
 """
@@ -2087,6 +2191,7 @@ duration = "Indefinite"
 prerequisites = ["any-survival-excellency"]
 source = "Exalted 2E"
 pages = "211-212"
+effect = "Never get lost; auto-find best path"
 description = """
 The deepest wilds are no mystery to the Solar Exalted. This Charm affects the character herself or a group she leads with a Magnitude no greater than her Essence. While this Charm is in effect, the character or group travels 10 miles per day across the harshest terrain and 20 miles per day across normal wilderness. The Solar's player automatically succeeds at any valid Survival roll for the Exalt to find her way—though the character must have enough information to make this a valid roll.
 """
@@ -2106,6 +2211,7 @@ duration = "Instant"
 prerequisites = ["trackless-region-navigation"]
 source = "Exalted 2E"
 pages = "211-212"
+effect = "Follow any trail unerringly"
 description = """
 The Lawgivers hunt down their enemies with a relentless passion. This Charm supplements a roll to track an opponent. It guarantees that the Solar achieves at least (target's successes + 1) successes on the tracking contest, after taking all penalties into account. If another Charm contests this effect, add the Solar's Essence in automatic successes to her opposed roll to maintain the effects of this Charm.
 """
@@ -2125,6 +2231,7 @@ duration = "Instant"
 prerequisites = ["unshakeable-bloodhound-technique"]
 source = "Exalted 2E"
 pages = "231-232"
+effect = "Leave no track/scent for a scene"
 description = """
 Solar heroes with this Charm can vanish into the wilderness. This Charm affects the Solar or a group she leads with a Magnitude no greater than her Essence. It enhances a roll made to travel without leaving signs of her (or the group's) presence. This Charm guarantees that any tracker achieves, at most, zero successes on the contest to track the character or group. If another Charm contests this effect, such as Unshakeable Bloodhound Technique, add the Solar's Essence in automatic successes to her opposed roll to maintain the effects of this Charm.
 """
@@ -2144,6 +2251,7 @@ duration = "Indefinite"
 prerequisites = ["trackless-region-navigation"]
 source = "Exalted 2E"
 pages = "228-229"
+effect = "Blend into terrain perfectly"
 description = """
 This Charm is a dramatic action to camouflage the Solar or some person or object, and it normally takes one hour to perform. The player rolls (Intelligence + Survival) to determine the quality of the camouflage. This Charm makes the camouflaged thing impossible to detect with Awareness rolls using ordinary senses. Characters with inhuman sensory acuity can discover the hidden thing by opposing the camouflage roll with (their Perception + Awareness). Characters conducting a thorough search can oppose the camouflage roll with an appropriate dice pool.
 """
@@ -2163,6 +2271,7 @@ duration = "Permanent"
 prerequisites = ["any-survival-excellency"]
 source = "Exalted 2E"
 pages = "231-232"
+effect = "Apply Survival skills to urban terrain"
 description = """
 This Charm enhances the character's Survival Charms. Survival Charms that allow the character to extend their benefits to a group of Magnitude 1 or more—such as Trackless Region Navigation—increase the allowed Magnitude for that unit by one. Players can purchase this Charm a number of times equal to the Solar's Essence.
 """
@@ -2184,6 +2293,7 @@ duration = "One scene"
 prerequisites = ["any-craft-excellency"]
 source = "Exalted 2E"
 pages = "213-214"
+effect = "Toughen an object's soak/HLs"
 description = """
 The things of the world strive to serve the Solars well. This Charm makes an object more difficult to break. It increases the number of successes necessary to damage the object by the character's Essence. It increases the (Strength + Athletics) rating necessary to break the object with a feat of strength by the character's Essence. No combination of Charms that includes Object-Strengthening Touch can increase these totals by more than the character's Essence.
 """
@@ -2203,6 +2313,7 @@ duration = "Instant"
 prerequisites = ["object-strengthening-touch"]
 source = "Exalted 2E"
 pages = "213-214"
+effect = "Perm. boost item durability"
 description = """
 The craftsmen of the Unconquered Sun shore up the Essence of the world. This Charm increases the number of successes necessary to damage the object by one. It increases the (Strength + Athletics) rating necessary to break the object with a feat of strength by one. This Charm's bonus is permanent, applying to the crafted object indefinitely.
 """
@@ -2222,6 +2333,7 @@ duration = "Indefinite"
 prerequisites = ["object-strengthening-touch"]
 source = "Exalted 2E"
 pages = "213-214"
+effect = "Object resists Wyld for a year"
 description = """
 The chaos of the Wyld corrodes the things of Creation. This Charm makes an object immune to Shaping effects and Wyld chaos for as long as the Essence remains committed.
 
@@ -2243,6 +2355,7 @@ duration = "Instant"
 prerequisites = ["any-craft-excellency"]
 source = "Exalted 2E"
 pages = "213-214"
+effect = "Restore broken object to whole"
 description = """
 The Lawgivers mend the flaws in the world. This Charm supplements any valid dramatic action to repair an object. This Charm allows the character to accomplish (Essence x 3) hours worth of normal repair work for each hour invested. It also allows the character to mend cracks and seal broken pieces together without glue or nails, leaving a join as strong and seamless as if the object were new. The character can perform the equivalent of days of painstaking labor in a few hours, reassembling and cleaning the shreds of a burnt letter or piecing a shattered crystal decanter back together.
 """
@@ -2262,6 +2375,7 @@ duration = "One scene"
 prerequisites = ["any-craft-excellency"]
 source = "Exalted 2E"
 pages = "214-215"
+effect = "Destroy an object with a touch"
 description = """
 The secrets of mending include the secrets of breaking. This Charm is a dramatic action taken to disassemble an object or structure. The character chooses whether to harmlessly or destructively take the object apart. This Charm allows the disassembly of only those objects the character can break with a feat of strength, adding twice the character's Craft to the character's (Strength + Athletics) pool to determine valid feats. This Charm can disassemble a single object in (8 — Essence) minutes, with a minimum of three minutes.
 
@@ -2283,6 +2397,7 @@ duration = "Instant"
 prerequisites = ["any-craft-excellency"]
 source = "Exalted 2E"
 pages = "213-214"
+effect = "Craft anything without tools/materials"
 description = """
 The Chosen bring harmony to Creation. This Charm supplements a Craft action. It removes the need for tools as well as penalties for crafting without tools. The character still needs raw materials. This Charm can enhance a Craft action to build something, in which case the character accomplishes (Essence x 3) hours of work for each hour invested.
 """
@@ -2306,6 +2421,7 @@ duration = "Instant"
 prerequisites = ["any-investigation-excellency"]
 source = "Exalted 2E"
 pages = "215-216"
+effect = "+Ess Investigation dice; spot all clues"
 description = """
 The world holds no mysteries to the Chosen of the Sun. This Charm is an Investigation-based action wherein the character studies observable evidence. This Charm functions exactly as a dramatic Investigation action that takes up to 15 minutes, save that the character performs it in a handful of seconds and does not need to ransack the scene.
 """
@@ -2325,6 +2441,7 @@ duration = "One story"
 prerequisites = ["any-investigation-excellency"]
 source = "Exalted 2E"
 pages = "215-216"
+effect = "Read scene's history at a glance"
 description = """
 The Lawgivers see into others' hearts. This Charm allows the character to make an Investigation-based roll to profile someone's personality. The character need not interact with the target, but must have sufficient material evidence of the target's personality to estimate the target's nature. If the target deliberately sends out misleading cues, subtract an external penalty of ([the target's Manipulation + Socialize] + 2) from the successes on the Investigation roll.
 
@@ -2346,6 +2463,7 @@ duration = "One scene"
 prerequisites = ["any-investigation-excellency"]
 source = "Exalted 2E"
 pages = "215-216"
+effect = "Detect lies; learn motive behind them"
 description = """
 The Lawgivers are the guardians of truth. This Charm allows the character to recognize as lies all deliberate lies presented to her. The character can also recognize the deliberate use of half-truths, though doing so does not tell her which part of the statement is true. If another Charm contests these effects, add the character's Essence in automatic successes to the (Perception + Investigation) roll to oppose the other Charm.
 """
@@ -2365,6 +2483,7 @@ duration = "One scene"
 prerequisites = ["judges-ear-technique"]
 source = "Exalted 2E"
 pages = "215-216"
+effect = "Compel honest answer with question"
 description = """
 This Charm forces the truth from those who would lie to the heroes of the dawn. It involves an interrogation, and the Solar's player rolls (the appropriate Social Attribute + Investigation) when the Exalt invokes Irresistible Questioning Technique. This Charm exerts unnatural mental influence on the target. The target can resist with MDV. If the roll succeeds, the target is compelled to answer the Exalt's questions honestly. Resisting costs one Willpower per five minutes, to a maximum of three Willpower, and the compulsion lasts for one scene.
 
@@ -2386,6 +2505,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "215-216"
+effect = "See political ties of those around you"
 description = """
 The Lawgivers understand the harmonies of the world. This Charm allows the character to detect others' importance or wealth with a glance. This Charm targets one individual the character can sense. The Exalt's player rolls (Perception + Investigation), adding the Solar's Essence in automatic successes. If the Exalt succeeds, she learns the target's Resources and Influence ratings, and she can make a rough but solid estimate of how many allies the target considers himself to have in the immediate circumstances. The Solar may not attempt to use this Charm on a given target more than once per scene.
 """
@@ -2405,6 +2525,7 @@ duration = "Instant"
 prerequisites = ["courtiers-eye-technique"]
 source = "Exalted 2E"
 pages = "215-216"
+effect = "Appraise any object's value/origin"
 description = """
 The intentions of others are transparent to the Chosen of the Sun. The Exalt uses this Charm immediately after interacting with a target. The Solar's player rolls (Perception + Investigation). The difficulty of this roll is 1, but subtract an external penalty of ([the target's Manipulation + Socialize] + 2) from the successes. On a success, this Charm forces the target's player to declare the target's intentions in this interaction.
 """
@@ -2424,6 +2545,7 @@ duration = "Instant"
 prerequisites = ["courtiers-eye-technique", "judges-ear-technique"]
 source = "Exalted 2E"
 pages = "216-217"
+effect = "Read a person's deepest desire"
 description = """
 In the savage world that is Creation, everyone has a price. The Exalt uses this Charm immediately after interacting with a target. The Solar's player rolls (Perception + Investigation). On a success, this Charm forces the target's player to declare the target's price. If the Exalt meets that price, this Charm invokes an unnatural Servitude effect—the target becomes loyal to the Exalt and must spend one Willpower per scene to act in a knowingly disloyal fashion. This servitude lasts until the Exalt betrays the bargain or the target has spent a total of 10 Willpower to act disloyally.
 """
@@ -2447,6 +2569,7 @@ duration = "One week"
 prerequisites = ["any-two-lore-excellencies"]
 source = "Exalted 2E"
 pages = "217-218"
+effect = "Halve research/study times"
 description = """
 Enlightened Lawgivers bring wisdom to the masses. This Charm involves training an organized social group such as a class, ministry or guild. This action requires five or more hours of effort in any given week to bear fruit. In each week of training, the trainer picks one trait to train: Conviction, Temperance, Perception, Intelligence, Craft (Air, Earth, Fire, Water or Wood), Investigation, Lore, Linguistics, Performance, Presence or Socialize. This Charm increases that trait for each member of the unit by one dot, to a maximum of 4. The Solar can train with the group or as a solo character, increasing her own traits. She cannot increase others' traits past her own.
 """
@@ -2466,6 +2589,7 @@ duration = "One week"
 prerequisites = ["harmonious-academic-methodology"]
 source = "Exalted 2E"
 pages = "217-218"
+effect = "Train mortals into expert scholars"
 description = """
 The Solar scholar has a special mastery of training. This Charm enhances the Exalt's ability to train others. This Charm allows him to use Harmonious Academic Methodology to train others in: social and scholarly Abilities he possesses at 4 or more (including Awareness, Bureaucracy, exotic Crafts, Integrity, Larceny, Medicine and Occult); Virtues (any Virtue to a maximum of 4); Attributes (Charisma, Manipulation and Wits to a maximum of 4, and Appearance with an appropriate rationale); and Specialties for any Ability he can train.
 """
@@ -2485,6 +2609,7 @@ duration = "One hour"
 prerequisites = []
 source = "Exalted 2E"
 pages = "217-218"
+effect = "Region resists Wyld influence"
 description = """
 The presence of the Lawgivers wards away chaos. This Charm surrounds the character with a mystic pattern of Essence—what the Fair Folk call an "island of Creation" or a "dead waypoint." The character's immediate vicinity—out to (her Essence) in yards—functions according to the laws of Creation, even if the character is in the Wyld, Malfeas or some stranger location.
 """
@@ -2504,6 +2629,7 @@ duration = "Instant"
 prerequisites = ["any-two-lore-excellencies", "chaos-repelling-pattern"]
 source = "Exalted 2E"
 pages = "218-219"
+effect = "Shape Wyld into matter/creatures"
 description = """
 In the First Age, Lawgivers used the Wyld-Shaping Technique to conquer the Wyld and expand Creation. This Charm forces a region of chaos to take form as the Exalt commands.
 
@@ -2527,6 +2653,7 @@ duration = "Instant"
 prerequisites = ["wyld-shaping-technique"]
 source = "Exalted 2E"
 pages = "218-219"
+effect = "Build artifact factories from Wyld"
 description = """
 The Lawgiver may craft reality from the Wyld. This Charm enhances the Exalt's Wyld-Shaping Technique, allowing the character to make permanent and real things.
 
@@ -2552,6 +2679,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "219-220"
+effect = "Grant motes to another Exalt"
 description = """
 The intricate Essence flows of the anima are as a child's toys to the savants of the Sun. This Charm allows the Solar to give up to (her Essence x 3) motes to another character. The Solar loses exactly as many motes as the target gains, in addition to the cost of this Charm, but this transfer does not count as spending motes for the purposes of anima banner flare. Transferred motes cannot increase either the target's personal or peripheral Essence past their normal maximums.
 """
@@ -2571,6 +2699,7 @@ duration = "Instant"
 prerequisites = ["essence-lending-method"]
 source = "Exalted 2E"
 pages = "219-220"
+effect = "Grant willpower to an ally"
 description = """
 Solar loremasters understand the subtle and delicate patterns of Essence that give rise to free will and the self. This Charm strengthens those patterns, reinforcing the target's determination and certainty. This Charm allows the character to give up to (her Essence) in Willpower to the target. The Solar loses exactly as much Willpower as the target gains, in addition to the Willpower spent on this Charm, but this does not count against the normal limits on Willpower expenditure. This Charm cannot increase the target's Willpower past its normal maximum.
 """
@@ -2590,6 +2719,7 @@ duration = "Indefinite"
 prerequisites = ["essence-lending-method"]
 source = "Exalted 2E"
 pages = "219-220"
+effect = "Grant temp Charm use to an ally"
 description = """
 The Lawgivers share great secrets with their disciples. This Charm targets an Essence 1 character who cannot channel Essence. This Charm increases the target's effective Essence to 2, allows him an (initially empty) 15-mote pool and the ability to regain Essence as a Solar Exalt, and it permits him to learn Solar Charms with the normal training time for 10 experience points each. The target has access to this increased Essence, pool and Charms only when actively under the influence of Power-Awarding Prana (i.e., for only as long as the awarding Solar's Essence motes remain committed).
 """
@@ -2609,6 +2739,7 @@ duration = "Instant"
 prerequisites = ["wyld-shaping-technique", "will-bolstering-method"]
 source = "Exalted 2E"
 pages = "219-220"
+effect = "Banish demons/disrupt Wyld with strike"
 description = """
 The Lawgivers restore the hidden patterns of the soul. This Charm targets an individual, whom the Solar must touch. The Lawgiver spends 15 motes and an amount of Willpower equal to the target's permanent Essence. This Charm shatters all Shaping effects on the target, including long-term or permanent effects such as Wyld mutations and Sidereal astrology. The target is immune to further Shaping effects for the remainder of the scene.
 
@@ -2630,6 +2761,7 @@ duration = "Indefinite"
 prerequisites = ["any-lore-excellency"]
 source = "Exalted 2E"
 pages = "219-220"
+effect = "Channel anima power without flaring"
 description = """
 The Solar draws strength from the harmonious governance of Creation. This Charm allows the Solar to recover motes by tending to the affairs of a kingdom, organization or social or military unit he leads. Each hour spent inspiring the people or performing administrative tasks allows the Solar to recover motes equal to the unit's Magnitude.
 
@@ -2655,6 +2787,7 @@ duration = "Solar's Essence in hours"
 prerequisites = ["any-medicine-excellency"]
 source = "Exalted 2E"
 pages = "220-221"
+effect = "Heal target by sharing damage"
 description = """
 Those who serve the Solars faithfully need know no pain. The recipient of this Charm feels a temporary euphoria qualitatively similar to an opium high. This Charm cancels up to three points of the target's penalties from Sickness, Poison and Crippling effects and wound penalties. Its effects linger for five minutes after the duration expires. Touch of Blissful Release is not physically addictive to the target.
 """
@@ -2674,6 +2807,7 @@ duration = "Instant"
 prerequisites = ["any-medicine-excellency"]
 source = "Exalted 2E"
 pages = "220-221"
+effect = "Cure any natural disease with a touch"
 description = """
 Tie a Solar physician and a man dying of the plague to an anchor and cast them into a stormy sea—still the Solar may have the ingenuity to heal the victim. This Charm supplements a Medicine-based action to treat a patient. It does not reduce the time required for medical treatment, but otherwise allows the Solar to treat patients in unfavorable conditions without medicines, penalties or a stunt.
 """
@@ -2693,6 +2827,7 @@ duration = "Until the day ends"
 prerequisites = ["any-medicine-excellency"]
 source = "Exalted 2E"
 pages = "220-221"
+effect = "Restore HL per long-term tend"
 description = """
 Solar physicians can speed a patient's recovery from even the most terrible wounds. This Charm supplements a dramatic action to treat, monitor and tend to the patient. This action requires one hour spent without a stunt or a Charm. The Solar's player rolls (Intelligence + Medicine). This Charm replaces the normal benefits of medical care, instead allowing the target to recover a number of lethal or bashing health levels equal to the number of successes at the end of the day. If the target spends the day resting, the target recovers a number of additional lethal and bashing health levels equal to the Solar's permanent Essence. No patient can benefit from this Charm more than once per day.
 """
@@ -2712,6 +2847,7 @@ duration = "Indefinite"
 prerequisites = ["wound-mending-care-technique"]
 source = "Exalted 2E"
 pages = "220-221"
+effect = "Total cure of injury and disease"
 description = """
 The Essence of the Solar Exalted fills others with new life. This Charm gives the target a number of temporary -1 health levels equal to the user's Essence. These health levels are the first lost when the character takes damage, and they are never healed back. When the Solar stops committing Essence to this Charm, the additional health levels fade without ill effect. They also fade instantly if Anointment of Miraculous Health is used on the target again.
 """
@@ -2731,6 +2867,7 @@ duration = "Instant"
 prerequisites = ["contagion-curing-touch", "wound-mending-care-technique"]
 source = "Exalted 2E"
 pages = "220-221"
+effect = "Convert lethal damage to bashing"
 description = """
 Great Solar healers can draw the poison from even unnatural wounds. This Charm enhances a dramatic action to treat, monitor and tend to the patient. This action requires one hour without a stunt or a Charm. This Charm replaces the normal benefits of medical care. Instead, the Solar's player rolls (Intelligence + Medicine). If she succeeds, the Solar converts the target's aggravated wound levels to lethal wound levels.
 """
@@ -2750,6 +2887,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "220-221"
+effect = "Instantly diagnose any ailment"
 description = """
 The eyes of the Solar Exalted see the hidden truths of others' pains. This Charm lets the Solar automatically determine which of the target's observable traits and described symptoms are medically related. If the Solar uses this Charm in the process of a formal diagnosis, this Charm protects her from any error in diagnosis. If she has enough information, she accurately identifies each condition, its source and its additional effect.
 """
@@ -2769,6 +2907,7 @@ duration = "Instant"
 prerequisites = ["flawless-diagnosis-technique"]
 source = "Exalted 2E"
 pages = "220-221"
+effect = "Cure any one disease/poison/curse"
 description = """
 Disease and corruption cannot stand against the Solars' healing light. Solar Exalted with this Charm can cure any Sickness effect. This Charm guarantees that any attempt Solars make to treat a sickness is considered supernatural. It halves the length of the patient's convalescence. If the Exalt's player rolls five or more successes on a Medicine roll for the Solar to treat an ordinarily incurable illness, such as the Great Contagion, she can spend five motes and banish it from the patient's system.
 """
@@ -2788,6 +2927,7 @@ duration = "Instant"
 prerequisites = ["flawless-diagnosis-technique"]
 source = "Exalted 2E"
 pages = "220-221"
+effect = "Counsel target to immunity for season"
 description = """
 The Lawgivers bring purgation and purity. Solar Exalted with this Charm can force even the most terrible Poison effects from the target's body. This Charm guarantees that any attempt they make to treat a poison is considered supernatural. If the Exalt's player rolls five or more successes on a Medicine roll for the Solar to treat an ordinarily incurable poison, such as spiritual taint, Yozi impregnation or even spells such as Blood of Boiling Oil, she can spend five motes and banish it from the patient's system.
 """
@@ -2807,6 +2947,7 @@ duration = "Permanent"
 prerequisites = ["flawless-diagnosis-technique"]
 source = "Exalted 2E"
 pages = "220-221"
+effect = "Regrow lost limbs/organs"
 description = """
 Essence can repair even severed limbs. Solar Exalted with this Charm can cure any Crippling effect. This Charm guarantees that any attempt they make to treat the effect is considered supernatural. If the Exalt's player rolls five or more successes on a Medicine roll for the Solar to treat an ordinarily incurable Crippling effect, such as limb amputation or Charm-induced paralysis, she can spend five motes and restore the patient. It takes the patient several days of convalescence to repair otherwise permanent damage such as lost limbs or blindness.
 """
@@ -2826,6 +2967,7 @@ duration = "Instant"
 prerequisites = ["any-medicine-excellency", "flawless-diagnosis-technique"]
 source = "Exalted 2E"
 pages = "222-223"
+effect = "Reflexively stabilise dying patient"
 description = """
 Rarely is a Solar forced to leave a task unfinished. This Charm is a Medicine-based action in which the character treats a patient. The Charm functions exactly as any Medicine-based dramatic action that takes up to one hour, save that the character performs it in a handful of seconds. This Charm does not remove the need for appropriate medicine, surgical tools and suchlike, but the Solar can use a stunt or Combo to work around these limitations.
 
@@ -2851,6 +2993,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "222-223"
+effect = "Cast Terrestrial spells"
 description = """
 The Exalted shape the Essence of the world. This Charm lets the character hone her will to the razor-sharp edge necessary to perform magic of the so-called First Circle—a power infinitely greater than mortal thaumaturgy. This magic can affect up to a few hundred individuals at a time, and its spells take only a few moments to cast. This Charm allows the character to take Terrestrial Circle Sorcery actions.
 """
@@ -2870,6 +3013,7 @@ duration = "Instant"
 prerequisites = ["terrestrial-circle-sorcery"]
 source = "Exalted 2E"
 pages = "222-223"
+effect = "Cast Celestial spells"
 description = """
 Celestial Circle Sorcery can slay thousands, level fortresses and bind Second Circle demons to the Exalt's will. Only the Celestial Exalted can master this powerful sorcerous initiation. This Charm permits the character to take Celestial Circle Sorcery actions.
 """
@@ -2889,6 +3033,7 @@ duration = "Instant"
 prerequisites = ["celestial-circle-sorcery"]
 source = "Exalted 2E"
 pages = "222-223"
+effect = "Cast Solar spells"
 description = """
 The sorcery reserved for the Lawgivers is a work of perfection and adamant. The spells of Solar Circle Sorcery are awesome beyond words—they can bring life to regions or slay entire armies. This Charm permits the character to take Solar Circle Sorcery actions.
 """
@@ -2908,6 +3053,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "223-224"
+effect = "See invisible spirits/Essence"
 description = """
 Spirits cannot hide from the Lawgivers. Spirits such as demons, ghosts and gods often move through the world in dematerialized form, completely hidden from all observers. This Charm lets the character see, hear, smell and feel—but not touch—dematerialized creatures. It makes dematerialized creatures within the normal range of the character's senses valid targets for the character's Awareness actions, including reflexive Awareness actions.
 """
@@ -2927,6 +3073,7 @@ duration = "Instant"
 prerequisites = ["spirit-detecting-glance"]
 source = "Exalted 2E"
 pages = "223-224"
+effect = "Strike dematerialised spirits"
 description = """
 The Solar Exalted may attack even the subtle Essence of dematerialized spirits. This Charm enhances an attack, making dematerialized creatures within the attack's normal range valid targets. The attack deals aggravated damage to spirits, materialized or otherwise. This Charm is explicitly permitted to supplement actions using other Abilities. Note that if the character cannot see the spirit he attacks, he receives the normal -2 external penalty.
 """
@@ -2946,6 +3093,7 @@ duration = "Instant"
 prerequisites = ["spirit-cutting-attack"]
 source = "Exalted 2E"
 pages = "223-224"
+effect = "Devour a ghost for motes/WP"
 description = """
 The heroes of the First Age used Ghost-Eating Technique to slay the Neverborn and the demon hordes. Spirits normally dissipate rather than dying when they lose all of their health levels to damage. The Solar invokes this Charm after making a successful attack that damages or dissipates a spirit. In addition to the normal damage from this attack, this Charm transfers a number of motes from the spirit to the Solar equal to (the Solar's permanent Essence x 2). If the spirit loses its last health level to this attack and dissipates, this Charm consumes the spirit utterly. Its Essence dissolves, and it will never be remade.
 """
@@ -2965,6 +3113,7 @@ duration = "One scene"
 prerequisites = ["spirit-cutting-attack"]
 source = "Exalted 2E"
 pages = "223-224"
+effect = "Ward an area against spirits"
 description = """
 The Solar casts out spirits. She spreads her arms, and a blazing ring of gold-white light spreads from her, forming a circle centered on the character with a radius equal to (the character's Essence) yards. This circle remains centered on the character for the remainder of the scene. This Charm imposes a Compulsion effect on all dematerialized creatures who take actions in this scene. They are compelled not to enter the circle while dematerialized and not to stay within the circle while dematerialized. Resisting costs Willpower equal to the Lawgiver's Essence, after which the spirit can ignore the Spirit-Repelling Diagram for the remainder of the scene.
 """
@@ -2984,6 +3133,7 @@ duration = "One scene"
 prerequisites = ["spirit-detecting-glance"]
 source = "Exalted 2E"
 pages = "223-224"
+effect = "See past all illusion/magic"
 description = """
 Nothing is hidden from the Lawgivers. The character augments his vision with the ability to see patterns of Essence. This Charm allows the character to see motes, Essence-fueled effects, power and invisible but magical creatures and effects. All Charms are treated as Obvious with respect to the character. Dematerialized and invisible creatures and effects are considered visible. The character recognizes all artifacts, manses and demesnes as such. The character can automatically recognize a creature with Essence 4+ as a supernatural creature.
 
@@ -3005,6 +3155,7 @@ duration = "Varies"
 prerequisites = ["all-encompassing-sorcerers-sight"]
 source = "Exalted 2E"
 pages = "223-224"
+effect = "Reflexive +Ess to countermagic"
 description = """
 The Lawgivers see all things truly. This Charm functions as All-Encompassing Sorcerer's Sight, but it has no cost—the character gains the benefits automatically whenever her anima banner is at or beyond the 4-7 mote level. If she wishes to use Essence sight at some other time, she may commit one mote reflexively to do so. While that mote remains committed, her Caste Mark burns visibly, and she has access to the benefits of All-Encompassing Sorcerer's Sight.
 """
@@ -3028,6 +3179,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "224-226"
+effect = "Walk on any surface; perfect balance"
 description = """
 The Solar Exalted are as graceful as sunlight on water. This Charm lets the Exalt automatically succeed on any valid Athletics action to keep his balance. Moreover, this Charm allows the Exalt to keep his footing on any surface at least as strong and wide as a human hair. He treats it as a three-foot-wide ledge capable of supporting a thousand pounds of weight when determining what movement and Athletics actions he can take and what penalties to them might apply.
 """
@@ -3047,6 +3199,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "224-226"
+effect = "Jump (Str+Athletics)×2 yards"
 description = """
 The heroes of the dawn leap with the grace of a flying crane and the speed of a striking hawk. For the rest of the scene, the character can jump with a movement action instead of a miscellaneous action, and she doubles the length of all jumps.
 """
@@ -3066,6 +3219,7 @@ duration = "Until next action"
 prerequisites = ["monkey-leap-technique"]
 source = "Exalted 2E"
 pages = "224-226"
+effect = "Long-jump scaled by Essence"
 description = """
 Supported by Essence, the character can almost fly. Until her next action, the character can jump with a Move action instead of a miscellaneous action, and she multiplies the length of all jumps by five. This is not cumulative with the bonus of Monkey Leap Technique.
 """
@@ -3085,6 +3239,7 @@ duration = "Instant"
 prerequisites = ["soaring-crane-leap"]
 source = "Exalted 2E"
 pages = "224-226"
+effect = "Cross miles in a single leap"
 description = """
 The heroes of the dawn can leap great distances in a single bound. This Charm is a dramatic jumping action, normally taking about five minutes, in which the character leaps up to (Essence x 5) miles. If the character is interrupted mid-leap and forced to take non-reflexive actions, he continues along the original trajectory—but his landing is considered "falling from a great height" rather than "safely completing a jump."
 """
@@ -3104,6 +3259,7 @@ duration = "One scene"
 prerequisites = ["monkey-leap-technique"]
 source = "Exalted 2E"
 pages = "224-226"
+effect = "Leap over a foe and attack from behind"
 description = """
 The Solar Exalt moves with unpredictable grace. For the rest of the scene, this Charm adds the character's Athletics in dice to any attempts to reestablish surprise. The character is not actually better at hiding, but his quicksilver movements make it harder for opponents to keep track of his exact position.
 """
@@ -3123,6 +3279,7 @@ duration = "Instant"
 prerequisites = ["any-athletics-excellency"]
 source = "Exalted 2E"
 pages = "224-226"
+effect = "Charge attack at +Ess dice damage"
 description = """
 The athletes of the Sun often master signature attacks. This Charm uses the Solar's signature athletic move to enhance an attack. A signature move is something like leaping into the air and swinging the character's fists in a brilliant Essence-laden arc, charging an opponent like a bull or pouncing on an enemy like a tiger. This Charm gives one bonus success on this attack in Step 3 of attack resolution and doubles the post-soak damage of the attack in Step 7 of attack resolution. This Charm is explicitly permitted to supplement actions of other Abilities.
 
@@ -3144,6 +3301,7 @@ duration = "One scene"
 prerequisites = ["any-athletics-excellency"]
 source = "Exalted 2E"
 pages = "226-227"
+effect = "Move at multiples of Dash speed"
 description = """
 The Exalt becomes a blur of motion. This Charm increases the distance she can cover with a Move or Dash action by her Athletics score in yards. She can increase this further with Athletics Excellencies, spending motes to increase the static rating of her (Dexterity + Athletics).
 """
@@ -3163,6 +3321,7 @@ duration = "Instant"
 prerequisites = ["lightning-speed"]
 source = "Exalted 2E"
 pages = "226-227"
+effect = "Sustain sprint for hours"
 description = """
 To the Lawgiver, the great distances between Creation's territories are not so much an obstacle as a place to keep their dominions. This Charm allows the character to travel ([her Stamina + Essence] x 10) miles per hour, for up to one hour. This is a single dramatic action. If the character invokes this Charm again as her next action, she may ignore the Willpower cost.
 """
@@ -3182,6 +3341,7 @@ duration = "One scene"
 prerequisites = ["graceful-crane-stance"]
 source = "Exalted 2E"
 pages = "226-227"
+effect = "Cling to walls/ceilings"
 description = """
 The heroes of the dawn make the impossible look easy. This Charm allows the character to run (using the Move and Dash actions) on any surface. She cannot stop while standing on a vertical surface or while upside down, however. If she does not make a Move or Dash action on every tick, she falls.
 
@@ -3203,6 +3363,7 @@ duration = "One scene"
 prerequisites = ["graceful-crane-stance"]
 source = "Exalted 2E"
 pages = "226-227"
+effect = "Run on water/snow/leaves"
 description = """
 The Lawgivers tread lightly when they choose. This Charm allows the Solar to run or walk on unstable surfaces (using the Move and Dash actions) as if she weighed no more than a feather. This makes surfaces such as rice paper, water, lava and writhing maggots effectively solid beneath her feet—though not necessarily harmless. To stop and stand on such a surface requires a successful reflexive difficulty 2 (Dexterity + Athletics) roll for each action in which the character wishes to maintain balance.
 """
@@ -3222,6 +3383,7 @@ duration = "One scene"
 prerequisites = ["spider-foot-style", "feather-foot-style"]
 source = "Exalted 2E"
 pages = "226-227"
+effect = "Glide and slow falls"
 description = """
 The Solar hero focuses her Essence and repels the ground. She leaps skyward and continues to fly until the scene ends or she wills herself to land. She can fly at triple her normal Move and Dash rates, but must move at least half her normal Move on every tick or she will have to land and end this Charm. The character must remain within ([Strength + Athletics] x 3) yards of a surface.
 
@@ -3243,6 +3405,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "227-228"
+effect = "+Str feats for a scene"
 description = """
 This Charm suffuses the character with Solar Essence, temporarily increasing his Strength. It adds one dot to the character's Strength for each three motes spent. No combination of Charms that includes Increasing Strength Exercise can increase the character's Strength by more than his Essence, and this bonus is treated as a dice bonus from Charms.
 """
@@ -3266,6 +3429,7 @@ duration = "One scene"
 prerequisites = ["any-awareness-excellency"]
 source = "Exalted 2E"
 pages = "227-228"
+effect = "Sharpen one sense to superhuman acuity"
 description = """
 Essence enhances the Solar's senses. Keen (Sense) Technique is actually three Charms, one that heightens sight, one that heightens hearing and touch and one that heightens smell and taste.
 
@@ -3291,6 +3455,7 @@ duration = "One scene"
 prerequisites = ["keen-sense-technique"]
 source = "Exalted 2E"
 pages = "227-228"
+effect = "Sense Essence/auras around you"
 description = """
 Essence grants the character supreme sensory prowess. Unsurpassed (Sense) Discipline is actually three Charms. One heightens sight, one heightens hearing and touch, and one heightens smell and taste. This Charm doubles the character's successes on Awareness rolls, before subtracting any external penalties.
 """
@@ -3310,6 +3475,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "226"
+effect = "Never surprised; reflexive defence"
 description = """
 In this degenerate time, the Lawgivers depend on a preternatural sense for danger. This Charm guarantees success on any valid Awareness roll to notice immediate mortal danger. This Charm works whether in or out of battle, awake or asleep.
 
@@ -3331,6 +3497,7 @@ duration = "One scene"
 prerequisites = ["unsurpassed-sense-discipline"]
 source = "Exalted 2E"
 pages = "226"
+effect = "See through illusions and disguises"
 description = """
 The Lawgivers see through all deceptions. This Charm lets the Solar see everything that is deliberately concealed within the normal range of his vision. This Charm renders Stealth effects, deception effects and concealment effects—natural and unnatural—inapplicable against the Solar. This includes invisibility, mundane disguises, disguises augmented by Lunar shapeshifting or Sidereal astrology and Compulsion and Illusion effects that force her to deny reality. This Charm flares the Solar's anima to the 16+ mote level while in use. If another Charm contests this Charm's effects, Eye of the Unconquered Sun adds twice the Solar's Essence in automatic successes to the opposed roll. This Charm is considered a defense when used to prevent a surprise or social attack.
 """
@@ -3354,6 +3521,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "227"
+effect = "Perfect Dodge vs one attack"
 description = """
 The Chosen move like shadows over water—with perfect grace and speed. The maneuver named Shadow Over Water restores defensive advantage to a beleaguered or overextended fighter. This Charm is used in response to an attack. It allows the Exalt to ignore all penalties that apply to her Dodge DV when resolving that attack. Her Dodge DV is still 0 against an undodgeable attack, but she takes no further penalties.
 """
@@ -3373,6 +3541,7 @@ duration = "Instant"
 prerequisites = ["shadow-over-water"]
 source = "Exalted 2E"
 pages = "227"
+effect = "Perfect Dodge vs unblockable attack"
 description = """
 The Solar hero is too quick for his enemies to land a blow. The Exalt invokes this Charm in response to an attack. The attack must not be unexpected. This Charm is a dodge that perfectly defends against the attack—even if the attack is undodgeable.
 
@@ -3394,6 +3563,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "227"
+effect = "Reflexive Dodge with no DV loss"
 description = """
 The heroes of the dawn are in tune with the Essence of the world. The Exalt invokes this Charm in response to an unexpected attack. The attack is no longer unexpected (but if an appropriate Charm, it remains unblockable). This allows the character to use his Dodge DV and Charms such as Seven Shadow Evasion against the attack.
 """
@@ -3413,6 +3583,7 @@ duration = "One scene"
 prerequisites = ["any-dodge-excellency", "seven-shadow-evasion", "reflex-sidestep-technique"]
 source = "Exalted 2E"
 pages = "227"
+effect = "Ignore onslaught penalties to DDV"
 description = """
 Essence permeates the Lawgiver's being. She moves with an impossible fluid grace. For the remainder of the scene, this Charm negates the onslaught and coordinated attack penalties that others' attacks impose on the Exalt's DV.
 """
@@ -3432,6 +3603,7 @@ duration = "Instant"
 prerequisites = ["shadow-over-water"]
 source = "Exalted 2E"
 pages = "229"
+effect = "Dodge by leaping, end at safe spot"
 description = """
 The Solar is as elusive as a dream. The Exalt invokes this Charm after using her Dodge DV to defend against an attack. This Charm allows her to leap away from her opponent, jumping up to ([Strength + Dodge] x 3) yards vertically or twice this distance horizontally. The Exalt chooses the exact direction and distance of this leap, so long as it is away from her attacker. This Charm is treated as a counterattack, even though the jump is not hostile. It reduces the character's DV by one, it cannot be used with a counterattack, and it is resolved in Step 9 of attack resolution.
 """
@@ -3455,6 +3627,7 @@ duration = "Until the character sleeps"
 prerequisites = ["any-larceny-excellency"]
 source = "Exalted 2E"
 pages = "230"
+effect = "Perfect disguise -- even Essence-sight"
 description = """
 After the Usurpation, the last of the Iron Wolves used this Charm to move in secret among the armies of the Dragon-Blooded. This Charm involves creating a disguise, and the player rolls ([Wits or Manipulation] + Larceny) to determine the disguise's quality.
 
@@ -3476,6 +3649,7 @@ duration = "One hour"
 prerequisites = ["flawlessly-impenetrable-disguise"]
 source = "Exalted 2E"
 pages = "230"
+effect = "Take target's exact appearance"
 description = """
 The Solar Exalted know the secrets of others' hearts. This Charm functions as Flawlessly Impenetrable Disguise, save that it has a shorter duration, a higher cost and two additional abilities.
 
@@ -3499,6 +3673,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "230"
+effect = "Auto-success on theft attempt"
 description = """
 It is the Lawgivers' right to confiscate goods necessary to the service of the Unconquered Sun. This Charm enhances a valid pickpocketing roll—that is, a roll to steal something that the character can both reach and carry from another's person. The character cannot steal things in active use unless the target is an extra.
 
@@ -3520,6 +3695,7 @@ duration = "Until DV refreshes (Essence) times"
 prerequisites = ["flawless-pickpocketing-technique"]
 source = "Exalted 2E"
 pages = "230"
+effect = "Theft unseen by watchful eyes"
 description = """
 In the First Age, the Solar Exalted used this Charm to steal the artifacts of the Fair Folk and the Yozis then turn them to the service of Creation. This Charm is an attempt to steal something in plain sight, within (the Solar's Essence) yards. The character automatically succeeds in stealing the item.
 
@@ -3543,6 +3719,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "231"
+effect = "Open any lock with a touch"
 description = """
 Mortal thieves must struggle with lockpicks and thieves' tools. The Exalted may use Essence. This Charm enhances a miscellaneous action to pick a lock. It makes success automatic even if the character has no tools (though such use makes the Charm Obvious). If this effect is opposed by another Charm or magical effect, add the character's Essence in automatic successes to the (Dexterity + Larceny) roll to oppose the rival magic.
 """
@@ -3562,6 +3739,7 @@ duration = "Instant"
 prerequisites = ["lock-opening-touch"]
 source = "Exalted 2E"
 pages = "231"
+effect = "Pass through any door/wall briefly"
 description = """
 Only the unrighteous would lock a door to keep the Lawgivers out. Such an intention is proof of iniquity. This Charm is a Move action with the normal movement allowance, which bypasses a single closed portal. The character can move through a closed door, a fallen portcullis or a sealed grate as if it were not there. This Charm only allows movement through portals—objects intentionally designed for people, animals or spirits to pass through them. The character cannot use this Charm to walk through walls, squeeze through arrow slits or fish around inside a sealed chest.
 """
@@ -3585,6 +3763,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "230"
+effect = "Be ignored in plain sight"
 description = """
 The Lawgivers must sometimes mask their glory, moving anonymously among the common folk. This Charm makes the character difficult to notice unless circumstances or battle readiness make him obvious. It causes Awareness and Investigation rolls made to notice the Solar to fail automatically unless the Solar is currently joined in battle or the observer has a minimum two-die bonus from circumstances.
 """
@@ -3604,6 +3783,7 @@ duration = "One scene"
 prerequisites = ["easily-overlooked-presence-method"]
 source = "Exalted 2E"
 pages = "231"
+effect = "Hide from mental detection"
 description = """
 The Mental Invisibility Technique bends the minds of those who might observe the character. The Exalt's player rolls ([Dexterity or Manipulation] + Stealth), adding her Essence in automatic successes. This Charm exerts unnatural mental influence on all those who observe her. If the character's successes exceed a target's Dodge MDV, the target is compelled to ignore the Solar's presence whenever the Solar is not joined in battle. The target must spend four Willpower to resist this compulsion, which drops to one Willpower if someone calls the target's attention to the Solar.
 """
@@ -3623,6 +3803,7 @@ duration = "Indefinite"
 prerequisites = ["mental-invisibility-technique"]
 source = "Exalted 2E"
 pages = "231"
+effect = "Erase self from short-term memory"
 description = """
 In the night, surrounded by the brooding things of darkness, it is sometimes hard to remember the sun. This Charm allows the character to apply Stealth retroactively. The Solar's player rolls ([Wits or Manipulation] + Stealth), adding a number of automatic successes equal to the Exalt's Essence. This stealth veils the character in others' memories. The first time in each day that someone attempts to remember an event involving the character or attempts to recognize the character, that person's player must reflexively roll (Wits + Lore) and achieve more successes than did the Exalt's player. If he fails, the character does not remember or recognize the character.
 """
@@ -3642,6 +3823,7 @@ duration = "Indefinite"
 prerequisites = ["easily-overlooked-presence-method"]
 source = "Exalted 2E"
 pages = "232"
+effect = "Become wholly invisible while still"
 description = """
 The Solar vanishes from others' sight. This Charm makes it impossible to detect the character with any sense save touch—unless they bump into him, observers simply cannot spot the character. This Charm fades instantly if the character joins battle or moves (with the Move action, the Dash action or their narrative and dramatic equivalents.) It fades automatically five ticks after someone notices the character by touch.
 """
@@ -3665,6 +3847,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "232"
+effect = "Bargain for half-price purchases"
 description = """
 Only a fool would cheat the heroes of the dawn. This Charm supplements a normal or dramatic action to estimate something's quality and price. This Charm gives the Exalt a perfect awareness of the target object's quality and condition. This awareness gives one bonus success on any price haggling if her bargaining opponent is honest (and using Charisma) and three bonus successes if the opponent is dishonest (and using Manipulation).
 """
@@ -3684,6 +3867,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "232"
+effect = "Detect fraud/forged goods"
 description = """
 Smoothly managing the economy is vital to the management of a state. This Charm supplements a social or dramatic action to buy, sell or trade something wisely. This Charm provides information on market values, giving the Solar a perfect knowledge of the target item's value in relevant markets. The main effect is to reduce external penalties applying to the mercantile action by an amount equal to the Solar's Essence.
 """
@@ -3703,6 +3887,7 @@ duration = "Indefinite"
 prerequisites = ["any-bureaucracy-excellency"]
 source = "Exalted 2E"
 pages = "233"
+effect = "Halve any bureaucratic task time"
 description = """
 The Lawgivers bring order and destroy corruption. The Solar speeds the process of a bureaucracy. The Solar communicates his desire for speedy resolution to the organization, and his player rolls ([Intelligence or Charisma] + Bureaucracy), adding the Solar's Essence in automatic successes. If the Solar succeeds, this Charm divides the time needed to begin the project by (the Solar's Essence + 1), with a maximum possible time of one season.
 """
@@ -3722,6 +3907,7 @@ duration = "Instant"
 prerequisites = ["speed-the-wheels"]
 source = "Exalted 2E"
 pages = "233"
+effect = "Improve organisation's efficiency"
 description = """
 The Lawgivers govern wisely. This Charm supplements an organizational effort that the Solar leads. This Charm reduces the external penalties on that action by the Solar's Essence. It permanently reduces any internal penalties that organization suffers due to endemic corruption or inefficiency by one. The Solar must have sufficient authority to lead the effort. This Charm incidentally purges the least useful members of the bureaucracy.
 """
@@ -3741,6 +3927,7 @@ duration = "Indefinite"
 prerequisites = ["any-bureaucracy-excellency"]
 source = "Exalted 2E"
 pages = "233"
+effect = "Bribe an official auto-succeeds"
 description = """
 The enemies of the Solar Exalted are creatures of vice. The Lawgivers exploit their venality and allow them to defeat themselves. This Charm empowers the natural indolence of others. If the Solar succeeds on the roll, this Charm multiplies the remaining time required for the target organization to begin a project by (the Solar's Essence + 1), always increased to at least (the Solar's Essence) in hours. If the project has already begun, this Charm instead applies an external penalty equal to the Solar's Essence to the organization's attempts to make progress.
 """
@@ -3760,6 +3947,7 @@ duration = "Instant"
 prerequisites = ["indolent-official-charm"]
 source = "Exalted 2E"
 pages = "232"
+effect = "Disrupt a meeting with confusion"
 description = """
 Those who oppose the Lawgivers often break down under the burden of their own failings. This Charm supplements a deliberate attempt by the Solar to sabotage an organization's operation. If the character succeeds, then the organization suffers a permanent increase in corruption and inefficiency that imposes a -2 internal penalty on all of its actions. No combination of Charms including Foul Air of Argument Technique can impose a greater internal inefficiency and corruption penalty on an organization than (the Solar's Intelligence + Bureaucracy).
 """
@@ -3783,6 +3971,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "234"
+effect = "Write at superhuman speed"
 description = """
 The diplomats of the Unconquered Sun write with a swift and elegant hand. This Charm supplements a dramatic action to write something down—be it a copy of an existing book, the transcript of a live conversation or an original work. This Charm allows the character to write at (her Essence x 10) times her normal speed.
 """
@@ -3802,6 +3991,7 @@ duration = "Instant"
 prerequisites = ["any-linguistics-excellency"]
 source = "Exalted 2E"
 pages = "234"
+effect = "Perfect calligraphy/forgery"
 description = """
 Flawless Brush Discipline heightens the beauty of a Lawgiver's script, making her every brushstroke ideal. This Charm adds the character's permanent Essence to her Linguistics score to determine the beauty of the writing. In addition, this Charm causes the Lawgiver's words to exude a supernatural attraction. The Exalt's player rolls (Charisma + Performance) when recording her message. If the successes exceed the MDV of someone reading this work, the target is overcome with admiration or even love for the Exalt—an unnatural mental influence. The target must spend three Willpower to resist this effect. Once affected, the target cannot suffer the effects of that Exalt's Flawless Brush Discipline again for one full year.
 """
@@ -3821,6 +4011,7 @@ duration = "Instant"
 prerequisites = ["any-linguistics-excellency"]
 source = "Exalted 2E"
 pages = "234"
+effect = "Hide a message inside a letter"
 description = """
 Though the glorious Solar Exalted of the First Age are dead, many left secret messages for their heirs. This Charm allows the character to hide a message within another written work. Only the intended targets for the message can perceive it.
 
@@ -3842,6 +4033,7 @@ duration = "One scene"
 prerequisites = ["any-linguistics-excellency"]
 source = "Exalted 2E"
 pages = "234"
+effect = "Detect coded/hidden meanings"
 description = """
 The Solar heroes see through petty mysteries. This Charm lets the character understand encoded, obscured and hidden communication as if it were clear. For example, the Exalt can read weather-damaged stone tablets, recognize the signals in a coded exchange, browse ciphered manuscripts as if they were in their original language and make out the words of someone whose tongue has been cut in half. This Charm can oppose the concealing effects of Letter-Within-a-Letter Technique and similar Charms. The character is never surprised by social attacks while this Charm is in force.
 """
@@ -3861,6 +4053,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "234"
+effect = "Read writer's emotion/intent"
 description = """
 The Lawgivers see others' purposes. This Charm identifies the motivation behind a given statement that the Exalt reads or hears—a one-sentence summary of what the person making that statement hopes to gain. If the Exalt invokes this Charm to defend against a social attack and the attacker's purpose is fundamentally hostile to the Exalt or the Exalt's Motivation, this Charm perfectly negates the attack.
 """
@@ -3880,6 +4073,7 @@ duration = "One scene"
 prerequisites = ["sagacious-reading-of-intent"]
 source = "Exalted 2E"
 pages = "235"
+effect = "Compose moving poetry on the fly"
 description = """
 The Solar heroes express their desires clearly. Language barriers do not stop them—their every gesture conveys their desired meaning. This Charm removes external penalties to dramatic actions and combat actions caused by the character not knowing others' languages. She can convey tactical and strategic necessities with expressive gestures and sounds. This Charm does not remove penalties to social or military actions.
 """
@@ -3899,6 +4093,7 @@ duration = "Varies"
 prerequisites = ["any-linguistics-excellency", "poetic-expression-style"]
 source = "Exalted 2E"
 pages = "235"
+effect = "Speak any language fluently"
 description = """
 Essence enhances the Solar's language skills. This Charm allows the Solar to communicate and understand basic concepts in a language with which he has some experience but does not know. This requires a successful (Intelligence + Linguistics) roll for each five long ticks of conversation or page of written material, and the Solar must use a Linguistics Excellency. The difficulty is 5 if the Solar has a few days' experience with the language, 7 for a scene's experience, and 10 if only a few words have been heard or read. If the Solar uses this Charm to engage in social conflict in a language he does not understand, both the Solar and anyone he attempts to persuade receive a +3 to their MDV.
 """
@@ -3918,6 +4113,7 @@ duration = "Instant"
 prerequisites = ["letter-within-a-letter-technique", "sagacious-reading-of-intent"]
 source = "Exalted 2E"
 pages = "235"
+effect = "Reword another's statement"
 description = """
 The cadences of the Solar's language are subtly compelling. This Charm supplements a written attempt to compel or deceive others. It makes the persuasion attempt involved unnatural. The player rolls (Manipulation + an appropriate social Ability). This effects a compulsion or illusion on anyone who reads the written text and whose MDV the successes exceed. The target must spend three Willpower to resist this effect or become committed to the intention or belief the Solar wishes to instill. This Charm loses effectiveness with repeated use—increase the target's MDV by three if an Exalt has used Twisted Words Technique or a similar Charm on the target this story.
 """
@@ -3937,6 +4133,7 @@ duration = "Instant"
 prerequisites = ["poetic-expression-style", "twisted-words-technique"]
 source = "Exalted 2E"
 pages = "235"
+effect = "Captivate listeners with words"
 description = """
 The Solar's words blaze with power, fascinating others. This Charm is a dramatic action to speak before a crowd. It flares the Solar's anima to the 16+ mote level while in use. The rhythm and poetry of the Solar's words become a transcendent numinous experience for those who hear him speak.
 
@@ -3964,6 +4161,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "236"
+effect = "Direct mount with thought alone"
 description = """
 The Chosen of the Sun know their animals well. This Charm permanently enhances the Exalt's capabilities with one of the following tricks:
 
@@ -3995,6 +4193,7 @@ duration = "Instant"
 prerequisites = ["any-ride-excellency"]
 source = "Exalted 2E"
 pages = "236"
+effect = "Bond with a horse permanently"
 description = """
 The Solar heroes are as one with their mounts. This Charm lets a character use his reflexive Charms to assist a loyal animal he is riding rather than himself. This counts as the character using that Charm, but adds one mote to its invocation cost. If the character has a self-invoking Charm, such as Surprise Anticipation Method, then it invokes to protect his mount as well. If the mount faces unexpected mortal danger, the character reflexively spends two motes to enhance the mount's Awareness and allow it to shy.
 """
@@ -4014,6 +4213,7 @@ duration = "Instant"
 prerequisites = ["worthy-mount-technique"]
 source = "Exalted 2E"
 pages = "236"
+effect = "Share dice pools with mount"
 description = """
 This Charm enhances the character's Worthy Mount Technique. The character can use Supplemental Charms to enhance the horse's actions, adding two motes to their cost. For example, the character can use Thunderbolt Attack Prana to enhance his horse's attack, possibly even in the same action that the character uses it to enhance his own. The character cannot do so when these Supplemental Charms are part of a Combo that includes a Simple Charm.
 """
@@ -4033,6 +4233,7 @@ duration = "One day"
 prerequisites = ["master-horsemans-techniques"]
 source = "Exalted 2E"
 pages = "237"
+effect = "Conjure a spirit-steed for scene"
 description = """
 The Solar shapes a pure white steed with a burning golden mane from the Essence of the world. This Charm creates a war horse that needs no sleep, rest or food. This war horse is loyal to the character and has Control Rating 2.
 """
@@ -4052,6 +4253,7 @@ duration = "One day"
 prerequisites = ["any-ride-excellency"]
 source = "Exalted 2E"
 pages = "237"
+effect = "Mount becomes blindingly fast"
 description = """
 Essence imbues the Lawgiver's mount with infinite energy. It can run all-out without suffering ill effects. It receives one automatic success on any rolls to keep its footing or successfully jump an obstacle. With this Charm active, a mounted character can reliably cover (the horse's Stamina x 10) miles per hour.
 """
@@ -4071,6 +4273,7 @@ duration = "Permanent"
 prerequisites = ["flashing-thunderbolt-steed"]
 source = "Exalted 2E"
 pages = "237"
+effect = "Boost mount's Dash and Move"
 description = """
 The steeds of the Lawgivers possess extraordinary speed. This Charm enhances the character's Flashing Thunderbolt Steed technique, allowing the mount under its influence to reliably travel ([the creature's Stamina + the character's Essence] x 10) miles per hour.
 """
@@ -4090,6 +4293,7 @@ duration = "One hour"
 prerequisites = ["flashing-thunderbolt-steed", "single-spirit-method"]
 source = "Exalted 2E"
 pages = "237"
+effect = "Mount runs on air/water briefly"
 description = """
 The Solar heroes inspire their mounts to unusual feats. This Charm gives a horse the ability to fly, as well as the confidence to do so. It can run on water, clouds and even the air itself with a Move or Dash action, spending two yards of movement to ascend one yard.
 
@@ -4115,6 +4319,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "238"
+effect = "Read sea/weather instantly"
 description = """
 This Charm assists in naval and shipboard operations, from maintaining sea legs during a storm to guiding an invasion fleet through the reefs on a foggy night. This Charm removes up to the character's Essence in external penalties from appropriate battle, social, dramatic and military actions. This includes both penalties directly related to the naval environment, such as fog and the rolling ship, and unrelated penalties such as an enemy's DV or MDV.
 """
@@ -4134,6 +4339,7 @@ duration = "One scene"
 prerequisites = ["salty-dog-method"]
 source = "Exalted 2E"
 pages = "238"
+effect = "Coordinate naval crews mass-action"
 description = """
 The heroes of the dawn are masters of the sea. Invincible Admiral Method resembles Salty Dog Method but extends its benefits to others. This Charm assists in naval and shipboard operations. The Solar must be on board a seagoing vessel. This Charm removes one point of external penalties from appropriate combat, social, dramatic and military actions for all units within (Essence x 10) miles that are actively following the character's lead—including solo units. For example, this Charm benefits a Solar's crew during a boarding operation or the Solar's navy during a large-scale fleet battle.
 """
@@ -4153,6 +4359,7 @@ duration = "Instant"
 prerequisites = ["any-sail-excellency"]
 source = "Exalted 2E"
 pages = "238"
+effect = "Bond ship to captain spiritually"
 description = """
 The Essence of a ship knows its master. This Charm claims a ship. The target ship must not be owned by another Essence channeler. This Charm causes the Exalt to own the ship instantly. Other characters subtract one success as an external penalty from all actions while on board until the Exalt formally welcomes them to the ship and unless he later renounces them. This is enforced by the little god of the ship, so the Exalt must welcome and renounce others in the language of the Old Realm and in earshot of the ship itself.
 """
@@ -4172,6 +4379,7 @@ duration = "Instant"
 prerequisites = ["ship-claiming-stance"]
 source = "Exalted 2E"
 pages = "238"
+effect = "Repair/maintain ship reflexively"
 description = """
 The character protects her ship. She invokes this Charm in response to an attack upon the ship—whether by a ramming enemy, a reef's cutting edge or the tentacles of an underwater beast. She must be on the ship at the time. This Charm perfectly negates the attack, guaranteeing a post-soak damage of 0.
 """
@@ -4191,6 +4399,7 @@ duration = "Indefinite"
 prerequisites = ["hull-preserving-technique"]
 source = "Exalted 2E"
 pages = "239"
+effect = "Survive any storm/drowning"
 description = """
 The character invokes this Charm in response to an attack that would shatter or sink her vessel. This Charm holds the ship together as long as the character remains on board and keeps the Essence committed. If the ship takes even one level of damage, it will fall apart, although the character may use this Charm again (maintaining multiple commitments) or other Charms to defend it.
 """
@@ -4210,6 +4419,7 @@ duration = "Instant"
 prerequisites = ["any-sail-excellency"]
 source = "Exalted 2E"
 pages = "239"
+effect = "Always know location/heading"
 description = """
 The Lawgivers find their way through the most terrible seas. This Charm is a dramatic action to guide the ship toward its destination. The Solar must be on board and authorized to navigate. The ship travels on course at its maximum speed until something—sleep, combat or the need to focus on other matters—distracts the character and causes her to take another action. The Solar's player automatically succeeds at any valid Sail roll made for the character to find her way around known hazards to a given destination—though she must have enough information to make this a valid roll.
 """
@@ -4229,6 +4439,7 @@ duration = "One scene"
 prerequisites = ["any-sail-excellency"]
 source = "Exalted 2E"
 pages = "239"
+effect = "Ship ignores weather effects"
 description = """
 Solar heroes can sail into the teeth of a storm. This Charm makes sure that a ship and crew survives a storm, maze of reefs, whirlpool or other hazard. The Solar must be on board and authorized to direct the crew. The Solar and the ship's crew receive two bonus successes on every action that directly serves the survival of the ship—whether repelling a unit of aquatic Fair Folk, patching the ship's side before it sinks or taking a simplified dramatic action to bypass a less interesting hazard.
 """
@@ -4248,6 +4459,7 @@ duration = "Instant"
 prerequisites = ["any-sail-excellency"]
 source = "Exalted 2E"
 pages = "239"
+effect = "Stealth approach by sea"
 description = """
 The navies of the Lawgivers appear from nowhere even on the clearest day. This Charm allows the character to double successes on a Stealth action taken by a naval unit he commands, before external penalties are applied. Naval units influenced by this Charm can conceal themselves at +4 difficulty even if there are no obstacles to hide behind.
 """
@@ -4271,6 +4483,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "240"
+effect = "Read room's social dynamics"
 description = """
 The Solar reshapes the beliefs of a society. This Charm is a Socialize-based social attack to make a social group with Magnitude 1+ (such as a court, kingdom or secret society) believe something. The character must have spent several hours within the last year encouraging the desired belief within this group before using this Charm, and this Charm must be invoked in the presence of at least one member of that group. The Exalt's player rolls ([Charisma or Manipulation] + Socialize). Subtract an external penalty equal to the group leader's MDV plus half of the group's Magnitude from the rolled successes. If the character succeeds, the social group accepts the belief.
 
@@ -4294,6 +4507,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "240"
+effect = "Charm a crowd into joining you"
 description = """
 The Solar encourages a society to release its tensions in a mad torrent of emotion. This Charm is a Socialize-based social attack to make a group feel a strong emotion—to lose itself in hatred, grief, lust or the joy of festival. It functions exactly as Wise-Eyed Courtier Method, save that its unnatural mental influence imposes an Emotion effect rather than a belief.
 """
@@ -4313,6 +4527,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "240"
+effect = "Place social taboo on target"
 description = """
 The Solar furiously condemns or supports some behavior, encouraging an entire society to accept or reject it. This Charm is a Socialize-based social attack to compel a social group with Magnitude 1+. The character must have spent several hours within the last month encouraging the desired attitude within this group before using this Charm, and this Charm must be invoked in the presence of at least one member of that group. The Exalt's player rolls ([Charisma or Manipulation] + Socialize). Subtract an external penalty equal to the leader's MDV plus half of the group's Magnitude from the rolled successes. If the character succeeds, the social group adopts a taboo or fad of the character's choice. The society instantly integrates the taboo or fad into its Policy. The taboo or fad remains part of the group's Policy until the group's leader spends a total of 10 Loyalty, at most one per week, to remove it. It is also a part of the Policy of any social groups of Magnitude 1+ that splinter off from the target group, and the leader of those groups must spend a total of 10 Loyalty, at most one per week, to remove it.
 
@@ -4334,6 +4549,7 @@ duration = "Instant"
 prerequisites = ["taboo-inflicting-diatribe"]
 source = "Exalted 2E"
 pages = "240"
+effect = "Plant a hostile rumour that sticks"
 description = """
 The Solar convinces society at large to reject a given individual or group. The Solar must touch an individual target or interact with the targeted group. This Charm is an unnatural Socialize-based social attack to undermine the target's position. The Exalt's player rolls ([Charisma or Manipulation] + Socialize). Subtract an external penalty equal to the target's MDV plus half of the target's Magnitude from the rolled successes.
 
@@ -4355,6 +4571,7 @@ duration = "Instant"
 prerequisites = ["any-socialize-excellency"]
 source = "Exalted 2E"
 pages = "240"
+effect = "Map all relationships in a room"
 description = """
 The Lawgivers understand how people interact. This Charm is an attempt to survey the power relationships in a given social environment. The character builds an accurate profile of the people and relationships involved, which the Storyteller can detail as desired. The Exalt's player rolls ([Perception or Intelligence] + Socialize), adding a dice bonus equal to the Exalt's Essence. The difficulty of this roll is 1. If a major social group in the court is deliberately attempting to send out misleading cues, subtract an external penalty equal to the largest ([Manipulation + Socialize + Magnitude] + 2) for such a group from the successes rolled. Unusual circumstances, such as a major player not being present at all during the character's survey, can also impose an external penalty. If the character succeeds, then each success reduces external penalties on dramatic and social actions to manipulate social groups within that environment. This Charm cannot reduce external penalties by an amount greater than the Solar's Essence.
 
@@ -4376,6 +4593,7 @@ duration = "Until next action"
 prerequisites = []
 source = "Exalted 2E"
 pages = "240"
+effect = "Auto-success at etiquette"
 description = """
 The Solar attunes herself to the patterns of human interaction. This Charm makes her responses to social situations so natural and appropriate that in social combat she treats all enemy groups as one point of Magnitude smaller than they are (to a minimum of 0). It also increases her effective Appearance by one dot. When in doubt, other characters will be more apt to do small favors and provide hospitality than not. Finally, this Charm ensures that the character understands the basic motivations of everyone present in the scene, as if her player had rolled three successes on a mundane Investigation roll to estimate each person's motives.
 """
@@ -4395,6 +4613,7 @@ duration = "One week"
 prerequisites = []
 source = "Exalted 2E"
 pages = "240"
+effect = "Draw a crowd around you"
 description = """
 The glory of the Lawgivers inspires mortals to awe. The Exalt attempts to persuade everyone who can hear him to organize in his service, his player rolling (Charisma + [Performance or Socialize]). This Charm organizes all characters whom the Exalt successfully persuades into a social group under the Exalt's direction. The group dissolves if the Exalt abandons it for more than a day.
 """
@@ -4422,6 +4641,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "243"
+effect = "Counter-attack on missed strike"
 description = """
 For its first bite, the snake is most feared. This Charm supplements a Join Battle action, adding a number of automatic successes to the character's Join Battle roll equal to his Martial Arts score.
 """
@@ -4441,6 +4661,7 @@ duration = "Instant"
 prerequisites = ["striking-cobra-technique"]
 source = "Exalted 2E"
 pages = "242"
+effect = "Sinuous dodge regains DV"
 description = """
 The serpent bends and weaves with utmost grace. This Charm gives the character +2 Dodge or Parry DV against a single attack.
 """
@@ -4460,6 +4681,7 @@ duration = "One scene"
 prerequisites = ["serpentine-evasion"]
 source = "Exalted 2E"
 pages = "242"
+effect = "Snake-Style Form Charm (+abilities)"
 description = """
 The Exalt adopts the attitude and stance of a wary snake—head back, ready to advance or retreat. The Essence of the snake hardens his skin. His sinuous movements slow and distract his enemies.
 
@@ -4483,6 +4705,7 @@ duration = "One scene"
 prerequisites = ["snake-form"]
 source = "Exalted 2E"
 pages = "242-243"
+effect = "Unarmed strikes count lethal/armed"
 description = """
 The snake's fangs bite deep. The snake's skin is strong and supple. This Charm gives the Exalt similar advantages. It makes her unarmed Martial Arts attacks inflict lethal damage, and this damage is piercing—it ignores half of the target's soak from armor. In addition, this Charm allows the Exalt to soak lethal damage with her bashing soak.
 """
@@ -4502,6 +4725,7 @@ duration = "Instant"
 prerequisites = ["essence-fangs-and-scales-technique"]
 source = "Exalted 2E"
 pages = "243"
+effect = "Ignore foe's armor soak"
 description = """
 The nix-snakes of the East can bite through tempered steel. The students of Snake Style learn similar ferocity. This Charm enhances an unarmed Martial Arts attack. It allows the attack to ignore the target's soak from armor. The target can only soak with Stamina and Charms such as Iron Skin Concentration.
 """
@@ -4521,6 +4745,7 @@ duration = "Instant"
 prerequisites = ["snake-form"]
 source = "Exalted 2E"
 pages = "243"
+effect = "Strike crippling location for free"
 description = """
 The snake defends itself by attacking. The Exalt invokes this Charm when hit by an attack but before damage is applied. This Charm gives the Exalt an unarmed Martial Arts counterattack. The dice pool for this counterattack equals the Exalt's Martial Arts score plus the number of extra successes rolled on the opponent's attack. (The original attacker's damage is still inflicted as normal.) Note the rules for counterattacks on pages 150 and 183.
 """
@@ -4540,6 +4765,7 @@ duration = "Instant"
 prerequisites = ["snake-strikes-the-heel"]
 source = "Exalted 2E"
 pages = "243"
+effect = "Strike at extra range"
 description = """
 The martial artist's anima flashes forward like a striking snake. Some martial artists instead strike with the shadow of their hand. In either case, this Charm enhances an unarmed Martial Arts attack, letting the Exalt target an opponent up to (Essence x 2) yards away. The character's anima or shadow actually strikes the target, so an unobstructed path to the target must exist.
 """
@@ -4569,6 +4795,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "326"
+effect = "+1 die per mote (DB Excellency)"
 description = """
 A First Excellency Charm for a Dragon-Blood gives two bonus dice per mote spent. However, a Dragon-Blood can only add dice equal to her Ability rating plus any applicable specialties.
 """
@@ -4588,6 +4815,7 @@ duration = "Instant"
 prerequisites = ["dragon-blooded-first-excellency"]
 source = "Exalted 2E"
 pages = "326"
+effect = "+1 success per 2m (DB)"
 description = """
 A Second Excellency Charm allows a Dragon-Blood to purchase automatic successes on a dice roll at a cost of two motes per success, up to the maximum of half her Ability rating plus applicable specialties.
 """
@@ -4607,6 +4835,7 @@ duration = "Instant"
 prerequisites = ["dragon-blooded-second-excellency"]
 source = "Exalted 2E"
 pages = "326"
+effect = "Reroll the action (DB)"
 description = """
 A Third Excellency Charm permits a Dragon-Blooded to reroll a failed attempt to use an Ability at a cost of three motes.
 """
@@ -4626,6 +4855,7 @@ duration = "Permanent"
 prerequisites = []
 source = "Exalted 2E"
 pages = "326"
+effect = "Add DB health levels"
 description = """
 A Dragon-Blooded's Ox-Body Technique conveys one -1 health level and one -2 health level per purchase.
 """
@@ -4647,6 +4877,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "325-326"
+effect = "Air anima discharges as gust/lightning"
 description = """
 For the duration of a scene, the Exalt is surrounded by a swirling vortex of air, which functions as a weakened version of the Stormwind Rider spell. The Dragon-Blood may triple his leaping distance, and he takes no damage from falls, as the air itself buoys him and slows his descent. Finally, the Dragon-Blood may add his Essence to his Defense Value against Thrown and Archery attacks, as the winds themselves buffet ranged weapons in order to protect their master. This effect activates automatically if the Dragon-Blood has spent at least 11 motes of Peripheral Essence.
 """
@@ -4666,6 +4897,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "325-326"
+effect = "Earth anima grants soak/stability"
 description = """
 For the duration of the scene, the Exalt may soak all lethal damage with her full Stamina. She may also add her Essence to dice rolls to resist grappling attacks or to avoid knockback. Finally, she may add her Essence to her Stamina for all purposes, but only while her feet rest on either earth or stone. This effect activates automatically if the Dragon-Blood has spent at least 11 motes of Peripheral Essence.
 """
@@ -4685,6 +4917,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "325-326"
+effect = "Fire anima burns nearby foes"
 description = """
 For the duration of the scene, the Exalt is surrounded by a corona of flames, which does no damage to his body or possessions but affects anything else he touches as normal flame would. Any bare-handed or grappling attacks against the Exalt will cause the attacker to suffer a number of lethal damage dice equal to the Dragon-Blood's Essence, and any similar attacks made by the Dragon-Blood inflict an additional number of damage dice equal to his Essence as well. The Exalt may also ignite flammable materials with a touch. This effect activates automatically if the Dragon-Blood has spent at least 11 motes of Peripheral Essence.
 """
@@ -4704,6 +4937,7 @@ duration = "One day"
 prerequisites = []
 source = "Exalted 2E"
 pages = "325-326"
+effect = "Water anima flows around attacks"
 description = """
 For the duration of a single day, the Exalt has complete water freedom. She can breathe water as easily as air and is incapable of drowning. She also suffers no environmental penalty for any actions taken while underwater, including such improbable actions as firing a bow or throwing a chakram. As a final bonus, the Exalt can walk across the surface of a body of water as easily as dry land. This effect activates automatically if the Dragon-Blood has spent at least 11 motes of Peripheral Essence.
 """
@@ -4723,6 +4957,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "325-326"
+effect = "Wood anima heals self/allies"
 description = """
 For the duration of a scene, the Exalt can render himself completely immune to the effects of any plant-based poison. This is a reflexive power, and the Exalt need not know that he has been poisoned prior to activating this power. While this effect is active, the Dragon-Blooded becomes a walking plant toxin. If the Exalt makes skin-to-skin contact with someone while this power is active, the target's player must make a successful (Stamina + Resistance) roll against a difficulty equal to the Exalt's Essence or suffer the effects of poisoning. Finally, the Dragon-Blooded can add his Essence to his Defense Value against Archery attacks and any attacks using wooden or wood-hafted weapons. This effect activates automatically if the Dragon-Blood has spent at least 11 motes of Peripheral Essence.
 """
@@ -4749,6 +4984,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "331-332"
+effect = "+1 die per mote (Lunar)"
 description = """
 One mote spent on a roll of the Attribute purchases one bonus die, to a maximum number of dice equal to the Attribute. This is the maximum number of dice a Lunar may add through any combination of Charms. Lunar Excellencies are purchased for Attributes rather than Abilities; e.g., a Lunar with Essence Triumphant in Dexterity can gain automatic successes in a (Dexterity + Melee) or a (Dexterity + Stealth) roll, but not a (Wits + Stealth) roll.
 """
@@ -4768,6 +5004,7 @@ duration = "Instant"
 prerequisites = ["lunar-first-excellency-essence-overwhelming"]
 source = "Exalted 2E"
 pages = "331-332"
+effect = "+1 success per 2m (Lunar)"
 description = """
 Two motes spent on a roll of the Attribute purchases an automatic success. The Lunar can buy no more automatic successes than half the Attribute.
 """
@@ -4787,6 +5024,7 @@ duration = "Instant"
 prerequisites = ["lunar-second-excellency-essence-triumphant"]
 source = "Exalted 2E"
 pages = "331-332"
+effect = "Reroll action (Lunar)"
 description = """
 Four motes spent on a roll of the Attribute allow the Lunar's player to reroll a failure. Any Charms used on the first roll must be paid for again. This Excellency is incompatible with extra action Charms.
 """
@@ -4806,6 +5044,7 @@ duration = "Permanent"
 prerequisites = []
 source = "Exalted 2E"
 pages = "331-332"
+effect = "Add Lunar health levels"
 description = """
 Each purchase provides two -1 or four -2 health levels.
 """
@@ -4825,6 +5064,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "331"
+effect = "Full Moon: feats of Strength"
 description = """
 Full Moons may spend five motes to double their speed and leaping distances for a scene. Doing so stacks with other speed increases, but only by adding a factor equal to the original value, not continuing to multiply by two. A Lunar who increases her running speed twice moves at three times her normal speed, not four.
 """
@@ -4844,6 +5084,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "331"
+effect = "No Moon: stealth/sorcery boons"
 description = """
 No Moon Lunars may spend one mote to reduce the Essence cost of all spells they cast by one for the scene. A No Moon cannot spend more motes than twice his Essence in this manner, and no spell's cost can be reduced by more than half.
 """
@@ -4863,6 +5104,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "331"
+effect = "Changing Moon: shapeshift mastery"
 description = """
 A Changing Moon can spend 10 motes to appear as any one person he knows for a scene, complete with voice and smells. The imagery is accompanied by the perception of trustworthiness, lending the Lunar his Essence in dice to any action that such an aura assists. These effects are instantly dispelled if the Lunar's anima banner activates at any level.
 """
@@ -4886,6 +5128,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "337"
+effect = "+1 die per mote (Sidereal)"
 description = """
 For every mote spent, the Sidereal may add one die to the Ability for which this Excellency was purchased, to a maximum of the Sidereal's Essence in dice. However, should the Sidereal have any dice penalties to this roll, he may also spend Essence to negate those dice penalties to 0 before adding up to his Essence in dice to a single roll.
 """
@@ -4905,6 +5148,7 @@ duration = "Instant"
 prerequisites = ["sidereal-first-excellency-essence-overwhelming"]
 source = "Exalted 2E"
 pages = "337"
+effect = "+1 success per 2m (Sid)"
 description = """
 For every two motes spent, the Sidereal may purchase one success on a roll involving the Ability for which this Excellency was purchased, to a maximum of the Sidereal's Essence in successes.
 """
@@ -4924,6 +5168,7 @@ duration = "Instant"
 prerequisites = ["sidereal-second-excellency-essence-triumphant"]
 source = "Exalted 2E"
 pages = "337"
+effect = "Reroll action (Sidereal)"
 description = """
 For three motes, a Sidereal's player may reroll any roll involving the Ability for which this Excellency was purchased.
 """
@@ -4943,6 +5188,7 @@ duration = "Permanent"
 prerequisites = []
 source = "Exalted 2E"
 pages = "337"
+effect = "Add Sidereal health levels"
 description = """
 Each time this Charm is purchased, the Sidereal gains a single -0 health level.
 """
@@ -4962,6 +5208,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "337"
+effect = "Spend WP to gain free Charm"
 description = """
 For every mote of Essence spent, the Sidereal may reduce the target number of any roll involving the Ability for which this Excellency was purchased, to a minimum of 4.
 
@@ -4985,6 +5232,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "336-337"
+effect = "Open paths through Loom of Fate"
 description = """
 The Chosen of Journeys (Caste of Mercury) can make the Lesser Sign of Mercury at a cost of 10 motes. For the rest of the scene, the Chosen of Journeys and all her allies within (Essence x 10) yards triple their running speeds. This applies not just to people but to horses and other steeds whose feet touch the ground as they travel. If the Sidereal's anima is manifested (in the 11-15 mote range), activating this effect costs only five motes. If the Sidereal's anima is fully manifested (in the 16+ mote range), the Lesser Sign of Mercury may be activated with a simple gesture and one mote.
 """
@@ -5004,6 +5252,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "336-337"
+effect = "Compel sympathy/desire"
 description = """
 The Chosen of Serenity (Caste of Venus) can make the Lesser Sign of Venus at a cost of 10 motes. For the rest of the scene, the Chosen of Serenity and all her allies within (Essence x 10) yards add a number of automatic successes equal to the Sidereal's permanent Essence to any Performance rolls made. If the Sidereal's anima is manifested (in the 11-15 mote range), activating this effect costs only five motes. If the Sidereal's anima is fully manifested (in the 16+ mote range), the Lesser Sign of Venus may be activated with a simple gesture and one mote.
 """
@@ -5023,6 +5272,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "336-337"
+effect = "Sharpen one combat trait"
 description = """
 The Chosen of Battles (Caste of Mars) can make the Lesser Sign of Mars at a cost of 10 motes. For the rest of the scene, the Chosen of Battles and all his allies within (the Sidereal's permanent Essence x 10) yards reduce the damage of all blows striking them by one health level, applied after the damage is rolled. This effect cannot reduce an attack's damage to less than one health level. If the Sidereal's anima is manifested (in the 11-15 mote range), activating this effect costs only five motes. If the Sidereal's anima is fully manifested (in the 16+ mote range), the Lesser Sign of Mars may be activated with a simple gesture and one mote.
 """
@@ -5042,6 +5292,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "336-337"
+effect = "Glimpse fated outcomes"
 description = """
 The Chosen of Secrets (Caste of Jupiter) can make the Lesser Sign of Jupiter at a cost of 10 motes. For the rest of the scene, the Sidereal and her allies within (Essence x 10) yards are immune to mind-reading and mental attacks from opponents with an Essence less than the Sidereal's own. Against mental attacks from opponents of equal or greater Essence, the Sidereal and her allies still add her Essence to their Mental DVs. If the Sidereal's anima is manifested (in the 11-15 mote range), activating this costs only five motes. If the Sidereal's anima is fully manifested (in the 16+ mote range), the Lesser Sign of Jupiter may be activated with a simple gesture and one mote.
 """
@@ -5061,6 +5312,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "336-337"
+effect = "Read mortality/endings"
 description = """
 The Chosen of Endings (Caste of Saturn) can make the Lesser Sign of Saturn at a cost of 10 motes. For the rest of the scene, any blows that the Chosen of Endings and all her allies within (Essence x 10) yards strike increase in damage by one health level, applied after damage is rolled. This cannot augment a damage roll that results in no successes. If the Sidereal's anima is manifested (in the 11-15 mote range), activating this effect costs only five motes. If the Sidereal's anima is fully manifested (in the 16+ mote range), the Lesser Sign of Saturn may be activated with a simple gesture and one mote.
 """
@@ -5080,6 +5332,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "336"
+effect = "See spirits/Essence patterns"
 description = """
 All Sidereals can attune their animas to the emanations of Heaven for one mote, enabling them to sense gateways to Heaven within a distance of (the character's permanent Essence x 100) feet. This does not reveal the location of the gateway to the Sidereal, only its general presence. Nor does this allow the Sidereal to automatically access the gateway.
 """
@@ -5103,6 +5356,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "342"
+effect = "+1 die per mote (Abyssal)"
 description = """
 Excellencies for Abyssals work the same way they do for Solar Exalts, with the same limits on how many dice can be gained from any single application of an Excellency.
 """
@@ -5122,6 +5376,7 @@ duration = "Permanent"
 prerequisites = []
 source = "Exalted 2E"
 pages = "342"
+effect = "Add Abyssal health levels"
 description = """
 Each time it is purchased, the Abyssal may choose to gain a single -0 health level, two -1 health levels or a -1 and two -2 health levels.
 """
@@ -5141,6 +5396,7 @@ duration = "Until end of scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "341"
+effect = "Sense death, dying, undead"
 description = """
 All deathknights can attune their animas to emanations of the Underworld for one mote, enabling them to sense nearby shadowlands, as well as ghosts and the walking dead. At a distance of (Essence x 100) yards, an Abyssal will recognize the presence of shadowlands, ghosts and creatures of the Underworld. This sense does not reveal the location of the Underworld emanations to the deathknight, only their general presence.
 """
@@ -5160,6 +5416,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "341"
+effect = "Inflict aggravated wounds"
 description = """
 By expending 10 motes of Essence, the Dusk Caste flares his anima, instilling fear in those who see the battlesome deathknight. A Dusk Caste gains a +2 to his Defense Value against those who have a Valor equal to or lower than his Essence. In addition, players of mortals must also make Valor rolls for their characters when they are facing one of the Dusk Caste. Mortals (and normal animals) that fail flee in terror of the dreadful apparition that confronts them. Golems, automata, the walking dead and other creatures that do not know fear cannot be affected by this anima power. This effect comes into play automatically once the Abyssal spends 11-15 motes of Peripheral Essence.
 """
@@ -5179,6 +5436,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "341-342"
+effect = "Drain Essence/willpower from foes"
 description = """
 Anytime her anima is flared (whether done deliberately for five motes of Essence or through the expenditure of 11-15 motes from her Peripheral Essence pool), a Midnight Caste grants undead within it a +1 to damage rolls against the living. Additionally, the Midnight Caste can animate any single corpse within (Essence x 10) yards by taking an action to do so and expending five motes.
 """
@@ -5198,6 +5456,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "342"
+effect = "Corrupt natural healing into rot"
 description = """
 At any point before damage is actually applied to the Daybreak's health levels, he may spend five motes, flaring his anima to protect him. Doing so subtracts a number of damage levels from the attack equal to the Daybreak's Essence rating. This effect comes into play automatically once the Abyssal spends 11-15 motes of Peripheral Essence.
 """
@@ -5217,6 +5476,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "342"
+effect = "Hide presence from senses"
 description = """
 For a cost of one mote, a Day Caste may prevent Essence spent from his Peripheral Essence pool from causing an anima manifestation when spending such motes on Charms that are not considered Obvious. This power may be used to mute the anima when using Obvious Charms as well, but the cost increases to double the cost of the Charm.
 """
@@ -5236,6 +5496,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "342"
+effect = "Cloud area in shadow"
 description = """
 By spending 10 motes, the anima of a Day Caste can blur and muffle the senses of those around him. For the remainder of the scene, the difficulty to detect or track the deathknight increases by half his Essence (round up). Once the deathknight spends 11-15 motes of Essence, though he is just as obvious as any other Exalt, his features are completely obscured by his anima display. Thus, assuming none saw him prior to his anima flaring, witnesses would be aware an Abyssal had been in their midst, but not his identity.
 """
@@ -5255,6 +5516,7 @@ duration = "Permanent (until oath broken)"
 prerequisites = []
 source = "Exalted 2E"
 pages = "342"
+effect = "Bind ghosts/Underworld ties"
 description = """
 The anima of the Moonshadow Caste binds the parties of an agreement, sanctifying agreements by touching the hands of those who are party to the agreement and spending 10 motes and a point of Willpower. Those who break such a sanctified oath suffer a number of terrible botches equal to the Moonshadow's Essence when the oath was sanctified. These botches invariably happen at the worst time. This sanctification may be invoked without cost once the Abyssal spends 11-15 motes of Peripheral Essence.
 """
@@ -5276,6 +5538,7 @@ duration = "One scene"
 prerequisites = []
 source = "Exalted 2E"
 pages = "342-343"
+effect = "Hungry Ghost Form Charm"
 description = """
 The Form-type Charm of Hungry Ghost Style. This Charm causes all Martial Arts attacks to also inflict a point of Virtue damage (healing at a rate of one dot per day). It also makes the practitioner's minimum Martial Arts attack damage equal to her Martial Arts score, rather than her Essence, after soak. Additionally, the practitioner can inflict lethal damage with bare-handed attacks and regain one mote per health level of damage inflicted with Martial Arts attacks, or spend three motes to strike dematerialized spirits.
 """
@@ -5295,6 +5558,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "342-343"
+effect = "See Essence flows in living/dead"
 description = """
 The practitioner can see flows of Essence in other beings to judge their power. Once he has done so, he can spend a point of Willpower as a reflexive action to regain Essence when opponents use Charms (to a maximum of the motes spent).
 """
@@ -5314,6 +5578,7 @@ duration = "Instant"
 prerequisites = ["essence-sight"]
 source = "Exalted 2E"
 pages = "342-343"
+effect = "Cancel a target's active Charm"
 description = """
 The practitioner can smother Charms by spending motes to increase the cost of an opponent's activated Charm, forcing his opponent to match the additional Essence expenditure or lose the Charm.
 """
@@ -5333,6 +5598,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "342-343"
+effect = "Strike halves target's DV"
 description = """
 This Charm halves the DV of an opponent against a single Martial Arts attack.
 """
@@ -5352,6 +5618,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "342-343"
+effect = "Strike ignores half of soak"
 description = """
 For every mote of Essence spent, the practitioner may reduce his opponent's soak by 2L on a single attack.
 """
@@ -5371,6 +5638,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "342-343"
+effect = "Flurry: extra Abyssal attacks"
 description = """
 The practitioner may gain a number of additional Martial Arts actions equal to his permanent Essence.
 """
@@ -5390,6 +5658,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "342-343"
+effect = "Hit dematerialised spirits"
 description = """
 The practitioner rushes forward, dematerializing and reappearing behind an opponent to execute an attack, striking her from behind.
 """
@@ -5409,6 +5678,7 @@ duration = "Permanent"
 prerequisites = []
 source = "Exalted 2E"
 pages = "342-343"
+effect = "Drink motes from a victim's wound"
 description = """
 This Charm allows the Abyssal to bloat his Peripheral Essence pool with up to 10 motes of stolen Essence, taken either from drinking the blood of the living or by harvesting that stolen through Charms and soulsteel weapons.
 """
@@ -5428,6 +5698,7 @@ duration = "Permanent (until death)"
 prerequisites = []
 source = "Exalted 2E"
 pages = "342-343"
+effect = "Mark living to rise as ghost"
 description = """
 A necromantic spell-like Charm that brands a living being so that, when she dies, she is assured of becoming a ghost.
 """
@@ -5447,6 +5718,7 @@ duration = "Instant"
 prerequisites = []
 source = "Exalted 2E"
 pages = "342-343"
+effect = "Open shadowland gate briefly"
 description = """
 A necromantic Charm that rips a portal into the Underworld.
 """

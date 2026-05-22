@@ -22,7 +22,7 @@ use crate::rules::essence::{personal_essence_max, peripheral_essence_max};
 
 use super::acroform::{set_text_field, FieldIndex};
 use super::field_map;
-use super::super::names::{ability_name, caste_name, intimacy_kind, spell_circle_label};
+use super::super::names::{ability_name, caste_name, intimacy_kind};
 use super::PdfRenderError;
 
 pub(super) fn fill(
@@ -301,8 +301,26 @@ fn fill_armor_and_defense(
 }
 
 // ---------------------------------------------------------------------------
-// Charms + spells (combined list)
+// Charms (CHARMS table) and spells (SORCERY table).
+//
+// The sheet exposes two tables that share the `charms/sorcery…` field prefix:
+//
+//   CHARMS table — 14 rows × 5 columns (NAME | TYPE | DURATION | COST | EFFECT)
+//     Row N (1..14): `sorceryN`, `sorcery{N+14}`, `sorcery{N+28}`,
+//                    `sorcery{N+42}`, `sorcery{N+56}`.
+//
+//   SORCERY table — 5 rows × 5 columns (NAME | (unused) | DURATION | COST | EFFECT)
+//     Row N (1..5), let M = N+9:
+//     `sorcery{M}x`, `sorcery{M+14}x`, `sorcery{M+28}x`,
+//     `sorcery{M+42}x`, `sorcery{M+56}x`.
+//     The second column is present in the AcroForm but not labeled on the
+//     printed sheet; we leave it blank.
+//
+// Field layout was verified via `cargo run --example dump_dots`.
 // ---------------------------------------------------------------------------
+
+const CHARM_ROWS: usize = 14;
+const SPELL_ROWS: usize = 5;
 
 fn fill_charms_and_spells(
     doc: &mut Document,
@@ -310,21 +328,29 @@ fn fill_charms_and_spells(
     c: &Character,
 ) -> Result<(), PdfRenderError> {
     let db = database();
-    let mut lines: Vec<String> = Vec::new();
-    for charm in &c.charms {
-        lines.push(charm.display_name(db).to_string());
-    }
-    for spell in &c.spells {
-        let circle = spell.circle(db).map(spell_circle_label).unwrap_or("?");
-        lines.push(format!("{} ({})", spell.display_name(db), circle));
-    }
-    // Write up to 70 charm/sorcery slots.
-    for (i, line) in lines.iter().take(70).enumerate() {
-        let field = format!("charms/sorcery{}", i + 1);
-        if index.has(&field) {
-            write(doc, index, &field, line)?;
+
+    for (i, charm) in c.charms.iter().take(CHARM_ROWS).enumerate() {
+        let n = i + 1;
+        write(doc, index, &format!("charms/sorcery{}", n), charm.display_name(db))?;
+        if let Some(entry) = charm.entry(db) {
+            write(doc, index, &format!("charms/sorcery{}", n + 14), entry.charm_type.display())?;
+            write(doc, index, &format!("charms/sorcery{}", n + 28), &entry.duration)?;
+            write(doc, index, &format!("charms/sorcery{}", n + 42), &entry.cost)?;
+            write(doc, index, &format!("charms/sorcery{}", n + 56), &entry.effect)?;
         }
     }
+
+    for (i, spell) in c.spells.iter().take(SPELL_ROWS).enumerate() {
+        let m = i + 10;
+        write(doc, index, &format!("charms/sorcery{}x", m), spell.display_name(db))?;
+        if let Some(entry) = spell.entry(db) {
+            // Column 2 (`sorcery{m+14}x`) is unlabeled on the sheet — skip.
+            write(doc, index, &format!("charms/sorcery{}x", m + 28), &entry.duration)?;
+            write(doc, index, &format!("charms/sorcery{}x", m + 42), &entry.cost)?;
+            write(doc, index, &format!("charms/sorcery{}x", m + 56), &entry.effect)?;
+        }
+    }
+
     Ok(())
 }
 

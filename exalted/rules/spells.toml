@@ -8,6 +8,7 @@ duration = "One day (after casting)"
 target = "Touched creature"
 source = "The Books of Sorcery, Vol II"
 pages = "38-39"
+effect = "Touched victim takes 5+ agg dmg"
 description = """
 The sorcerer renders her touch deadly to one selected victim. To cast this spell, the sorcerer must first make skin contact with either her intended victim or some small object the victim touched in the last hour, such as an article of clothing or jewelry. Shaping this spell is a dramatic action that takes 15 minutes. After the spell is completed, its effects linger on the sorcerer for a full day.
 
@@ -30,6 +31,7 @@ duration = "Until next sleep"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "38"
+effect = "Move untracked through plants"
 description = """
 With a swirl of green mist, the sorcerer draws Wood-aspected Essence from her environment. Her skin becomes greenish, her hair like leaves. Until the next time she sleeps, the caster moves unhindered through dense foliage. Her actions take no environmental penalties due to plant life and are not limited by her Athletics when dealing with unstable footing caused by vegetation (see Exalted, p. 155). Indeed, her player adds the character's Essence to her dice pools for moving through any plant-based terrain, from forest canopies to peat bogs. For movement and fatigue, treat heavy vegetation as open terrain.
 
@@ -48,6 +50,7 @@ duration = "One scene"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "39-40"
+effect = "Conjure a whip of blood (lethal)"
 description = """
 Most sorcerers consider the Blood Lash a weapon of last resort, for the spell can be cast only if the sorcerer bears a bleeding wound—at least one unbound, unhealed level of lethal damage. The character may wound himself if he must (this self-inflicted damage does not trigger reflexive Charms of defense). Blood from the sorcerer's wounds surges outward, forming a lash of blood. This effect inflicts another health level of lethal damage, which cannot be healed until the caster ends the spell or the spell's scene-long duration expires.
 
@@ -66,6 +69,7 @@ duration = "Until dispelled"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "39"
+effect = "Foes attacking you take -Ess to rolls"
 description = """
 The sorcerer's anima ignites in a colorless fire that refracts and magnifies the hues of her Exaltation. Sorcerers without animas (such as God-Bloods) radiate a blank, white brilliance. All who gaze upon the sorcerer weep uncontrollably, their eyes stung by her blazing halo.
 
@@ -84,6 +88,7 @@ duration = "Essence hours"
 target = "Summoned servitor"
 source = "The Books of Sorcery, Vol II"
 pages = "39"
+effect = "Summon a clay servitor laborer"
 description = """
 Reaching into the ground, the sorcerer pulls out a servitor of crude clay, five feet tall and nearly as wide, and two feet thick at the chest. If no soil is nearby, the Stalwart Servitor emerges from whatever surface the sorcerer stands upon, and from thin air if there is no surface nearby at all. The servitor can lift up to 10 tons, it obeys no one but the caster, and it can dig holes, transport materials, build crude but sturdy structures and perform other simple tasks on command. If it is not banished by other means, the servitor lasts a number of hours equal to the caster's Essence before vanishing. It does not fight or even try to defend itself.
 
@@ -107,6 +112,7 @@ duration = "Essence hours (extendable)"
 target = "One sailing vessel"
 source = "The Books of Sorcery, Vol II"
 pages = "40-41"
+effect = "Speed/slow a ship for hours"
 description = """
 The sorcerer completes this spell with the Azure Sign, a glyph that epitomizes the Element of Air. He fills a target ship's sails with a powerful wind sufficient to drive it forward at its maximum speed without sacrificing handling or safety, and also ignoring currents or small storms. He may target any sail-powered vessel (including Haslanti air boats) he can see, up to (Essence x 3) miles away. The sorcerer can always cancel this spell as a reflexive action.
 
@@ -129,6 +135,7 @@ duration = "Until sorcerer debarks"
 target = "Summoned cloud"
 source = "The Books of Sorcery, Vol II"
 pages = "40-41"
+effect = "Conjure a personal cloud-skiff"
 description = """
 The sorcerer whistles and calls from the sky a white cloud just large enough to carry her and one human-sized passenger. The cloud descends and waits patiently for the sorcerer to step onto it, then it ascends into the sky and travels at the sorcerer's direction. During the scene in which the cirrus skiff is called, the sorcerer may enter and debark the vehicle at will. After the end of the scene, the cloud vanishes back into the sky the moment she steps off, pausing only to dump her baggage or traveling companion beside her.
 
@@ -155,6 +162,7 @@ duration = "Indefinite (until destroyed)"
 target = "Black ceramic coin"
 source = "The Books of Sorcery, Vol II"
 pages = "40"
+effect = "Scry from a placed ceramic coin"
 description = """
 The sorcerer spits into her palm and conjures into her hand a black ceramic coin inscribed with arcane sigils. She can place the coin where she likes. Thereafter, she can concentrate and perform a miscellaneous action to project her consciousness to the coin (Speed 5, DV reduced to 0 for the duration of the projection). She sees, hears and smells everything as if she stood at the coin's location. If the coin is in a pocket, pouch or container with at least one opening, she can sense the environment both inside and outside that container. She senses only the inside of a container that's completely enclosed, such as a strongbox. As they occupy the coin's vicinity, her senses are identical to her senses in her body, and she may benefit normally from all sense-enhancing Charms. Because she cannot project her sense of touch, she knows instantly if her body is shaken or injured.
 
@@ -173,6 +181,7 @@ duration = "Up to one scene"
 target = "Fiery projection"
 source = "The Books of Sorcery, Vol II"
 pages = "41-42"
+effect = "Huge fiery projection of self"
 description = """
 From the fiery valor within her, the sorcerer creates above herself a huge projection in her own image, dozens of feet tall and wreathed in flame, high enough to be seen for seven miles. Speaking through the image, the sorcerer's voice is amplified so all who see her, even in the clamor of a storm or a battlefield, can hear her. The projection lasts one minute (or one long tick) at minimum, and up to one scene. For every additional minute or long tick the sorcerer wishes the projection to last, her player must succeed at a reflexive Stamina roll. Failure ends the spell.
 
@@ -189,6 +198,7 @@ duration = "One scene"
 target = "Animals"
 source = "The Books of Sorcery, Vol II"
 pages = "41-42"
+effect = "Charm/command natural animals"
 description = """
 Glittering streamers from the sorcerer's anima wrap around target animals, carrying sorceries of peace, obedience and understanding. This spell affects only normal animals of Intelligence 1. It can affect a number of animals equal to (caster's Essence x 2), all within 20 yards of the caster. It does not affect Wyld-tainted or otherwise supernatural creatures.
 
@@ -209,6 +219,7 @@ duration = "Until sunset or destination reached"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "89-90"
+effect = "Summon a flying chariot for daylight"
 description = """
 The sorcerer's words of power create a billowing fog bank. Four cerulean horses coalesce from the mist, pulling a coach the hue of the noonday sky behind them. The horses snort steam and trail lightning sparks from their manes. Their hooves freeze the ground where they touch.
 
@@ -239,6 +250,7 @@ duration = "Until dispelled or caster dies"
 target = "Speaking creature"
 source = "The Books of Sorcery, Vol II"
 pages = "41"
+effect = "Curse silence on a chosen topic"
 description = """
 This spell helps sorcerers keep their secrets. It also enforces oaths of silence or simply prevents someone from speaking about a given subject. The subject may be as specific as "Mnemon's deal with the Mask of Winters," or as broad as "Solars in Chiaroscuro." It affects any one person the sorcerer can see within 10 yards.
 
@@ -259,6 +271,7 @@ duration = "One scene"
 target = "One creature within 10 yards"
 source = "The Books of Sorcery, Vol II"
 pages = "42-43"
+effect = "Compel target to worship a chosen"
 description = """
 The sorcerer ties knots of scarlet Essence as he exhorts the victim to worship one target, which may be the caster himself, another being present or even an object. With the final word, the spell's Essence creeps forward in scintillating ruby tendrils that force the target to his knees.
 
@@ -277,6 +290,7 @@ duration = "One scene"
 target = "Creatures near caster"
 source = "The Books of Sorcery, Vol II"
 pages = "43-44"
+effect = "Glittering shards -2 to nearby foes"
 description = """
 Essence and the Crystal Rune evoke a globe of shimmering quartz fragments around the sorcerer. These crystal shards float about the sorcerer for the rest of the scene, capturing light and reflecting it back as dazzling and distracting beams and spots. All characters within a three-yard radius of the sorcerer (but not the sorcerer herself) suffer a -2 external penalty to their DVs and to all rolls. The effects of the Curtain of Quartz do not affect characters who cannot see.
 
@@ -293,6 +307,7 @@ duration = "One scene"
 target = "One creature within 30 yards"
 source = "The Books of Sorcery, Vol II"
 pages = "43-44"
+effect = "Five poisonous smoke cobras attack"
 description = """
 Dark, fiery Essence shatters the ground at the target's feet in a star pattern. Streams of thick, gray smoke rise from the points of this star and coalesce into five tall cobras. Poison drips from the fangs to char and blacken the ground.
 
@@ -325,6 +340,7 @@ duration = "Until revealed or dispelled"
 target = "Creature"
 source = "The Books of Sorcery, Vol II"
 pages = "44-45"
+effect = "Perfectly disguise as another"
 description = """
 This spell weaves an illusion that makes the target look like someone else. It transforms not just the person's appearance, but her voice, mannerisms and even anima. Sidereal Exalted favor this spell for its ability to make them appear as someone else entirely. It perfectly complements the false identities they create through resplendent destinies.
 
@@ -345,6 +361,7 @@ duration = "One day (or until destination reached)"
 target = "Serpentine guide"
 source = "The Books of Sorcery, Vol II"
 pages = "44-45"
+effect = "Conjure a guide to known place"
 description = """
 The sorcerer expels a flying, serpentine guide from the center of her chest. It leads her on while she moves, and loops and whorls around her when she's still. By day or in light, the guide is formed of inky black smoke. By night or in darkness, the smoke transforms into heatless white flame visible for miles, illuminating its immediate surroundings as brightly as daylight.
 
@@ -372,6 +389,7 @@ duration = "One scene"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "44-45"
+effect = "Mass-Compulsion social attacks (10y)"
 description = """
 The sorcerer evokes a low droning buzz faintly audible to all in the spell's area. At the moment of casting, the noise rises to a crescendo, the sound of a thousand voices whispering in an unknown tongue. This is the spell's only Obvious quality: Unlike other spells, Droning Suggestion does not flare the sorcerer's anima if the sorcerer uses only her Personal Essence. Thereafter, a single speaking voice can drown out the quiet hum. Whether they hear the sound or not, everyone within 10 yards of the caster becomes susceptible to her suggestions. The spell lasts until the end of the scene.
 
@@ -388,6 +406,7 @@ duration = "Instant"
 target = "Demon"
 source = "The Books of Sorcery, Vol II"
 pages = "45-46"
+effect = "Banish a First Circle demon"
 description = """
 This spell has special timing rules. The character can cast it as a reflexive Shape Terrestrial Circle Sorcery action that takes 0 ticks. It affects one First Circle demon, up to (Essence x 15) yards away.
 
@@ -404,6 +423,7 @@ duration = "Instant"
 target = "One individual"
 source = "The Books of Sorcery, Vol II"
 pages = "45-46"
+effect = "Send sense impressions on wind (Ess×50mi)"
 description = """
 The sorcerer imposes an instant's worth of sensory impressions on a passing gust of wind, then bids the gust to deliver those impressions to a compatriot up to (caster's Essence x 50) miles away. Within a minute, the wind reaches its recipient despite any barrier and delivers the experience.
 
@@ -420,6 +440,7 @@ duration = "10 minutes"
 target = "Summoned eye and mouth"
 source = "The Books of Sorcery, Vol II"
 pages = "44"
+effect = "Conjure eye+mouth to read aloud"
 description = """
 Drawing from ancient bargains, the sorcerer evokes a disembodied mouth and eye of golden light. The golden eye can read any text (though not codes or ciphers) and the mouth can translate and recite whatever the eye reads. The mouth will pause in its dictation if the sorcerer asks, but it will not translate the same text twice for a single sorcerer, nor repeat itself if the sorcerer mishears or is distracted during the translation. The eye and the mouth consent to only 10 minutes of servitude per day before they return whence they came.
 """
@@ -434,6 +455,7 @@ duration = "One year and a day"
 target = "Up to (sorcerer's Essence x 2) people"
 source = "The Books of Sorcery, Vol II"
 pages = "44-45"
+effect = "Crystals link allies' emotions a year"
 description = """
 Dragon-Blooded sworn brotherhoods, and other Terrestrials who expect to work together for any length of time, favor this spell. The ritual takes 30 minutes to cast. The participants link hands around the sorcerer; if the sorcerer wishes to be included in this link, he joins hands with the rest. A brilliant white glow flows from each participant to the center of the circle and then back again, coalescing before each participant as a crystal to pluck from the air. These crystals have one facet per participant. One mote per crystal remains committed by the sorcerer who cast this spell, and the crystals remain intact for a year and a day. The sorcerer may not decommit these motes unless he decommits them all, destroying the spell and dissolving the crystals.
 
@@ -456,6 +478,7 @@ duration = "Until destination reached or Essence miles traveled"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "46-47"
+effect = "Become flock of birds; fly Ess miles"
 description = """
 The sorcerer speaks the Word of Ten Thousand Birds, part of the song that all the birds of Creation sing when they gather in one place. Because humans cannot speak this word, the caster is suddenly transformed into a flock of birds in a burst of Essence. The birds fly together at a speed of 20 miles per hour and can travel up to a number of miles equal to the caster's Essence. Once the birds reach this distance (or some nearer destination), the birds complete the Word of Ten Thousand Birds, and coalesce to become the sorcerer once more.
 
@@ -476,6 +499,7 @@ duration = "Instant"
 target = "Creature"
 source = "The Books of Sorcery, Vol II"
 pages = "47-48"
+effect = "Diamond bird strike, explodes on hit"
 description = """
 The sorcerer's Essence coalesces into an eagle-sized bird of prey made of diamond and ruby flame. The bird then streaks with unearthly speed toward any target the caster can see within 1,800 yards. Right before it slams into the target, it gives the shrill victory cry of a garda bird. Should the brilliant raptor succeed in its attack, this briefly lived automaton explodes, consuming the area around the target in a holocaust.
 
@@ -498,6 +522,7 @@ duration = "Until destination reached"
 target = "Plant"
 source = "The Books of Sorcery, Vol II"
 pages = "47-48"
+effect = "Conjure a sailing boat from a plant"
 description = """
 The sorcerer causes a nearby plant to grow and change in shape until it becomes a seaworthy vessel. The conjured boat might look like a flower (as the spell's name suggests) or like a curling leaf, a seed pod or even a piece of fruit—whatever's appropriate for the plant that produced it. One person can easily carry the lightweight magical boat by himself.
 
@@ -524,6 +549,7 @@ duration = "Instant"
 target = "Creature"
 source = "The Books of Sorcery, Vol II"
 pages = "47-48"
+effect = "Spinning chain decapitates a target"
 description = """
 The sorcerer makes the Sign of the Hooded Headsman. His Essence congeals into a barbed chain two feet long that spins as it arcs toward the target at 170 yards per tick (about 340 miles per hour). The sorcerer can attack anyone he can see within 500 yards.
 
@@ -546,6 +572,7 @@ duration = "Essence days (before dissolving)"
 target = "Conjured food"
 source = "The Books of Sorcery, Vol II"
 pages = "48-49"
+effect = "Conjure days of bland food"
 description = """
 The Essence around the sorcerer condenses into a cascade of pink flakes that resemble flower petals. The soft, edible flakes can feed at least five people. For every additional five motes and Shape Terrestrial Circle Sorcery action taken, the spell creates another 10 servings of food. If the spell is interrupted during casting, the food produced up to that point already exists, but no more is conjured. The additional Essence spent is lost, as all the motes used in casting this spell are spent with the first Shape Terrestrial Circle Sorcery action.
 
@@ -564,6 +591,7 @@ duration = "Until botch, wounded, or voluntarily released"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "48-49"
+effect = "Trance: see through illusion/lies"
 description = """
 The sorcerer casts this spell after meditating in a lightless, soundless place for one hour. He attunes himself to truth and the flows of Essence, rather than the tricks that sound and light play on the senses. The meditation enables the sorcerer to see through illusions, to resist glamours, to avoid enchantments and to perceive what is concealed, whether they are things or purposes.
 
@@ -582,6 +610,7 @@ duration = "Until next sunrise or sunset"
 target = "Conjured automaton"
 source = "The Books of Sorcery, Vol II"
 pages = "49-50"
+effect = "Summon a horse that runs on water"
 description = """
 As the sorcerer makes the Sign of the Horseman, the winds in his area converge in the bubble of Essence before him. The Essence takes a hue that indicates the nearest Elemental Pole—red in the South, blue in the North, green in the East, black in the West and white nearest the Imperial Mountain—and then forms itself into a horse-shaped automaton. The horse's coat matches the bubble of Essence whence it came, though its mane and tail are either black or white.
 
@@ -616,6 +645,7 @@ duration = "Eight hours"
 target = "Conjured automaton"
 source = "The Books of Sorcery, Vol II"
 pages = "49-50"
+effect = "Summon huge tracker hound (8h)"
 description = """
 The sorcerer hurls his Essence into the air and makes the Gesture of the Huntsman. Winds from the five elemental poles swirl together and form a massive, horse-sized wolfhound. This magical automaton can scent its prey up to 100 miles away and chase it tirelessly, as long as it has been introduced to the scent already. It can also serve the sorcerer as a bodyguard, warrior or even a riding beast (control rating 1). The creature exists for up to eight hours after its creation.
 
@@ -650,6 +680,7 @@ duration = "Concentration"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "50-51"
+effect = "Globe of breathable water (or air)"
 description = """
 The sorcerer's anima flashes blue and green as it transforms the air in a 10-foot radius around her heart into a globe of fresh, magically breathable water. Its surface functions as a barrier with a soak of 20L/20B and 35 health levels. (See Exalted p. 153 for rules on attacking inanimate targets.) People inside the sphere cannot launch physical attacks against the world outside.
 
@@ -668,6 +699,7 @@ duration = "Permanent (repair)"
 target = "One item"
 source = "The Books of Sorcery, Vol II"
 pages = "51-52"
+effect = "Repair a damaged item to new"
 description = """
 Through a one-minute ritual, the sorcerer returns one damaged item to a pristine state by recalling its original form from the patterns in its Essence. This spell only restores items small enough for the sorcerer to lift, such as the fragments of a rotting book or the rusted remains of a suit of armor. The sorcerer also needs more than half of the decayed item's remains to restore it. Anything repaired by the spell appears as it did when it was new, and the effects are permanent.
 
@@ -686,6 +718,7 @@ duration = "Indefinite (while maintained)"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "51-52"
+effect = "Ward area vs spirit travel"
 description = """
 In Yu-Shan, the gods wear solid bodies. This rite mimics that condition, forbidding dematerialized beings from entering an area with a radius equal in yards to the caster's (Occult + Essence), and forcing materialized spirits to remain so. The ritual takes six hours to cast. It uses salt, small mirrors and talismans engraved with symbols of the five cardinal points (Resources 2 and the mirrors and talismans may be reused). This spell may not be cast within an area that includes a godly sanctum or spirits of greater Essence than the sorcerer's own.
 """
@@ -700,6 +733,7 @@ duration = "Occult actions (environmental damage)"
 target = "Creature"
 source = "The Books of Sorcery, Vol II"
 pages = "50-51"
+effect = "Cause molten bone marrow (env. dmg)"
 description = """
 Molten rock flows within the bones of the earth. Volcanic gods use a certain gesture to call that magma to their mountains. As the sorcerer makes the Mudra of Burning Earth at any creature he can see within 300 yards, streamers of red and gray Essence-flame wash over the target's body. They seep past armor and clothing to enter his body. The sorcerer's player rolls (Wits + Occult) and adds a number of successes equal to the caster's Essence to the attack. This attack cannot be dodged, though it may be parried using stunts, magic weapons or Charms.
 
@@ -718,6 +752,7 @@ duration = "Until next dawn or dusk"
 target = "Ship"
 source = "The Books of Sorcery, Vol II"
 pages = "52-53"
+effect = "Crew-less ship pilots itself"
 description = """
 The sorcerer lays her hand upon the figurehead of a ship and calls it to awaken—and it opens sea-green eyes. The entire ship comes to life, working every mechanical aspect—wheel, rudder, sail, rope, oars and all—without the need for a crew. Loyal and loving, the figurehead will even lead the ship in pursuit of the sorcerer, should she move more than 100 yards away—at least until the next dawn or dusk, when its eyes close and the ship becomes inert once more.
 
@@ -734,6 +769,7 @@ duration = "12 hours (must be recast)"
 target = "Ship"
 source = "The Books of Sorcery, Vol II"
 pages = "52-53"
+effect = "Ship sails on clouds (12h)"
 description = """
 As fog or clouds touch the sea before her ship, the sorcerer persuades the vessel's spirit that they are true water, and sails forward onto them. This spell works only in misty conditions. The ship travels upon the mist as quickly as it would on water, at the mercy of the wind or the strength of the rowers as usual. If the fog lifts, the ship rises with it until it sails on clouds.
 
@@ -754,6 +790,7 @@ duration = "Scene"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "52-53"
+effect = "Eight lightning legs: climb, dash, grapple"
 description = """
 This spell involves the steps of the Storm Spider Dance, a tribal dance in the Northeast that celebrates the spiders that crawl among the highest, cloud-scraping treetops. As the sorcerer raises his arms like a hunting spider about to strike, eight legs of coherent lightning sprout from his back.
 
@@ -772,6 +809,7 @@ duration = "Until dawn (or used)"
 target = "Conjured whip"
 source = "The Books of Sorcery, Vol II"
 pages = "55-56"
+effect = "Conjure a thrown lightning whip"
 description = """
 After the sorcerer casts this spell with a sharp, lashing gesture, a copper whip appears in his hand. Cracking the whip dissolves it into a single bolt of red-streaked copper lightning, which the sorcerer can aim at anything within half a mile using his (Perception + Thrown) pool. Attacking structures, such as ships, is difficulty 1; there are no range penalties.
 
@@ -792,6 +830,7 @@ duration = "Until sunrise (or dismissed)"
 target = "Creature"
 source = "The Books of Sorcery, Vol II"
 pages = "53-54"
+effect = "Curse: lose sense of direction"
 description = """
 The sorcerer makes eye contact with a creature and uses the Spinning Sign to thrust spatial confusion into his brain. Unless the victim's player succeeds at a Willpower roll with a difficulty equal to the sorcerer's Essence, he loses his way. The victim loses all sense of direction until sunrise the following day or until the sorcerer dismisses the spell's effects. Even if the roll succeeds, the target must flurry any other action he takes while moving. The player rolls each time the character moves.
 
@@ -808,6 +847,7 @@ duration = "Instant"
 target = "Ship"
 source = "The Books of Sorcery, Vol II"
 pages = "53-54"
+effect = "Explode target ship's mast"
 description = """
 The sorcerer's anima flares dark blue and solidifies into a hovering, spiked ball of blue-tempered steel. With a tap of the sorcerer's finger, the spiked ball shoots toward the targeted ship in the literal blink of an eye—right into the target ship's mast. It can target any visible ship within one mile.
 
@@ -828,6 +868,7 @@ duration = "15 ticks (sleep lasts until sun crosses horizon twice)"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "54-55"
+effect = "Sleeping mist (5y radius)"
 description = """
 The sorcerer focuses her Essence onto a visible point up to 50 yards away and makes the Sign of the Gates of Eventide, the metaphorical "gates of sleep" through which all must pass to reach the lands of dream. Opalescent mist spreads from that point to fill an area five yards in radius. The mists induce a magical slumber. Exalts, spirits and other creatures with active Essence receive a (Stamina + Resistance) roll, difficulty of the caster's permanent Essence, to resist the effects for five ticks. The spell does not affect Fair Folk, the dead, intangible spirits or automata. The mists appear for 15 ticks of combat time, during which they affect any creatures that touch them.
 
@@ -846,6 +887,7 @@ duration = "Until sun next crosses horizon (or recast)"
 target = "Touched creature(s)"
 source = "The Books of Sorcery, Vol II"
 pages = "53"
+effect = "Step into a spirit's sanctum"
 description = """
 Tugging on the spiritual Essence that impregnates the world, the character pulls it through herself and anyone else she chooses. As the sorcerer casts this spell, she must stand within three yards of an entrance to a spirit's sanctum. The caster and her allies vanish into her fading anima, and reappear just inside the entrance. They can remain in the sanctum until the sun next crosses the horizon or the sorcerer recasts this spell—if the sanctum's owner doesn't force them out.
 """
@@ -860,6 +902,7 @@ duration = "Until scene ends, countered, sorcerer dies, or all targets solve the
 target = "Creatures in area"
 source = "The Books of Sorcery, Vol II"
 pages = "53"
+effect = "Koan paralyzes minds in area"
 description = """
 The sorcerer suffuses one of the Ineffable Koans with magical power, forcing the minds of sentient beings to do nothing else but ponder an impossible riddle. Speaking the koan, the sorcerer releases white Essence. This power forms over the sorcerer's head a sigil that represents the mystery of the koan. The spell affects all sentient creatures within 50 yards (except automata) who see the sigil or hear the caster's words, and have an Intelligence greater than 1. (Stupid people don't realize there's a puzzle.)
 
@@ -878,6 +921,7 @@ duration = "Concentration"
 target = "Body of water"
 source = "The Books of Sorcery, Vol II"
 pages = "55-56"
+effect = "Part a body of water while concentrating"
 description = """
 Her arms spread wide and her face held skyward, the sorcerer calls up the behemoth Genai, who appears in his aspect as twin phantom giants. The twins wade into a body of water of the sorcerer's choice and split it in two. Each holds back one wall of water as if it were solid, leaving the ground between them dry. Rivers continue to flow even if Genai seems to block them off—the water mystically flows from one side of the trench to the other without passing through the space in between. This effect does not carry over to things living in the water or boats traversing its surface.
 
@@ -894,6 +938,7 @@ duration = "5 minutes (suggestion) + Illusion"
 target = "One sentient being"
 source = "The Books of Sorcery, Vol II"
 pages = "55"
+effect = "Hypnotic Compulsion via eye-lock"
 description = """
 The sorcerer's eyes glow with iridescent flame that holds the gaze of a target up to 10 yards away, compelling him to stunned silence. The sorcerer's player rolls (Wits + Occult). If the result exceeds the target's Dodge MDV, the hypnotized target believes anything the sorcerer says in the next five minutes and remembers the suggestions as his own memory—an unnatural mental influence. When the five minutes are up, an auxiliary Illusion effect convinces the target he had a normal conversation with the sorcerer, while continuing to believe what the sorcerer told him.
 
@@ -910,6 +955,7 @@ duration = "One scene"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "55"
+effect = "Wind cover (90%) at half-speed"
 description = """
 The sorcerer performs the Five Winds Nexus Gesture, making her the center of a confluence of strong winds. Her clothing whips about in winds that only people standing very close to her can feel. These winds last one scene, until dismissed or until the caster is incapacitated.
 
@@ -928,6 +974,7 @@ duration = "Essence nights"
 target = "Conjured automata"
 source = "The Books of Sorcery, Vol II"
 pages = "55-56"
+effect = "Bronze snakes hunt at night, petrify"
 description = """
 This spell can be cast only at night. Speaking the sibilant Verdigris Serpent Chant, the sorcerer makes the Sign of the Hammer. His Essence coalesces into a great brass mallet, decorated with twining serpents. He strikes the ground once, twice, thrice to cast the sorcery. On the third strike, the hammer opens a hole in the ground and is swallowed up.
 
@@ -946,6 +993,7 @@ duration = "Occult + Essence days (renewable)"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "55"
+effect = "Ward area vs scrying & teleport"
 description = """
 This spell wards a place against scrying and teleportation. It takes six hours to cast and requires the sorcerer make a procession through all of the areas to be warded, circling the area again and again for the duration of the casting. As he walks, the sorcerer sprinkles ground glass along the boundary and makes the Mudra of Separation. The spell wards an area with a radius equal to the sorcerer's (Occult + Essence) in yards.
 
@@ -964,6 +1012,7 @@ duration = "Instant"
 target = "Food and drink"
 source = "The Books of Sorcery, Vol II"
 pages = "56"
+effect = "Cleanse food/water/body of poison"
 description = """
 The sorcerer closes her eyes and flares her anima, forcing it through the strength of her will to assume the form of a blazing white, heatless flame. The flame surges from her body and seeks out any poison, corruption and toxicity that dare offend the sorcerer's presence. Purifying Flames halts all decay and destroys all non-magical poisons within enough food and drink to feed 12 people in one meal or else cleanses a single fouled well or self-contained water source. It neutralizes any non-magical poison already within a creature's body, preventing any further damage or negative effects, but it does not heal damage already taken. Purified characters expel the neutralized poison by vomiting it or by sweating it out through their pores.
 """
@@ -978,6 +1027,7 @@ duration = "Permanent (structures become mundane)"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "56"
+effect = "Raise walls & earthworks from ground"
 description = """
 The military forces of both Lookshy and the Realm make frequent use of this spell, which enables military sorcerers to raise earthworks and stone walls for defensive positions or otherwise to reshape a battlefield to their advantage. The sorcerer first marks out the area he wants to affect by driving cut sapling branches into the ground and infusing them with his anima. He can do so up to ([Intelligence + War + Essence] x 10) yards in any direction. The sorcerer also paces along the line of any berms, mottes, buildings or trenches he wishes to construct. The area must also be cleared of any creature larger than a rabbit.
 
@@ -994,6 +1044,7 @@ duration = "Until Essence x 27 cubic feet consumed"
 target = "Inanimate object"
 source = "The Books of Sorcery, Vol II"
 pages = "56-57"
+effect = "Burn a chosen material to ash"
 description = """
 The sorcerer's Essence flares around him, and he makes the sign of Essence Consumed over an object. A jet of blue-white flame leaps up to a yard from his fingertips to ignite the target of the spell. Wood sears to ash. Stone softens and burns like wax, while metals crumble to ash and slag.
 
@@ -1012,6 +1063,7 @@ duration = "Permanent"
 target = "Inanimate object"
 source = "The Books of Sorcery, Vol II"
 pages = "57-58"
+effect = "Permanently empower an item w/ element"
 description = """
 This spell imbues an object with the puissant Essence of one of the elements. This extensive ritual begins at dawn and continues until noon. The sorcerer requires a large quantity of the element being invested: for instance, a grove of trees, a large bonfire or a brisk wind.
 
@@ -1039,6 +1091,7 @@ duration = "Willpower days"
 target = "Flowing body of water"
 source = "The Books of Sorcery, Vol II"
 pages = "58"
+effect = "Turn river water to blood"
 description = """
 The caster's anima rises up as a deep vermilion serpent and strikes at a body of water no more than 500 yards away. The water turns into thick, red-black blood that flows downstream for a number of miles equal to the sorcerer's Essence, plus one mile per additional three motes spent in casting this spell. River of Blood may not be cast on ponds, lakes, seas or other bodies of water of which the caster cannot see the other side or that do not flow somewhere else. It can be cast on canals, aqueducts, fountains or even indoor plumbing.
 
@@ -1055,6 +1108,7 @@ duration = "Until sun next crosses horizon (or dismissed)"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "58"
+effect = "Speak/understand any language"
 description = """
 The Eternal Word belongs to no known language but is recognizable as a word of power in all tongues. Upon casting this spell, the sorcerer invokes that word and shapes the Essence of this spell into a mask of dusky gold that covers his ears and the lower half of his face.
 
@@ -1073,6 +1127,7 @@ duration = "Moonset to sunrise (shadow trapped); penalty lasts one week"
 target = "Living creature"
 source = "The Books of Sorcery, Vol II"
 pages = "58"
+effect = "Steal & message via target's shadow"
 description = """
 This ritual begins at midnight and continues until moonset. The sorcerer paints a pentagram of pitch and bile. He also needs an arcane link to his target. Walking the edge of the pentagram counterclockwise, the sorcerer chants the name of his target with the Dirge of Shadows. This incantation is completed 55 times.
 
@@ -1093,6 +1148,7 @@ duration = "One scene (or until dispersed)"
 target = "Area around caster"
 source = "The Books of Sorcery, Vol II"
 pages = "59"
+effect = "15y cloud: -1 sight, distraction"
 description = """
 A black, obscuring cloud rises from the sorcerer's anima, extending 15 yards from her person. Shadowy, distracting figures dart about within it. Sounds are muffled within the cloud, and their directions become unclear. Anyone other than the sorcerer within the cloud suffers a -1 external penalty to sight and hearing. Every time an affected character within the cloud attacks, his player must attempt a reflexive (Perception + Awareness) roll at a difficulty equal to the sorcerer's Essence (and the -1 penalty still applies). On a success, he selects his intended target. On a failure, he attacks one of the simulacra and wastes his action. On a botch, he attacks the ally closest to him by mistake. If a character flurries multiple attacks against the same target, every subsequent attack in the flurry hits the same target, be it enemy, simulacrum or ally—but characters who attack undesired targets may abort flurries after the first attack.
 
@@ -1109,6 +1165,7 @@ duration = "Instant (social attack delivered through dream)"
 target = "Person"
 source = "The Books of Sorcery, Vol II"
 pages = "59"
+effect = "Send a social attack via dream"
 description = """
 This rite takes 10 minutes to perform. It requires a pair of silvered mirrors, incense made from rare lotuses (a Resources 3 purchase) and an arcane link to its target. The mirrors face each other with the arcane link between them. The sorcerer lights the incense. As she speaks the Five Words of Dreams, the incense smoke wafts toward the mirrors—and into them.
 
@@ -1125,6 +1182,7 @@ duration = "Until dawn or sorcerer wakes and ends it"
 target = "Caster and up to (Willpower) additional willing subjects"
 source = "The Books of Sorcery, Vol II"
 pages = "60"
+effect = "Stone dome shelters sleeping allies"
 description = """
 Sleep of Stony Safety takes a minute to cast and can be cast only at night. The sorcerer spreads fine white sand in a circle on the ground, large enough to encompass all the targets. The participants lie with their heads touching and their feet extended outward. The sorcerer chants the Irresistible Song of Stone used by earth elementals to while away the seasons. The white sand dissolves into a glowing mist that creeps upwards, arcing over the targets to solidify into a dome of white sandstone.
 
@@ -1141,6 +1199,7 @@ duration = "Successes over MDV actions"
 target = "One opponent"
 source = "The Books of Sorcery, Vol II"
 pages = "60"
+effect = "Compel target into berserk attack"
 description = """
 The sorcerer's anima flares upward to form a great phantom wave behind her. From it emerges the watery head and forelimbs of a huge horse that blasts the intended victim with a stream of water and ear-splitting symphonic noise. The weird, cacophonous display enchants a target into a berserk but directed rage, driving him to attack the sorcerer's enemies with abandon.
 
@@ -1157,6 +1216,7 @@ duration = "Indefinite (gem); 24 hours per use"
 target = "Creature"
 source = "The Books of Sorcery, Vol II"
 pages = "60-61"
+effect = "Possess prepared target via gem"
 description = """
 This spell prepares a creature for later possession by a spirit. The subject either must be willing or unconscious and immobilized during the first part of this spell, which takes an hour to cast. The sorcerer binds the target in ritual paper inscribed with the One Hundred Sigils of the Cunning Puppeteer and burns incense placed around the target in the Pattern of Command. The materials for this ritual are a Resources 2 purchase and are consumed in the spell.
 
@@ -1181,6 +1241,7 @@ duration = "Occult actions"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "61"
+effect = "Massive Str bonus for Occult actions"
 description = """
 The Invocation of the Titan channels magical power through the sorcerer's anima, manifesting in his body as tremendous physical strength. For a number of actions equal to his Occult rating, the sorcerer's strength is increased and his anima flares to full roaring manifestation. Iconic animas often seem to help perform these feats of strength, whether a great angelic being reaches down to help pull a door from its hinges, or a bear-totem anima helps the sorcerer push a boulder out of the way.
 
@@ -1197,6 +1258,7 @@ duration = "One scene"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "61"
+effect = "Sword that strikes spirits/ignores armor"
 description = """
 This spell uses the Sword-God Mudra, the sacred hand-sign that the least gods of all the swords in Creation make anytime one of the Incarnae takes up his or her blade. The spell's Essence forges a shard of the caster's own soul into a blade that shimmers with a thousand hues and rings like an iron bell when it strikes. The sorcerer may use either Melee or Occult to wield the sword, which lasts for one scene or until countered. The magical blade requires minimum Strength 1.
 
@@ -1215,6 +1277,7 @@ duration = "Permanent (until tree dies)"
 target = "Living tree"
 source = "The Books of Sorcery, Vol II"
 pages = "61-62"
+effect = "Use carved tree as remote face"
 description = """
 The sorcerer turns a tree into a conduit through which she may communicate over long distances. First, the sorcerer must carve a likeness of her face into a living tree. This ritual lasts from sundown to sunup, during which the sorcerer spends 10 motes and her player rolls (Dexterity + Craft [Wood]). Should the roll fail or the sorcerer be interrupted, the motes are lost. The sorcerer can try again the next night and need not select a new tree.
 
@@ -1233,6 +1296,7 @@ duration = "One scene (or until dispersed/destroyed)"
 target = "One creature"
 source = "The Books of Sorcery, Vol II"
 pages = "62"
+effect = "Vines clinch a foe in place"
 description = """
 The sorcerer casts this spell with the gesture that vines make as they climb. The Essence of the spell evokes a magical automaton from local vegetation, so that thick vines rise up and seize a target no more than 30 yards away. The spell can draw upon any plant life, as well as lichens and fungi, but fails if there are no suitable life forms in the area whatsoever.
 
@@ -1251,6 +1315,7 @@ duration = "Intelligence + Occult days"
 target = "Conjured servant"
 source = "The Books of Sorcery, Vol II"
 pages = "62-63"
+effect = "Shadow-puppet servant; possess it"
 description = """
 The sorcerer transforms his own shadow into an automaton extension of his will. This ritual takes three hours to cast, requires the aid of an assistant and must be performed on the night of the full moon.
 
@@ -1277,6 +1342,7 @@ duration = "Until target struck, target out of range, or 30 ticks elapsed"
 target = "One creature"
 source = "The Books of Sorcery, Vol II"
 pages = "63"
+effect = "Swarm of ice shards chases foe"
 description = """
 The sorcerer evokes a grayish cloud of Essence, speaks the Word of Sudden Frost—which deities in the North use to create blizzards—and points at a visible target within 300 yards. The Essence crystallizes into a swarm of ice shards that launch themselves at the target. These ice shards are about four inches long and half an inch thick. Although they shatter against steel, these slivers can chip stone surfaces and pierce wood up to one inch thick.
 
@@ -1293,6 +1359,7 @@ duration = "3 days or until storm ends"
 target = "Ship"
 source = "The Books of Sorcery, Vol II"
 pages = "64"
+effect = "Ship immune to a storm 3 days"
 description = """
 On encountering a storm at sea, the sorcerer appeases the storm mothers by shaping a simulacrum of a red-haired woman from his own anima and casting it out of the ship. It's a cheat, but by fooling a storm mother for a moment, the sorcerer can steal some of her power. For three days or until the end of the storm (whichever comes first), the ship is immune to the storm mothers' wrath. Lightning does not strike it, nor does water drag it down. It will not even sail off course as long as the helmsman succeeds at a ([Wits or Stamina] + Sail) roll, difficulty dependent on the storm's ferocity. Indeed, if the storm follows the vessel's charted course, it will speed the journey by a few days.
 """
@@ -1307,6 +1374,7 @@ duration = "Instant (effects are permanent)"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "64"
+effect = "Force crops/animals to ripen"
 description = """
 The sorcerer weeps a single tear and uses it to trace a glyph of Sextes Jylis on the ground. The tear imbues fertility into all the vegetation and animals within 50 yards of the caster. Within a minute, plants mature and bring forth bountiful crops, and pregnant animals birth their offspring. No affected living thing is harmed in any way by this spell. Summoning of the Harvest does not affect intelligent creatures. The spell can be used only once per year on the same patch of land. Additional attempts in that time fail automatically—even those cast by other sorcerers. Sorcerers often use this spell on areas afflicted with drought, as it forces a successful harvest even in the absence of proper irrigation.
 """
@@ -1321,6 +1389,7 @@ duration = "One year and a day (or until slain or new batch summoned)"
 target = "Summoned minions"
 source = "The Books of Sorcery, Vol II"
 pages = "65"
+effect = "Summon mute minions (year+day)"
 description = """
 This spell requires a pool of expensive, black, scented oil (Resources 3) and a ritual lasting six hours. In the course of the ritual, the sorcerer reaches through the oil into Elsewhere and draws forth mewling, servile creatures long-banished from Creation. The creatures absorb the oil as the sorcerer pulls them through it, and once she calls forth a number of lesser minions equal to her (Charisma + Essence), the ritual ends and the oil is expended, save for the residue on her arms and hands.
 
@@ -1341,6 +1410,7 @@ duration = "Instant (memory trapped in gem permanently)"
 target = "Person"
 source = "The Books of Sorcery, Vol II"
 pages = "65-66"
+effect = "Steal a memory into a gem"
 description = """
 The Theft of Memory spell permits the sorcerer to snatch a memory from his victim, though it acts subtly—a rarity among spells. The sorcerer must bear an emerald (of at least Resources 2 value) in his hand and touch it to his target. He makes the Mudra of Remembrance and Forgetting with his other hand and releases the Essence of the spell. The spell's Essence display can manifest as any number of noticeable phenomena—simple alchemical pyrotechnics from a street performer, weather effects or the light of the sun playing across the area. In order to conceal the casting of this spell, the caster's player must succeed at a (Wits + Larceny) roll. People watching the scene realize the character just cast a spell if their players gain more successes on a (Perception + Occult) roll than the sorcerer's roll to conceal the spell.
 
@@ -1359,6 +1429,7 @@ duration = "Instant"
 target = "An area 20 yards across, within 100 yards of the sorcerer"
 source = "The Books of Sorcery, Vol II"
 pages = "66"
+effect = "Sonic boom: bashing area attack"
 description = """
 In the ancient days of the First Age, the great Lunar general Shu-lin hunted the behemoth Thunder Wolf, who roamed the Far North eating men and beast alike. Though Shu-lin wished to tame him, the two struggled, painting a snowy mountainside crimson, until they died. Shu-lin's widow created this spell in memory of the struggle.
 
@@ -1377,6 +1448,7 @@ duration = "Instant (penalties last remainder of scene)"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "66"
+effect = "Ice giant breath: lethal area"
 description = """
 The sorcerer calls up the head and shoulders of an icy giant, which rises from the ground before her and exhales a stream of freezing air that solidifies into an icy shell around anyone caught within an area 10 yards wide and high, extending 100 yards from the caster. The titan bellows a second after the exhalation, shattering the ice, and then vanishes.
 
@@ -1395,6 +1467,7 @@ duration = "Until the sun crosses the horizon twice"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "66"
+effect = "+Ess Str/Sta; halve wound penalties"
 description = """
 The sorcerer begins the Irresistible Song of Stone, the song that earth elementals sing to themselves while they sit deep in the soil (also used in the Sleep of Stony Safety). She sings it wrong, however, and the local earth elementals—perfectionists unable to resist correcting such a thing—croon the song to her correctly. The sorcerer's silver-burning Essence absorbs the corrected song, turning the sorcerer's bones to stone until the sun crosses the horizon twice.
 
@@ -1411,6 +1484,7 @@ duration = "Instant"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "66-67"
+effect = "Caster self-immolates utterly"
 description = """
 Also called the Spell That Is Not A Spell, Unconquerable Self is actually a mangling of the processes of sorcery. The spell turns Essence inward, burning away the sorcerer until nothing remains but white ash.
 
@@ -1431,6 +1505,7 @@ duration = "10 minutes (torrent); Essence days (stream)"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "67"
+effect = "Torrent erupts from ground"
 description = """
 Shouting the Birthing Word of Rivers and unleashing the blue-tinged Essence of this spell, the caster strikes the ground with his foot, fist or weapon. The ground before him cracks open, and a roaring torrent of water gushes forth, flattening everything before it in an area three yards wide, two yards high and 20 yards long. The crushing force of the Unstoppable Fountain of the Depths lasts for 10 minutes, after which it slows to a gentle stream of pure water. This stream lasts for a number of days equal to the sorcerer's permanent Essence, during which time it cannot be poisoned or otherwise fouled, save by spells cast by a sorcerer or necromancer of greater Essence than the caster's own.
 
@@ -1451,6 +1526,7 @@ duration = "Instant"
 target = "A single structure"
 source = "The Books of Sorcery, Vol II"
 pages = "67-68"
+effect = "Blow open all doors in a structure"
 description = """
 The sorcerer stamps the ground, and her Essence blasts out to force open all the non-magical entrances in a single structure she touches or stands within. Any portal blocked with material less durable than metal is destroyed. Windows shatter, wooden doors are blown to splinters, sturdier doors, and portcullises are blasted from their moorings. The spell affects the portals of a single structure. If the sorcerer casts this spell on the walls of a city, the city gates blow open, but the doors of the buildings in the city are not affected. Casting the spell while touching a barrier with no door opens an oval entrance two yards wide and three yards tall in front of the sorcerer, boring through up to (sorcerer's Essence x 10) feet of material.
 
@@ -1467,6 +1543,7 @@ duration = "Until targets leave the water (ends 6 ticks after)"
 target = "Caster and up to (Essence) willing targets"
 source = "The Books of Sorcery, Vol II"
 pages = "68"
+effect = "Breathe & move underwater"
 description = """
 This spell grants its caster and a number of willing targets equal to the caster's Essence the ability to move and breathe underwater without difficulty. The targets must stand or tread water while the sorcerer unleashes tendrils of Essence about them. The tendrils seek out aquatic plant life and transform it into fronds of sorcerous seaweed. As the sorcerer speaks the Ineffable Incantation of the Waves, the fronds envelop the targets and cover them like a second skin from head to toe. Filaments of the plant extend down each target's throat and into their lungs, a strange but painless experience.
 
@@ -1485,6 +1562,7 @@ duration = "Until the sun crosses the horizon again, or sorcerer stops committin
 target = "One creature"
 source = "The Books of Sorcery, Vol II"
 pages = "68"
+effect = "Flame automaton parries for target"
 description = """
 The caster combines the Sign of Flame with the Sword-God Mudra to create an automaton servant in the form of a burning sword that floats before him. If the caster touches another being, the virtuous guardian of flame shrinks to the size of a torch-flame and obeys that being thereafter. The flame goes wherever the target bids it, but it must remain within three yards of her. Sorcerers protected by these spells are known for the burning headdresses they wear, for the holy flames that adorn their staves, or for their occult lanterns or burning censers.
 
@@ -1505,6 +1583,7 @@ duration = "Essence units of time (varies by climate)"
 target = "Boulder"
 source = "The Books of Sorcery, Vol II"
 pages = "68-69"
+effect = "Strike rock for a stream of water"
 description = """
 With her clenched fist, the sorcerer strikes a large boulder as hard as she can while shouting the name of Daana'd. Out from the resultant crack pours a stream of pure, cool water. Enough water pours forth to quench the thirst of a military unit of Magnitude equal to half the sorcerer's Essence, rounded up, or an equivalent number of individuals.
 
@@ -1521,6 +1600,7 @@ duration = "Until the recipient looks away"
 target = "Body of liquid"
 source = "The Books of Sorcery, Vol II"
 pages = "69"
+effect = "Message appears on recipient's water"
 description = """
 The sorcerer inscribes upon the surface of any body of liquid a message intended for one other person and then strikes the liquid surface with the open palm of his hand. The same message appears on the next liquid surface at which the recipient looks. The message appears at the same speed it was written. If the liquid is clear, the writing manifests in letters of dark ink. Otherwise, the message appears in ink of fiery gold. Once the target looks away, the message vanishes and never reappears.
 
@@ -1537,6 +1617,7 @@ duration = "(Essence x 20) ticks"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "69"
+effect = "Halt all combat in area"
 description = """
 Silur herself devised this variation on the older Wheel of the Turning Heavens. The sorcerer pours violet Essence into the sky and makes the Sign of Battle's End. The Essence forms a great wheel of light. The edges of the slowly spinning wheel bear mystic sigils of peace and harmony, while the center holds the symbol of the Maiden of Endings. This wheel lasts for (Essence x 20) ticks and covers an area (Essence x 100) yards wide. The wheel's center can be up to 50 yards from the sorcerer.
 
@@ -1555,6 +1636,7 @@ duration = "(Essence x 10) ticks"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "69"
+effect = "Singing chorus inflicts lethal grief"
 description = """
 The sorcerer makes the Mudra of the Tomb-Harp, and her Essence forms a chorus of vaporous entities that sing in perfect harmony. Their crystalline song inspires lethal grief and pain. Every sentient being within 100 yards of the sorcerer weeps and suffers environmental damage (2L/5 ticks, Trauma 3). The stinging tears and agony inflict a -2 internal penalty to all actions. Essence wielders who reduce the environmental damage by at least one step may ignore these penalties. The cantata continues for (Essence x 10) ticks. The caster is immune to the singing and may take normal actions once the spell is cast. The visages always surround him, but they are without substance and grant him neither cover nor defense.
 """
@@ -1569,6 +1651,7 @@ duration = "Concentration"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "70"
+effect = "Travel on a cloud (100mph, hidden)"
 description = """
 While the sorcerer speaks the Invocation of Heavenly Transport used to signal the cloud chariots in Yu-Shan, his anima envelops him in a thick vapor. Although it looks like a bank of mist from the outside, people inside the cloud trapeze can see though the vapors. The cloudbank lifts the sorcerer and any passengers or cargo into the air and propels them along, without disturbance from wind or weather, at 100 miles per hour.
 
@@ -1587,6 +1670,7 @@ duration = "Instant (walls collapse over 60 ticks)"
 target = "City walls"
 source = "The Books of Sorcery, Vol II"
 pages = "70"
+effect = "City walls collapse over a minute"
 description = """
 The sorcerer calls down the power of Saturn, who holds dominion over endings and borders, to annihilate the defensive walls separating a city from the lands beyond it. To cast this spell, the sorcerer must gather four chosen companions and make five circuits around the targeted city while singing a hymn to the end of conflict. The sorcerer and her companions must make as many circuits of the city in one day as she is capable and must manage at least one circuit per day. During the casting, the sorcerer and her companions are prohibited from defending themselves against attack, though they may have bodyguards accompany them or use armor or magic to enhance their ability to avoid harm.
 
@@ -1603,6 +1687,7 @@ duration = "Permanent (until shattered or countered)"
 target = "One creature or object"
 source = "The Books of Sorcery, Vol II"
 pages = "70"
+effect = "Trap target in eternal crystal"
 description = """
 Beginning at dawn on a clear day, the sorcerer catches strands of Essence and new sunlight in her hands and sings an old weaving song of the First Age. She weaves through the fullness of the day, wrapping her target in a glowing field of light. The target cannot exceed 27 cubic feet (more than enough for a human being). Living beings must be unconscious through the entire process, as any motion ruins the weaving. As the sun sets on that day, the sorcerer speaks the Word of Solidity and the Essence-woven light hardens into a crystal coating in all the hues of the rising and setting sun. With the last bits of light and Essence, the sorcerer weaves a thin wand of the same material.
 
@@ -1619,6 +1704,7 @@ duration = "Permanent (tattoo, until teleportation is invoked)"
 target = "Caster and one creature"
 source = "The Books of Sorcery, Vol II"
 pages = "70-71"
+effect = "Long-range teleport home/known place"
 description = """
 This spell takes eight hours to perform and requires sapphire dust (Resources 3 cost) mixed with the blood of the caster and one other willing sentient creature. The sorcerer's Essence transubstantiates the mixture into gleaming blue ink, which is used to create an occult tattoo on both targets. Creating the first tattoo doesn't call for a roll, but the second requires a successful (Perception + Craft [Air]) roll, difficulty 4, to copy the tattoo accurately and in the exact same place on the second person's body. The sorcerer herself need not make this tattoo, however.
 
@@ -1641,6 +1727,7 @@ duration = "Until washed off or scene ends"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "72"
+effect = "Acid geyser, area lethal dmg"
 description = """
 The sorcerer speaks the Word of Vitriol and gathers his Essence into an amber ball of light. He can launch the ball at any visible point within 50 yards. When it hits, a gout of scalding, stinking acid erupts and sprays over everything within 20 yards of that point. The spray cannot be parried, but it can be dodged.
 
@@ -1657,6 +1744,7 @@ duration = "One hour (extendable at 10m per additional hour)"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "72"
+effect = "Summon a champion automaton"
 description = """
 This spell works only when cast under the open sky. The sorcerer speaks several of the Five Hundred Words of War and draws a latticework of Essence around herself. During the day, sparks of sunfire swirl down from the sky to join the lattice, while at night, the sorcerer's anima catches glowing motes of moonlight or starlight.
 
@@ -1679,6 +1767,7 @@ duration = "Sunrise to sunset"
 target = "Summoned Judge"
 source = "The Books of Sorcery, Vol II"
 pages = "72-73"
+effect = "Conjure judges who interrogate"
 description = """
 There are seven ancient judges, tall, cloaked and hooded in black, each of whose limbs have withered to darkened bones and whose face is but a single blue flame. The Hidden Judges each carry one of the Swords of the Secret Flame and have the right to destroy even gods and Exalted who forget their responsibilities. The Judges have no names but are addressed by the names of their swords, such as Hekateron, Amantythae, Sebelle, Kasimodente and Pheberester. In Yu-Shan, they enforce the peace at the Calibration festival. Any other times of the year, they can be called to Creation to punish transgressions against the Divine Law—but never compelled.
 
@@ -1699,6 +1788,7 @@ duration = "(Essence x 2) hours"
 target = "Area and infected creatures"
 source = "The Books of Sorcery, Vol II"
 pages = "74"
+effect = "Babel-confuse a crowd's speech"
 description = """
 The sorcerer makes the Sign of the Shattered Tower into the spell's Essence. The resulting burst of turquoise light carries a linguistic curse. Everyone who was within 100 yards of the sorcerer speaks gibberish from then on, though they are not aware of this fact. Once an affected creature attempts to communicate with someone else, that character's player may roll (Perception + Awareness), difficulty 3, once per minute of interaction, for the character to realize he's speaking nonsense. A (Perception + Occult) roll may also be made at the time of casting to understand what the spell did, without needing to speak. The curse lasts (caster's Essence x 2) hours, and it affects only a victim's ability to communicate. Charm use and spell casting are not affected, unless they rely on communication.
 
@@ -1717,6 +1807,7 @@ duration = "Permanent"
 target = "One mortal creature"
 source = "The Books of Sorcery, Vol II"
 pages = "74"
+effect = "Forge spirits into an amalgam being"
 description = """
 With this spell, a Celestial sorcerer may imbue a servant, pet or guardian with tremendous power and ability, enabling it to serve her better. The ritual itself takes one full day to cast and requires a statue of the form the sorcerer wishes to give her target. This statue must be carved of stone quarried from the Blessed Isle, gilded and inlaid with a variety of jewels arranged in occult patterns across the body (a Resources 4 cost). During the ritual, the target remains prone and naked, with identical gems placed in the same places on its body. When the spell is complete, the jewels are consumed, and the target's form changes to match that of the statue, while the statue appears in the target's original form (and may, in fact, be used in a subsequent casting of this spell to return the subject to normal).
 
@@ -1749,6 +1840,7 @@ duration = "Essence days or until caster is slain"
 target = "People in area"
 source = "The Books of Sorcery, Vol II"
 pages = "76"
+effect = "Tendrils spread hate in target"
 description = """
 The sorcerer feeds a brazier with the skins of a dozen exotic snakes (a Resources 3 purchase, or a Resources 2 purchase in large cities of the South). After a three-minute invocation of hate, a grasping hand of smoke rises from the brazier, and the sorcerer gives it arcane links to each of the intended targets. The hand returns to the flames, which burn a sickly green and then smother as smoky tendrils leap through Elsewhere toward the targets. The spell affects a number of sentient creatures up to the caster's (Manipulation + Essence), all of whom must be within 30 yards of each other at the time of casting.
 
@@ -1769,6 +1861,7 @@ duration = "24 hours"
 target = "Conjured pavilion"
 source = "The Books of Sorcery, Vol II"
 pages = "76"
+effect = "Conjure a defended pavilion"
 description = """
 The sorcerer weaves her Essence into the shape of a gleaming white orchid bud as she sings the last stanza of Welcome to the Highest, the song that least gods sing silently to herald the arrival of an Incarna. As the song ends, the sorcerer raises her hands and claps them overhead. The blossom unfolds around her into a magnificent palace, ornately carved and pillared, smelling of orchids. This wondrous pavilion can entertain up to (Essence x 100) guests in high style. Gods find themselves at ease, for the pavilion radiates an aura that feels like Yu-Shan. This aura also puts most mortals in a state of awe.
 
@@ -1787,6 +1880,7 @@ duration = "One scene"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "76"
+effect = "Magma kraken erupts and rampages"
 description = """
 The sorcerer combines the Prayer to the Kraken with the Mudra of Burning Earth that volcano gods make when their mountains spew fire. Red strands of Essence then lance toward the targeted area, which begins to rumble.
 
@@ -1814,6 +1908,7 @@ duration = "Until the sun next crosses the horizon"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "77"
+effect = "Reflexive teleport (Wits+Occult)"
 description = """
 Mercury's Deliverance grants defense against all spells of the Emerald and Sapphire Circles. Before casting the spell, the sorcerer must etch a circle around the area to defend. The maximum diameter is (caster's Essence x 100) yards. She marks it at the five points of a pentagram with small hexagrams the size of her hand, and she scribes a sixth hexagram in the direct center of the circle. Within each hexagram, she writes a symbol of the Maiden of Journeys. This painstaking process takes about half an hour.
 
@@ -1834,6 +1929,7 @@ duration = "One month (renewable)"
 target = "Room"
 source = "The Books of Sorcery, Vol II"
 pages = "77"
+effect = "Step into pocket dimension"
 description = """
 This spell transforms a chamber's interior into a perfect duplicate of any environment in Creation, from the strange fields of white flame in the Far South to the frigid ice caves of the North. This spell takes three hours to complete.
 
@@ -1858,6 +1954,7 @@ duration = "Essence hours"
 target = "Conjured automata"
 source = "The Books of Sorcery, Vol II"
 pages = "78"
+effect = "Summon spirit princes as advisors"
 description = """
 The sorcerer evokes a doorway of dark, rippling water in midair. Through the sheet of water lurch manlike creatures made of living, compacted rust. They number twice the sorcerer's permanent Essence. The creatures kneel once, then wait for the sorcerer to tell them what to destroy. Their long, rusty claws deal terrible wounds—while metal rusts, stone crumbles, wood rots and leather and cloth falls to dust. These automata have poor combat skills, but they can wreck a town or fortress.
 
@@ -1876,6 +1973,7 @@ duration = "Permanent"
 target = "Demesne"
 source = "The Books of Sorcery, Vol II"
 pages = "79"
+effect = "Raise a stone manse-tower"
 description = """
 The Lunar and Sidereal Exalted rarely have the luxury of huge crews of workmen to build their manses. The Lunars demand self-sufficiency, and the Sidereals desire secrecy. This rite provides both. A sorcerer can raise a manse from a demesne rated no higher than (her Essence – 2).
 
@@ -1898,6 +1996,7 @@ duration = "Concentration"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "79"
+effect = "Earth rolls beneath you (fast travel)"
 description = """
 The Mudra of the Auspicious Journey releases deep-blue Essence that flows outward, reshaping the land so that it becomes easy to travel through. The land becomes smooth, while puddles of water and mud dry up. This field moves with the sorcerer as he travels, remaking the land before him into perfect traveling territory. Terrain left in his wake returns to normal. This Shaping effect is large enough to encompass 100 marching humans (mounted riders count as two men). For every additional 10 motes spent when casting the spell, the radius increases, allowing the spell to support 50 additional man-sized travelers.
 
@@ -1914,6 +2013,7 @@ duration = "Instant"
 target = "Demon or demons"
 source = "The Books of Sorcery, Vol II"
 pages = "80"
+effect = "Banish a Second Circle demon"
 description = """
 This spell has special timing rules. The character can cast it as two reflexive Shape Celestial Circle Sorcery actions that take 0 ticks. It has a range of (Essence x 15) yards.
 The sorcerer makes the Seven Devils Rebuking sign just before the Victory over Primordials Mudra. Sapphire Circle Banishment forces a single First Circle demon back to Malfeas, without a contest of wills. It can banish a Second Circle demon, but doing so forces a contest of wills, handled as for Emerald Circle Banishment (see p. 44). If the demon wins, it remains in Creation, and the sorcerer cannot attempt to banish it again for five days.
@@ -1931,6 +2031,7 @@ duration = "Until target is found or dismissed"
 target = "One conjured creature"
 source = "The Books of Sorcery, Vol II"
 pages = "80"
+effect = "Conjure infallible tracker/finder"
 description = """
 Combining the Prayer for Guidance with the Flutter-Wing Mudra, the sorcerer shapes her Essence into a small sparrow of blue flame. The sparrow can find any item, person or place the sorcerer has previously encountered or to which she bears an arcane link. She may also name anything she wants to find, as long as it is within 500 yards and objectively definable: "The nearest man" or "the exit from this maze" is sufficient. "My closest ally" or "a safe place" is not.
 The sparrow locates unhidden or mundanely concealed things automatically. Moreover, it is a supernatural tracker with a tracking dice pool of equal to the sorcerer's (Wits + Occult + Essence). The sparrow does not speak or sing, and it cannot travel farther than a few yards from the sorcerer. It tends to fly back and forth to the limits of its reach. The more excited and frantic the little bird's fluttering becomes, the nearer the target lies. The sparrow lasts until the sorcerer finds her target, dismisses the bird or dies. The sparrow is just a puff of shaped Essence, so it neither attacks nor takes damage if it is attacked.
@@ -1946,6 +2047,7 @@ duration = "Until released, countered, or orb destroyed"
 target = "One creature"
 source = "The Books of Sorcery, Vol II"
 pages = "80"
+effect = "Steal target's shadow (long-term)"
 description = """
 This spell traps a victim's shadow in a crystal orb. The spell requires a small globe of rock crystal (costing Resources 2) set inside an orichalcum cage (costing Resources 4, but reusable).
 The spell itself takes one hour to complete. At its end, the target's shadow disappears, and inky blackness swirls in the center of the orb. The sorcerer can then remove the crystal ball from the orichalcum cage.
@@ -1971,6 +2073,7 @@ duration = "Willpower minutes"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "81"
+effect = "Replay past events as shadow show"
 description = """
 Essence remembers. The dragon lines of an area preserve subtle records of every event. The sorcerer using this spell sends shimmering threads of silver-blue Essence into the dragon lines of an area, delving into its past, then resurfacing as a silvery fog that spreads (Essence x 20) yards from the caster. This area does not move thereafter. A scene from the past plays out on this mystic screen as a ghostly overlay on the sorcerer's present surroundings.
 The sorcerer has a choice. She can specify a time in the past, such as "50 years ago, third day of Resplendent Earth, four hours after sunrise," or she can specify an event that involved a particular object in the area, such as "When you died," (for a skull she unearthed) or "When your construction was complete" (for a manse). In the former case, the sorcerer knows when a scene happened, but doesn't know in advance whether she will see something important. In the latter case, the sorcerer can aim for an important event, but doesn't know when it actually happened. Either way, the sorcerer must give some objective definition of a time. The sorcerer is also limited to scenes that occurred at most (Occult x 100) years in the past. If the Wyld passed through an area, however, it shattered the memory of the dragon lines there, and the spell can only view the time after the Wyld receded.
@@ -1987,6 +2090,7 @@ duration = "Up to one month"
 target = "Ghost"
 source = "The Books of Sorcery, Vol II"
 pages = "81"
+effect = "Summon and bind one ghost"
 description = """
 This spell works like the necromancy version (see The Black Treatise, pp. 34-35), but the ghost may not be compelled to serve for longer than a month. The rite also takes three hours instead of one, and the caster sprinkles honey, wine and barley upon the ground as well as blood.
 """
@@ -2001,6 +2105,7 @@ duration = "One journey"
 target = "Summoned ship"
 source = "The Books of Sorcery, Vol II"
 pages = "81"
+effect = "Summon a sailing spirit-vessel"
 description = """
 As the sorcerer wades out from the beach, a ship builds itself from the sun's light upon the waves, becoming a sparkling, translucent white bireme under her feet. She may speak the name of any maritime location from where she stands on the deck, and the spirit boat rows her there.
 The bireme serves tempting repasts to the sorcerer and her guests and can create individual rooms for as many people as it can carry. The sentient boat is clever enough to avoid submerged hazards such as reefs or shoals, and it requires no crew to row or direct it beyond the sorcerer herself. The sorcerer may delegate command to someone else, as long as that person has at least one dot of Sail and has always treated the ship with respect. She may place conditions upon that command, however.
@@ -2029,6 +2134,7 @@ duration = "5 minutes"
 target = "Summoned Calibration Gate"
 source = "The Books of Sorcery, Vol II"
 pages = "82"
+effect = "Open a gate to Yu-Shan or elsewhere"
 description = """
 Once a year, on the third night of Calibration, the Celestial City of Yu-Shan revels in the Carnival of Meeting. In ages past, mortal and Exalted dignitaries would be invited to Heaven to join the festival, but in these debased times, the gods of Yu-Shan neglect the world.
 The starmetal Calibration Gate still appears in Creation once a year to admit mortals to the Carnival, though the gods send out no invitations. During that night, it cannot be summoned. For the rest of the year, though, a sorcerer may call it with this spell.
@@ -2047,6 +2153,7 @@ duration = "Until dismissed or killed"
 target = "Summoned minions"
 source = "The Books of Sorcery, Vol II"
 pages = "83"
+effect = "Summon greater Eyeless minions"
 description = """
 The greater minions of the Eyeless Face are pulled into Creation through a pool of oil in a ritual much like lesser minions of the Eyeless Face are (see p. 65). The greater minions possess mouths, though only some possess lips. Sometimes, their mouths are vertical splits running down the center of their blank faces. Nevertheless, they do not speak. A few greater minions possess blackened bulges or indentations at the sides of their head, in multiples of two, as if they had tried to form pairs of eyes or ears during their evocation. During the summoning, greater minions do not whimper. Like the lesser minions, they emerge naked and sexless.
 The sorcerer calls forth a number of greater minions equal to her (Charisma + Essence), plus one more for each additional five motes she spends during the casting. Unlike lesser minions, the sorcerer's player defines the traits for the greater minions as if they were heroic mortals. Though they receive no Backgrounds, greater minions have 15 bonus points plus one additional bonus point per extra mote spent during the casting. (These bonus points may not be spent on Backgrounds.) The player may create each greater minion with separate and unique traits. Greater minions benefit from the same immunity to bleeding, infection and Poison and Sickness effects as lesser minions, but they heal as Exalts do. Since they are magical beings, round up when calculating the greater minions' DVs. Greater minions have Essence 2 and the Motivation, "Serve the sorcerer who pulled me from imprisonment."
@@ -2063,6 +2170,7 @@ duration = "24 hours"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "83"
+effect = "Summon Heart of Darkness servitor"
 description = """
 The sorcerer knots strands of Essence infused with silence, darkness, confusion and terror. A black pillar explodes upward, surrounding the caster and extending outward a mile in every direction and 10 miles into the air.
 Within this pillar of darkness, blind terror reigns. Sounds become muffled and seem to come from everywhere at once. Only screams ring out clearly, though they still seem to come from all around. In a large group, victims need successful Valor checks, difficulty 3, lest they give in to panic. Entire armies have slaughtered themselves when caught by the Heart of Darkness.
@@ -2081,6 +2189,7 @@ duration = "Until destination reached, destroyed, countered, or released"
 target = "Vessel"
 source = "The Books of Sorcery, Vol II"
 pages = "83"
+effect = "Conjure a flying spirit-steed"
 description = """
 The sorcerer stands on the target vessel or within a number of yards of it equal to his Essence. This vessel may be a ship, a wagon or even a small building. The Sign of Ten Thousand Feathers shapes his Essence into an automaton that appears as a mass of huge, feathered wings. It has no head, eyes or other features, save for a pair of gigantic, five-taloned claws. The Swift Spirit is 500 feet long and 200 feet wide, and it can carry up to 1,000 tons. Old texts call it a demon or spirit, but the thing is an automaton: It has no existence outside of its creation by this spell.
 The automaton lifts the vessel and presses it along its underside, creating a strange canopy of wings that protects the vessel from wind and weather. The automaton flies up to a mile high and 200 miles per hour. If the sorcerer is not aboard the vessel, he must give the swift spirit a destination when he creates the automaton. It flies off for that destination without pause. If the sorcerer is aboard the vessel, he may order the automaton to change direction and destination as he pleases. He can order it to set the vessel on land or sea or even to drop it from a great height. Only flat-bottomed vessels can land intact on dry ground; other vessels are likely to break up or fall over when set down.
@@ -2110,6 +2219,7 @@ duration = "Indefinite (see text)"
 target = "One being"
 source = "The Books of Sorcery, Vol II"
 pages = "84"
+effect = "Lock target's Intimacy in 3 ways"
 description = """
 Ropes of orange and yellow light coil around the target and wrap around her spine, ending in three knots through the heart of the victim of the type fishermen of the Coral Archipelago swear will never work loose.
 Mortals are snared automatically. Against Essence wielders, the sorcerer attempts a magical social attack. His player rolls (Manipulation + Occult), adding a number of automatic successes equal to his Essence, against the target's Dodge MDV. If this attack succeeds, the victim is under an unnatural mental influence that creates a Compulsion effect (a powerful Intimacy to the sorcerer), an Emotion effect (love) and a Servitude effect. Since powerful beings often have ways to resist these effects, sorcerers prefer to cast Threefold Binding of the Heart on Essence wielders who are asleep or unconscious, rendering the target's Mental DV inapplicable.
@@ -2130,6 +2240,7 @@ duration = "Essence x 5 ticks"
 target = "One body of water"
 source = "The Books of Sorcery, Vol II"
 pages = "85"
+effect = "Tidal wave area attack"
 description = """
 The sorcerer hurls a ball of blue Essence-flame into a sea, lake, river or other large body of water that must be within 100 yards. White-capped waves form, and the roar of rushing water fills the air. On his second Shape Celestial Circle Sorcery action, the sorcerer raises his arms to the sky as a wall of water 20 yards high and 100 yards long rises from the body of water. Everyone within five miles receives a reflexive (Perception + Awareness) roll to notice this very loud event.
 On his Cast Sorcery action, the sorcerer points in the direction he wishes the torrential cascade to flow and the wall of water surges outward on its journey. It travels at 50 yards per tick for (sorcerer's Essence x 5) ticks, remaining 20 yards high and 10 yards thick as it moves.
@@ -2147,6 +2258,7 @@ duration = "Essence months (after required nightly castings)"
 target = "Caster and allies"
 source = "The Books of Sorcery, Vol II"
 pages = "85"
+effect = "Link sleepers in a shared dream"
 description = """
 The sorcerer binds the dreams of the ritual's participants (including herself) to one another using the Sign of Venus. Unity of Dreams must be cast once a night per participant for the magic to take hold, with everyone in the same room. The spell's Essence settles on participants as saffron motes of light. After the required number of castings over consecutive nights, the spell lasts for a number of months equal to the sorcerer's Essence.
 The participants' dreams intermingle and allow them to communicate while sleeping, as long as they are all in Creation. Not only does the fluid nature of dream consciousness not hamper this dream communication, but participants have trouble hiding important facts and events from each other. A closeness develops on a subconscious level. People linked in this spell have their Intimacies for one another augmented. Eroding Intimacies to other dreamers now takes a number of successful social attacks equal to the character's (Willpower + Conviction).
@@ -2164,6 +2276,7 @@ duration = "Until next sleep"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "85"
+effect = "Speak long-range to all known names"
 description = """
 The word that describes a god's ability to hear petitioners' prayers doesn't have a translation. It is an onomatopoeia of the buzzing mumble that gods hear when they attend to their worshipers' prayers. A sorcerer who knows this spell can speak this word, infuse it with his own Essence and emulate the divine ability until the next time she sleeps.
 While the spell is active, the character hears any people who talk about her, as clearly as if she stood beside them. A conversation does not need to include the sorcerer's name. The caster knows the approximate distance and direction of each conversation and can recognize voices she has heard before.
@@ -2180,6 +2293,7 @@ duration = "Essence x 30 minutes"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "85"
+effect = "Vast spinning wheel grants insight"
 description = """
 This spell cannot be cast during the day. When cast, the sorcerer's Essence shoots upward as a brilliant beam of white light and explodes like a fireworks display visible to every creature within (Essence x 100) yards who can see the sky. Instead of fading, the sparks slowly swirl clockwise in kaleidoscopic displays that last (Essence x 30) minutes. In the center floats the sign of the Maiden of Serenity. The interlacing sparks trace out many astrological sigils the Sidereals would rather keep to themselves… but no one will remember them.
 All sentient creatures are entranced by the display and forget what they were doing. They take no actions. When the spell ends, they do not remember what happened while they stared at the sky. People outside the area just see pretty lights (though the display might attract them into the spell's area). The sorcerer himself is immune. Once he casts the spell, he may take other actions normally.
@@ -2197,6 +2311,7 @@ duration = "Essence hours"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "86"
+effect = "Whirlwind of fate scatters foes"
 description = """
 By standing motionless during the casting of this spell, the caster observes the weaves of Fate. In the light of her anima, the caster can see how every creature and object in her immediate vicinity is tied to every other and interpret how those interactions can be turned to her own advantage.
 When the sorcerer casts the spell, she names a goal, and the whirlwind of information can then be read to aid in this goal. The caster's player rolls (Intelligence + Occult). Each success on this roll adds two to a finite pool of bonus successes. The player may take bonus successes from this pool and add them to any roll that furthers the goal he stated when casting the spell. The pool lasts for a number of hours equal to the sorcerer's Essence.
@@ -2216,6 +2331,7 @@ duration = "5 days (renewable)"
 target = "Area (Essence) miles in diameter"
 source = "The Books of Sorcery, Vol II"
 pages = "86"
+effect = "Banish a Third Circle demon"
 description = """
 Creation's sky holds 25 constellations of special import: five sets of five, each set in the domain of one of the Maidens of Fate. The sorcerer takes five hours to mark each constellation's sigil in an enormous circle upon the Earth, one with a diameter that stretches a number of miles equal to his Essence. The sorcerer then may call upon the power of all Five Maidens to defend that place. A small, central circle holds the Unspoken Word, a glyph every thinking creature understands but none may speak.
 Once this spell has been invoked, the 25 great signs—above and below—begin to glow, though the constellations' gleam is seen only within the spell's area. The caster cuts her hand and pours her blood upon the central sign. Strands of her blood become light as they fall from her fingers, as matching radiance shoots into the sky from the 25 signs and surrounds the warded area's boundary with an iridescent flare.
@@ -2232,6 +2348,7 @@ duration = "Instant"
 target = "A demon or demons within (Essence x 15) yards of the sorcerer"
 source = "The Books of Sorcery, Vol II"
 pages = "87"
+effect = "Banish a Third Circle demon"
 description = """
 As the Emerald Circle Banishment, the sorcerer may use this spell to remove demons from Creation. The Victory over Primordials Mudra, augmented by the Calibration-Denying Sign, can expel a demon of the Third Circle, making it as though the Calibration during which it was summoned had never happened.
 This spell has special timing rules. The character can cast it as three reflexive Shape Solar Circle Sorcery actions that take 0 ticks. It has a range of (Essence x 15) yards.
@@ -2250,6 +2367,7 @@ duration = "Essence hours"
 target = "Body of water"
 source = "The Books of Sorcery, Vol II"
 pages = "87"
+effect = "Vast firestorm, scene-long"
 description = """
 In the uttermost South, lakes and rivers of fire flow like water. The sorcerer copies the Essence of the South's liquid fire and casts it into a body of water—and 10-yard-high scarlet flames sweep over its surface. The resultant burning water flows and eddies, just as normal water does, but it also ignites everything it touches that could conceivably burn. Everything caught in the flames is destroyed, except enchanted objects or those made from the magical materials. The flaming water deals environmental damage (6A/action, Trauma 5).
 The burning water cannot be quenched. Other water that comes in contact with it will be vaporized. If the added water is a truly enormous quantity—if, for example, a transformed fire-river flows into a lake of normal water—then the water will heat, but not boil, with the burning water floating on top of it.
@@ -2267,6 +2385,7 @@ duration = "Permanent (first year supernatural, thereafter natural)"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "88"
+effect = "Flood a region with new life"
 description = """
 Within herself, a Solar Circle sorcerer holds a living power to compare with the fury of a tsunami, the force of an earthquake—or the still, quiet resilience of an ancient forest. As she chooses to give herself to the land around her, the Solar grants it all the bounty and vitality of her own Exalted Essence. Whether a stinking, rotting swamp or a barren, rocky plateau, any land may be remade, lush and arable. The benediction covers up to (Essence x 100) square miles of consistent terrain—all desert, all mesa, all marshland or the like.
 At sunset on the new moon of Ascending Water, the character begins casting Benediction of Archgenesis from the geomantic center of the domain she wishes to revitalize. Shaping this spell is a dramatic action that lasts until sunrise. The sorcerer cuts her bare feet so that her blood falls upon the ground. From then on, she walks in an expanding spiral, pouring her life into the earth drop by drop, sacrificing five levels of aggravated damage. At sunrise, clouds gather overhead and release a soft, warm rain to wash the sorcerer's blood into the land.
@@ -2285,6 +2404,7 @@ duration = "Until sunset or destination reached"
 target = "Summoned chariot"
 source = "The Books of Sorcery, Vol II"
 pages = "88"
+effect = "Summon blazing solar chariot"
 description = """
 The sorcerer sends a triple helix of red, white and golden Essence toward the sun. Out of the sun ride five horses of white fire, pulling a chariot of pure, golden Essence—a copy of the chariot used by the Unconquered Sun himself, pulled by celestial stallions from his own stables.
 The sorcerer needs at least one dot of Ride to control the powerful, spirited sun horses. The caster must include a controlling Ride action in a flurry if she wishes to perform any other action while driving. If the caster performs no other action that would require a dice roll, the chariot is quite safe to drive and requires no roll.
@@ -2312,6 +2432,7 @@ duration = "Permanent"
 target = "Touched shadowland"
 source = "The Books of Sorcery, Vol II"
 pages = "89"
+effect = "Holy solar flames cleanse area"
 description = """
 This spell must be cast during the day at the geomantic center of a shadowland—that place through which all its Essence flows are poisoned. As the sorcerer casts Cleansing Solar Flames from that point, sunlight pierces the shadowland's miasma, shining warmly upon the caster and collecting in growing clouds until a thunderhead of light rises above her, visible for miles. And then, the sorcerer lifts her head in a piercing cry as the sun-cloud impales her with a bolt of golden lightning that passes through her into the ground and explodes outward in a glittering wave. The solar lightning holds the sorcerer for 10 minutes per 50 miles of shadowland she converts. When she is done, the sun-cloud dissipates, and normal sunlight shines over land that is now severed from the Underworld and fully part of Creation once more.
 If the sorcerer is moved or her attention wavers at any time during the cleansing, then this entire spell fails. Black storm winds of deathly Essence rip across the sky and scatter the sun-cloud in a terrifying (though harmless) backlash.
@@ -2327,6 +2448,7 @@ duration = "Until condition is met (potentially permanent)"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "89"
+effect = "Region locked in cursed mist"
 description = """
 As the sorcerer stands within the area she hates (which must all, in the local tongue, fall under a single name), the sorcerer intones the reason for her rage and names a condition that will alleviate her curse. This condition may be as simple—"The king of this country must kneel before me, and kiss my feet"—or as arcane—"Everyone within this land must speak nothing but the exact truth for a month"—as the sorcerer wishes, as long as it could conceivably be fulfilled within the land's borders. The spell fails if the condition requires actions from the Incarnae, major spirit courts or anyone else with no particular connection to the region.
 As the sorcerer speaks, purple lightning flickers in her anima. She catches these sparks and ties them into 15 knots. Tendrils of fog reach from her anima and spread through the cursed land. Dank gray mist fills the land from the ground to 100 feet above. Nothing, even the most immediate of objects, is clearly visible, and even the vague shadows of one's surroundings fade into the grayness within 10 feet. Day or night makes no difference, for the fog shines with its own faint, eldritch radiance. Characters within the mist quickly grow dispirited, inflicting a -2 internal penalty on all social interactions therein. (Essence wielders may avoid this penalty by succeeding on a daily Valor check.)
@@ -2346,6 +2468,7 @@ duration = "One month, or until name is forgotten"
 target = "One entity or social group"
 source = "The Books of Sorcery, Vol II"
 pages = "90"
+effect = "Nature itself attacks the cursed"
 description = """
 At the end of a chant that invokes the rage of all things natural, the sorcerer utters a name that resounds across the nearby hills and valleys. Some say that a careful listener can hear it whispering through the trees and grasses from over 1,000 leagues away. It must be the specific name of a person or creature, a region or a group no larger than Magnitude 9 (Magnitude 3 in the Mandate of Heaven). At that moment, the owner of that name becomes anathema to all things living. Plants strain to trip or strangle the targets, and even the most docile beast of burden attempts to bite and trample her. All creatures who sense a target of this spell become ferocious and uncontrollable, and they do their very best to kill her with no regard for their own lives. In lands completely devoid of life (only the Underworld and Essence-blasted wastelands really meet this criterion), a target is potentially safe. In other regions, she suffers the following effects:
 • She suffers a -1 to -3 external penalty to all actions as swarms of vermin and masses of plants impede her, based on the region's fecundity. All but the least hospitable regions of Creation host creatures or roots enough to inflict the least penalty. Lava rats live in the Southern expanses of volcanic stone, for instance, while ice hornets nest in the worst wastes of the North. In the jungles or forests of the West and East, life is so abundant it becomes difficult to accomplish anything at all. Although this penalty represents the difficulty for powerful entities (an Exalt, a city) to act under such conditions, the massed assault of vermin and insects can kill individual mortals.
@@ -2364,6 +2487,7 @@ duration = "Until countered, ended by caster, or target dies"
 target = "One creature"
 source = "The Books of Sorcery, Vol II"
 pages = "90"
+effect = "Invert target's Essence (devastating)"
 description = """
 Twisting her fingers together and flicking them toward her enemy, the sorcerer releases a roiling black and violet beam that penetrates his target's chest. Only Charm-enhanced parries or dodges may resist the beam, in which case the sorcerer's player rolls (Intelligence + Occult) to aim it. Otherwise, this is a perfect attack. Beginning on the action after he's hit, the target suffers 10 dice of lethal damage every five ticks as the Essence of his life rips from his body and twists into black and violet streamers of death. This damage may be soaked only with Stamina and Charms. The curse persists until Adamant Countermagic dispels it, the sorcerer decides to end his torment, or her foe finally dies. As the last of the victim's life erupts and inverts, the death-cloud rushes back into the corpse and dissolves it to nothing.
 """
@@ -2378,6 +2502,7 @@ duration = "Until mirror-person touches his own reflection"
 target = "One creature"
 source = "The Books of Sorcery, Vol II"
 pages = "91"
+effect = "Mirror-double of self appears"
 description = """
 Some societies fear mirrors, and this spell could explain why. It magically evokes a duplicate of a targeted person from his mirror reflection, while imprisoning the original within the mirror. To cast the spell, the sorcerer must be within 100 yards of her target and have a mirror at least the size of her hand within 20 yards. The victim must be conscious and see the mirror, but he can be drugged, bewitched or otherwise restrained. The sorcerer incants a ritual palindrome while making the Mudra of Opposition, only one hand makes the gesture in reverse, while dozens of images of her flicker through her anima.
 When the spell is released, the players of the sorcerer and her target make a resisted (Willpower + Essence) roll. If the sorcerer's player loses or ties the roll, the mirror shatters, and the spell fails. If the sorcerer's player rolls more successes, however, the target and the mirror both flash with iridescent Essence and… nothing seems to have happened. Close observation will show, however, that the person has been reflected left to right.
@@ -2398,6 +2523,7 @@ duration = "Instant"
 target = "Creature"
 source = "The Books of Sorcery, Vol II"
 pages = "91"
+effect = "Earth itself rises to defend"
 description = """
 The earth itself rejects the sorcerer's enemy, along with the very ground he stands on. As this spell is cast, the sorcerer indicates a target and grandly sweeps her arms together. The ground under her enemy's feet shudders, jagged chasms abruptly surround it, and a circle of it—one yard in diameter wider than the target and 10 yards thick—hurls itself into the sky, trailing a streamer of red and yellow Essence. Living creatures other than the target are shaken free near the ground, landing unhurt. The unfortunate himself, however, finds the column of earth flipping over once it reaches a mile in the air, then driving back down to the ground just as quickly. The ascent and crash take five ticks each, which is all the time the victim has to think of some escape before the chunk of earth smashes into the ground with him underneath it. The victim and his belongings take 150 dice of lethal damage, leaving nothing behind but a pile of rubble as his cairn.
 """
@@ -2412,6 +2538,7 @@ duration = "While sun is above horizon and arms raised"
 target = "One army"
 source = "The Books of Sorcery, Vol II"
 pages = "91"
+effect = "Empower army: huge mass-combat boost"
 description = """
 The sorcerer stands at a high place overlooking her army, lifts her arms and turns her face to the sun. Her anima rises to the sky and meets an answering bolt from above, forming a clear pillar of golden light, threaded with scarlet for the Maiden of Battles. A matching banner of light briefly rises above every soldier who follows the sorcerer. The soldiers' blades spark golden, and their faces glow white with the glory of the Unconquered Sun. As long as the sun remains above the horizon and the sorcerer's arms remain raised toward it, units she can see receive bonuses to their Might scores equal to her Essence or their own Magnitude, whichever is lower. Furthermore, the units are considered to have Perfect Morale and to be composed of supernatural beings for the purposes of enemy rout checks. The blessing extends to (Essence x 5,000) soldiers, grouped in units no larger than legions.
 Clouds will not naturally block the sun's light upon the battlefield. A long time standing with arms raised, however, can tax even a Lawgiver. For every hour the sorcerer holds her vigil, her player rolls (Stamina + Resistance) against a difficulty equal to the number of hours the spell has lasted already. If her arms do fall against her will, the light begins to fade, but the sorcerer has one action to reclaim it. Success on another (Stamina + Resistance) roll, at the previous difficulty + 1, allows her to lift her exhausted limbs again and call back the Unconquered Sun's favor. Otherwise, the spell ends only if she wills it, if Adamant Countermagic is cast, if the sun sets, or if the battle ends.
@@ -2427,6 +2554,7 @@ duration = "Until subject to Adamant Countermagic"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "92"
+effect = "Summon the Eyeless Face entity"
 description = """
 Outside Creation, Elsewhere, lies a vast, long-banished intelligence: the Eyeless Face. In the time since the Solars banished it and its race from the world, its once-raging anger has cooled and frozen into an icy, abiding hatred. The Eyeless Face cannot escape the perfect bindings placed upon it, and though its servant-limbs are bound to the will of its jailers and may be pulled from its prison at whim, the behemoth itself cannot—must not—be released by external forces. Nevertheless, by the end of the First Age, its jailers' heirs had found a use for it.
 The sorcerer makes the familiar pool of oil used to call forth the lesser and greater minions of the Eyeless Face, but instead of pulling anything out, she enters it herself. An hour passes, and she emerges… changed. Though she remains recognizable as the person she was, the skin of her body darkens and grows slightly reflective, while the skin of her face pales. Her eyes become sunken orbs of white as her pupils and irises vanish. She unconsciously mutes her motions, and her posture grows unnaturally still. At the back of her mind, she hears whispered hatreds and seductive assurances of her own superiority. While under the effects of the spell, she benefits from the following:
@@ -2448,6 +2576,7 @@ duration = "Instant"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "92"
+effect = "Holy light cleanses scene"
 description = """
 As the sorcerer casts this spell, the golden rays of the Unconquered Sun coalesce around him in a night-tangible nimbus before he finally releases their fury. Pure and deadly sunshine bursts in a circle outward from the caster. Where it touches anything unloved by the sun, that cursed thing suffers (Essence x 2) dice of aggravated damage as the sun's gaze burns it away. This damage ignores armor. The spell affects all creatures of darkness and objects of similar origin within a number of miles equal to the caster's Essence. Anything destroyed dissolves in a wash of light, and everything in the area of effect looks faded and sun-bleached.
 After a casting of this spell, the light within 100 yards dims, having spent its wrath. There's still plenty of light to see by, but the dimming hinders anything requiring truly bright light. Until the light returns to its full potency with the next sunrise, Light of Solar Cleansing cannot be cast within the area.
@@ -2463,6 +2592,7 @@ duration = "Essence months (permanent with focus)"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "93"
+effect = "Hidden mirage-shelter for all"
 description = """
 One of the best ways to protect a person or place is to hide it. After taking the Cast Sorcery action, the character must walk around the area she wishes to protect. As she walks, faint silvery Essence falls from her and forms a line on the ground where she has trod. She must return to her point of origin before the moon next crosses the horizon.
 Any creatures that intend to harm the area or its inhabitants cannot approach it. When they get close, the spell makes an unnatural mental attack on them. Unless their Dodge MDVs equal or exceed a value equal to double the caster's Essence, they follow a path around the affected region and cannot perceive it. Spending three points of Willpower lets a character ignore this Illusion effect for one scene, but at the end of that scene, the person finds himself lost again. Mirage of Protective Shelter can deflect entire armies or protect whole provinces.
@@ -2479,6 +2609,7 @@ duration = "Until destination reached or path broken"
 target = "Unit of travelers"
 source = "The Books of Sorcery, Vol II"
 pages = "93"
+effect = "Step across Creation at will"
 description = """
 A path exists to convey travelers from one end to the other. The sorcerer reaching out his hand and the path she wishes to follow briefly shines silver and gold. Then the sorcerer yanks, pulling the end of the path to her and her companions. The sorcerer then can travel along the path at 10 times her normal speed: The spell does not actually help the sorcerer move faster. Instead, it shrinks the world—at least for the sorcerer, along that particular path. Any clear path is valid, from commonly used ocean trade routes to animal trails through the woods.
 A sorcerer can share this spell with other beings. Before casting the spell, the sorcerer performs a 15-minute ceremony in which she anoints herself, the road and the leader of any unit she wishes to affect (the general of an army, the captain of a ship, the messiah of bunch of apostles, or whatever). Units of any size are valid targets for this spell, from a circle of five to a First Age legion of 10,000 or larger, as long as they all travel with the sorcerer.
@@ -2496,6 +2627,7 @@ duration = "Indefinite"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "93"
+effect = "Force target out of present moment"
 description = """
 This incredibly powerful spell shoves an entire region from Creation into Elsewhere, rendering it immune to invasion as long as it remains there.
 The sorcerer may target any region that goes by a single name, such as a manse, city or mountain. Affected Dominions may not exceed Magnitude (Essence – 2).
@@ -2516,6 +2648,7 @@ duration = "Instant (permanent effect)"
 target = "Person"
 source = "The Books of Sorcery, Vol II"
 pages = "95"
+effect = "Curse one target with universal hate"
 description = """
 This curse is the blackest, foulest one that an Exalt can utter. It sears and twists the soul of the target and of the sorcerer who pronounces it. The Rune of Singular Hate is but a single word, a word so sharp-edged and hateful that a tongue can give it voice but once in a lifetime—a spell that a sorcerer may cast only once. As a result, the casting time is near-instantaneous. This spell has special timing rules. The character can cast it as three reflexive Shape Solar Circle Sorcery actions that take 0 ticks.
 To speak the rune, the character must be within earshot of the target, and the character must be able to speak. The target need not hear the word, and magical silence is no protection—the target hears the curse in his heart. The Rune of Singular Hate can target only a single individual, but if that individual is less than a Yozi, a Neverborn or an Incarna, the rune sears him.
@@ -2533,6 +2666,7 @@ duration = "Permanent"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "95"
+effect = "Erect a holy solar refuge"
 description = """
 The caster must create five jeweled orichalcum statues of himself (Resource cost incalculable) and arrange them around the area he wishes to make his sanctuary. On a day when the sun is high in the sky, five people must simultaneously pray to the caster at each statue. The caster himself must cast the spell at the center of the area demarcated by the five statues. With his Cast Sorcery action, shafts of golden light lance upward from the statues, bursting through any obstacle to reach the sky, where they curve downward to converge above the caster. Sunshine lances briefly through the sorcerer, and a faint transparent dome flickers into and out of visibility over the affected area. This area, which may not exceed a radius of (Essence x 1,000) yards, is now the character's sanctuary, almost arbitrarily under his control. The area acquires the following qualities:
 • All demesnes become aspected to the character's Essence, and a manse of the appropriate level spontaneously grows from the ground to cap each demesne. As per Raise the Puissant Sanctum, the sorcerer can control each manse's appearance and function. The sorcerer is automatically attuned to all manses, whose hearthstones appear immediately in his possession. Manses whose aspects do not change continue to produce the same hearthstones; the Solar dictates new and changed manses' hearthstones.
@@ -2548,6 +2682,7 @@ duration = "Permanent"
 target = "Caster or entity"
 source = "The Books of Sorcery, Vol II"
 pages = "96"
+effect = "Trap a target's soul in object"
 description = """
 There are many dozens of words and symbols for dealing with souls, but most of them strike or draw or arrange the souls only after they have left the body or only as a part of the person. Only the Inimitable Sign of the Self can command a soul from the body and shift it to another location, and each such sign is specific to the individual it will affect. Each must be discovered or researched separately.
 Aside from that annoyance, Soul Seal takes one minute to cast (i.e., three separate Speed 20 Shape Solar Circle Sorcery actions before the sorcerer can perform the Cast Sorcery action). Once finished, gray light lances from fourth-dimensional directions through the target, severing the higher soul from the body and propelling it into another vessel. For willing targets, the effect is automatic death of the body but preservation of the mind. Players of unwilling targets roll the characters' (Essence + Willpower) in an opposed roll against the sorcerer's (Willpower + Occult). A successful target suffers one level of aggravated damage and loses one point of Willpower. Weaker targets suffer the worse fate: immediate death of the body. It is a small blessing that a hostile Solar Circle sorcerer cannot destroy the mind with this spell.
@@ -2565,6 +2700,7 @@ duration = "Scene"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "97"
+effect = "Mirror any technique used vs you"
 description = """
 The powerful techniques of the Exalted take time to learn and even longer to master. Luckily, a skilled sorcerer need never bother. The Solar traces the Sign of Reversal on a small, ordinary mirror with his finger while reciting a palindrome. With a flip of the wrist, he sets it spinning above his head, where it continues to rotate for the rest of the scene. For an instant when the caster completes this spell, and every time it takes effect, the sorcerer appears to be surrounded by several body-sized distorting mirrors.
 Each time someone attacks the sorcerer within the scene, a perfect duplicate of the attacker appears without flash or fanfare and uses the same attack on the sorcerer's foe. The mirrored attacker looks and acts just like the original did while attacking, and it uses the same dice pools. Attacks and other dice pools are rolled again. After attacking, the duplicate disappears.
@@ -2583,6 +2719,7 @@ duration = "Instant"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "97"
+effect = "Annihilate target utterly"
 description = """
 Every occult master knows about Ligier the Green Sun, the defining soul of the Demon Prince Malfeas. Ligier once had another name, however, when Malfeas was a Primordial instead of the demons' home and prison. Circling her hands before her chest, the sorcerer closes her eyes and builds herself into a rage. As she whispers the lost, former name of Ligier, a vivid green spark erupts from her heart to collect her Essence into a roiling, fist-sized orb of emerald fire. The sorcerer flings the orb into the air and directs it with her will toward any target within 200 yards. The sphere constitutes a perfect attack unless opposed by magic-enhanced dodges or parries, in which case the sorcerer rolls (Dexterity + [Occult or Thrown]) to hit. If parried, the orb is not destroyed, but is deflected 1,000 yards away in a random direction—from then on, it can't be steered. Attempting to parry the orb with a mundane weapon merely detonates it at once.
 When the orb strikes, it explodes into a column of bright green light 50 yards wide and five miles high. It deals 50 levels of lethal damage to everything within that area. Then, for (Essence x 5) ticks, the column of emerald light sweeps outward at a rate of 10 yards per tick, inflicting another 25 levels of lethal damage per action to everyone caught within in it on that action. Creatures near the explosion can try to outrun the all-destroying glare—this had best include the caster herself, since she is not immune to its power. Once the orb has exploded, the outpouring light cannot be parried and may only be dodged or soaked by means of perfect defenses. The devastation is complete: That which can burn, burns; that which can be broken, breaks. Behind it, the light leaves nothing but a scorched, cracked wasteland. In the thunder of the orb's detonation and the crash and crackle of devastation, one might hear the awful, vengeful laughter of a defeated god, laughing that his conquerors now turn his power against Creation.
@@ -2599,6 +2736,7 @@ duration = "Scene"
 target = "Caster and creatures"
 source = "The Books of Sorcery, Vol II"
 pages = "98"
+effect = "Bind army into a unified weapon"
 description = """
 As this spell is cast, those affected by it stretch and blur into the sorcerer's body, which shifts and shapes itself into a massive composite being. The anima of each entity included in the casting (if they have one) flares in full, iconic glory. No one can be included in this amalgam identity against his will. If the sorcerer tries to include someone who refuses to join, the spell fails. The composite being has the following qualities:
 • Height equal to the tallest member of the composite, plus 25 percent for each additional participant.
@@ -2623,6 +2761,7 @@ duration = "Instant"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "99"
+effect = "Confuse all in area (large)"
 description = """
 As the sorcerer shapes this spell and invokes the Maiden of Endings, her anima darkens until she looks like a deep purple silhouette backed by waning light. As she releases the spell, onyx winds sweep from behind her to howl across the landscape. They fill a corridor one mile across, five miles long and 20 yards high. Natural cover does nothing to stop the dark wind. Only sheltering entirely behind one of the magical materials prevents a creature from suffering its effects. The dark wind drains one dot of Intelligence and one dot of permanent Willpower every action (or five ticks) unless a victim's player succeeds at an (Intelligence + Integrity) roll at a difficulty equal to the caster's Essence. Naturally, the sorcerer is unaffected. People with Intelligence 0 stand or sit like zombies unless otherwise motivated. Each trait returns at a rate of one dot per hour. The curse fogs memories of whatever happens while a victim is affected, and anyone drained to Intelligence or Willpower 0 remembers only a vague blur.
 """
@@ -2637,6 +2776,7 @@ duration = "Instant"
 target = "One creature"
 source = "The Books of Sorcery, Vol II"
 pages = "99"
+effect = "All five elements strike target"
 description = """
 As the sorcerer's anima builds, he gestures and calls the names of the Elemental Dragons. Each dragon's sigil appears, the set forming a pentagram around him. The sorcerer names the target of the spell while holding three arcane links in his upraised hand—a hair, a swatch of clothing and soil from the target's footprint, perhaps. The links can vary (including the presence of friends or relatives), but at least one must come from the victim's body. At last, the sorcerer speaks the Word by which the Unconquered Sun announced his defiance of his Primordial creators. The sigils flare as the Elemental Dragons each vent their wrath on the spell's target, no matter where in Creation she is.
 Once the spell is cast, the victim suffers five deadly attacks, one every five ticks. The sorcerer sets their order or lets them happen at random. Each attack requires a separate (Intelligence + Occult) roll to target, with the sorcerer's Essence added as automatic successes, against a difficulty equal to the target's Dodge MDV. A perfect dodge Charm also lets the target evade one attack per action. Treat each attack as environmental damage (15L, Trauma 4). No conceivable external defenses apply, because the attack comes from within the victim's own body. The victim applies nothing but her innate soak from Stamina or Charms.
@@ -2659,6 +2799,7 @@ duration = "Three days"
 target = "One ghost"
 source = "The Books of Sorcery, Vol II"
 pages = "121-124"
+effect = "Banish a ghost from Creation"
 description = """
 The ease of casting this spell displays the sheer power an experienced necromancer can wield over
 inhabitants of the Underworld. Banish Ghost has special timing rules. The character can cast it as a
@@ -2688,6 +2829,7 @@ duration = "Up to one week (resisted) or indefinite (unresisted)"
 target = "One ghost"
 source = "The Books of Sorcery, Vol II"
 pages = "124-125"
+effect = "Conceal face in black candle smoke"
 description = """
 The character spills drops of blood from both hands, and her Essence spins it into a cat's cradle of
 crimson strands. Pulling and tugging at any ghost in line of sight, the character shapes her target's corpus
@@ -2727,6 +2869,7 @@ duration = "One month (or indefinite for linked variant)"
 target = "One living creature"
 source = "The Books of Sorcery, Vol II"
 pages = "124-125"
+effect = "Bless a sinful soul with power"
 description = """
 Ghosts who enjoy possessing the bodies of the living love necromancers with this spell. Some even offer
 favors or long-term service in exchange for a single casting. Bless the Rapine Soul scourges a living target's
@@ -2753,6 +2896,7 @@ duration = "Until the event begins"
 target = "Up to six ghosts"
 source = "The Books of Sorcery, Vol II"
 pages = "124-125"
+effect = "Conjure fool-ghosts as servitors"
 description = """
 Spending 10 minutes, the caster sings a small pavilion and flag of pale blue flame into existence around her.
 Visible for leagues in the Underworld, it tugs at ghosts who see it. Any ghost who steps into the tent
@@ -2777,6 +2921,7 @@ duration = "Instant"
 target = "One creature"
 source = "The Books of Sorcery, Vol II"
 pages = "124-125"
+effect = "Scry/talk via blood-mirror"
 description = """
 Mirrors carry a great deal of metaphor that the Exalted can use in their powerful magic. (Description continues beyond page 125 — text cut off at page boundary.)
 """
@@ -2791,6 +2936,7 @@ duration = "Instant"
 target = "One skeleton"
 source = "The Books of Sorcery, Vol II"
 pages = "125-126"
+effect = "Animate corpses as puppets"
 description = """
 The necromancer utters a single syllable of deathly command, and a symbol representing the spell ripples toward its target and brands itself in the center of the skeleton's ribcage. The caster now commands that skeleton… not good if a person lives around it.
 The skeleton moves as the caster wills, from dancing a jig to murdering a child, for a number of hours equal to the caster's (Charisma + Occult). The skeleton acts with either its normal dice pools or those of its normal, fleshly owner. Living targets suffer an internal penalty on these actions equal to their Essence. A living target may resist, using muscles to struggle against the deathly force that animates his bones. Each action in which he does so, he suffers one level of unsoakable lethal damage. Doing so also consumes much more of the spell's energy, reducing the duration by one hour. When the remaining duration reaches zero hours, the spell ends.
@@ -2807,6 +2953,7 @@ duration = "3 hours"
 target = "One bonfire"
 source = "The Books of Sorcery, Vol II"
 pages = "125-126"
+effect = "Scry the past via a bonfire"
 description = """
 Bones of creatures that once lived are rare finds in the Underworld, but this spell requires one. The necromancer casts the bone on the ground and spits on it to evoke a large, blue bonfire that burns for three hours. The fire burns brightly for a thing of the dreary Underworld. It is visible for miles, and its vibrant glow attracts ghosts. Ghosts who peer into the fire can see their Fetters with perfect clarity. Ghosts are often willing to pay a necromancer for such a chance to check on the status of their Fetters.
 """
@@ -2821,6 +2968,7 @@ duration = "Indefinite"
 target = "One sailing vessel"
 source = "The Books of Sorcery, Vol II"
 pages = "125-126"
+effect = "Mark ship for ghost-pirate doom"
 description = """
 Sailing on the Sea of Shadows, the Underworld equivalent to the Inland Sea, is a dangerous prospect. Spectres sail the black waves on ectoplasmic flotsam, the sea's black waters seep in with their nightmares and poisons, and hekatonkhire rise from the depths for food.
 As the waters of the Underworld lap at her feet, the caster sings a lullaby to the dead. After seven minutes of song, a sailing ship rises to the waters' surface. Its sail is patched with human skin, and its hull repaired with pale bone. Its figurehead is a spectre, bound there to sing for the ship's protection.
@@ -2840,6 +2988,7 @@ duration = "Instant"
 target = "One ghost"
 source = "The Books of Sorcery, Vol II"
 pages = "125-126"
+effect = "Loop target's near-death moment"
 description = """
 A ghost's death was usually horrible—otherwise, the ghost would not have passions left unfulfilled or Fetters binding her to her unlife. Catching the gaze of a ghost, the caster can force her to experience that moment of death once more. The necromancer's player rolls (Willpower + Essence) against the ghost's Willpower. If the caster wins the contest, the ghost relives her death over and over again. Targets of this spell become Inactive immediately, but they may act normally on the next action. Each net success reduces the ghost's permanent Willpower by one. Lost Willpower returns at the rate of one dot per week. Ghosts reduced to 0 Willpower by this spell dissolve into permanent haunts of the site of their deaths.
 If the ghost's player wins the resisted roll, the ghost forces the effect back on the caster. The necromancer suffers a -2 internal penalty on his next action as vague and disturbing visions of his own death beset him. Whether these visions are truly prophetic is subject to some debate.
@@ -2855,6 +3004,7 @@ duration = "Indefinite"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "126-127"
+effect = "Don face of the recently dead"
 description = """
 To cast this spell, the necromancer must first oversee the painful sacrifice of a living human. As life flees the body, the caster invokes Death Mask to capture her victim's higher soul and wash away its sentience, leaving an empty shell of soul-stuff. (Victims of this spell never rise as normal ghosts, but their lower souls usually become hungry ghosts.) The spell then hides the cloak of ghostly plasm Elsewhere.
 Later, the caster can invoke the spell again and spend 10 minutes easing the soul-shell from Elsewhere and donning it. Acting too quickly can tear the soul and render it useless. While wearing the soul-cloak, the necromancer appears to all eyes like a normal ghost. A successful (Perception + [Awareness or Occult]) roll at a difficulty equal to the caster's Essence allows an onlooker to recognize an impostor spirit. Living creatures cannot see the plasmic disguise at all without using techniques to see Essence.
@@ -2871,6 +3021,7 @@ duration = "3 actions"
 target = "One reflective surface"
 source = "The Books of Sorcery, Vol II"
 pages = "127-128"
+effect = "Open gate to the Underworld"
 description = """
 Reflections look alive but are not alive, and this property gives the surfaces that create them an affinity with the Underworld. Caressing a reflective surface as he casts this spell, the necromancer opens a quicksilver doorway between Creation and the analogous point in the Underworld—or vice versa. Travel between the two is instantaneous, and the passage remains open for the caster's next three actions. Things can come through the other way, too. Once the connection fades, the road closes viciously. Mirrors crack, water boils, and silver tarnishes.
 """
@@ -2885,6 +3036,7 @@ duration = "Indefinite"
 target = "One ghost"
 source = "The Books of Sorcery, Vol II"
 pages = "127-128"
+effect = "Strike at intangible/dead"
 description = """
 On her Cast Necromancy action, the caster bites her lip and blows a frigid red mist, which pales into crystalline pink rime, onto her hand. On her next action, she then plunges her frost-covered hand into a ghost's corpus as a (Dexterity + Martial Arts) attack (which may target immaterial ghosts). On a successful strike, the caster draws from the ghost a transparent blade that dances with pale blue flame—this blade is Blind Edge. Failing to affect a ghost with the spell—i.e., failing the roll—inflicts one level of unsoakable bashing damage on the caster every minute, as the cold spreads throughout her body. This damage accumulates until the necromancer succeeds in drawing the blade from a ghost or until it freezes her to death.
 The weapon's base traits are those of a reaver daiklave (see Exalted p. 385). Each dot of her target's Essence lets the caster add one point to the weapon's Accuracy, Damage, Defense or Rate, but no individual trait may be raised above the necromancer's (Essence + Occult). This weapon inflicts half damage, calculated before soak, against living targets. Against the dead, it deals aggravated damage and can strike even immaterial ghosts.
@@ -2901,6 +3053,7 @@ duration = "1 hour"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "127-128"
+effect = "See in any darkness"
 description = """
 Anointing his eyes with blood from a pricked finger, the caster uses it to see around the borders between life and death. While this spell is active, the character may see from the Underworld into the analogous part of Creation, or vice versa. He can see only one world at a time, however. If he peers into one world while doing something in the other world that requires attention, such as combat, he suffers the typical penalties for blindness (Exalted, p. 152).
 Wards and spells against scrying can defeat this spell. Dusk Eyes lasts for one hour, during which time the caster may walk through a shadowland's border into either Creation or the Underworld without expending a mote. This spell has no real effect in shadowlands, where the two worlds are one.
@@ -2916,6 +3069,7 @@ duration = "Instant"
 target = "One haunt"
 source = "The Books of Sorcery, Vol II"
 pages = "128-129"
+effect = "Steal/edit a ghost's memory"
 description = """
 Violent or emotional deaths can leave haunts, locations where the event's imagery replays itself over and again, often timed to a phase of the moon or other celestial event. In Creation, haunts fade over time or wise men can exorcise them. In the Underworld, haunts are nigh permanent and difficult to remove. A fastidious necromancer, however, might not want the echoing cries of a pitiful spirit's death to contaminate her décor or motifs. Casting this spell erases a single haunt or relocates it to any place within (Essence x 5) miles.
 If she wishes, a necromancer can also use this spell to turn a cooperating ghost's memory into a haunt or create one from her own imagination. Creating a haunt requires a successful ([Intelligence or Manipulation] + Performance) roll from the ghost's or necromancer's player, depending on who designs the haunt. These rolls can be considered social attacks that inspire various emotions in beings that watch the haunt, or they can convince people that the haunt is evidence of a murder or a clue to a treasure. (The latter use would be a Manipulation-based roll.) In Creation, created haunts last for a number of months equal to the necromancer's Essence. In the Underworld, they are permanent. This use of the spell is often called Congealing the Last Thought, but it's the same spell.
@@ -2931,6 +3085,7 @@ duration = "Instant"
 target = "One ghost or multiple ghosts"
 source = "The Books of Sorcery, Vol II"
 pages = "128-129"
+effect = "Bind a ghost to your command"
 description = """
 The necromancer claps his hands, and his Essence rings like a dull but very loud gong. When the sound strikes a ghost, the ghost becomes sluggish and has difficulty moving. All ghosts within 50 yards of the caster move at half speed (minimum one yard per tick) and double the Essence costs of all movement-related Arcanoi. Creation mutes the sound of the gong, reducing the range to 25 yards.
 The caster may instead focus the spell on a single ghost in range. That ghost becomes unable to move at all, and the Essence costs of movement-related Arcanoi triple.
@@ -2946,6 +3101,7 @@ duration = "1 hour"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "128-129"
+effect = "Take face of any dead person"
 description = """
 Pulling his fingers as if drawing thread, the necromancer spins a shimmering silver line of Essence. It thickens into wire, then rotates into the third dimension to become a silver mace with a perfect, 12-faced head. The weapon is treated as an exceptional mace. Against ghosts and other spirits of the dead, the weapon adds a value equal to the necromancer's Essence to its base damage. Also, when a single blow with the mace inflicts levels of damage equal to or greater than a target's permanent Essence, the mace captures the ghost in one of its faces with a steely blue flash. The ghost then looks out from the face that captured it.
 Either after one hour or when the necromancer commands it (whichever comes first), the mace's shaft dissolves into dust and disappears. The silver mace head transmutes into rock crystal, holding all the ghosts absorbed by the mace. It has 12L/12B soak and requires 20 levels of damage to break. Countermagic shatters the crystal. Otherwise, only the caster can release the ghosts without violent means. Ghosts freed from the crystal have empty Essence pools.
@@ -2962,6 +3118,7 @@ duration = "Until midnight"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "128-129"
+effect = "Field induces nightmares in sleepers"
 description = """
 Laying his palm on the ground at the spell's climax, the caster scorches the earth with a black brand in the shape of his hand. Immediately afterward, hundreds of skeletal hands burst upward through the earth, stone or flooring to grab anyone present (except the caster), holding them with the strength of the dead.
 Everyone within 50 yards of the palm-shaped brand suffers a -1 internal penalty to all Dexterity-based actions as they are forced to dance away from the clutching hands. People also suffer a two-yard penalty to movement. Each tick on which someone takes a Move or Dash action, that person suffers a clinch attack from the hands, made with an attack pool of (caster's Essence + 5). Anyone who falls or is knocked down is automatically grabbed, then the clinch proceeds normally. The hands use the same pool to maintain clinches, and they attempt only to restrain their victims without doing damage. They are easy to destroy—they never defend and they have only one health level—but they are replaced within moments.
@@ -2978,6 +3135,7 @@ duration = "1 day"
 target = "One ghost"
 source = "The Books of Sorcery, Vol II"
 pages = "129-130"
+effect = "Grant five lesser ghost gifts"
 description = """
 Strong passions and Fetters enable the dead to resist the sweet call of Lethe, but the Underworld is a dull place. Its winds and parties are tepid, food tastes like dust, and habits are carved into stone. By anointing a willing ghost with five drops of blood, the caster lets a ghost experience the world as he did while alive. Blood is bright instead of faded pink, and the sobs of the enslaved dead sound joyfully abominable. Foods of the Underworld actually taste of something, and sacrificed foods from the living world are as sweet or savory as if they were fresh from the oven.
 Ghostly targets of this spell gain a number of Willpower points equal to the caster's Essence from the experience of the world to which they cling. This boon can take a ghost above his maximum Willpower. Both the enhanced senses and any Willpower above the maximum fade after one day.
@@ -2994,6 +3152,7 @@ duration = "Indefinite"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "129-130"
+effect = "Animate bone winds; tear flesh"
 description = """
 Gesturing at the ground around her, the necromancer makes it glow a faint ivory. One moment later, sharp knives of shattered bone and long, pink-and-red ribbons of flesh rupture the earth, rising to spin around the caster in a column one yard in radius. They obscure him and move with him, picking up the flesh and bone of the dead near him and shredding them to absorb them into the charnel whirlwind.
 This spell adds a -1 external penalty to all close-combat attacks made against the caster and a -3 external penalty to all ranged attacks into or out of the maelstrom. Additionally, anyone caught in the death-storm suffers three dice of lethal damage each action she is exposed to it. Anyone the winds kill gets torn apart and added to the storm. Each body added to the storm thus increases the storm's radius by one yard. Every two bodies added to the winds increase both external penalties and the dice of damage by one. A maximum of (caster's Essence x 2) bodies can be added to the storm before it stabilizes and grows no larger.
@@ -3009,6 +3168,7 @@ duration = "Instant"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "129-130"
+effect = "Wave melts flesh from bone"
 description = """
 Although Flesh-Sloughing Wave was designed as a utility spell for cleaning the rotted meat from bones for constructing temples or war machines for the Deathlords, the spell can be lethal in the world of the living. The caster shapes an ivory ball of Essence in her hands, then hurls it to the ground. It shatters there and releases a translucent ivory wave out to a range of (Essence x 5) yards. As the dome expands, it washes flesh away from the bones it passes. Flesh from any corpse is torn away, as is any dead flesh on a living creature. The living suffer a brief moment of pain as the wave tries to peel away their skin, muscle and fat from the bones beneath.
 Living creatures caught in the radius of the spell, excepting the caster, suffer ([Essence + Occult] x 2) dice of lethal damage. This effect can be dodged, but not parried. Fair Folk caught within this blast suffer double damage before soak, and those killed by the spell die in a rainbow flash as their thin veneer of order is torn away.
@@ -3024,6 +3184,7 @@ duration = "Instant"
 target = "One ghost"
 source = "The Books of Sorcery, Vol II"
 pages = "128-129"
+effect = "Bind a ghost's threads"
 description = """
 The caster's eyes become black pits as they gather in all the information they need about one ghost within his sight. He conjures visions of the ghost's Fetters and Motivation, which come one for each inactive action the necromancer takes after his Cast Necromancy action. This knowledge does not grant any inherent power over the ghost, but the knowledge is an advantage with regard to social and political leverage. This effect costs 10 motes.
 By spending an additional 10 motes, the necromancer may replace a target's Fetters and Motivation. Each one he wishes to change requires an inactive action after the Cast Necromancy action. To resist the necromancer's attempt to alter a Motivation the target's player rolls (Willpower) against a difficulty equal to the caster's Essence. The ghost's altered ties feel (and are) equally strong, but the ghost always knows they are of necromantic origin. Changes fade after a number of months equal to the caster's Essence.
@@ -3039,6 +3200,7 @@ duration = "Permanent (until death)"
 target = "One living creature"
 source = "The Books of Sorcery, Vol II"
 pages = "129-130"
+effect = "Send a ghost gently to Lethe"
 description = """
 The necromancer marks a person's forehead with a stylized cicada, symbol of eternal life and says the Five Words of Release. He thus binds the creature into the cycle of reincarnation. The cicada-glyph shines for a moment before disappearing, after which it is visible only to Essence sight. Many of those who associate themselves with death understand the rune's power. When the person dies, the glyph shines again. She does not become a ghost. Her spirit enters Lethe at once, unless some extraordinary magic or effort of will hurls her into Oblivion.
 Gentle Call of Lethe and Rune of Sweet Passing are incompatible spells. Unless the spell first cast is broken by countermagic, the other enchantment cannot be laid on an individual.
@@ -3054,6 +3216,7 @@ duration = "1 hour (or until target is killed)"
 target = "One creature"
 source = "The Books of Sorcery, Vol II"
 pages = "130-131"
+effect = "Creeping shadow drains targets"
 description = """
 Dragging from herself the worst of her inner darkness, the necromancer vomits a sticky, black ooze, which flows from her to attack an indicated visible enemy within 100 yards. The shadow has Physical Attribute and Martial Arts scores equal to the caster's Essence, health levels equal to her (Stamina + Essence) and can move at a dash. The viscous thing can be hurt only by magical attacks (against which it has no soak) or fire. The merest brush with an open flame will burn it up in seconds, leaving a tacky, noisome residue on everything it touched. A character clinched by the shadow while it burns takes six levels of lethal damage.
 The ooze always seeks to immobilize a foe and creep down his throat. It only makes grapple attacks, electing to do damage when in control of the clinch. If its target flees, the shadow pursues unerringly, no matter where he goes. Once it kills its target, the shadow falls quiescent within him, leaving no trace but the residue on his body and utter, unreflecting blackness in his eyes. If a victim can evade it for an hour, however, the shadow evaporates.
@@ -3069,6 +3232,7 @@ duration = "Instant"
 target = "Caster, or nearby Shadowlands Circle necromancy spell"
 source = "The Books of Sorcery, Vol II"
 pages = "130-131"
+effect = "Counter Shadowlands necromancy"
 description = """
 The necromancer's quick gesture trails blackness behind it like a shredded banner and wraps her in its darkness. The chill upon her flesh lasts until her next action. Until then, Shadowlands Circle spells targeted against her freeze and crack, falling in bleeding pieces at her feet—but the cold penetrates to her core, imposing a -2 internal penalty upon all physical actions until the countermagic fades on her next action. Alternatively, the necromancer may project the darkness outward, using the spell to disrupt any Shadowlands Circle spell that is currently in progress within a number of feet equal to (her Essence x 50).
 This spell has special timing rules. The character can cast it as a reflexive Shape Shadowlands Circle Necromancy action that takes 0 ticks. It follows all of the other rules for necromancy actions, and the character must take a Cast Necromancy action as her next normal action. Countermagic cannot banish ghosts, though it can destroy other current necromantic effects. Some spells can be countered after casting, if so noted in a spell's description.
@@ -3084,6 +3248,7 @@ duration = "Instant"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "131-132"
+effect = "Knife controls a dead body"
 description = """
 Spreading her fingers wide and slashing a sharp object beneath it, the caster cuts the threads that bind a necrotic semblance of life into a lifeless corpse. This spell has special timing rules. The character can cast it as a reflexive Shape Shadowlands Circle Necromancy action that takes 0 ticks. Her next action must be a Cast Necromancy action. All animate dead within 15 yards and a 90-degree arc (in a direction of the caster's choice) collapse, fully dead once more. Zombies affected must be extras, like those created with Raise the Skeletal Horde and Arisen Legion, among others. Necromancers can use Master Puppeteer's Knife to destroy animated corpses of greater power or intellect, such as those created by Exquisite Undead Aide, by focusing the spell's power on one zombie at a time. The spell does not affect undead war machines.
 """
@@ -3098,6 +3263,7 @@ duration = "(Essence x 5) minutes"
 target = "Shadowland border"
 source = "The Books of Sorcery, Vol II"
 pages = "131-132"
+effect = "Block sunlight in area"
 description = """
 Though deathknights and most denizens of the Underworld can force the border of a shadowland to obey their will, some necromancers need to move greater numbers of beings between realms. Channeling Essence through the Door-Opening Mudra forces the shadowland to deposit everyone who leaves in either Creation or the Underworld, as the caster chooses. The time of day or the individual's nature no longer matter. Midnight Shadow Sun affects 40 yards of border and ends once the caster is no longer within 100 yards of the spell or after (Essence x 5) minutes.
 """
@@ -3112,6 +3278,7 @@ duration = "1 week"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "131-132"
+effect = "Conjure protective dark cloak"
 description = """
 Snapping her fingers and scuffing a Neverborn's sigil in the ground with her sandal, the necromancer changes her environs to better suit her temperament. Over the next minute, the sky clouds over and blocks out the sun. Flora grays and fauna leave or become sickly and surly. Dull white bones of dubious origin emerge from the ground, and stone becomes flaking obsidian. Mother Darkness affects an area with a radius equal to (caster's Essence x 50) yards, occasionally more or less due to natural boundaries.
 Dead creatures are more comfortable in the area than they usually are in Creation. They recover one mote of Essence per full day spent in the area, and the Abyssal Exalted count the area as "trappings of the dead." The region returns to normal overnight after one week, unless the necromancer casts the spell in the Wyld. There, the Underworld's Essence deadens the region, reducing the Wyld's strength by one and remaining deathly until the Wyld reinfects it.
@@ -3128,6 +3295,7 @@ duration = "Permanent (until removed)"
 target = "One ghost"
 source = "The Books of Sorcery, Vol II"
 pages = "131-132"
+effect = "Strike target's Achilles weakness"
 description = """
 To cast this spell on a ghost, the necromancer first requires his victim's body—actually just the feet. The caster speaks the ghost's name, then ritually pierces the tendons above the heel of each foot with iron as he invokes the spell. From that point on, the ghost cannot harm the necromancer. If the ghost tries, either directly or indirectly, she immediately falls to the ground. Her legs do not support her, and she cannot move, even to speak, until she abandons the intention.
 Countermagic breaks this binding, as will removing the iron from the feet of the ghost's corpse—though the ghost is bound not to do so herself. If the body decays to the point where the nails fall from the body naturally, only countermagic can end the spell. Similarly, when the body is too decayed for the nails to fit snugly through the tendons, it is too late for this spell to be laid. Luckily for necromancers, some First Age ghosts' bodies are very well preserved.
@@ -3143,6 +3311,7 @@ duration = "30 seconds"
 target = "Labyrinth"
 source = "The Books of Sorcery, Vol II"
 pages = "131-132"
+effect = "See/strike through Underworld veil"
 description = """
 This spell can be cast only at night. A shimmering, faint shadow manifests in the air at waist height, like the reverse of light on water. As the necromancer chants for 10 minutes, the liquid shadow darkens, the earth trembles, and every animal nearby panics and tries to flee. At last, the necromancer slashes a blade into the inky surface, which falls and drains away. A rough-hewn onyx staircase now yawns at her feet.
 The staircase remains open for 30 seconds (or ticks) before closing with a horrible, sucking sound. It leads to the Labyrinth, whence there is no easy escape. Even the portal created by this spell will not allow a person to return, once she has placed her foot upon the first step.
@@ -3158,6 +3327,7 @@ duration = "Until dawn (or permanent with Willpower commitment)"
 target = "Corpses"
 source = "The Books of Sorcery, Vol II"
 pages = "132-133"
+effect = "Animate skeletons into army"
 description = """
 As lightning flickers from a roiling, black ball of Essence in her hand, the necromancer calls fallen bodies to serve her as zombies, using any corpses within 100 yards. She can animate up to as many zombies as she has dots of (Intelligence + Occult + Essence), per casting. The corpses burst from their coffins, claw their way from the earth or simply lurch to their feet on her next action. Mausoleum doors, being buried six feet under and so on cannot impede the undead in their rush to serve their new master, but a significant force could do so—such as a dramatic character personally restraining them or a spell designed for this purpose.
 Zombies stay animate for one scene if animated in daylight or until the next dawn. The necromancer can keep a permanent staff of zombies, but doing so requires committing one point of Willpower for every five zombies. If the necromancer spends those Willpower points, the zombies collapse, inanimate.
@@ -3173,6 +3343,7 @@ duration = "1 hour"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "132-133"
+effect = "Ringing rebuke harms undead"
 description = """
 Looking much like a common charlatan magician, the caster pulls two iron rings from thin air. Struck against each other, both ring with a slightly different tone. Even though the caster makes them "disappear" again, the ringing sounds persist for the next hour. Ghosts find the combined tones abhorrent and have difficulty approaching the caster. To come within five yards, a ghost must expend two points of Willpower. Even then, it has trouble attacking the necromancer. The caster adds an effective +2L/+3B soak against all attacks from ghosts that come from within the five-yard radius. When the character walks into a crowd of ghosts, they part for him unless any decided to spend the Willpower to endure the constant ringing.
 """
@@ -3187,6 +3358,7 @@ duration = "Permanent (until death)"
 target = "One living creature"
 source = "The Books of Sorcery, Vol II"
 pages = "132-133"
+effect = "Curse target with lethargy/death"
 description = """
 With a mixture of honey, blood and graveyard earth, the necromancer spends an hour painting dozens of bees on her victim's flesh along with the Fettering Sign. These symbols soak in with an insistent drone. Once the painted insects penetrate his skin, the target's spirit is bound to them. They will pull it from him at his death to become a ghost, buzzing in a cloud from his mouth and eyes. Several bees will then fly with supernatural speed to the necromancer, instantly telling her of the subject's passing.
 While the victim lives, countermagic can free his soul. Once he dies, nothing—not even the Zenith Caste anima power—can prevent his shade from rising. This spell does not otherwise bind or compel the new ghost.
@@ -3203,6 +3375,7 @@ duration = "1 hour"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "132-133"
+effect = "Throne of necromantic majesty"
 description = """
 The necromancer lets a drop of Essence-charged blood fall from her finger to the ground while she speaks the secret names of Stygia's monarchs. The ground shakes, and an enormous, skeletal fist bursts forth. Fingers uncurl to reveal jagged claws and the palm reclines until it is supine—the caster may then take her seat in the hand of a long-dead giant, beneath its niter-stained talons.
 While sitting there, the character's player adds two dice to all rolls involving intimidation, persuasion or perceiving true motives or lies. She can also see dematerialized ghosts as though they were material. Increase the spell's bonuses to three dice when directed at ghosts. These magical effects last one hour, but the skeletal throne remains until someone cuts it down (treat as a stone statue, per the table on p. 154 of Exalted) and removes it. If the throne should be destroyed before the hour is up, the magic ends. Finally, the bone fist can be summoned only from the earth. A building's second story, a ship's deck and other such locales are exempt.
@@ -3218,6 +3391,7 @@ duration = "Permanent (until broken)"
 target = "Bone"
 source = "The Books of Sorcery, Vol II"
 pages = "132-133"
+effect = "Trap a shade in an amulet"
 description = """
 Hungry ghosts can be trapped, but only once-living bone can hold them. The necromancer cuts a rune into a piece of bone while infusing it with Essence. Thereafter, if it ever touches a hungry ghost, that ghost is sucked in and caught. Only if the trinket breaks will the ghost be released.
 This spell may enchant a living creature's bone if the necromancer slices through its flesh to reach it, in which case the creature itself becomes a vessel for the next ghost it touches. This is not a comfortable experience for either the live victim or the hungry ghost. Although it feels fine during the day, the holding creature suffers anxiety, vicious urges and nightmares when the sun is down, and it will be rid of its captive only if the etched bone breaks.
@@ -3233,6 +3407,7 @@ duration = "Instant"
 target = "One living creature"
 source = "The Books of Sorcery, Vol II"
 pages = "133-134"
+effect = "Mirror reflects fate back as harm"
 description = """
 Throwing his arm out toward his victim in an imperious gesture, the caster speaks words of dark power. Onlookers often see the image of a great, black-robed necromancer with violet-hued eyes towering behind him in the same posture. The target's colors appear to invert for a moment as her Essence is juxtaposed with an exact opposite drawn from the Void.
 The spell is devastating to its victims' spiritual and physical well-being. Her bones shiver with the force brought against them, and her heart flutters with the cold of Oblivion. She suffers dice of raw lethal damage equal to twice her current remaining health levels, which ignores armor, and she loses motes of Essence equal to twice her permanent Essence (Peripheral before Personal).
@@ -3249,6 +3424,7 @@ duration = "Instant"
 target = "One ghost or two ghosts"
 source = "The Books of Sorcery, Vol II"
 pages = "133-134"
+effect = "Pollen silences/dazes targets"
 description = """
 The necromancer creates a pinprick-small hole in the world, leading directly into Lethe and the cycle of reincarnation. As the shining point of gray-white light hovers before her eyes, she may either take it in her hands or cast it toward a target within (Essence x 10) yards. Touching it, the necromancer's hands begin to glow. The next two times she touches a ghost, the ghost's player must roll (Willpower) at difficulty 3. Failure or a botch indicates that the call was too strong, and the ghost has moved on to Lethe. Touching a ghost might require a (Dexterity + Martial Arts) attack. Alternatively, the necromancer may launch the passage to Lethe at a single ghost within range. This (Wits + Occult) attack may not be parried except by a perfect defense (if a ghost can have such a thing).
 Whether or not a target of this spell succumbs to Lethe, the spell breaks certain necromantic bindings on a ghost. It counters ghost-binding spells of the Iron Circle as well as Charms of Essence 3 or less.
@@ -3264,6 +3440,7 @@ duration = "Essence days"
 target = "One creature"
 source = "The Books of Sorcery, Vol II"
 pages = "133-134"
+effect = "Soothe a tormented ghost"
 description = """
 Nephwracks and other mad servants of the Void hear the whispers of Oblivion in their minds. It drives them beyond sanity and inspires their horrifying schemes. With a soft caress of silver-bright Essence, the necromancer can protect a ghost from this torment. The creature affected by this spell can no longer hear the maddening murmurs, and most targets even revert to the sanity they knew before. The silence lasts for a number of days equal to the caster's Essence. A successful Willpower roll enables affected nephwracks and other spectres to act for a while like the ghosts they once were. They cannot fail this roll on purpose. Spectres so affected do not forget what they learned while mad, though, which makes this spell a potential source of guides through the Labyrinth. Spirits who never knew sanity simply become quiescent.
 Used on Abyssal Exalted or other characters with the Whispers Background, Smoothing the Crease-Worn Mind reduces the target's Whispers rating to 0 for its duration. Targets may reduce the duration of this effect by one day per point of Willpower spent for that purpose.
@@ -3280,6 +3457,7 @@ duration = "Indefinite"
 target = "One living creature"
 source = "The Books of Sorcery, Vol II"
 pages = "134-135"
+effect = "Brand a soul w/ permanent mark"
 description = """
 The necromancer shrouds a creature in death-aspected Essence and anchors it to him with a mystic brand on his palm or forehead. Near-mindless undead horrors such as zombies or hungry ghosts will not attack the Soul Brand's bearer unless they are specifically compelled to do so by necromancy or other magic.
 The Soul Brand lasts indefinitely. It may be removed by countermagic or its creator's whim, in which case it inflicts a number of dice of lethal damage equal to the caster's Essence as it burns away. If a branded mortal Exalts, the sigil vanishes painlessly.
@@ -3295,6 +3473,7 @@ duration = "Essence weeks"
 target = "One ghost"
 source = "The Books of Sorcery, Vol II"
 pages = "134-135"
+effect = "Erode stone or wear flesh smooth"
 description = """
 His hand a rigid claw, the necromancer gestures toward a ghost within 15 yards. Unless the ghost's player succeeds in a Willpower roll with a difficulty equal to the caster's Essence, the spirit flies through the air to the caster, where his grasping hand impales her. (Success on the roll ends the spell.) The ghost, now robbed of all vitality, slides from the necromancer's hand, leaving a pale pink heart behind. Turning his claw into a fist, the caster crushes the heart into a black diamond the size of a walnut. The rest of ghost's corpus boils away into a thin layer of dust.
 The diamond lets the necromancer draw on the Essence of the ghost and the Underworld, acting as a hearthstone of a level equal to the ghost's Essence. It can only replenish Essence, offering no additional powers. After a number of weeks equal to the caster's Essence, the false hearthstone shatters and dissolves, at which time the ghost re-forms or passes on to Lethe or Oblivion as normal. If it is exposed to the light of the Unconquered Sun, the hearthstone breaks and the spell ends.
@@ -3310,6 +3489,7 @@ duration = "Instant"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "135-136"
+effect = "Lure things from the dark waters"
 description = """
 The necromancer draws violet threads of Essence from the Underworld and weaves them into a net. As she completes the spell, the net expands to cover a large area. Any immaterial spirits of the dead caught within 25 yards of the caster become visible. The necromancer may give the net a tug and spend five extra motes to force all ghosts caught within it to materialize. Even ghosts who cannot normally materialize can be made tangible with this spell.
 Ghosts who are already material are not affected by this spell. Similarly, this spell has little effect in the Underworld, as ghosts there are material already.
@@ -3325,6 +3505,7 @@ duration = "Permanent"
 target = "One undead creature or necromantic automaton"
 source = "The Books of Sorcery, Vol II"
 pages = "144-145"
+effect = "Animate a corpse war-machine"
 description = """
 Uncanny as ghosts and zombies are, they do not inspire as much sheer terror as the undead siege engines employed by the Deathlords. A necromancer can create these horrors with this spell… and a suitable supply of corpses. Necromancers also call this spell Iron Reanimation.
 The character must first construct (or oversee the construction of) the monstrosity, with an extended (Intelligence + Medicine) roll to represent the labor of cutting and stitching together the bodies. The Storyteller may also ask for suitable (Intelligence + Craft [Varies]) rolls if the construction involves wood or metal bracing, built-in blades, alchemical treatments or other unusual construction techniques. The difficulty of the roll depends on the size and complexity of the weapon. For instance, a spine chain calls for one success per two segments of its body. Animating the monster then costs four motes per success required to create it. Walking war machines serve their creator to the best of their limited intelligence.
@@ -3341,6 +3522,7 @@ duration = "Essence weeks"
 target = "Fetters"
 source = "The Books of Sorcery, Vol II"
 pages = "135-136"
+effect = "Strip target of mercy/compassion"
 description = """
 Ghosts' Fetters provide them with some measure of strength. In addition to helping them resist the call of Lethe, they also give ghosts small amounts of Essence. In order to claim this Essence, a ghost must hold her Fetters close. As things of Creation, she keeps them close by wearing or bearing their tokens—copies of the objects themselves, or iconic representations of larger Fetters.
 The caster channels the black Essence of Oblivion into a sphere of coruscating power. He then casts it to the ground at his feet, where it shatters and looses a wave of energy that stirs even the deadened dust of the Underworld as it rushes outward 25 yards. As the crest, crackling with purple lightning, passes a ghost, the tokens that ghost bears are rendered inert. They no longer provide her with Essence, and she can no longer feel a tie to her Fetters. Weakened thus, ghosts are more susceptible to the unequal pulls of Lethe and the Void. The tokens remain inert for a number of weeks equal to the caster's Essence.
@@ -3357,6 +3539,7 @@ duration = "Instant"
 target = "Caster, or nearby Terrestrial Circle sorcery spell, or nearby Shadowlands or Labyrinth Circle necromancy spell"
 source = "The Books of Sorcery, Vol II"
 pages = "131-132"
+effect = "Counter Labyrinth necromancy"
 description = """
 This spell functions just like Iron Countermagic (see p. 30), but it also affects Labyrinth Circle necromancy and Terrestrial Circle sorcery.
 """
@@ -3371,6 +3554,7 @@ duration = "Special"
 target = "Ghost"
 source = "The Books of Sorcery, Vol II"
 pages = "125-126"
+effect = "Bind a heart in puzzle-box prison"
 description = """
 A necromancer can use this spell against a ghost whose Fetters and Motivation she knows, probably from previous use of Gathering a Ghost's Strings (see p. 29). She may instantly overwrite all of the ghost's Fetters and his Motivation without any defense.
 Once per year, the player of a heroic ghost bound by this spell can roll (Willpower) at a difficulty equal to the necromancer's Essence in order to return one of the affected qualities (Motivation or one Fetter) to its old state. He may continue the attempt each year, on the day of his death, until he returns to normal.
@@ -3386,6 +3570,7 @@ duration = "1 hour (extendable)"
 target = "Summoned warstrider"
 source = "The Books of Sorcery, Vol II"
 pages = "144"
+effect = "Bones rise as war-spirits"
 description = """
 Gesticulating like a mad conductor, the character draws forth long-buried bones from the earth around her. The rising bones grow pearlescent, then shine with a faintly greenish light. They lift from the ground and surround the caster in an osseous whirlwind. The winds lift the character from where she stands as the bones lock into place around her to form greaves and cuisse, gauntlet and vambrace, a helm with a visor and cuirass marked with the character's personal sigil, often a stylized version of an Exalt's icon. Finally, the spell forms a warstrider dire lance from the long thighbone of a dead giant or the stiffened spine and tailbone of an enormous creature.
 When casting the spell, the character gets to choose between either a common or scout warstrider, as defined by the appendix of Wonders of the Lost Age. Cured ligaments serve as her interface with the giant suit of bone armor that surrounds her, and she is attuned and ready to fight as soon as the spell is complete. The warstrider remains for one full hour; the bone-forged siege weapon then loses cohesion and falls apart. The caster may reflexively spend another 12 motes to purchase another hour. Otherwise, she lands safely on the ground surrounded by discarded bones. If the character casts the spell while wearing an attuned hearthstone rated 3 or more, the warstrider can run for a full day without any additional Essence before it falls apart. Hearthstones used in this way no longer provide the character with Essence or other powers for the spell's duration. Note that the fatigue a necromancer almost definitely accrues while piloting the warstrider does not magically dissipate.
@@ -3402,6 +3587,7 @@ duration = "Scene"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "145"
+effect = "Reap energy from a battlefield"
 description = """
 The character's anima leaps into its iconic form, while sparks of black lightning flicker around its edges. For the rest of the scene, the necromancer recovers one mote of Essence every time someone dies within a league of her. A glowing spark of soul-stuff rises from the body, races to her and dissolves in her anima. In settings of ongoing mass carnage, such as a battle, the Storyteller assigns how many motes the necromancer collects per action. The Magnitude of the smallest unit involved in mass combat is reasonable. (So, for instance, in a battle between two armies of Magnitude 7 and Magnitude 8, the character would gain 7 motes per action).
 """
@@ -3416,6 +3602,7 @@ duration = "Essence weeks"
 target = "One ghost"
 source = "The Books of Sorcery, Vol II"
 pages = "145"
+effect = "Resurrect target as dark servant"
 description = """
 The necromancer points a prepared ceramic collar at any ghost he can see clearly and snaps it. At that moment, the ghost feels an invisible collar tighten around her neck. The players of the necromancer and the ghost make a resisted (Essence + Willpower) roll. The caster may reduce the ghost's dice pool by one per additional five motes spent. Ghosts who win escape the spell. Those who lose feel the phantom collar close and lock with a snap before that sensation fades.
 When a ghost affected by this spell "dies," she has no opportunity to enter the cycle of reincarnation or fall to Oblivion. Instead, she re-forms before the caster after the normal time span (usually one or two days). She cannot completely die as long as this spell remains active. Powerful necromancers use this spell to torture ghosts to "death" without fear that the ghost will escape them into Lethe or re-form somewhere out of reach. After a number of weeks equal to the caster's Essence, the ghost feels the collar crack and fall off as the spell ends.
@@ -3431,6 +3618,7 @@ duration = "Essence months (or permanent with 1wp sacrifice)"
 target = "One ghost"
 source = "The Books of Sorcery, Vol II"
 pages = "145-146"
+effect = "Seven visions of fate/death"
 description = """
 The necromancer holds her hand before her and squints so she sees a ghost as standing or resting in her palm. Closing her hand into a fist, she captures the ghost and compresses his Essence into a small medallion of soulsteel etched with the ghost's name. This medallion qualifies as a two-dot artifact and requires two motes of commitment for use. Any person using it can substitute one of the captured ghost's Ability ratings for one of her own. Additionally, when using Lore to determine if the character knows something, her player may roll twice, using the ghost's Lore rating the second time. Charms may apply to this roll.
 Seven Visions Wisdom can capture only those ghosts with permanent Essence less than or equal to the caster's. After a number of months equal to the caster's Essence, or when it is struck by appropriate countermagic, the medallion unfolds into the original ghost, again whole and in command of his own facilities. He remembers what his Abilities were used for and the memories that were accessed (through Lore), but otherwise knows nothing about his time within the amulet.
@@ -3447,6 +3635,7 @@ duration = "Essence x 5 ticks"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "146"
+effect = "Travel via shadow-stones"
 description = """
 When the character takes the Cast Necromancy action, he cuts his palm. Uncannily red, Essence-charged blood spills and stains the ground. Five ticks later, a breeze blows outward from the vivid bloodstain. After 10 ticks, the gusting wind reeks of grave rot. On the 15th tick, a veil of shadow ripples outward from the center of the spell. Where it passes, grasses brown and wither, the earth becomes sterile and gray, and the sky grows dark. The area within 50 yards of the stain becomes a temporary shadowland.
 A number of ticks later (equal to the caster's Essence x 5), the forced blending of the worlds ends. Creation reasserts itself and shoves the Underworld away, but all creatures that were inside the spell's boundaries go with it. They are now in the Underworld, in a place analogous to their former spot in Creation. The caster may let the shadowland effect end earlier—as early as her very next action after it opens.
@@ -3463,6 +3652,7 @@ duration = "Until next sunrise"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "146"
+effect = "Shield of bones that fly out"
 description = """
 Crimson Essence flows from the caster's heart to her outstretched hand, where it coalesces into a phantasmal red fire. She crushes it, and a blood-red halo bursts outward from her across the battlefield. Before it fades away at 25 yards, any skeleton or zombie the expanding ring touches glows for a moment with a faint red fire. Thereafter, until the next sunrise, the necromancer may reflexively spend three motes before damage against her is rolled in combat Step 10 to shunt all remaining dice onto one of the affected undead. Damage is then rolled as normal, but the result is applied to the affected zombie.
 Only a number of the nearest walking dead equal to (caster's Essence x 5) are bound to the caster's life, and they must stay within 50 yards to be valid targets for the redirected damage. On a successful (Perception + [Awareness or a relevant combat skill]) roll, any onlooker can notice that attacks don't hurt the caster. The caster gets struck with a goremaul (for instance), but a nearby skeleton shatters; the wavecleaver that just kissed the caster's chest leaves her unharmed, but a grinning gray wound opens on a zombie.
@@ -3479,6 +3669,7 @@ duration = "7 Underworld sunrises"
 target = "One creature or area"
 source = "The Books of Sorcery, Vol II"
 pages = "146"
+effect = "Silence target's prayers/cries"
 description = """
 As he shapes this spell, the necromancer hears the whispered prayers snaking through the air around him—prayers for clemency, for honor, for luck, love, money or vengeance. He whispers too, and more voices flow from his mouth than possible for a single person. Once the spell is cast, his whispers become the perfect opposites of those he heard, canceling out the prayers' power.
 Targeting an individual ghost severs that spirit from prayers given to her. She gains no benefit from any Cult rating or other prayers until the Underworld's sun has risen seven times. If a living creature is the spell's target, she treats her Cult rating as half normal (round down) for the duration.
@@ -3495,6 +3686,7 @@ duration = "Instant"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "146-147"
+effect = "Curse: targets near you die slowly"
 description = """
 This spell has special timing rules. The character can cast it as a reflexive Shape Labyrinth Circle Necromancy action that takes 0 ticks. After that, the Cast Necromancy action takes just a single tick. It is the last action the character ever takes.
 When a necromancer with this spell knows he's about to die anyway, he can invoke the Void and turn his Essence against itself. His body implodes into a vortex of darkness that swiftly expands again into a sucking whirlpool. Everyone and everything caught within a number of yards equal to the suicidal necromancer's Essence is swept into the black vortex and disappears. One can escape this fate with a perfect dodge. The whirlpool cannot be parried or soaked, however, even by other perfect effects. After three ticks, the vortex drains away, leaving nothing behind.
@@ -3512,6 +3704,7 @@ duration = "Permanent (once animated)"
 target = "War machine"
 source = "The Books of Sorcery, Vol II"
 pages = "147"
+effect = "Rouse undead beast to fury"
 description = """
 This spell is a heightened version of Walking War Machine (p. 35). Necromancers also call it Onyx Reanimation. Spurring the Beast of War animates an undead war machine. Most of the rules for Walking War Machine apply, but a necromancer needs both Medicine and Craft (Fire) at 4 or higher even to attempt such fantastic creations. Each roll in the construction attempt represents two full days of work, and the spell costs four motes for each success on the construction roll.
 Deathlords use this spell to create their "bonestriders," casting it in such a way that the completed mechanism does not take on its own life but responds perfectly to an attuned rider. Nor have the shrewd Deathlords ignored the possibilities of other undead weapons to be "worn" or piloted by their Abyssal and ghostly servants.
@@ -3527,6 +3720,7 @@ duration = "Instant"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "147"
+effect = "Steal a victim's last breath"
 description = """
 The unfortunates within (Essence x 5) yards of the necromancer gasp, lungs clenching as bits of their souls trail from their lips in bright wisps. Each takes a die of lethal damage, soakable only with Stamina. For every health level thus inflicted, the necromancer gains one mote.
 """
@@ -3541,6 +3735,7 @@ duration = "Scene"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "147-148"
+effect = "Specter-whip strike (lethal)"
 description = """
 The necromancer slashes open her skin and the black skeleton of a serpent lunges from the wound to strike enemies within (Essence x 4) yards. The lash acts on the same tick as the necromancer, but independently of her, using a dice pool equal to her (Wits + Occult + Essence) to attack. It cannot parry, but it can lash like a whip or attempt to twine its body around a foe, grappling him. The lash inflicts raw bashing damage equal to the caster's (Strength + Essence). More importantly, the player of anyone struck by the spectre lash must roll her character's Essence. Failure means the spectral serpent lodges its fangs in the target and drains away his life. Such a victim falls with his skin tight as a drum against his bones and a look of horror frozen on his face. Extras die outright. Other characters are merely knocked straight to their last Incapacitated health level with bashing damage.
 At the end of the scene, the skeletal snake struggles from the necromancer's flesh to land on the ground, where the fallen bones calcify into unmoving onyx.
@@ -3556,6 +3751,7 @@ duration = "Special"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "148"
+effect = "Bind a ghost as voice-familiar"
 description = """
 This spell gives a mouth to the inchoate ramblings of the Neverborn. The caster surrenders her body to Oblivion's whispers. Her legs bend, she balances impossibly on the balls of her feet, and her body seems suspended by invisible puppeteer's strings. Her head lolls to one side and her jaw opens, and the never-spoken mad words of the dead Primordials issue from her unmoving mouth, magnified by the spell's power.
 Any ghost within a number of miles equal to the caster's Essence hears these whispers, and their players must roll (Integrity + Willpower) at a difficulty equal to (caster's Whispers + 5) to resist the taint. Any who fail have been poisoned, mind and soul, as if they had been exposed to the whispers of Oblivion. They soon become spectres and belong to the Abyss. Success means the ghost merely loses one point of Willpower.
@@ -3573,6 +3769,7 @@ duration = "Essence x 10 minutes"
 target = "Mirror"
 source = "The Books of Sorcery, Vol II"
 pages = "148"
+effect = "Bone-shard funeral attack"
 description = """
 A drop of blood and an imperious gesture links a convenient mirror to any other mirror in the world (Creation or the Underworld, but not crossing between worlds). The caster looks into her mirror, sees out the other as if through a window and hears what's happening at the other location. Anyone at the targeted mirror can see and hear the caster, too.
 The only limit is that the caster must have some idea of the target mirror's location: Trying to look through the mirror in the Tri-Khan of Chiaroscuro's council chamber doesn't work if you don't know where that chamber is in the palace. If you don't know where the palace is, the best you can do is a mirror somewhere in Chiaroscuro. Arcane links to a location (such as dust from the palace, or a thread pulled from an arras in the council chamber) enable accurate targeting.
@@ -3590,6 +3787,7 @@ duration = "Permanent"
 target = "Ghost"
 source = "The Books of Sorcery, Vol II"
 pages = "138-139"
+effect = "Command animated flesh as army"
 description = """
 A necromancer using this spell can perform all of the effects afforded by Black Candle Visage (see pp. 23-24). He may also do the following:
 • Reduce Attributes: One success per dot. By twisting the ghost's flesh and her nature, the caster may reduce any of his victim's Attributes.
@@ -3609,6 +3807,7 @@ duration = "Until next sunrise"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "149"
+effect = "Aegis of Void protects the caster"
 description = """
 The necromancer's aura seems to catch the light and shine… before she peels off that light, wads it into a ball, and consigns it to Oblivion with the Three Unspeakable Words. Until the next sunrise, a halo of shadow and emptiness hangs about the necromancer. The Abyssal Aegis adds the necromancer's permanent Essence to her bashing and lethal soak. More importantly, she becomes immune to magic designed to hurt her specifically because she is aspected with death. Therefore, although a Zenith Caste can still attack her with a blade, his anima power cannot raise his minimum damage. A Blazing Solar Bolt vanishes in a swirl of shadow. Not even Solar Circle sorcery designed to harm creatures of darkness will have the desired effect against the necromancer.
 """
@@ -3623,6 +3822,7 @@ duration = "Until next dusk"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "149"
+effect = "Harvest tormented souls en masse"
 description = """
 As the sun sets, the necromancer races to journey around an area that may be as big as he wishes as long as he surrounds it by midnight. The character can ride, but not use any sort of magic to speed his passage. Once he connects his path's end with its beginning, the stars within the circle fade, and clouds smother the heavens. Until the next dusk, the area remains heavily overcast and every person who dies a violent or painful death rises as a hungry ghost—even in daytime. The ghosts are not slaves to the necromancer, but they won't attack her.
 """
@@ -3637,6 +3837,7 @@ duration = "Instant"
 target = "Mirror"
 source = "The Books of Sorcery, Vol II"
 pages = "132-133"
+effect = "Open the gate without bars"
 description = """
 The necromancer touches a mirror as his anima flashes silver. The mirror ripples, sucks him in and bursts into slivers as soon as the caster is gone from sight. Another mirror of the caster's choice immediately turns black and shatters outward, expelling the character—though the necromancer simply floats to the ground with quiet dignity. He may step out of any mirror in the same world. If he doesn't know of a particular mirror, he may aim for a location and steps from the nearest mirror. Spells that block teleportation such as Private Plaza of Downcast Eyes (see The White Treatise, p. 55) shunt the necromancer to the mirror nearest the warded location.
 """
@@ -3651,6 +3852,7 @@ duration = "Up to 1 hour"
 target = "Recently dead creature"
 source = "The Books of Sorcery, Vol II"
 pages = "142-143"
+effect = "Seal a tomb beyond opening"
 description = """
 Barred Tomb functions like Denying the Call (see pp. 39-40), except that its binding is stronger. Souls are bound back to life for up to one hour (or until slain again). They also possess a number of unwounded health levels equal to the caster's Essence, each of which is vulnerable only to aggravated damage. Barred Tomb cannot be cast on someone who was previously revived by this spell or Denying the Call. Likewise, Denying the Call doesn't work on someone who was once revived by Barred Tomb. Ghosts that rise after being targeted by this spell have only a single health level.
 Barred Tomb is the utmost limit to necromantic attempts to deny death. Even the Obsidian Circle cannot truly return the dead to life.
@@ -3666,6 +3868,7 @@ duration = "Scene"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "149-150"
+effect = "Birth sorrow that breaks minds"
 description = """
 Only the Neverborn themselves can tutor a necromancer in this spell. All other attempts to teach it result in failure, and committing it to paper results in gibberish. The character must have the insanity, influence and raw power to approach the tombs of the Neverborn that drift within the Mouth of the Void in Stygia, constantly devoured by the Abyss but never diminishing. There, the necromancer communes with one of the chthonic entities, and together, they devise her personal expression of this spell.
 Birth of Sanity's Sorrow has special timing rules. The character can cast it as three reflexive Shape Void Circle Necromancy actions that take 0 ticks, regardless of previous actions or Charms used. She may do so, however, only when she is reduced to the Incapacitated health level—not before. When she does, her body swells and becomes the monster she and her Neverborn master devised. That creature has these qualities:
@@ -3686,6 +3889,7 @@ duration = "Instant"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "143-144"
+effect = "Bestow undying black faith"
 description = """
 A necromancer who casts this spell places all his trust in the Neverborn. He must believe they value him and his dedicated service. The character carves his prayer to dead gods into the corpus of a ghost, hurls this sacrifice into the Mouth of the Void, then spills his own blood into the vast emptiness.
 And after the paired sacrifices of death and life, he leaps in himself!
@@ -3704,6 +3908,7 @@ duration = "Essence months"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "150"
+effect = "Chain souls in black storm"
 description = """
 This spell summons a rain of arrows like that created by Clamoring Shackles (see pp. 37-38). On his Cast Necromancy action, the caster's player makes a single (Perception + Archery) attack roll that applies to all targets within a 100-yard radius of a point the necromancer picks within 500 yards. Any arrow that misses dissolves into a foul black smoke. Each ghost slain by an arrow suffers the same effects as in Clamoring Shackles, and the chains thus created latch onto the nearest surviving ghost. Two sets of chains will not latch onto the same ghost; one instead finds a new target.
 These chains cannot be made permanent, but they last for a number of months equal to the caster's Essence, at which point they dissolve into acrid smoke.
@@ -3720,6 +3925,7 @@ duration = "Scene"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "150"
+effect = "Conjure blood from past slaughter"
 description = """
 As the necromancer's anima bursts into its full iconic form, insubstantial serpents of Essence erupt from its edges and vanish. For the remainder of the scene, a bloody haze and the sound of distant death agonies surround the necromancer. Every time someone within a league of the sorcerer dies a violent death, a phantom snake appears coiled around the body as it falls, then withdraws to the caster in a dark blaze. Each death heals the necromancer of a health level of bashing or lethal damage, to a maximum of her Essence in health levels per action.
 """
@@ -3734,6 +3940,7 @@ duration = "Stamina hours"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "150-151"
+effect = "Monsoon of blood, lethal area"
 description = """
 The necromancer cuts her own palm and cups the blood in her hand. She raises her hand, and her anima blasts the blood into the sky in a growing, rising fountain. At a mile's height, the blood-geyser spreads into a huge, disk-shaped cloud that is a number of miles wide equal to the necromancer's Essence. The necromancer can take other actions once she casts the spell, though the cloud takes an hour to reach its full extent. And then it rains blood.
 The sun is blotted out. For a number of hours equal to the caster's Stamina, the sanguine rain falls and the affected area is considered part of the Underworld. Ghosts, for example, are material. Abyssal Exalted also respire Essence naturally, while spirits and other Exalted do not. In addition, even the most peaceful or inoffensive animals kill each other and cannibalize the remains—or commit suicide in any way they can. The stench of gore makes people sick. Every character's player rolls (Stamina + Resistance) for each hour of action, to resist a -1 external penalty to all actions while the rain lasts. For a year and a day afterward, outbreaks of every possible disease haunt the area, impregnated in the water and crops that grow there, while the stench of rotting blood attracts all the undead for miles.
@@ -3749,6 +3956,7 @@ duration = "Until released or a Neverborn reclaims it"
 target = "Area (Labyrinth)"
 source = "The Books of Sorcery, Vol II"
 pages = "151"
+effect = "Warp reality through dream-clay"
 description = """
 As she stands in the damned grandeur of the Labyrinth, with not a living thing around her, the caster utters a 10-minute prayer to the black will of the Neverborn. As she finishes, the whitest Essence seeps from the walls and floors around the three sacrificial ghosts she brought with her. They fade from existence and become nothing, swallowed by white Oblivion to appease the fickle dreaming of the Neverborn that is the Labyrinth.
 Once cast, the character gains complete control over (Essence x 10) cubic miles of the Labyrinth, in any configuration she desires. Landscapes appear as she imagines them, becoming her playground instead of the expression of the Neverborn's nightmares.
@@ -3771,6 +3979,7 @@ duration = "Instant"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "151"
+effect = "Force target into empty future"
 description = """
 The pure and foreboding black of a starless, moonless night flows outward from the caster's eyes over her entire body. As she speaks the forbidden words of the spell, waves of darkness wash from her into the surroundings, highlighting all ghosts less than (Essence x 10) yards away in clotted shadow. For each ghost affected, people nearby hear the faint sound of glass breaking or tears shattering on a hard, unforgiving ground. Ghosts touched by the spell immediately lose all necromantic bonds and any other bindings produced by Charms whose minimum Essence does not exceed the caster's own. Players of affected ghosts must roll their Willpower at difficulty 5, however, to keep the ghosts from being sucked into Oblivion. For each ghost the necromancer consigns to the Void, she regains one mote.
 """
@@ -3785,6 +3994,7 @@ duration = "Until shadowland complete or engine destroyed"
 target = "Area and conjured automaton"
 source = "The Books of Sorcery, Vol II"
 pages = "151-153"
+effect = "Engine grinds life from area"
 description = """
 To cast this spell, a necromancer first constructs a scale model of a necromantic mechanism, from components all derived from a single human body. Doing so requires an (Intelligence + Craft [lesser of Fire or Water]) roll at difficulty 5. The caster holds his palm-size invention level with his eyes and pours his Essence into it. When he drops his hand, the forsaken life engine becomes a colossal reality, sitting hundreds of yards away where his perspective put it.
 The forsaken life engine's cogs are carved from slices of thigh- and arm-bones and reinforced with iron. Its cables are woven from sinew and spinal cords. None of it would run without bile-tainted blood as lubrication. Twenty feet wide and almost as tall, heavy iron beams raise it even higher so a yeddim could walk beneath it. Its bottom features a gaping black hole ringed with teeth. Smoke trickles upward from the engine's pipes like blood trickling from a dead man's mouth. It is an automaton with the power to make shadowlands.
@@ -3805,6 +4015,7 @@ duration = "Essence consecutive Speed 5 actions"
 target = "Caster and spectres"
 source = "The Books of Sorcery, Vol II"
 pages = "153-154"
+effect = "Invoke the Void grandmother"
 description = """
 The ground shakes with increasing violence as this spell nears its completion, then the caster speaks two words in a rare Old Realm dialect. Her image fades, until she looks like a two-dimensional hole in the universe, one that might lead directly into Oblivion. And out of that hole pour spectres.
 Each spectre is uniquely (and horrifyingly) disfigured, but they share some qualities. Their skin looks like obsidian. Their claws and teeth drip blood and shed tatters of flesh and torn plasm when they move. Eminently prepared to kill for the necromancer and the Neverborn, they constantly whisper the insanities they hear from their slumbering masters' dreams.
@@ -3823,6 +4034,7 @@ duration = "Permanent (until caster dies or erects a second)"
 target = "Conjured citadel"
 source = "The Books of Sorcery, Vol II"
 pages = "153-154"
+effect = "Raise a void citadel"
 description = """
 In the gloom of a shadowland, the necromancer stands above a hole so deep that torches cannot light its depths. At his behest, 100 people have been sacrificed, their teeth and eyes lining the pit's edge. At last, he cuts the Last Sign of the Labyrinth over his own heart, spreads his arms and steps off the edge—and his foot comes down on the roof of an iron tower that surges up into the middle of the hole. It keeps rising until five minutes later, an entire fortress of black iron, basalt and obsidian blights the earth. Any onlooker who doesn't run for her life will be crushed as the citadel grows.
 Each citadel is unique, but defensible and complete. Its walls bear the mazy marks of the Labyrinth. The eyes of the sacrifices line its halls, glowing brightly enough to illuminate them; mosaics of their teeth adorn the walls, and their skins upholster furniture carved from bone.
@@ -3841,6 +4053,7 @@ duration = "Permanent (once animated)"
 target = "War machine"
 source = "The Books of Sorcery, Vol II"
 pages = "154"
+effect = "Vast engine of destruction"
 description = """
 This spell is the ultimate version of Walking War Machine (see p. 35). Necromancers also call it Obsidian Reanimation. A necrosurgeon must have Medicine and Craft (Fire) both at five dots in order to construct a war machine for this spell to animate. Each roll in the construction attempt represents three full days of work, and the spell costs two motes per success on the extended roll.
 """
@@ -3855,6 +4068,7 @@ duration = "24 hours"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "135-136"
+effect = "Claim lordship over local dead"
 description = """
 The necromancer's caste mark burns a baleful red on her forehead. For the next 24 hours, she may command any creature of death with a lower Essence than her own as she wills, and such creatures will not attack her—even if they hate her. Only Abyssal Exalted, Deathlords and Neverborn can resist this perfect Servitude effect.
 """
@@ -3869,6 +4083,7 @@ duration = "Instant"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "154-155"
+effect = "Open a mouth of the Void"
 description = """
 The caster brandishes a specially prepared, bone-handled, obsidian knife in three occult patterns, then pricks himself at various point of the body where strong flows of Essence and blood coincide. What flows from the character's wounds is not blood, but cold black oil. Indeed, he feels no pain, just the numbness of Oblivion seeping from his veins. The black oil races outward from the necromancer, ignoring gravity, until it covers a 40-yard radius around him. Then, like water spilling over the edge of a birdbath, the inky Essence falls up, eliminating all light within its range.
 Within the perfect darkness, obscene voices whisper about joyful torture and mutilations, chill hands with sharp claws caress the living and cold, lifeless teeth nibble at their flesh and their delicious souls. Mundane sounds are muffled, and screams occasionally rip through the darkness. One frozen moment later, the perfect shadows seep away through the cracks in the world, taking with them people's life and Essence. Every living creature within the shadow except the caster (who might not qualify as a living creature anyway) suffers 30 levels of aggravated damage. Where the thick darkness lay, the ground now rots and dies, and it is strewn with pitted chunks of strangely shaped obsidian—the transformed remains of creatures the spell kills.
@@ -3885,6 +4100,7 @@ duration = "Committed or Permanent"
 target = "War machine"
 source = "The Books of Sorcery, Vol II"
 pages = "155-156"
+effect = "Become an avatar of Oblivion"
 description = """
 Animating an undead war machine is sometimes just the first step in making it more formidable. Oblivion's Avatar endows a walking war machine with the ability to carry the pure entropy of the Void into Creation, or wherever the device goes. For every 10 motes spent (and committed), the character can endow large necromantic weapons, such as enhanced spine chains or bonestriders, with any of the listed powers. Alternatively, the character can spend 40 motes and one dot of permanent Willpower per power to make them permanent.
 • Chill of the Abyss: Rime forms on the weapon, which sucks warmth from the living. Victims feel their heat draining away into the Void. Treat the area within 10 yards of the war machine as a supernatural ice storm (see Exalted, p. 131) to determine its effects on all living creatures in that radius.
@@ -3911,6 +4127,7 @@ duration = "Instant"
 target = "Caster, or nearby Terrestrial or Celestial Circle sorcery spell, or nearby Shadowlands, Labyrinth or Void Circle necromancy spell"
 source = "The Books of Sorcery, Vol II"
 pages = "156"
+effect = "Counter Void Circle necromancy"
 description = """
 This spell functions just like Iron Countermagic (see page 30), except that it can affect all necromancy. Obsidian Countermagic also dispels sorcery of the Terrestrial or Celestial Circles.
 """
@@ -3925,6 +4142,7 @@ duration = "Special (1 dot per month decline, then 1 dot per month recovery)"
 target = "Demesne"
 source = "The Books of Sorcery, Vol II"
 pages = "156"
+effect = "Poison region's water/spirit"
 description = """
 The necromancer meditates quietly at the geomantic center of a demesne for number of days equal to its power rating. Her anima smolders around her, seeping into the land. The caster must commit the full 50 motes when she begins the spell and maintain that commitment until its end, when she sacrifices them completely.
 Her communion with the demesne infects that demesne with the deathly power of the Underworld. It dies slowly, losing one rating dot per month until it reaches level 0. The necromancy has then subverted the demesne. Its aspect changes to Abyssal, then regains one dot per month, until it reaches its original power. If a manse is currently capping the demesne, it changes aspect as well.
@@ -3941,6 +4159,7 @@ duration = "1 hour (Underworld)"
 target = "Caster"
 source = "The Books of Sorcery, Vol II"
 pages = "156-158"
+effect = "Conjure pyre-flame guardian"
 description = """
 The caster must possess and swallow a soulsteel vial—one the size of a pinky finger joint—that contains pyre flame. Once she performs that action and finishes the spell's casting, the necromancer swells to twice her normal size. The screams of a dozen random and unlucky ghosts in the Underworld resound around her. Each shrieking ghost is instantly shaped into soulsteel that fuses to the caster's skin, face, hair and eyes. Once she is protected, the caster's skin bursts into a sickly green bonfire of pyre flame.
 Her new skin gives the character +15L/+15B soak and 12 Hardness. She adds to her Strength rating a value equal to her Essence, and the corrosive flame that engulfs her inflicts three dice of aggravated damage on anyone foolish enough to attack her barehanded. Foes who strike her with a weapon not forged of a magical material end up with weapons burning in their hands, soon to be consumed. Even the mightiest artifact weapons of the Exalted become dangerous, because even though they burn slowly, they can carry the flame to other targets. A character who continues to wield a weapon after it has been smeared with the sticky fire suffers its basic environmental damage unless he wears gauntlets of the magical materials or is otherwise immune to pyre flame, at least until he scrapes it off. Victims of the necromancer's barehanded attacks are likewise afflicted with the touch of the pyre flame.
@@ -3958,6 +4177,7 @@ duration = "Permanent curse until dispelled"
 target = "Area"
 source = "The Books of Sorcery, Vol II"
 pages = "158"
+effect = "Raise screaming undead army"
 description = """
 After the Cast Necromancy action, the necromancer paces out a path in Creation, dropping a small dusting of salt crystals every 30 steps. The trail he walks blackens and dries out, as if it had been burned and salted by enemies. Once he rejoins his beginning, the spell's effects appear to end.
 The area enclosed by his travel has been poisoned with a lasting curse of undeath. Roiling necromantic energy lies concealed just below the surface. Any time a living creature dies within its boundary, the ground softens and crumbles to absorb it. The corpse rises again a few minutes later, its skin years rotted but its bones strong and claws sharp.
@@ -3975,6 +4195,7 @@ duration = "Permanent (until dispelled)"
 target = "One living person"
 source = "The Books of Sorcery, Vol II"
 pages = "157-158"
+effect = "Curse target's lineage"
 description = """
 Concluding the spell, the caster reaches out and lightly caresses the face of her victim. Her Essence-charged touch sears the person, leaving a scar that no magic or medicine can heal. A (Dexterity + Martial Arts) roll is needed for the necromancer to touch her victim if that person tries to avoid her.
 Over the next week, identical brands appear on all the target's children, and any of his later descendants are born displaying the mark. Otherwise, someone so marked suffers no other effects during his lifetime.
@@ -3993,6 +4214,7 @@ duration = "Year and a day"
 target = "Summoned hekatonkhire"
 source = "The Books of Sorcery, Vol II"
 pages = "158-162"
+effect = "Summon a hundred-handed colossus"
 description = """
 Hekatonkhire is the general term for the largest and most powerful dead things that refuse to stop moving. They are behemoths, slain but too invested with meaning to fade away completely. They are the memories and nightmares that stir the Neverborn in their sleep, shaking the Labyrinth enough to spawn a monster from their imaginations or, perhaps worse, their fears. And they are the residual remains of the Primordials' subsidiary souls as they were slain and fell through Creation into the new sunless realms—necromantic analogues of Second or Third Circle demons.
 Casting this spell requires a six-hour ritual, in which the character sacrifices both a mortal and a ghost (or a single Ghost-Blood). The ritual involves a great deal of ritual paraphernalia, none necessary but all advantageous: Casting this spell without at least Resources 3 worth of prepared ingredients and reusable tools worth at least Resources 4 levies a -1 external penalty on the caster's first roll to dominate the creature's will.
@@ -4010,6 +4232,7 @@ duration = "2 hours (extendable)"
 target = "Summoned warstrider"
 source = "The Books of Sorcery, Vol II"
 pages = "160"
+effect = "Cocoon emerges as Void warrior"
 description = """
 Like Rattled Bones of War (pp. 43-44), Void Cocoon Warrior creates a warstrider for the character to pilot in battle. The necromancer's words and mudras call a great black nothingness out of the world around her. Blobs of gray-black metal appear about her and lock into place, lifting her into the air until she sits in the cockpit of a 20-foot tall noble warstrider, interfacing with it through tendrils of solidified Void that burrow into her brain and spine. She may choose to sacrifice a lethal health level in the casting, which causes her to cough up impossible volumes of blood into the gray-black Oblivion the spell sheathes around her. The spell-forged metal turns a red-stained black and swells, growing another five feet in height or thickening and becoming more squat—the character makes the warstrider into either a colossus or a royal. The sacrificed health level does not heal until after the spell ends.
 The Void Cocoon Warrior appears with a grand daiklave, humming softly as it annihilates the air around it with the power of the Abyss. At the caster's option, she may adorn her construct with Void-crafted artifacts of war. She can summon into existence a black, Oblivion-twisted version of any ranged artifact or Essence weapon that can normally be mounted on warstriders. Doing so increases the spell's cost (and commitment) by the Essence required to attune a mounted version of that weapon.

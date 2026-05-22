@@ -10,9 +10,9 @@ use lopdf::Document;
 
 use crate::character::{AbilityKind, AttributeKind, Character, VirtueKind};
 
-use super::acroform::{set_checkbox, FieldIndex};
-use super::field_map;
 use super::PdfRenderError;
+use super::acroform::{FieldIndex, set_checkbox};
+use super::field_map;
 
 pub(super) fn fill(
     doc: &mut Document,
@@ -25,6 +25,7 @@ pub(super) fn fill(
     fill_virtue_dots(doc, index, c)?;
     fill_willpower_dots(doc, index, c)?;
     fill_essence_dots(doc, index, c)?;
+    fill_essence_overflow_dots(doc, index, c)?;
     fill_background_dots(doc, index, c)?;
     fill_intimacy_dots(doc, index, c)?;
     Ok(())
@@ -125,13 +126,73 @@ fn fill_essence_dots(
     index: &FieldIndex,
     c: &Character,
 ) -> Result<(), PdfRenderError> {
-    // Sheet caps essence at 6 dots; truncate higher ratings.
+    // MrGone sheet only carries AcroForm fields for dots 1–6; dots 7–10 are
+    // drawn separately as overlay content by `fill_essence_overflow_dots`.
     let rating = (c.essence_dots() as usize).min(field_map::ESSENCE_DOTS.len());
     for (i, field) in field_map::ESSENCE_DOTS.iter().enumerate() {
         if index.has(field) {
             set_checkbox(doc, index, field, i < rating)?;
         }
     }
+    Ok(())
+}
+
+/// Per p.78–79 of the 2E core, Essence ranges 1–10 (Solars start at 2 and
+/// cap at 5 for new characters; only century-old beings reach 6+). The
+/// MrGone editable PDF only includes six dot widgets, so we draw the
+/// remaining four (positions 7–10) as overlay content in a second row
+/// directly below the original six, matching the markdown renderer.
+fn fill_essence_overflow_dots(
+    doc: &mut Document,
+    index: &FieldIndex,
+    c: &Character,
+) -> Result<(), PdfRenderError> {
+    let rating = c.essence_dots() as usize;
+    // Skip the overlay entirely when no overflow dot would be filled. This
+    // keeps the rendered sheet visually identical to the unmodified
+    // template for the common case (Essence 1–6).
+    if rating < 7 {
+        return Ok(());
+    }
+    let Some((d1_widget, d1)) = super::acroform::first_widget_rect(doc, index, "essencedot1")
+    else {
+        return Ok(());
+    };
+    let Some((_, d6)) = super::acroform::first_widget_rect(doc, index, "essencedot6") else {
+        return Ok(());
+    };
+    let Some(page_id) = super::overlay::page_containing_widget(doc, d1_widget) else {
+        return Ok(());
+    };
+
+    let cx1 = (d1[0] + d1[2]) / 2.0;
+    let cy1 = (d1[1] + d1[3]) / 2.0;
+    let cx6 = (d6[0] + d6[2]) / 2.0;
+    let width = d1[2] - d1[0];
+    let height = d1[3] - d1[1];
+    let spacing = (cx6 - cx1) / 5.0;
+    // Slight inset so our drawn circle visually matches the widget glyphs
+    // rather than spilling to the rect edge.
+    let radius = (width.min(height) / 2.0 - 2.5).max(1.0);
+    // Drop a row below the original six. The MrGone sheet has only a thin
+    // gap before the next content block, so we sit close to the original
+    // row (about a third of a dot's height below).
+    let row_y = cy1 - height * 1.5 + 9.0;
+    // Center the four overflow dots horizontally within the span of the
+    // original six. Four dots at `spacing` apart cover 3 × spacing of the
+    // 5 × spacing total, leaving 1 × spacing of slack — half on each side.
+    let row_left_cx = cx1 + spacing;
+
+    let mut content: Vec<u8> = Vec::new();
+    content.extend_from_slice(b"\n% exalted-essence-overflow\nq\n0 G\n0 g\n0.5 w\n");
+    for i in 0..4 {
+        let dot_index = 7 + i;
+        let cx = row_left_cx + (i as f64) * spacing;
+        super::overlay::append_circle(&mut content, cx, row_y, radius, rating >= dot_index);
+    }
+    content.extend_from_slice(b"Q\n");
+
+    super::overlay::append_page_content(doc, page_id, content)?;
     Ok(())
 }
 
