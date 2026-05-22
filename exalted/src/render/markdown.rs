@@ -27,6 +27,7 @@ pub fn character_to_markdown(c: &Character) -> String {
     section_virtues(c, &mut out);
     section_willpower_essence(c, &mut out);
     section_charms(c, &mut out);
+    section_combos(c, &mut out);
     section_spells(&c.spells, &mut out);
     section_backgrounds(c, &mut out);
     section_intimacies(c, &mut out);
@@ -342,6 +343,52 @@ fn section_charms(c: &Character, out: &mut String) {
             if let Some(notes) = charm.notes() {
                 writeln!(out, "  - {}", notes).unwrap();
             }
+        }
+    }
+    writeln!(out).unwrap();
+}
+
+fn section_combos(c: &Character, out: &mut String) {
+    writeln!(out, "## Combos ({})", c.combos.len()).unwrap();
+    if c.combos.is_empty() {
+        writeln!(out, "(none)").unwrap();
+        writeln!(out).unwrap();
+        return;
+    }
+    let db = database();
+    for combo in &c.combos {
+        let name = if combo.name.is_empty() {
+            "<unnamed>"
+        } else {
+            combo.name.as_str()
+        };
+        writeln!(out, "- **{}** *[{}]*", name, source_tag(combo.source)).unwrap();
+        for id in &combo.charm_ids {
+            match c.charms.iter().find(|ch| ch.is_id(id)) {
+                Some(ch) => {
+                    let display = ch.display_name(db);
+                    match ch.entry(db) {
+                        Some(entry) => {
+                            writeln!(
+                                out,
+                                "  - {} — {} ({})",
+                                display, entry.cost, entry.charm_type.display()
+                            )
+                            .unwrap();
+                        }
+                        None => {
+                            writeln!(out, "  - {}", display).unwrap();
+                        }
+                    }
+                }
+                None => {
+                    writeln!(out, "  - {} *(not owned)*", id).unwrap();
+                }
+            }
+        }
+        writeln!(out, "  - Activation: +1 WP").unwrap();
+        if let Some(notes) = &combo.notes {
+            writeln!(out, "  - Notes: {}", notes).unwrap();
         }
     }
     writeln!(out).unwrap();

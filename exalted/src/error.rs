@@ -178,6 +178,30 @@ pub enum ValidationError {
     #[error("alien (non-Solar) charm {charm} requires Eclipse caste")]
     AlienCharmOnNonEclipse { charm: String },
 
+    #[error("combo {combo} references charm {charm}, which the character does not own")]
+    ComboCharmNotOwned { combo: String, charm: String },
+
+    #[error(
+        "combo {combo} includes charm {charm}, which lacks the Combo-Basic or Combo-OK keyword"
+    )]
+    ComboCharmNotComboable { combo: String, charm: String },
+
+    #[error(
+        "combo {combo} mixes a Combo-Basic charm with non-Reflexive charm {charm}"
+    )]
+    ComboBasicWithNonReflexive { combo: String, charm: String },
+
+    #[error("combo {combo} contains {count} Simple charms (max 1)")]
+    ComboMultipleSimple { combo: String, count: usize },
+
+    #[error("combo {combo} repeats charm {charm}")]
+    ComboDuplicateCharm { combo: String, charm: String },
+
+    #[error(
+        "combo {combo} has an invalid source ({source_kind}); use BonusPoints (chargen) or Xp (in play)"
+    )]
+    ComboInvalidSource { combo: String, source_kind: String },
+
     #[error("ability {ability} has {got} distinct specialties; max 3 (Linguistics is exempt)")]
     SpecialtiesOverMax { ability: String, got: usize },
 

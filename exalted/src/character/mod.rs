@@ -1,5 +1,6 @@
 pub mod backgrounds;
 pub mod charms;
+pub mod combos;
 pub mod equipment;
 pub mod familiar;
 pub mod hearthstone;
@@ -17,6 +18,7 @@ use serde::{Deserialize, Serialize};
 
 pub use backgrounds::{canonical_id as background_canonical_id, BackgroundKind, BackgroundRef};
 pub use charms::CharmRef;
+pub use combos::Combo;
 pub use equipment::{Armor, Artifact, Equipment, Possession, Weapon};
 pub use familiar::Familiar;
 pub use hearthstone::Hearthstone;
@@ -44,6 +46,8 @@ pub struct Character {
     pub willpower: RatedTrait,
     pub essence: RatedTrait,
     pub charms: Vec<CharmRef>,
+    #[serde(default)]
+    pub combos: Vec<Combo>,
     #[serde(default)]
     pub spells: Vec<SpellRef>,
     #[serde(default)]
@@ -96,6 +100,7 @@ impl Character {
             willpower: RatedTrait::with_base(0),
             essence: RatedTrait::with_base(2),
             charms: Vec::new(),
+            combos: Vec::new(),
             spells: Vec::new(),
             backgrounds: Vec::new(),
             intimacies: Vec::new(),

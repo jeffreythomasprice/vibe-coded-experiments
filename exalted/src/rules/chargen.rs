@@ -7,6 +7,7 @@
 //! - Specialty: 1 BP per specialty (other), 1 BP per 2 specialties (C/F).
 //! - Background: 1 BP per dot (≤3), 2 BP per dot (4–5).
 //! - Charm: 4 BP (Caste/Favored), 5 BP (other).
+//! - Combo: BP equal to the number of Charms it contains (p.246).
 //! - Virtue: 3 BP per dot.
 //! - Willpower: 2 BP per dot.
 //! - Essence: 7 BP per dot.
@@ -59,6 +60,11 @@ pub fn charm_bp_cost(caste_or_favored: bool) -> u32 {
     if caste_or_favored { 4 } else { 5 }
 }
 
+/// BP cost of a Combo at chargen: one BP per member Charm (p.246).
+pub fn combo_bp_cost(num_charms: usize) -> u32 {
+    num_charms as u32
+}
+
 pub fn virtue_dot_bp_cost(_new_rating: u8) -> u32 {
     3
 }
@@ -86,6 +92,7 @@ pub fn validate_chargen(character: &Character) -> ValidationReport {
     check_virtues(character, &mut report);
     check_backgrounds(character, &mut report);
     check_charms(character, &mut report);
+    check_combos(character, &mut report);
     check_intimacies(character, &mut report);
     check_essence_at_chargen(character, &mut report);
     check_willpower_base(character, &mut report);
@@ -523,6 +530,103 @@ fn check_charms(c: &Character, report: &mut ValidationReport) {
     }
 }
 
+fn check_combos(c: &Character, report: &mut ValidationReport) {
+    let db = crate::rules::database::database();
+    use crate::rules::database::CharmType;
+
+    for combo in &c.combos {
+        let combo_name = if combo.name.is_empty() {
+            "<unnamed>".to_string()
+        } else {
+            combo.name.clone()
+        };
+
+        match combo.source {
+            crate::character::DotSource::BonusPoints { .. }
+            | crate::character::DotSource::Xp { .. } => {}
+            other => {
+                report.push(ValidationError::ComboInvalidSource {
+                    combo: combo_name.clone(),
+                    source_kind: format!("{:?}", other),
+                });
+            }
+        }
+
+        let mut seen: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+        for id in &combo.charm_ids {
+            if !seen.insert(id.as_str()) {
+                report.push(ValidationError::ComboDuplicateCharm {
+                    combo: combo_name.clone(),
+                    charm: id.clone(),
+                });
+            }
+        }
+
+        let mut member_entries = Vec::new();
+        let mut has_basic = false;
+        let mut simple_count = 0usize;
+
+        for id in &combo.charm_ids {
+            let owned = c.charms.iter().find(|ch| ch.is_id(id));
+            let Some(charm_ref) = owned else {
+                report.push(ValidationError::ComboCharmNotOwned {
+                    combo: combo_name.clone(),
+                    charm: id.clone(),
+                });
+                continue;
+            };
+            let Some(entry) = charm_ref.entry(db) else {
+                report.push_note(ValidationError::UnknownCharm {
+                    charm: charm_ref.display_name(db).to_string(),
+                });
+                continue;
+            };
+            let comboable = entry
+                .keywords
+                .iter()
+                .any(|k| k.eq_ignore_ascii_case("Combo-OK") || k.eq_ignore_ascii_case("Combo-Basic"));
+            if !comboable {
+                report.push(ValidationError::ComboCharmNotComboable {
+                    combo: combo_name.clone(),
+                    charm: entry.name.clone(),
+                });
+            }
+            let is_basic = entry
+                .keywords
+                .iter()
+                .any(|k| k.eq_ignore_ascii_case("Combo-Basic"));
+            if is_basic {
+                has_basic = true;
+            }
+            if matches!(entry.charm_type, CharmType::Simple) {
+                simple_count += 1;
+            }
+            member_entries.push((entry, is_basic));
+        }
+
+        if has_basic {
+            for (entry, is_basic) in &member_entries {
+                if *is_basic {
+                    continue;
+                }
+                if !matches!(entry.charm_type, CharmType::Reflexive) {
+                    report.push(ValidationError::ComboBasicWithNonReflexive {
+                        combo: combo_name.clone(),
+                        charm: entry.name.clone(),
+                    });
+                }
+            }
+        }
+
+        if simple_count > 1 {
+            report.push(ValidationError::ComboMultipleSimple {
+                combo: combo_name.clone(),
+                count: simple_count,
+            });
+        }
+    }
+}
+
 fn check_intimacies(c: &Character, report: &mut ValidationReport) {
     let compassion = c.virtue(VirtueKind::Compassion);
     let willpower = c.willpower_dots();
@@ -809,6 +913,20 @@ pub fn validate_bp(c: &Character, report: &mut ValidationReport) {
             }
         }
     }
+
+    // Combos (BP-bought at chargen: 1 BP per member Charm).
+    for combo in &c.combos {
+        if let crate::character::DotSource::BonusPoints { spent } = combo.source {
+            let expected = combo_bp_cost(combo.charm_ids.len());
+            if spent as u32 != expected {
+                report.push(ValidationError::BpCostWrong {
+                    trait_name: format!("Combo::{}", combo.name),
+                    paid: spent as u32,
+                    expected,
+                });
+            }
+        }
+    }
 }
 
 /// Validate the XP ledger: every `Xp { spent }` purchase costs the canonical
@@ -961,6 +1079,27 @@ pub fn validate_xp(c: &Character) -> ValidationReport {
             if spent != canonical {
                 report.push(ValidationError::XpCostWrong {
                     trait_name: format!("Spell::{}", spell.display_name(db)),
+                    paid: spent,
+                    expected: canonical,
+                });
+            }
+        }
+    }
+
+    // Combos (post-chargen XP-bought: sum of member min-ability ratings).
+    for combo in &c.combos {
+        if let crate::character::DotSource::Xp { spent } = combo.source {
+            let sum: u32 = combo
+                .charm_ids
+                .iter()
+                .filter_map(|id| c.charms.iter().find(|ch| ch.is_id(id)))
+                .filter_map(|ch| ch.entry(db))
+                .map(|e| e.mins_ability as u32)
+                .sum();
+            let canonical = xp_costs::xp_cost_combo(sum);
+            if spent != canonical {
+                report.push(ValidationError::XpCostWrong {
+                    trait_name: format!("Combo::{}", combo.name),
                     paid: spent,
                     expected: canonical,
                 });

@@ -18,7 +18,7 @@ pub use database::{
 pub use backgrounds::validate_backgrounds;
 pub use chargen::{
     ability_dot_bp_cost, attribute_dot_bp_cost, background_dot_bp_cost, charm_bp_cost,
-    essence_dot_bp_cost, specialty_bp_cost, validate_bp, validate_chargen,
+    combo_bp_cost, essence_dot_bp_cost, specialty_bp_cost, validate_bp, validate_chargen,
     virtue_dot_bp_cost, willpower_dot_bp_cost,
 };
 pub use defense::{
@@ -39,7 +39,7 @@ pub use anima::{universal_powers, powers_for, AnimaPower, AnimaPowerKind};
 pub use equipment::{validate_artifacts, validate_hearthstones};
 pub use languages::validate_languages;
 pub use xp_costs::{
-    xp_cost_ability_increase, xp_cost_attribute_increase, xp_cost_charm, xp_cost_essence_increase,
-    xp_cost_new_ability, xp_cost_specialty, xp_cost_spell, xp_cost_virtue_increase,
-    xp_cost_willpower_increase, NON_SOLAR_CHARM_XP_COST,
+    xp_cost_ability_increase, xp_cost_attribute_increase, xp_cost_charm, xp_cost_combo,
+    xp_cost_essence_increase, xp_cost_new_ability, xp_cost_specialty, xp_cost_spell,
+    xp_cost_virtue_increase, xp_cost_willpower_increase, NON_SOLAR_CHARM_XP_COST,
 };

@@ -66,3 +66,9 @@ pub const NON_SOLAR_CHARM_XP_COST: u32 = 20;
 pub fn xp_cost_spell(occult_favored_or_caste: bool) -> u32 {
     if occult_favored_or_caste { 8 } else { 10 }
 }
+
+/// Cost to learn a Combo in play: sum of the minimum Ability ratings of the
+/// member Charms (p.246).
+pub fn xp_cost_combo(min_ability_sum: u32) -> u32 {
+    min_ability_sum
+}

@@ -6,9 +6,6 @@ todo:
 what does the series of checkboxes for essence pol and anima pool actually mean? I can only select one of them like they're radio buttons
 
 
-what does the "combos" section mean in the sheet?
-
-
 why does running all tests take a while?
 
 

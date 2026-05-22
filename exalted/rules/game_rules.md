@@ -442,7 +442,54 @@ Overwhelming*).
 - Must own each Excellency to invoke it through Essence Flow at the discount, but Essence Flow is bought **once per Ability**, not once per Excellency.
 - **Incompatible with any cost-reduction effect** — does not stack with Infinite Mastery (p.187).
 
-### 8.8 Charm Keywords (p.184)
+### 8.8 Combos (p.244–247)
+
+A **Combo** is a pre-purchased bundle of Charms an Exalt can fire together as
+a single action. Combos are the canonical exception to §8.1's "one Charm per
+action" — at the cost of **1 temporary Willpower** on top of every
+component Charm's normal cost, an Exalt may activate every Charm in the
+Combo simultaneously.
+
+> "Normally, an Exalt can use only a single Charm per action. However, with
+> long practice and focus, the Exalted can combine Charms together, becoming
+> able to use two or more Charms in the same action." (p.244)
+
+**Cost to learn:**
+
+- At chargen: **BP equal to the number of Charms in the Combo** (p.246).
+- During play: **XP equal to the sum of the minimum Ability ratings** of
+  the Charms in it. Training time = 3 × that sum in days (p.246).
+
+**Composition rules** (p.246):
+
+- Member Charms must have the **Combo-Basic** or **Combo-OK** keyword.
+- A **Combo-Basic** Charm may only share a Combo with **Reflexive** Charms
+  (incl. Excellencies).
+- **At most one Simple Charm** per Combo. If present, any Supplemental
+  Charms must enhance it and (unless a Charm says otherwise) share its
+  Ability.
+- A Charm cannot appear in the same Combo twice.
+- Combos are immutable once bought. To add a Charm to an existing Combo,
+  the character must buy a *new* Combo containing it — both versions then
+  coexist on the sheet.
+- The Storyteller may veto any combination and is the final authority on
+  how a given Combo resolves.
+
+**Activation:**
+
+- Pay **1 WP** plus each component Charm's normal cost.
+- Apply each Charm per its own Type rules: a Combo containing a Simple +
+  Extra-Action Charm runs the Simple Charm as every attack in the magical
+  flurry (p.247).
+- The individual Charms remain usable outside the Combo normally.
+
+**Visibility:** Activating a Combo in combat produces an unmistakable
+Essence display — observers know the moment Willpower is spent that a
+Combo is firing, and after seeing it once they can recognize that specific
+Combo on future activations (p.246). Social or dramatic uses do not
+produce the display unless a member Charm has the **Obvious** keyword.
+
+### 8.9 Charm Keywords (p.184)
 
 | Keyword | Meaning |
 |---|---|

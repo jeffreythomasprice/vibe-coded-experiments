@@ -40,6 +40,7 @@ pub(super) fn fill(
     fill_weapons(doc, index, c)?;
     fill_armor_and_defense(doc, index, c)?;
     fill_charms_and_spells(doc, index, c)?;
+    fill_combos(doc, index, c)?;
     fill_xp_and_essence(doc, index, c)?;
     fill_virtue_flaw(doc, index, c)?;
     fill_familiar(doc, index, c)?;
@@ -359,6 +360,83 @@ fn fill_charms_and_spells(
     }
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Combos
+//
+// MrGone's sheet has a Combos chart of 8 rows × 3 columns. Field positions
+// confirmed via `cargo run --example dump_dots`:
+//   - Cost column   (x = 143.7): combos1..combos8
+//   - Name column   (x = 379.2): combos9..combos16
+//   - Charms column (x = 539.5): combos17..combos24
+// Row i (1-indexed, 1..=8) lives at the same y-coordinate across all three
+// columns, so combo i fills (cost = combos{i}, name = combos{i+8},
+// charms = combos{i+16}). Overflow past 8 combos is silently dropped.
+// ---------------------------------------------------------------------------
+
+const COMBO_ROWS: usize = 8;
+
+fn fill_combos(
+    doc: &mut Document,
+    index: &FieldIndex,
+    c: &Character,
+) -> Result<(), PdfRenderError> {
+    let db = database();
+    for (i, combo) in c.combos.iter().take(COMBO_ROWS).enumerate() {
+        let row = i + 1;
+        let cost_field = format!("combos{}", row);
+        let name_field = format!("combos{}", row + 8);
+        let charms_field = format!("combos{}", row + 16);
+
+        let name = if combo.name.is_empty() {
+            "<unnamed>"
+        } else {
+            combo.name.as_str()
+        };
+        write(doc, index, &name_field, name)?;
+
+        let charms_label = combo
+            .charm_ids
+            .iter()
+            .map(|id| {
+                c.charms
+                    .iter()
+                    .find(|ch| ch.is_id(id))
+                    .map(|ch| ch.display_name(db).to_string())
+                    .unwrap_or_else(|| id.clone())
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        write(doc, index, &charms_field, &charms_label)?;
+
+        let cost_label = combo_cost_summary(combo, c, db);
+        write(doc, index, &cost_field, &cost_label)?;
+    }
+    Ok(())
+}
+
+/// Compact "mote totals + 1wp" string for the Combo's Cost cell. Charm cost
+/// strings are free-form (`"3m"`, `"1m per die"`, etc.) so we just join them
+/// rather than attempting arithmetic; the WP for activation is always +1.
+fn combo_cost_summary(
+    combo: &crate::character::Combo,
+    c: &Character,
+    db: &RulesDatabase,
+) -> String {
+    let parts: Vec<String> = combo
+        .charm_ids
+        .iter()
+        .filter_map(|id| c.charms.iter().find(|ch| ch.is_id(id)))
+        .filter_map(|ch| ch.entry(db))
+        .map(|e| e.cost.clone())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if parts.is_empty() {
+        "+1wp".to_string()
+    } else {
+        format!("{}, +1wp", parts.join(" + "))
+    }
 }
 
 // ---------------------------------------------------------------------------
