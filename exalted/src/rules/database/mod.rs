@@ -28,6 +28,19 @@ use crate::character::{AbilityKind, AttributeKind, BackgroundKind, SpellCircle};
 const CHARMS_TOML: &str = include_str!("../../../rules/charms.toml");
 const SPELLS_TOML: &str = include_str!("../../../rules/spells.toml");
 const BACKGROUNDS_TOML: &str = include_str!("../../../rules/backgrounds.toml");
+const GAME_RULES_MD: &str = include_str!("../../../rules/game_rules.md");
+const CHARACTER_CREATION_MD: &str = include_str!("../../../rules/character_creation.md");
+
+/// Embedded text of `rules/game_rules.md` — the core-rules summary document.
+pub fn game_rules_markdown() -> &'static str {
+    GAME_RULES_MD
+}
+
+/// Embedded text of `rules/character_creation.md` — the chargen summary
+/// document.
+pub fn character_creation_markdown() -> &'static str {
+    CHARACTER_CREATION_MD
+}
 
 static DATABASE: OnceLock<RulesDatabase> = OnceLock::new();
 
