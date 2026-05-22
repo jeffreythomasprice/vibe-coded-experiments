@@ -241,6 +241,22 @@ fn pdf_can_be_written_to_disk() {
 }
 
 #[test]
+fn page4_athletics_boxes_filled() {
+    // valid_dawn → Str 4, Dex 5 (chargen 4 + BP 1), Athletics 3, no armor, full HP.
+    //   Move            = Dex (5)
+    //   Dash            = Dex + 6 (11)
+    //   Jump vertical   = Str + Ath (7)
+    //   Jump horizontal = vert × 2 (14)
+    //   Lift            = (Str + Ath = 7) → 650 lbs
+    let doc = render();
+    assert_eq!(read_text_field(&doc, "Mo").as_deref(), Some("5"));
+    assert_eq!(read_text_field(&doc, "DA").as_deref(), Some("11"));
+    assert_eq!(read_text_field(&doc, "VJ").as_deref(), Some("7"));
+    assert_eq!(read_text_field(&doc, "HJ").as_deref(), Some("14"));
+    assert_eq!(read_text_field(&doc, "LI").as_deref(), Some("650"));
+}
+
+#[test]
 fn no_subcommand_arg_smuggling() {
     // The PDF render path must be reachable via the public API at all
     // — guard against accidental privatization of `character_to_pdf`.

@@ -238,7 +238,9 @@ Triggered when a single blow inflicts **HLs > defender's Stamina**.
 
 ---
 
-## 5. Movement (p.127–128 jumping; p.144–145 move/dash)
+## 5. Movement & Feats of Strength
+
+### 5.1 Move / Dash / Jump (p.127–128 jumping; p.144–145 move/dash)
 
 All four values are **yards per tick** (~1 sec/tick). "Wound Pen" = current
 health-level penalty (positive number subtracted); "Mob.Pen" = worn armor's
@@ -252,6 +254,41 @@ mobility penalty.
 | **Jump (horizontal)** | **vertical × 2** yards | (same) | May Move *and* Jump same tick (no extra DV pen. for the Move). Short hops fit inside a Move. |
 
 Long-distance / endurance running uses `Stamina + Resistance` instead (p.126).
+
+### 5.2 Feats of Strength / Lift (p.128)
+
+Diceless action: compare `Strength + Athletics + appropriate specialty` against
+the chart below. **Lift / push / pull** is a miscellaneous combat action;
+**breaking** a non-attack target takes ~1 minute (so out-of-combat). To attack
+an inanimate object in combat, use the attack rules (pp.153–154) instead.
+
+| (Str + Ath) | Max lift (lbs) | Sample feat |
+|---:|---:|---|
+| 1  |    80 | Lift an anvil or suit of heavy armor. |
+| 2  |   160 | Lift a full-grown man; break a wooden plank with a kick. |
+| 3  |   250 | Punch a fist through a wooden door. |
+| 4  |   350 | Lift a pony; break a sword over one knee. |
+| 5  |   450 | Lift a donkey; kick a wooden door to flinders. |
+| 6  |   550 | Punch a fist through a heavy wooden door. |
+| 7  |   650 | Bend an iron bar with both hands. |
+| 8  |   800 | Lift a horse; bend a horseshoe into a pretzel. |
+| 9  | 1,000 | Pull a fully laden wagon. |
+| 10 | 1,200 | Lift a camel; kick a heavy wooden door to flinders. |
+| 11 | 1,400 | Lift an unlocked portcullis. |
+| 12 | 1,600 | Pull down a wooden bridge. |
+| 13 | 1,800 | Lift a yeddim; punch a fist through an iron-shod door. |
+| 14 | 2,000 | Snap iron manacles; rip a stone out of a castle wall. |
+| 15 | 2,200 | Punch a fist through a stone wall. |
+| 16 | 2,500 | Lift a locked portcullis; smash any lock apart with a kick. |
+| 17 | 3,000 | Punch a fist through a metal door; pull down heavy stone pillars. |
+| 18 | 3,500 | Rip iron bars out of stone with one hand; tip over a loaded wagon. |
+| 19 | 4,000 | Tear apart welded steel (e.g. portcullis grating). |
+| 20 | 4,500 | Lift a hippopotamus; punch a hole through an armored fortress gate. |
+
+- **Throwing:** requires a `(Str + Ath)` total **5 higher** than the lift entry; the object flies `(Str + Ath)` yards. Speed 5 `(Dex + Thrown)` attack at -3 Accuracy; base damage = `(Str + Ath)` bashing dice (piercing).
+- **Bonuses to the total** (stack onto `Str + Ath` at use time, not on the sheet): stunts add their bonus directly; channeled Virtues add their rating; WP-for-success rolls Willpower and adds successes; cooperation adds +1 per assistant up to the leader's Athletics rating.
+- **Gritty-game variant:** halve the feats possible for a given `(Str + Ath)` (rounded up) — significantly alters tone, GM call.
+- **Sheet:** field `LI` on page 4 shows the base `(Str + Ath)` lbs only (no situational modifiers).
 
 ---
 

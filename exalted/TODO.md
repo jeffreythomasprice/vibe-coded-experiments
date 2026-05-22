@@ -12,10 +12,6 @@ what does the "combos" section mean in the sheet?
 why does running all tests take a while?
 
 
-make sure we handle favored abilities correctly
-e.g. Edd telling Daz that, "you have one more Favored ability to check off, since you only picked 4 out of 5."
-
-
 tell me a story using a bit of lore from the book
 
 

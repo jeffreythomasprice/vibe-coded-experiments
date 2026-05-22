@@ -53,6 +53,28 @@ pub fn movement(c: &Character) -> Movement {
     }
 }
 
+/// Feats-of-strength lift table from `game_rules.md` §5.1 (p.128).
+/// Indexed by `(Strength + Athletics)`; entries are max lift in pounds.
+/// Index 0 is "no exertion possible"; the chart caps at index 20.
+const LIFT_TABLE_LBS: [u32; 21] = [
+    0, 80, 160, 250, 350, 450, 550, 650, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500, 3000,
+    3500, 4000, 4500,
+];
+
+/// Base maximum weight a character can lift as a feat of strength, in pounds
+/// (`game_rules.md` §5.1, p.128). Looked up by `(Strength + Athletics)`
+/// against the published chart; values above 20 clamp to the chart's top.
+///
+/// Specialties, channeled Virtues, stunt dice, Willpower successes, and
+/// cooperation all add directly to the `(Str + Ath)` total at use time —
+/// they are not folded into the sheet value.
+pub fn lift_lbs(c: &Character) -> u32 {
+    let str_ = c.attribute(AttributeKind::Strength) as usize;
+    let ath = c.ability(AbilityKind::Athletics) as usize;
+    let idx = (str_ + ath).min(LIFT_TABLE_LBS.len() - 1);
+    LIFT_TABLE_LBS[idx]
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Knockdown {
     /// Raw damage strictly greater than this triggers a knockdown check
@@ -172,6 +194,39 @@ mod tests {
         let m = movement(&c);
         assert_eq!(m.move_, 1, "Move floors at 1");
         assert_eq!(m.dash, 2, "Dash floors at 2");
+    }
+
+    #[test]
+    fn lift_table_chargen_solar() {
+        // Blank solar: Str 1, Athletics 0 → index 1 → 80 lbs.
+        let c = Character::new_blank_solar("Lift Test", Caste::Dawn);
+        assert_eq!(lift_lbs(&c), 80);
+    }
+
+    #[test]
+    fn lift_table_mid_chart() {
+        // Str 3 + Athletics 2 = 5 → 450 lbs.
+        let mut c = Character::new_blank_solar("Lift Test", Caste::Dawn);
+        let str_ = c.attributes.get_mut(&AttributeKind::Strength).unwrap();
+        str_.add_chargen().add_chargen(); // Str 3
+        let ath = c.abilities.get_mut(&AbilityKind::Athletics).unwrap();
+        ath.add_chargen().add_chargen(); // Athletics 2
+        assert_eq!(lift_lbs(&c), 450);
+    }
+
+    #[test]
+    fn lift_table_clamps_above_chart() {
+        // Force (Str + Ath) well above 20 — should clamp to the top entry.
+        let mut c = Character::new_blank_solar("Lift Test", Caste::Dawn);
+        let str_ = c.attributes.get_mut(&AttributeKind::Strength).unwrap();
+        for _ in 0..20 {
+            str_.add_chargen();
+        }
+        let ath = c.abilities.get_mut(&AbilityKind::Athletics).unwrap();
+        for _ in 0..10 {
+            ath.add_chargen();
+        }
+        assert_eq!(lift_lbs(&c), 4500);
     }
 
     #[test]

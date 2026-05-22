@@ -17,7 +17,7 @@ use crate::rules::database::{database, RulesDatabase};
 use crate::rules::defense::{
     dodge_dv, join_battle, mdv_dodge, parry_dv, soak_aggravated, soak_bashing, soak_lethal,
 };
-use crate::rules::derived::movement;
+use crate::rules::derived::{lift_lbs, movement};
 use crate::rules::essence::{personal_essence_max, peripheral_essence_max};
 
 use super::acroform::{set_text_field, FieldIndex};
@@ -285,8 +285,8 @@ fn fill_armor_and_defense(
         }
     }
 
+    let m = movement(c);
     if index.has("combat") {
-        let m = movement(c);
         let line = format!(
             "Join Battle {} · Move {} / Dash {} · Jump {}v / {}h",
             join_battle(c),
@@ -297,6 +297,13 @@ fn fill_armor_and_defense(
         );
         write(doc, index, "combat", &line)?;
     }
+
+    // Page 4 athletics boxes: Move / Dash / Vertical Jump / Horizontal Jump / Lift.
+    write(doc, index, "Mo", &m.move_.to_string())?;
+    write(doc, index, "DA", &m.dash.to_string())?;
+    write(doc, index, "VJ", &m.jump_vertical.to_string())?;
+    write(doc, index, "HJ", &m.jump_horizontal.to_string())?;
+    write(doc, index, "LI", &lift_lbs(c).to_string())?;
     Ok(())
 }
 
