@@ -3,6 +3,9 @@ active:
 
 todo:
 
+pdf, numbers next to attributes and abilities are nonsense? equal to dots but don't match the dots for that thing?
+
+
 what does the series of checkboxes for essence pol and anima pool actually mean? I can only select one of them like they're radio buttons
 
 
