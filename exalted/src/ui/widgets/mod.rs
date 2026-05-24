@@ -2,6 +2,7 @@
 // until phases 3–6 wire the real sections and sidebar.
 #![allow(dead_code)]
 
+pub mod custom_entry;
 pub mod dot_source;
 pub mod dots_display;
 pub mod dots_grid;

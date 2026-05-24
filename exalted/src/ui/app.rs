@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use crate::character::{BackgroundRef, CharmRef, SpellRef};
 use crate::render::pdf::character_to_pdf;
 use crate::ui::dialogs::confirm_discard::{self, DiscardChoice};
 use crate::ui::dialogs::file_picker;
@@ -9,6 +10,9 @@ use crate::ui::pickers::{PickerOutcome, background_picker, charm_picker, spell_p
 use crate::ui::sections;
 use crate::ui::sidebar;
 use crate::ui::state::{AppState, PendingAction, StartupAction, StatusKind, blank_character};
+use crate::ui::widgets::custom_entry::{
+    background_entry_form, charm_entry_form, spell_entry_form,
+};
 
 pub struct App {
     state: AppState,
@@ -336,13 +340,90 @@ impl eframe::App for App {
         });
 
         self.drive_pickers(&ctx);
+        self.drive_edit_modals(&ctx);
 
         // Confirm-discard modal goes last so it draws above the pickers.
         self.handle_pending_action(&ctx);
     }
 }
 
+enum EditOutcome {
+    Stay,
+    Saved,
+    Cancelled,
+}
+
 impl App {
+    fn drive_edit_modals(&mut self, ctx: &egui::Context) {
+        // Background.
+        if let Some((idx, mut entry)) = self.state.editing_custom_background.take() {
+            let outcome = show_edit_modal(ctx, "Edit custom background", "edit-custom-bg", |ui| {
+                background_entry_form(ui, "edit-custom-bg", &mut entry);
+                !entry.id.is_empty() && !entry.name.is_empty()
+            });
+            match outcome {
+                EditOutcome::Stay => {
+                    self.state.editing_custom_background = Some((idx, entry));
+                }
+                EditOutcome::Cancelled => {}
+                EditOutcome::Saved => {
+                    if let Some(BackgroundRef::Custom { entry: target, .. }) =
+                        self.state.character.backgrounds.get_mut(idx)
+                    {
+                        *target = entry;
+                        self.state.mark_dirty();
+                    }
+                }
+            }
+        }
+
+        // Charm.
+        if let Some((idx, mut entry)) = self.state.editing_custom_charm.take() {
+            let outcome =
+                show_edit_modal(ctx, "Edit custom charm", "edit-custom-charm", |ui| {
+                    charm_entry_form(ui, "edit-custom-charm", &mut entry);
+                    !entry.id.is_empty() && !entry.name.is_empty()
+                });
+            match outcome {
+                EditOutcome::Stay => {
+                    self.state.editing_custom_charm = Some((idx, entry));
+                }
+                EditOutcome::Cancelled => {}
+                EditOutcome::Saved => {
+                    if let Some(CharmRef::Custom { entry: target, .. }) =
+                        self.state.character.charms.get_mut(idx)
+                    {
+                        *target = entry;
+                        self.state.mark_dirty();
+                    }
+                }
+            }
+        }
+
+        // Spell.
+        if let Some((idx, mut entry)) = self.state.editing_custom_spell.take() {
+            let outcome =
+                show_edit_modal(ctx, "Edit custom spell", "edit-custom-spell", |ui| {
+                    spell_entry_form(ui, "edit-custom-spell", &mut entry);
+                    !entry.id.is_empty() && !entry.name.is_empty()
+                });
+            match outcome {
+                EditOutcome::Stay => {
+                    self.state.editing_custom_spell = Some((idx, entry));
+                }
+                EditOutcome::Cancelled => {}
+                EditOutcome::Saved => {
+                    if let Some(SpellRef::Custom { entry: target, .. }) =
+                        self.state.character.spells.get_mut(idx)
+                    {
+                        *target = entry;
+                        self.state.mark_dirty();
+                    }
+                }
+            }
+        }
+    }
+
     fn drive_pickers(&mut self, ctx: &egui::Context) {
         // Borrow the picker state out, run the picker, then decide whether to
         // close it. This avoids holding &mut on self.state while the picker
@@ -387,4 +468,43 @@ impl App {
             }
         }
     }
+}
+
+fn show_edit_modal(
+    ctx: &egui::Context,
+    title: &str,
+    id_salt: &str,
+    body: impl FnOnce(&mut egui::Ui) -> bool,
+) -> EditOutcome {
+    let mut outcome = EditOutcome::Stay;
+    egui::Window::new(title)
+        .collapsible(false)
+        .resizable(true)
+        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        .default_size([640.0, 620.0])
+        .show(ctx, |ui| {
+            let body_height = (ui.available_height() - 60.0).max(120.0);
+            let mut can_save = false;
+            egui::ScrollArea::vertical()
+                .id_salt((id_salt, "scroll"))
+                .auto_shrink([false; 2])
+                .max_height(body_height)
+                .show(ui, |ui| {
+                    can_save = body(ui);
+                });
+
+            ui.separator();
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    outcome = EditOutcome::Cancelled;
+                }
+                if ui
+                    .add_enabled(can_save, egui::Button::new("Save"))
+                    .clicked()
+                {
+                    outcome = EditOutcome::Saved;
+                }
+            });
+        });
+    outcome
 }

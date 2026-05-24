@@ -1,9 +1,11 @@
 //! Charms section: list current charms (grouped by ability), edit each
 //! one's source / notes / non_solar flag, and add new charms via the picker.
+//! `Custom` charms also get a read-only summary of their inline entry data
+//! and an "Edit details…" button that opens the entry editor.
 
 use crate::character::CharmRef;
 use crate::render::names::ability_name;
-use crate::rules::database::database;
+use crate::rules::database::{CharmEntry, database};
 use crate::ui::pickers::charm_picker::CharmPickerState;
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::{DotSourceKind, dot_source_editor};
@@ -30,12 +32,13 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     let db = database();
     let mut any_changed = false;
     let mut delete_idx: Option<usize> = None;
+    let mut start_edit: Option<(usize, CharmEntry)> = None;
     for (i, charm) in state.character.charms.iter_mut().enumerate() {
         let id_str = charm.id().to_string();
         let name = charm.display_name(db).to_string();
         let ability_label = charm.ability(db).map(ability_name).unwrap_or("—");
         let header = format!("[{}] {}", ability_label, name);
-        let entry_effect = db.charm(&id_str).map(|e| {
+        let entry_effect = charm.entry(db).map(|e| {
             (
                 e.effect.clone(),
                 format!(
@@ -44,6 +47,10 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                 ),
             )
         });
+        let custom_snapshot: Option<CharmEntry> = match charm {
+            CharmRef::Custom { entry, .. } => Some(entry.clone()),
+            _ => None,
+        };
         egui::CollapsingHeader::new(header)
             .id_salt(("charm", i))
             .default_open(false)
@@ -91,11 +98,53 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                 if notes_editor(ui, ("charm-notes", i), notes) {
                     any_changed = true;
                 }
+
+                if let Some(entry) = &custom_snapshot {
+                    ui.add_space(6.0);
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Custom charm").strong());
+                        if ui.small_button("Edit details…").clicked() {
+                            start_edit = Some((i, entry.clone()));
+                        }
+                    });
+                    ui.small(format!(
+                        "type: {}   keywords: {}",
+                        entry.charm_type.display(),
+                        if entry.keywords.is_empty() {
+                            "—".to_string()
+                        } else {
+                            entry.keywords.join(", ")
+                        }
+                    ));
+                    ui.small(format!(
+                        "duration: {}   prereq: {}",
+                        if entry.duration.is_empty() {
+                            "—"
+                        } else {
+                            entry.duration.as_str()
+                        },
+                        if entry.prerequisites.is_empty() {
+                            "—".to_string()
+                        } else {
+                            entry.prerequisites.join(", ")
+                        }
+                    ));
+                    if !entry.source.is_empty() || !entry.pages.is_empty() {
+                        ui.small(format!("source: {}   pages: {}", entry.source, entry.pages));
+                    }
+                    if !entry.description.is_empty() {
+                        ui.small(&entry.description);
+                    }
+                }
             });
     }
     if let Some(i) = delete_idx {
         state.character.charms.remove(i);
         any_changed = true;
+    }
+    if let Some(payload) = start_edit {
+        state.editing_custom_charm = Some(payload);
     }
     if any_changed {
         state.mark_dirty();

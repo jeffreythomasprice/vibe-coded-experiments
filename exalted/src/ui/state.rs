@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use crate::character::{Caste, Character};
 use crate::error::ValidationReport;
+use crate::rules::database::{BackgroundEntry, CharmEntry, SpellEntry};
 use crate::ui::pickers::background_picker::BackgroundPickerState;
 use crate::ui::pickers::charm_picker::CharmPickerState;
 use crate::ui::pickers::spell_picker::SpellPickerState;
@@ -48,6 +49,13 @@ pub struct AppState {
     pub spell_picker: Option<SpellPickerState>,
     pub background_picker: Option<BackgroundPickerState>,
 
+    /// "Edit details…" modal state for a `BackgroundRef::Custom` entry on
+    /// the character. Holds the index into `character.backgrounds` and a
+    /// working copy of the entry being edited. Cleared on Save/Cancel.
+    pub editing_custom_background: Option<(usize, BackgroundEntry)>,
+    pub editing_custom_charm: Option<(usize, CharmEntry)>,
+    pub editing_custom_spell: Option<(usize, SpellEntry)>,
+
     pub pending_action: Option<PendingAction>,
     pub status_message: Option<(StatusKind, String)>,
     pub last_dir: Option<PathBuf>,
@@ -68,6 +76,9 @@ impl AppState {
             charm_picker: None,
             spell_picker: None,
             background_picker: None,
+            editing_custom_background: None,
+            editing_custom_charm: None,
+            editing_custom_spell: None,
             pending_action: None,
             status_message: None,
             last_dir: None,

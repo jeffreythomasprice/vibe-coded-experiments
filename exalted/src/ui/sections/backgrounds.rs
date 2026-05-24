@@ -1,8 +1,10 @@
 //! Backgrounds section: list each `BackgroundRef`, edit its rated trait,
 //! label (for disambiguation), and notes; add new entries via the picker.
+//! `Custom` entries also get a read-only summary of their inline entry data
+//! and an "Edit details…" button that opens the entry editor.
 
 use crate::character::{BackgroundRef, DotSource};
-use crate::rules::database::database;
+use crate::rules::database::{BackgroundEntry, database};
 use crate::ui::pickers::background_picker::BackgroundPickerState;
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::DotSourceKind;
@@ -32,6 +34,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     };
     let mut any_changed = false;
     let mut delete_idx: Option<usize> = None;
+    let mut start_edit: Option<(usize, BackgroundEntry)> = None;
     for (i, bg) in state.character.backgrounds.iter_mut().enumerate() {
         let name = bg.display_name(db).to_string();
         let label = bg.label().to_string();
@@ -39,6 +42,10 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             name.clone()
         } else {
             format!("{} — {}", name, label)
+        };
+        let custom_snapshot: Option<BackgroundEntry> = match bg {
+            BackgroundRef::Custom { entry, .. } => Some(entry.clone()),
+            _ => None,
         };
         egui::CollapsingHeader::new(header)
             .id_salt(("bg", i))
@@ -91,11 +98,32 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                         any_changed = true;
                     }
                 }
+
+                if let Some(entry) = &custom_snapshot {
+                    ui.add_space(6.0);
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Custom background").strong());
+                        if ui.small_button("Edit details…").clicked() {
+                            start_edit = Some((i, entry.clone()));
+                        }
+                    });
+                    ui.small(format!("kind: {:?}", entry.kind));
+                    if !entry.source.is_empty() || !entry.pages.is_empty() {
+                        ui.small(format!("source: {}   pages: {}", entry.source, entry.pages));
+                    }
+                    if !entry.description.is_empty() {
+                        ui.small(&entry.description);
+                    }
+                }
             });
     }
     if let Some(i) = delete_idx {
         state.character.backgrounds.remove(i);
         any_changed = true;
+    }
+    if let Some(payload) = start_edit {
+        state.editing_custom_background = Some(payload);
     }
     if any_changed {
         state.mark_dirty();
