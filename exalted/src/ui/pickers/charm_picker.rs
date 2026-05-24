@@ -7,6 +7,7 @@ use crate::render::names::ability_name;
 use crate::rules::database::{CharmEntry, database};
 use crate::ui::pickers::PickerOutcome;
 use crate::ui::widgets::dot_source::{DotSourceKind, dot_source_editor};
+use egui_extras::{Column, TableBuilder};
 
 const PICKER_SOURCES: &[DotSourceKind] = &[
     DotSourceKind::ChargenPriority,
@@ -118,38 +119,64 @@ pub fn show(
 
             ui.label(format!("{} match(es)", entries.len()));
 
-            egui::ScrollArea::vertical()
-                .auto_shrink([false; 2])
-                .max_height(ui.available_height() - 80.0)
-                .show(ui, |ui| {
-                    egui::Grid::new("charm-picker-results")
-                        .num_columns(5)
-                        .striped(true)
-                        .show(ui, |ui| {
-                            ui.strong("Name");
-                            ui.strong("Ability");
-                            ui.strong("Min A");
-                            ui.strong("Min E");
-                            ui.strong("Type");
-                            ui.end_row();
+            let row_h = ui.spacing().interact_size.y;
+            let available_body = (ui.available_height() - 130.0).max(120.0);
 
-                            for entry in &entries {
-                                let selected = state.selected_id.as_deref() == Some(&entry.id);
-                                let resp = ui.selectable_label(selected, &entry.name);
-                                if resp.clicked() {
-                                    state.selected_id = Some(entry.id.clone());
-                                }
-                                ui.label(if entry.ability.is_empty() {
-                                    "—"
-                                } else {
-                                    entry.ability.as_str()
-                                });
-                                ui.label(entry.mins_ability.to_string());
-                                ui.label(entry.mins_essence.to_string());
-                                ui.label(entry.charm_type.display());
-                                ui.end_row();
+            TableBuilder::new(ui)
+                .id_salt("charm-picker-results")
+                .striped(true)
+                .resizable(false)
+                .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+                .column(Column::initial(260.0).at_least(160.0).clip(true))
+                .column(Column::initial(110.0).at_least(80.0))
+                .column(Column::exact(48.0))
+                .column(Column::exact(48.0))
+                .column(Column::remainder().at_least(80.0))
+                .min_scrolled_height(available_body)
+                .max_scroll_height(available_body)
+                .header(row_h, |mut header| {
+                    header.col(|ui| {
+                        ui.strong("Name");
+                    });
+                    header.col(|ui| {
+                        ui.strong("Ability");
+                    });
+                    header.col(|ui| {
+                        ui.strong("Min A");
+                    });
+                    header.col(|ui| {
+                        ui.strong("Min E");
+                    });
+                    header.col(|ui| {
+                        ui.strong("Type");
+                    });
+                })
+                .body(|body| {
+                    body.rows(row_h, entries.len(), |mut row| {
+                        let entry = entries[row.index()];
+                        let selected = state.selected_id.as_deref() == Some(&entry.id);
+                        row.col(|ui| {
+                            if ui.selectable_label(selected, &entry.name).clicked() {
+                                state.selected_id = Some(entry.id.clone());
                             }
                         });
+                        row.col(|ui| {
+                            ui.label(if entry.ability.is_empty() {
+                                "—"
+                            } else {
+                                entry.ability.as_str()
+                            });
+                        });
+                        row.col(|ui| {
+                            ui.label(entry.mins_ability.to_string());
+                        });
+                        row.col(|ui| {
+                            ui.label(entry.mins_essence.to_string());
+                        });
+                        row.col(|ui| {
+                            ui.label(entry.charm_type.display());
+                        });
+                    });
                 });
 
             ui.separator();
