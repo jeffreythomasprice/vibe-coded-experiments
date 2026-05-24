@@ -4,6 +4,7 @@
 
 use crate::character::{KnownLanguage, LanguageFamily};
 use crate::ui::state::AppState;
+use crate::ui::widgets::icon_button::trash_button;
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     let count = state.character.languages.len();
@@ -90,7 +91,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                 any_changed = true;
             }
 
-            if ui.small_button("✕").clicked() {
+            if trash_button(ui).clicked() {
                 delete_idx = Some(i);
             }
         });

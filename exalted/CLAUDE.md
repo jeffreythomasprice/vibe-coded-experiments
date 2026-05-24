@@ -13,8 +13,13 @@ This is a project about helping create and manage character sheets for Exalted (
 cargo build                 # debug
 cargo build --release       # release; the create-character skill expects target/release/exalted
 
-# Run the CLI without installing
-cargo run -- <subcommand> [args]
+# Run without installing.
+# With NO subcommand, the binary launches the egui-based GUI editor (see
+# `src/ui/`). An optional positional FILE opens that character on startup.
+cargo run                                # blank GUI
+cargo run -- assets/sample-character.toml  # GUI, file pre-opened
+
+# CLI subcommands
 cargo run -- render assets/sample-character.toml
 cargo run -- render --format pdf assets/sample-character.toml -o /tmp/sheet.pdf
 cargo run -- validate assets/sample-character.toml
@@ -23,7 +28,8 @@ cargo run -- --output-format json validate assets/sample-character.toml
 # Subcommands the CLI exposes:
 #   render, validate, rules-markdown {rules|chargen}, backgrounds [id], charms [id], spells [id]
 # All accept the global flag `--output-format {text|json}` (text is default; for
-# list/show commands text is markdown, json is the raw struct).
+# list/show commands text is markdown, json is the raw struct). The flag is
+# ignored when no subcommand is given — the GUI has no text/json mode.
 
 # Tests
 cargo test                          # whole suite (integration tests in tests/ + unit tests)
@@ -49,7 +55,8 @@ TOML on disk → `Character` struct → validation report → renderer.
 - **`src/character/`** — the `Character` struct and its constituent types (`Identity`, `RatedTrait`, `CharmRef`, `BackgroundRef`, `SpellRef`, `Equipment`, `PoolState`, `Intimacy`, `Combo`, …). This is the serialization surface: the TOML files under `assets/` and any user character file deserialize directly into `Character`. Every dot purchase carries a `DotSource` discriminator (`Base | ChargenPriority | BonusPoints { spent } | Xp { spent }`) so validation can reconstruct what was paid for what.
 - **`src/rules/`** — pure rules logic that operates on a `&Character`. Modules: `chargen` (BP/XP ledgers and the chargen validation entry points), `xp_costs`, `dice`, `defense`, `health`, `derived`, `anima`, `essence`, `equipment`, `backgrounds`, `languages`, and `database` (see below). `validate_chargen` and `validate_xp` are the two functions invoked by the `validate` subcommand.
 - **`src/render/`** — output formats. `markdown.rs` produces the human-readable sheet; `pdf/` fills the embedded MrGone AcroForm template (`assets/character-sheet/Exalted2ndED4-Page_TheSolarsV2_Editable.pdf`); `rules_data.rs` produces the markdown for the `backgrounds` / `charms` / `spells` CLI commands.
-- **`src/error.rs`** — `ValidationError` (typed errors, `thiserror`-derived) and `ValidationReport { errors, notes }`. Validators across `rules/` push into a `ValidationReport`; the CLI prints it as text or JSON.
+- **`src/ui/`** — the egui/eframe desktop editor (entry point `ui::launch`). It edits the same `Character` struct used everywhere else: `ui::io` round-trips TOML through `toml::{from_str, to_string_pretty}`, and `AppState` holds the live `Character`, dirty flag, file path, the cached `ValidationReport`, and per-picker state. Submodules: `app` (the `eframe::App` impl and per-frame draw loop), `state` (`AppState`, `StartupAction`, `PendingAction`, status toasts), `menu` (File menu / shortcuts), `sidebar` (derived stats + validation dock), `sections/` (one file per character-sheet section: attributes, abilities, charms, spells, backgrounds, intimacies, combos, pools, xp, …), `pickers/` (modal browsers backed by the rules database for adding charms/spells/backgrounds), `dialogs/` (confirm-discard, file pickers via `rfd`), and `widgets/` (shared building blocks like `RatedTrait` editors and `DotSource` selectors).
+- **`src/error.rs`** — `ValidationError` (typed errors, `thiserror`-derived) and `ValidationReport { errors, notes }`. Validators across `rules/` push into a `ValidationReport`; the CLI prints it as text or JSON, and the GUI displays it in the sidebar validation dock.
 
 ## Embedded rules database
 
@@ -76,6 +83,12 @@ Because the rules files are embedded at compile time, editing any file under `ru
 4. `acroform::finalize_form` finalizes the form so viewers display the filled values.
 
 Dot positions are hard-coded in `pdf/field_map.rs` (~700 lines of coordinates) because the PDF template's dot widgets are named `dot12`, `dot13`, … with no semantic linkage to the trait they belong to. `examples/dump_dots.rs` is the operator tool used to re-derive these mappings when the template changes — it walks the AcroForm and clusters widgets by page+row.
+
+## GUI editor
+
+`src/ui/launch` opens a native window via `eframe::run_native` (egui 0.34). The editor is an immediate-mode UI over a single in-memory `Character` held in `AppState`. Each frame, `app::App::update` lays out the menu, sidebar (derived stats + validation dock), and the central scrolling region of sheet sections. Section render functions take `&mut AppState` and call `mark_dirty` whenever they mutate the character so the title bar's `*` indicator, the save-prompt flow, and the validation re-run all stay in sync. Validation is recomputed lazily when `validation_dirty` is set, not on every frame.
+
+Save / load goes through `ui::io` (TOML round-trip on the same `Character` the CLI uses), so a character authored in the GUI is byte-for-byte the same shape as one authored by the `create-character` skill or by hand. File-system dialogs use `rfd`; the rules database (charms, spells, backgrounds) is read by the picker modals to populate their lists.
 
 # Game rules / references
 

@@ -4,6 +4,7 @@ use crate::character::{Combo, DotSource};
 use crate::rules::database::database;
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::{dot_source_editor, DotSourceKind};
+use crate::ui::widgets::icon_button::trash_button_with_label;
 use crate::ui::widgets::notes_list::notes_editor;
 
 const COMBO_SOURCES: &[DotSourceKind] = &[DotSourceKind::BonusPoints, DotSourceKind::Xp];
@@ -63,7 +64,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                     ) {
                         any_changed = true;
                     }
-                    if ui.small_button("✕ remove combo").clicked() {
+                    if trash_button_with_label(ui, "remove combo").clicked() {
                         delete_idx = Some(i);
                     }
                 });

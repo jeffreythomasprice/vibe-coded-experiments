@@ -6,6 +6,7 @@ use crate::rules::database::database;
 use crate::ui::pickers::background_picker::BackgroundPickerState;
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::DotSourceKind;
+use crate::ui::widgets::icon_button::trash_button_with_label;
 use crate::ui::widgets::notes_list::notes_editor;
 use crate::ui::widgets::rated_trait::{rated_trait_editor, RatedTraitOpts};
 
@@ -57,7 +58,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                         if resp.changed() {
                             any_changed = true;
                         }
-                        if ui.small_button("✕ remove").clicked() {
+                        if trash_button_with_label(ui, "remove").clicked() {
                             delete_idx = Some(i);
                         }
                     });

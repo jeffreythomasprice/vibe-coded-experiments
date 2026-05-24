@@ -5,6 +5,7 @@ use crate::character::equipment::DamageType;
 use crate::character::{AbilityKind, Armor, Artifact, Possession, Weapon};
 use crate::render::names::ability_name;
 use crate::ui::state::AppState;
+use crate::ui::widgets::icon_button::{trash_button, trash_button_with_label};
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     ui.heading("Equipment");
@@ -72,7 +73,7 @@ fn weapons(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
                 if w.ability != prev {
                     *any = true;
                 }
-                if ui.small_button("✕ remove").clicked() {
+                if trash_button_with_label(ui, "remove").clicked() {
                     delete = Some(i);
                 }
             });
@@ -186,7 +187,7 @@ fn armor(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
             {
                 *any = true;
             }
-            if ui.small_button("✕ remove armor").clicked() {
+            if trash_button_with_label(ui, "remove armor").clicked() {
                 remove_armor = true;
             }
         });
@@ -278,7 +279,7 @@ fn possessions(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
                     *any = true;
                 }
             }
-            if ui.small_button("✕").clicked() {
+            if trash_button(ui).clicked() {
                 delete = Some(i);
             }
         });
@@ -336,7 +337,7 @@ fn artifacts(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
                 {
                     *any = true;
                 }
-                if ui.small_button("✕").clicked() {
+                if trash_button(ui).clicked() {
                     delete = Some(i);
                 }
             });

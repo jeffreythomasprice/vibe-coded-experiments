@@ -7,6 +7,7 @@ use crate::rules::database::database;
 use crate::ui::pickers::charm_picker::CharmPickerState;
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::{dot_source_editor, DotSourceKind};
+use crate::ui::widgets::icon_button::trash_button_with_label;
 use crate::ui::widgets::notes_list::notes_editor;
 
 const CHARM_SOURCES: &[DotSourceKind] = &[
@@ -70,7 +71,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                     if ui.checkbox(non_solar, "non-Solar").changed() {
                         any_changed = true;
                     }
-                    if ui.small_button("✕ remove").clicked() {
+                    if trash_button_with_label(ui, "remove").clicked() {
                         delete_idx = Some(i);
                     }
                 });

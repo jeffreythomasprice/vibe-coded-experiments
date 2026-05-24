@@ -5,6 +5,7 @@
 pub mod dot_source;
 pub mod dots_display;
 pub mod enum_combo;
+pub mod icon_button;
 pub mod labeled;
 pub mod notes_list;
 pub mod rated_trait;

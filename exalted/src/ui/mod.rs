@@ -28,6 +28,9 @@ pub fn launch(start: StartupAction) -> eframe::Result<()> {
     eframe::run_native(
         "Exalted",
         native_options,
-        Box::new(move |_cc| Ok(Box::new(App::new(start)))),
+        Box::new(move |cc| {
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+            Ok(Box::new(App::new(start)))
+        }),
     )
 }

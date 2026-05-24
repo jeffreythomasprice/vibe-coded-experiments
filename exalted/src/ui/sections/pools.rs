@@ -4,6 +4,7 @@
 use crate::character::{MoteCommitment, MotePool, VirtueKind};
 use crate::render::names::virtue_name;
 use crate::ui::state::AppState;
+use crate::ui::widgets::icon_button::trash_button;
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     ui.heading("Pools & In-Play State");
@@ -68,7 +69,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             if resp.changed() {
                 any = true;
             }
-            if ui.small_button("✕").clicked() {
+            if trash_button(ui).clicked() {
                 delete_idx = Some(i);
             }
         });

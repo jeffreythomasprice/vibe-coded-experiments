@@ -3,6 +3,7 @@
 use crate::character::{DotSource, Intimacy, IntimacyKind};
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::{dot_source_editor, DotSourceKind};
+use crate::ui::widgets::icon_button::trash_button;
 
 const INTIMACY_SOURCES: &[DotSourceKind] = &[
     DotSourceKind::Base,
@@ -72,7 +73,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             {
                 any_changed = true;
             }
-            if ui.small_button("✕").clicked() {
+            if trash_button(ui).clicked() {
                 delete_idx = Some(i);
             }
         });

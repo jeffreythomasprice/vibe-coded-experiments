@@ -3,6 +3,7 @@
 
 use crate::character::Familiar;
 use crate::ui::state::AppState;
+use crate::ui::widgets::icon_button::trash_button_with_label;
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     ui.heading("Familiar");
@@ -23,7 +24,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             if resp.changed() {
                 any_changed = true;
             }
-            if ui.small_button("✕ remove").clicked() {
+            if trash_button_with_label(ui, "remove").clicked() {
                 remove = true;
             }
         });

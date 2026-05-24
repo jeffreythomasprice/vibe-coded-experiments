@@ -3,6 +3,7 @@
 
 use crate::character::{DotPurchase, DotSource, RatedTrait, Specialty};
 use crate::ui::widgets::dot_source::{dot_source_editor, DotSourceKind};
+use crate::ui::widgets::icon_button::trash_button;
 
 pub struct RatedTraitOpts<'a> {
     /// Label shown to the left of the dot row (e.g. "Strength").
@@ -95,7 +96,7 @@ pub fn rated_trait_editor(
                         ) {
                             changed = true;
                         }
-                        if ui.small_button("✕").clicked() {
+                        if trash_button(ui).clicked() {
                             delete_idx = Some(i);
                         }
                     });
@@ -135,7 +136,7 @@ pub fn rated_trait_editor(
                         ) {
                             changed = true;
                         }
-                        if ui.small_button("✕").clicked() {
+                        if trash_button(ui).clicked() {
                             delete_idx = Some(i);
                         }
                     });

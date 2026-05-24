@@ -7,6 +7,7 @@ use crate::rules::database::database;
 use crate::ui::pickers::spell_picker::SpellPickerState;
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::{dot_source_editor, DotSourceKind};
+use crate::ui::widgets::icon_button::trash_button_with_label;
 use crate::ui::widgets::notes_list::notes_editor;
 
 const SPELL_SOURCES: &[DotSourceKind] = &[
@@ -53,7 +54,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                     if dot_source_editor(ui, ("spell-src", i), source, SPELL_SOURCES) {
                         any_changed = true;
                     }
-                    if ui.small_button("✕ remove").clicked() {
+                    if trash_button_with_label(ui, "remove").clicked() {
                         delete_idx = Some(i);
                     }
                 });
