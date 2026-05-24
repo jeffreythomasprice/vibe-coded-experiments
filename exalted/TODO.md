@@ -7,9 +7,14 @@ The default command when we run the app should be to launch the UI. There should
 
 todo:
 
+/init
+
+
 UI mode should have tooltips for rules explanations
 
-UI mode should support custom backgrounds, charms, spells, combos
+
+UI mode should support fully custom backgrounds, charms, spells, combos
+not just the dropdown from the database
 
 
 what does the series of checkboxes for essence pol and anima pool actually mean? I can only select one of them like they're radio buttons

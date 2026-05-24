@@ -20,6 +20,13 @@ serde_json = "1"
 thiserror = "1"
 toml = "0.8"
 
+# GUI editor
+eframe = { version = "0.34", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+egui = "0.34"
+egui_extras = "0.34"
+rfd = "0.17"
+directories = "6"
+
 [[example]]
 name = "dump_dots"
 path = "examples/dump_dots.rs"

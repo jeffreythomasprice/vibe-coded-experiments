@@ -2,9 +2,10 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::Parser;
 use serde::Serialize;
 
+use exalted::cli::{Cli, Cmd, OutputFormat, RenderFormat, RulesTopic};
 use exalted::error::{ValidationError, ValidationReport};
 use exalted::render::{
     background_to_markdown, backgrounds_to_markdown, character_to_markdown, character_to_pdf,
@@ -16,110 +17,6 @@ use exalted::rules::database::{
 };
 use exalted::Character;
 
-#[derive(Parser)]
-#[command(name = "exalted", version, about = "Exalted 2e character sheet tools")]
-struct Cli {
-    /// Output format for command results and error messages.
-    ///
-    /// `text` is the default human-readable form. `json` emits machine-parsable
-    /// output for `validate` and JSON-encoded `{"error": "..."}` on stderr for
-    /// any command that fails. The intended payload of `render` (markdown) is
-    /// unaffected; only its error messages honor this flag.
-    #[arg(
-        long = "output-format",
-        value_enum,
-        global = true,
-        default_value_t = OutputFormat::Text,
-    )]
-    output_format: OutputFormat,
-
-    #[command(subcommand)]
-    command: Cmd,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
-enum OutputFormat {
-    Text,
-    Json,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
-enum RenderFormat {
-    Markdown,
-    Pdf,
-}
-
-/// Which embedded rules-summary markdown file to emit.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
-enum RulesTopic {
-    /// `rules/game_rules.md` — core-rules summary.
-    Rules,
-    /// `rules/character_creation.md` — chargen summary.
-    Chargen,
-}
-
-#[derive(Subcommand)]
-enum Cmd {
-    /// Render a character TOML file as markdown or a filled PDF.
-    ///
-    /// Markdown (default) writes to stdout unless `-o` is given.
-    /// PDF requires `-o FILE` because PDF bytes are binary and not safe to
-    /// write to a TTY.
-    Render {
-        /// Path to the character TOML file.
-        file: PathBuf,
-        /// Optional output path. Required when `--format pdf` is selected;
-        /// for markdown, omitting it writes to stdout.
-        #[arg(short, long)]
-        output: Option<PathBuf>,
-        /// Rendered output format.
-        #[arg(long = "format", value_enum, default_value_t = RenderFormat::Markdown)]
-        format: RenderFormat,
-    },
-    /// Validate a character against chargen and XP rules.
-    ///
-    /// Exit code is 0 if there are no errors (notes are informational),
-    /// non-zero if any validation errors are found or the file cannot be
-    /// parsed.
-    Validate {
-        /// Path to the character TOML file.
-        file: PathBuf,
-    },
-    /// Emit one of the embedded rules-summary markdown documents.
-    ///
-    /// The payload is always markdown written to stdout — `--output-format`
-    /// is ignored for this subcommand (a JSON wrapper around a multi-page
-    /// document is not useful).
-    RulesMarkdown {
-        /// Which document to emit.
-        topic: RulesTopic,
-    },
-    /// List all backgrounds, or show one by id.
-    ///
-    /// With no id, every background is emitted (sorted by id). With an id,
-    /// only that entry is emitted; an unknown id exits with status 2.
-    /// `--output-format text` (default) emits markdown; `--output-format
-    /// json` emits the entry struct(s).
-    Backgrounds {
-        /// Optional background id (e.g. `allies`, `artifact`).
-        id: Option<String>,
-    },
-    /// List all charms, or show one by id.
-    ///
-    /// Excellency template ids (e.g. `first-ability-excellency`) are
-    /// expanded at startup into one entry per Ability; pass the expanded id
-    /// (e.g. `first-archery-excellency`).
-    Charms {
-        /// Optional charm id.
-        id: Option<String>,
-    },
-    /// List all spells, or show one by id.
-    Spells {
-        /// Optional spell id.
-        id: Option<String>,
-    },
-}
-
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let fmt = cli.output_format;
@@ -128,12 +25,27 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     }
     match cli.command {
-        Cmd::Render { file, output, format } => run_render(file, output, format, fmt),
-        Cmd::Validate { file } => run_validate(file, fmt),
-        Cmd::RulesMarkdown { topic } => run_rules_markdown(topic),
-        Cmd::Backgrounds { id } => run_backgrounds(id, fmt),
-        Cmd::Charms { id } => run_charms(id, fmt),
-        Cmd::Spells { id } => run_spells(id, fmt),
+        Some(Cmd::Render { file, output, format }) => run_render(file, output, format, fmt),
+        Some(Cmd::Validate { file }) => run_validate(file, fmt),
+        Some(Cmd::RulesMarkdown { topic }) => run_rules_markdown(topic),
+        Some(Cmd::Backgrounds { id }) => run_backgrounds(id, fmt),
+        Some(Cmd::Charms { id }) => run_charms(id, fmt),
+        Some(Cmd::Spells { id }) => run_spells(id, fmt),
+        None => run_ui(cli.file),
+    }
+}
+
+fn run_ui(file: Option<PathBuf>) -> ExitCode {
+    let start = match file {
+        Some(p) => exalted::ui::StartupAction::OpenFile(p),
+        None => exalted::ui::StartupAction::Empty,
+    };
+    match exalted::ui::launch(start) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("ui error: {}", e);
+            ExitCode::from(2)
+        }
     }
 }
 
