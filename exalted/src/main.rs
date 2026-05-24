@@ -5,6 +5,7 @@ use std::process::ExitCode;
 use clap::Parser;
 use serde::Serialize;
 
+use exalted::Character;
 use exalted::cli::{Cli, Cmd, OutputFormat, RenderFormat, RulesTopic};
 use exalted::error::{ValidationError, ValidationReport};
 use exalted::render::{
@@ -12,10 +13,9 @@ use exalted::render::{
     charm_to_markdown, charms_to_markdown, spell_to_markdown, spells_to_markdown,
 };
 use exalted::rules::database::{
-    character_creation_markdown, database, game_rules_markdown, init_database, BackgroundEntry,
-    CharmEntry, SpellEntry,
+    BackgroundEntry, CharmEntry, SpellEntry, character_creation_markdown, database,
+    game_rules_markdown, init_database,
 };
-use exalted::Character;
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
@@ -25,7 +25,11 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     }
     match cli.command {
-        Some(Cmd::Render { file, output, format }) => run_render(file, output, format, fmt),
+        Some(Cmd::Render {
+            file,
+            output,
+            format,
+        }) => run_render(file, output, format, fmt),
         Some(Cmd::Validate { file }) => run_validate(file, fmt),
         Some(Cmd::RulesMarkdown { topic }) => run_rules_markdown(topic),
         Some(Cmd::Backgrounds { id }) => run_backgrounds(id, fmt),
@@ -82,10 +86,7 @@ fn run_render(
             match output {
                 Some(path) => {
                     if let Err(e) = fs::write(&path, md.as_bytes()) {
-                        emit_error(
-                            &format!("could not write {}: {}", path.display(), e),
-                            fmt,
-                        );
+                        emit_error(&format!("could not write {}: {}", path.display(), e), fmt);
                         return ExitCode::from(2);
                     }
                 }
@@ -113,10 +114,7 @@ fn run_render(
                 }
             };
             if let Err(e) = fs::write(&path, &bytes) {
-                emit_error(
-                    &format!("could not write {}: {}", path.display(), e),
-                    fmt,
-                );
+                emit_error(&format!("could not write {}: {}", path.display(), e), fmt);
                 return ExitCode::from(2);
             }
         }
@@ -183,7 +181,10 @@ fn print_report_json(report: &ValidationReport) {
     // Pretty-print for readability; machine parsers handle either.
     match serde_json::to_string_pretty(&payload) {
         Ok(s) => println!("{}", s),
-        Err(e) => eprintln!("{}", serde_json::json!({ "error": format!("could not serialize report: {}", e) })),
+        Err(e) => eprintln!(
+            "{}",
+            serde_json::json!({ "error": format!("could not serialize report: {}", e) })
+        ),
     }
 }
 

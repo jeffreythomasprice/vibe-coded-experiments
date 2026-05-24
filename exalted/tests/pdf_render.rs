@@ -3,6 +3,7 @@
 mod common;
 
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use common::valid_dawn;
 use exalted::character::{AbilityKind, AttributeKind, KnownLanguage, LanguageFamily};
@@ -10,11 +11,24 @@ use exalted::render::character_to_pdf;
 use exalted::rules::database::init_database;
 use lopdf::{Document, Object};
 
-fn render() -> Document {
-    init_database().ok();
-    let c = valid_dawn();
-    let bytes = character_to_pdf(&c).expect("render pdf");
-    Document::load_mem(&bytes).expect("output parseable as pdf")
+/// PDF bytes for the unmodified `valid_dawn` character. Rendered once and
+/// shared across every test that needs the baseline — the render+serialize
+/// pipeline is the single most expensive thing this test file does.
+fn baseline_bytes() -> &'static [u8] {
+    static BYTES: OnceLock<Vec<u8>> = OnceLock::new();
+    BYTES.get_or_init(|| {
+        init_database().ok();
+        let c = valid_dawn();
+        character_to_pdf(&c).expect("render pdf")
+    })
+}
+
+/// Parsed `Document` for the unmodified `valid_dawn` baseline. The read
+/// helpers (`read_text_field`, `read_checkbox`, `find_field`) only inspect
+/// the document, so sharing a single `&'static Document` across tests is safe.
+fn baseline_doc() -> &'static Document {
+    static DOC: OnceLock<Document> = OnceLock::new();
+    DOC.get_or_init(|| Document::load_mem(baseline_bytes()).expect("output parseable as pdf"))
 }
 
 fn read_text_field(doc: &Document, name: &str) -> Option<String> {
@@ -54,11 +68,7 @@ fn find_field(doc: &Document, name: &str) -> Option<lopdf::ObjectId> {
     None
 }
 
-fn find_in_subtree(
-    doc: &Document,
-    id: lopdf::ObjectId,
-    target: &str,
-) -> Option<lopdf::ObjectId> {
+fn find_in_subtree(doc: &Document, id: lopdf::ObjectId, target: &str) -> Option<lopdf::ObjectId> {
     let dict = doc.get_dictionary(id).ok()?;
     let local = dict.get(b"T").ok().and_then(|o| match o {
         Object::String(b, _) => std::str::from_utf8(b).ok().map(str::to_string),
@@ -87,21 +97,21 @@ fn find_in_subtree(
 
 #[test]
 fn pdf_renders_and_parses() {
-    let doc = render();
+    let doc = baseline_doc();
     assert!(doc.objects.len() > 0, "rendered PDF has no objects");
 }
 
 #[test]
 fn pdf_name_field_matches_character() {
-    let doc = render();
-    let v = read_text_field(&doc, "name").expect("name field set");
+    let doc = baseline_doc();
+    let v = read_text_field(doc, "name").expect("name field set");
     assert_eq!(v, "Test Solar");
 }
 
 #[test]
 fn pdf_caste_field_matches_character() {
-    let doc = render();
-    let v = read_text_field(&doc, "caste").expect("caste field set");
+    let doc = baseline_doc();
+    let v = read_text_field(doc, "caste").expect("caste field set");
     assert_eq!(v, "Dawn");
 }
 
@@ -109,11 +119,11 @@ fn pdf_caste_field_matches_character() {
 fn strength_dots_checked_correctly() {
     let c = valid_dawn();
     let strength = c.attribute(AttributeKind::Strength) as usize;
-    let doc = render();
+    let doc = baseline_doc();
     // dot1..dot5 are Strength.
     for i in 0..5 {
         let field = format!("dot{}", i + 1);
-        let v = read_checkbox(&doc, &field).expect("strength dot has value");
+        let v = read_checkbox(doc, &field).expect("strength dot has value");
         let expected = if i < strength { "Yes" } else { "Off" };
         assert_eq!(v, expected, "{}: expected {}, got {}", field, expected, v);
     }
@@ -156,10 +166,10 @@ const PDF_ABILITY_ORDER: [AbilityKind; 25] = [
 #[test]
 fn ability_caste_marks_match_character() {
     let c = valid_dawn();
-    let doc = render();
+    let doc = baseline_doc();
     for (i, kind) in PDF_ABILITY_ORDER.iter().enumerate() {
         let field = format!("skillscheck{}", i + 1);
-        let v = read_checkbox(&doc, &field).expect("caste mark has value");
+        let v = read_checkbox(doc, &field).expect("caste mark has value");
         let expected = if c.is_caste_or_favored_ability(*kind) {
             "Yes"
         } else {
@@ -176,17 +186,18 @@ fn ability_caste_marks_match_character() {
 #[test]
 fn ability_dots_match_character() {
     let c = valid_dawn();
-    let doc = render();
+    let doc = baseline_doc();
     for (pos, kind) in PDF_ABILITY_ORDER.iter().enumerate() {
         let rating = c.ability(*kind) as usize;
         for dot_idx in 0..5 {
             let dot_n = 46 + pos * 5 + dot_idx;
             let field = format!("dot{}", dot_n);
-            let v = read_checkbox(&doc, &field)
+            let v = read_checkbox(doc, &field)
                 .unwrap_or_else(|| panic!("ability dot {} missing", field));
             let expected = if dot_idx < rating { "Yes" } else { "Off" };
             assert_eq!(
-                v, expected,
+                v,
+                expected,
                 "{} (ability {:?} dot {}, rating {}): expected {}, got {}",
                 field,
                 kind,
@@ -206,8 +217,8 @@ fn ability_dots_match_character() {
 /// the literal text we wrote.
 #[test]
 fn text_field_has_baked_appearance_stream() {
-    let doc = render();
-    let widget_id = find_field(&doc, "name").expect("name field exists");
+    let doc = baseline_doc();
+    let widget_id = find_field(doc, "name").expect("name field exists");
     let widget = doc.get_dictionary(widget_id).expect("widget dict");
     let ap = widget
         .get(b"AP")
@@ -231,11 +242,9 @@ fn text_field_has_baked_appearance_stream() {
 
 #[test]
 fn pdf_can_be_written_to_disk() {
-    let c = valid_dawn();
-    init_database().ok();
-    let bytes = character_to_pdf(&c).expect("render pdf");
+    let bytes = baseline_bytes();
     let tmp = std::env::temp_dir().join("exalted-pdf-render-test.pdf");
-    std::fs::write(&tmp, &bytes).expect("write tmp");
+    std::fs::write(&tmp, bytes).expect("write tmp");
     assert!(tmp.exists());
     let _ = std::fs::remove_file(&tmp);
 }
@@ -248,12 +257,12 @@ fn page4_athletics_boxes_filled() {
     //   Jump vertical   = Str + Ath (7)
     //   Jump horizontal = vert × 2 (14)
     //   Lift            = (Str + Ath = 7) → 650 lbs
-    let doc = render();
-    assert_eq!(read_text_field(&doc, "Mo").as_deref(), Some("5"));
-    assert_eq!(read_text_field(&doc, "DA").as_deref(), Some("11"));
-    assert_eq!(read_text_field(&doc, "VJ").as_deref(), Some("7"));
-    assert_eq!(read_text_field(&doc, "HJ").as_deref(), Some("14"));
-    assert_eq!(read_text_field(&doc, "LI").as_deref(), Some("650"));
+    let doc = baseline_doc();
+    assert_eq!(read_text_field(doc, "Mo").as_deref(), Some("5"));
+    assert_eq!(read_text_field(doc, "DA").as_deref(), Some("11"));
+    assert_eq!(read_text_field(doc, "VJ").as_deref(), Some("7"));
+    assert_eq!(read_text_field(doc, "HJ").as_deref(), Some("14"));
+    assert_eq!(read_text_field(doc, "LI").as_deref(), Some("650"));
 }
 
 #[test]
@@ -387,11 +396,12 @@ fn assert_health_checks(doc: &Document, expected_checked: &[&str]) {
         let v = read_checkbox(doc, &field).unwrap_or_else(|| {
             panic!("{} missing from rendered PDF", field);
         });
-        let expected = if want.contains(field.as_str()) { "Yes" } else { "Off" };
-        assert_eq!(
-            v, expected,
-            "{}: expected {}, got {}", field, expected, v
-        );
+        let expected = if want.contains(field.as_str()) {
+            "Yes"
+        } else {
+            "Off"
+        };
+        assert_eq!(v, expected, "{}: expected {}, got {}", field, expected, v);
     }
 }
 
@@ -499,11 +509,7 @@ fn assert_only_native_checked(doc: &Document, native_slot: usize) {
         let v = read_checkbox(doc, &field)
             .unwrap_or_else(|| panic!("{} missing from rendered PDF", field));
         let expected = if n == native_slot { "Yes" } else { "Off" };
-        assert_eq!(
-            v, expected,
-            "{}: expected {}, got {}",
-            field, expected, v
-        );
+        assert_eq!(v, expected, "{}: expected {}, got {}", field, expected, v);
     }
 }
 
@@ -511,16 +517,16 @@ fn assert_only_native_checked(doc: &Document, native_slot: usize) {
 fn language_native_checkbox_marks_only_native_slot() {
     // valid_dawn has exactly one language (Riverspeak) marked native in
     // slot 1. LCheck1 should be ticked; LCheck2..15 should be clear.
-    let doc = render();
-    assert_only_native_checked(&doc, 1);
+    let doc = baseline_doc();
+    assert_only_native_checked(doc, 1);
 }
 
 #[test]
 fn language_text_no_longer_appends_native_suffix() {
     // The native flag is now conveyed by LCheck, so the text field for
     // the native language must not contain the legacy "(native)" suffix.
-    let doc = render();
-    let v = read_text_field(&doc, "languages1").expect("languages1 written");
+    let doc = baseline_doc();
+    let v = read_text_field(doc, "languages1").expect("languages1 written");
     assert!(
         !v.contains("(native)"),
         "languages1 should not contain '(native)' suffix, got: {:?}",
@@ -616,10 +622,14 @@ fn specialty_row_6_uses_page4_specx_and_e2dot51() {
             AbilityKind::Athletics,
         ];
         for (i, kind) in abilities.iter().enumerate() {
-            c.abilities.get_mut(kind).unwrap().specialties.push(Specialty {
-                name: format!("Spec{}", i + 1),
-                source: DotSource::Xp { spent: 0 },
-            });
+            c.abilities
+                .get_mut(kind)
+                .unwrap()
+                .specialties
+                .push(Specialty {
+                    name: format!("Spec{}", i + 1),
+                    source: DotSource::Xp { spent: 0 },
+                });
         }
     });
 
@@ -676,7 +686,7 @@ fn intimacy_rating_fills_idot_row() {
 
 #[test]
 fn familiar_damage_fills_fcheck_track() {
-    use exalted::character::{state::HealthDamage, Familiar};
+    use exalted::character::{Familiar, state::HealthDamage};
 
     let doc = render_with(|c| {
         c.familiar = Some(Familiar {
@@ -758,16 +768,24 @@ fn essence_overflow_fills_dots_7_and_8_when_rating_is_8() {
     // and 9 and 10 are stroked.
     let fills = s.matches("\nf\n").count();
     let strokes = s.matches("\nS\n").count();
-    assert_eq!(fills, 2, "expected 2 filled overflow dots, got {} (stream: {:?})", fills, s);
-    assert_eq!(strokes, 2, "expected 2 stroked overflow dots, got {} (stream: {:?})", strokes, s);
+    assert_eq!(
+        fills, 2,
+        "expected 2 filled overflow dots, got {} (stream: {:?})",
+        fills, s
+    );
+    assert_eq!(
+        strokes, 2,
+        "expected 2 stroked overflow dots, got {} (stream: {:?})",
+        strokes, s
+    );
 }
 
 #[test]
 fn essence_overflow_not_drawn_when_rating_below_7() {
     // valid_dawn has Essence 2 — none of dots 7–10 would be filled, so
     // we don't render the overflow row at all.
-    let doc = render();
-    let s = essence_overflow_stream_content(&doc);
+    let doc = baseline_doc();
+    let s = essence_overflow_stream_content(doc);
     assert!(
         s.is_empty(),
         "expected no overflow stream below rating 7, got: {:?}",
@@ -785,17 +803,25 @@ fn essence_overflow_drawn_at_exactly_rating_7() {
     let s = essence_overflow_stream_content(&doc);
     let fills = s.matches("\nf\n").count();
     let strokes = s.matches("\nS\n").count();
-    assert_eq!(fills, 1, "expected 1 filled overflow dot at Essence 7, got {}", fills);
-    assert_eq!(strokes, 3, "expected 3 stroked overflow dots at Essence 7, got {}", strokes);
+    assert_eq!(
+        fills, 1,
+        "expected 1 filled overflow dot at Essence 7, got {}",
+        fills
+    );
+    assert_eq!(
+        strokes, 3,
+        "expected 3 stroked overflow dots at Essence 7, got {}",
+        strokes
+    );
 }
 
 #[test]
 fn no_familiar_clears_fcheck_track() {
     // valid_dawn has no familiar; every Fcheck box should be unchecked.
-    let doc = render();
+    let doc = baseline_doc();
     for n in 1..=30 {
         let field = format!("Fcheck{}", n);
-        let v = read_checkbox(&doc, &field).expect("Fcheck has value");
+        let v = read_checkbox(doc, &field).expect("Fcheck has value");
         assert_eq!(v, "Off", "{}: expected Off, got {}", field, v);
     }
 }

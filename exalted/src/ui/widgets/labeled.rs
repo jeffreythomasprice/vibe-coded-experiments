@@ -15,12 +15,7 @@ pub fn labeled_text_edit(ui: &mut egui::Ui, label: &str, value: &mut String) -> 
 }
 
 /// A multi-line text edit with a label above it.
-pub fn labeled_text_area(
-    ui: &mut egui::Ui,
-    label: &str,
-    value: &mut String,
-    rows: usize,
-) -> bool {
+pub fn labeled_text_area(ui: &mut egui::Ui, label: &str, value: &mut String, rows: usize) -> bool {
     let mut changed = false;
     ui.label(label);
     let resp = ui.add(

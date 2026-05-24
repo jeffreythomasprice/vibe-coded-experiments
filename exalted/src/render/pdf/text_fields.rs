@@ -13,17 +13,17 @@ use crate::character::xp::total_xp_spent;
 use crate::character::{
     AttributeKind, BackgroundRef, Character, KnownLanguage, LanguageFamily, Weapon,
 };
-use crate::rules::database::{database, RulesDatabase};
+use crate::rules::database::{RulesDatabase, database};
 use crate::rules::defense::{
     dodge_dv, join_battle, mdv_dodge, parry_dv, soak_aggravated, soak_bashing, soak_lethal,
 };
 use crate::rules::derived::{lift_lbs, movement};
-use crate::rules::essence::{personal_essence_max, peripheral_essence_max};
+use crate::rules::essence::{peripheral_essence_max, personal_essence_max};
 
-use super::acroform::{set_text_field, FieldIndex};
-use super::field_map;
 use super::super::names::{ability_name, caste_name, intimacy_kind};
 use super::PdfRenderError;
+use super::acroform::{FieldIndex, set_text_field};
+use super::field_map;
 
 pub(super) fn fill(
     doc: &mut Document,
@@ -157,7 +157,11 @@ fn fill_intimacies(
         let text = if matches!(intimacy.kind, crate::character::IntimacyKind::Other) {
             intimacy.description.clone()
         } else {
-            format!("{} [{}]", intimacy.description, intimacy_kind(intimacy.kind))
+            format!(
+                "{} [{}]",
+                intimacy.description,
+                intimacy_kind(intimacy.kind)
+            )
         };
         let field = format!("intimacies{}", i + 1);
         if index.has(&field) {
@@ -321,12 +325,37 @@ fn fill_charms_and_spells(
 
     for (i, charm) in c.charms.iter().take(CHARM_ROWS).enumerate() {
         let n = i + 1;
-        write(doc, index, &format!("charms/sorcery{}", n), charm.display_name(db))?;
+        write(
+            doc,
+            index,
+            &format!("charms/sorcery{}", n),
+            charm.display_name(db),
+        )?;
         if let Some(entry) = charm.entry(db) {
-            write(doc, index, &format!("charms/sorcery{}", n + 14), entry.charm_type.display())?;
-            write(doc, index, &format!("charms/sorcery{}", n + 28), &entry.duration)?;
-            write(doc, index, &format!("charms/sorcery{}", n + 42), &entry.cost)?;
-            write(doc, index, &format!("charms/sorcery{}", n + 56), &entry.effect)?;
+            write(
+                doc,
+                index,
+                &format!("charms/sorcery{}", n + 14),
+                entry.charm_type.display(),
+            )?;
+            write(
+                doc,
+                index,
+                &format!("charms/sorcery{}", n + 28),
+                &entry.duration,
+            )?;
+            write(
+                doc,
+                index,
+                &format!("charms/sorcery{}", n + 42),
+                &entry.cost,
+            )?;
+            write(
+                doc,
+                index,
+                &format!("charms/sorcery{}", n + 56),
+                &entry.effect,
+            )?;
         }
     }
 
@@ -432,7 +461,12 @@ fn fill_xp_and_essence(
     if index.has("exp") {
         let spent = total_xp_spent(c);
         let remaining = c.xp_earned.saturating_sub(spent);
-        write(doc, index, "exp", &format!("{} (spent {} of {})", remaining, spent, c.xp_earned))?;
+        write(
+            doc,
+            index,
+            "exp",
+            &format!("{} (spent {} of {})", remaining, spent, c.xp_earned),
+        )?;
     }
     // EP = Personal Essence pool max; AP = Peripheral Essence pool max.
     write(doc, index, "EP", &personal_essence_max(c).to_string())?;

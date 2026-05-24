@@ -40,11 +40,7 @@ pub fn mdv_dodge(character: &Character) -> u8 {
 
 /// Mental Parry DV: ⌊((Cha or Manip) + Ability) / 2⌋ + 2. Caller chooses
 /// the attribute and the social ability used (Performance/Presence/Investigation).
-pub fn mdv_parry(
-    character: &Character,
-    attribute: AttributeKind,
-    ability: AbilityKind,
-) -> u8 {
+pub fn mdv_parry(character: &Character, attribute: AttributeKind, ability: AbilityKind) -> u8 {
     let raw = character.attribute(attribute) as u16 + character.ability(ability) as u16;
     let rounded = raw / 2;
     rounded.saturating_add(2) as u8

@@ -134,17 +134,17 @@ fn main() {
     });
 
     println!();
-    println!("# text-field dump — {} non-dot fields total", text_fields.len());
+    println!(
+        "# text-field dump — {} non-dot fields total",
+        text_fields.len()
+    );
     let mut current_page: Option<u32> = None;
     for f in &text_fields {
         if current_page != Some(f.page) {
             current_page = Some(f.page);
             println!("page {}", f.page + 1);
         }
-        println!(
-            "  {:<28}  y={:>6.1}  x={:>6.1}",
-            f.name, f.cy, f.cx
-        );
+        println!("  {:<28}  y={:>6.1}  x={:>6.1}", f.name, f.cy, f.cx);
     }
 }
 
@@ -239,7 +239,14 @@ fn walk_field(
         if has_child_field {
             for k in kids {
                 if let Ok(kid_id) = k.as_reference() {
-                    walk_field(doc, widget_page, kid_id, full_name.as_deref(), out, text_out);
+                    walk_field(
+                        doc,
+                        widget_page,
+                        kid_id,
+                        full_name.as_deref(),
+                        out,
+                        text_out,
+                    );
                 }
             }
             return;
@@ -262,9 +269,21 @@ fn is_dot_name(name: &str) -> bool {
     // `EPCheckN`, `APCheckN`, `FcheckN`, `LCheckN` — anything that could be
     // a rating/track checkbox.
     let prefixes = [
-        "dot", "willdot", "essencedot", "e2dot", "Idot", "xtdot",
-        "virtuecheck", "LBCheck", "healthcheck", "skillscheck", "willcheck",
-        "EPCheck", "APCheck", "Fcheck", "LCheck",
+        "dot",
+        "willdot",
+        "essencedot",
+        "e2dot",
+        "Idot",
+        "xtdot",
+        "virtuecheck",
+        "LBCheck",
+        "healthcheck",
+        "skillscheck",
+        "willcheck",
+        "EPCheck",
+        "APCheck",
+        "Fcheck",
+        "LCheck",
     ];
     for p in prefixes {
         if let Some(rest) = name.strip_prefix(p) {

@@ -298,21 +298,8 @@ pub(super) const LIMIT_TRACK: [&str; 10] = [
 /// Per-language checkboxes (15 rows). Ticked iff that slot's language
 /// is the character's native tongue.
 pub(super) const LANGUAGE_CHECKBOXES: [&str; 15] = [
-    "LCheck1",
-    "LCheck2",
-    "LCheck3",
-    "LCheck4",
-    "LCheck5",
-    "LCheck6",
-    "LCheck7",
-    "LCheck8",
-    "LCheck9",
-    "LCheck10",
-    "LCheck11",
-    "LCheck12",
-    "LCheck13",
-    "LCheck14",
-    "LCheck15",
+    "LCheck1", "LCheck2", "LCheck3", "LCheck4", "LCheck5", "LCheck6", "LCheck7", "LCheck8",
+    "LCheck9", "LCheck10", "LCheck11", "LCheck12", "LCheck13", "LCheck14", "LCheck15",
 ];
 
 // ---------------------------------------------------------------------------
@@ -460,16 +447,45 @@ pub(super) fn background_text_field(slot: usize) -> Option<String> {
 // ---------------------------------------------------------------------------
 
 pub(super) const INTIMACY_DOTS: [[&str; 10]; 10] = [
-    ["Idot1", "Idot2", "Idot3", "Idot4", "Idot5", "Idot6", "Idot7", "Idot8", "Idot9", "Idot10"],
-    ["Idot11", "Idot12", "Idot13", "Idot14", "Idot15", "Idot16", "Idot17", "Idot18", "Idot19", "Idot20"],
-    ["Idot21", "Idot22", "Idot23", "Idot24", "Idot25", "Idot26", "Idot27", "Idot28", "Idot29", "Idot30"],
-    ["Idot31", "Idot32", "Idot33", "Idot34", "Idot35", "Idot36", "Idot37", "Idot38", "Idot39", "Idot40"],
-    ["Idot41", "Idot42", "Idot43", "Idot44", "Idot45", "Idot46", "Idot47", "Idot48", "Idot49", "Idot50"],
-    ["Idot51", "Idot52", "Idot53", "Idot54", "Idot55", "Idot56", "Idot57", "Idot58", "Idot59", "Idot60"],
-    ["Idot61", "Idot62", "Idot63", "Idot64", "Idot65", "Idot66", "Idot67", "Idot68", "Idot69", "Idot70"],
-    ["Idot71", "Idot72", "Idot73", "Idot74", "Idot75", "Idot76", "Idot77", "Idot78", "Idot79", "Idot80"],
-    ["Idot81", "Idot82", "Idot83", "Idot84", "Idot85", "Idot86", "Idot87", "Idot88", "Idot89", "Idot90"],
-    ["Idot91", "Idot92", "Idot93", "Idot94", "Idot95", "Idot96", "Idot97", "Idot98", "Idot99", "Idot100"],
+    [
+        "Idot1", "Idot2", "Idot3", "Idot4", "Idot5", "Idot6", "Idot7", "Idot8", "Idot9", "Idot10",
+    ],
+    [
+        "Idot11", "Idot12", "Idot13", "Idot14", "Idot15", "Idot16", "Idot17", "Idot18", "Idot19",
+        "Idot20",
+    ],
+    [
+        "Idot21", "Idot22", "Idot23", "Idot24", "Idot25", "Idot26", "Idot27", "Idot28", "Idot29",
+        "Idot30",
+    ],
+    [
+        "Idot31", "Idot32", "Idot33", "Idot34", "Idot35", "Idot36", "Idot37", "Idot38", "Idot39",
+        "Idot40",
+    ],
+    [
+        "Idot41", "Idot42", "Idot43", "Idot44", "Idot45", "Idot46", "Idot47", "Idot48", "Idot49",
+        "Idot50",
+    ],
+    [
+        "Idot51", "Idot52", "Idot53", "Idot54", "Idot55", "Idot56", "Idot57", "Idot58", "Idot59",
+        "Idot60",
+    ],
+    [
+        "Idot61", "Idot62", "Idot63", "Idot64", "Idot65", "Idot66", "Idot67", "Idot68", "Idot69",
+        "Idot70",
+    ],
+    [
+        "Idot71", "Idot72", "Idot73", "Idot74", "Idot75", "Idot76", "Idot77", "Idot78", "Idot79",
+        "Idot80",
+    ],
+    [
+        "Idot81", "Idot82", "Idot83", "Idot84", "Idot85", "Idot86", "Idot87", "Idot88", "Idot89",
+        "Idot90",
+    ],
+    [
+        "Idot91", "Idot92", "Idot93", "Idot94", "Idot95", "Idot96", "Idot97", "Idot98", "Idot99",
+        "Idot100",
+    ],
 ];
 
 // ---------------------------------------------------------------------------
@@ -479,12 +495,10 @@ pub(super) const INTIMACY_DOTS: [[&str; 10]; 10] = [
 // ---------------------------------------------------------------------------
 
 pub(super) const FAMILIAR_HEALTH_SLOTS: [&str; 30] = [
-    "Fcheck1", "Fcheck2", "Fcheck3", "Fcheck4", "Fcheck5",
-    "Fcheck6", "Fcheck7", "Fcheck8", "Fcheck9", "Fcheck10",
-    "Fcheck11", "Fcheck12", "Fcheck13", "Fcheck14", "Fcheck15",
-    "Fcheck16", "Fcheck17", "Fcheck18", "Fcheck19", "Fcheck20",
-    "Fcheck21", "Fcheck22", "Fcheck23", "Fcheck24", "Fcheck25",
-    "Fcheck26", "Fcheck27", "Fcheck28", "Fcheck29", "Fcheck30",
+    "Fcheck1", "Fcheck2", "Fcheck3", "Fcheck4", "Fcheck5", "Fcheck6", "Fcheck7", "Fcheck8",
+    "Fcheck9", "Fcheck10", "Fcheck11", "Fcheck12", "Fcheck13", "Fcheck14", "Fcheck15", "Fcheck16",
+    "Fcheck17", "Fcheck18", "Fcheck19", "Fcheck20", "Fcheck21", "Fcheck22", "Fcheck23", "Fcheck24",
+    "Fcheck25", "Fcheck26", "Fcheck27", "Fcheck28", "Fcheck29", "Fcheck30",
 ];
 
 pub(super) const FAMILIAR_NAME_FIELD: &str = "fam1";
@@ -621,7 +635,10 @@ mod tests {
             bucketed_set.len(),
             "duplicate field across health buckets"
         );
-        assert_eq!(bucketed_set, all_set, "buckets do not cover ALL_HEALTH_SLOTS");
+        assert_eq!(
+            bucketed_set, all_set,
+            "buckets do not cover ALL_HEALTH_SLOTS"
+        );
     }
 
     #[test]

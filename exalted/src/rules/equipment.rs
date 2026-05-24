@@ -20,11 +20,8 @@ pub fn validate_artifacts(c: &Character) -> ValidationReport {
         report.push(ValidationError::TooManyArtifacts { got, max });
     }
 
-    let hearthstone_names: std::collections::BTreeSet<&str> = c
-        .hearthstones
-        .iter()
-        .map(|h| h.name.as_str())
-        .collect();
+    let hearthstone_names: std::collections::BTreeSet<&str> =
+        c.hearthstones.iter().map(|h| h.name.as_str()).collect();
 
     for art in &c.equipment.artifacts {
         if art.socketed_hearthstones.len() > art.hearthstone_sockets as usize {

@@ -13,9 +13,7 @@ pub enum ValidationError {
     #[error("attribute priority groups must be exactly Physical+Social+Mental, one each")]
     AttributePriorityMisassigned,
 
-    #[error(
-        "attribute group {group} chargen-priority dots = {got}, expected {expected}"
-    )]
+    #[error("attribute group {group} chargen-priority dots = {got}, expected {expected}")]
     AttributePriorityDotsWrong {
         group: String,
         got: u32,
@@ -49,9 +47,7 @@ pub enum ValidationError {
     #[error("virtue flaw is unset")]
     VirtueFlawUnset,
 
-    #[error(
-        "virtue flaw {flaw} belongs to {expected_virtue}, but primary virtue is {got_virtue}"
-    )]
+    #[error("virtue flaw {flaw} belongs to {expected_virtue}, but primary virtue is {got_virtue}")]
     VirtueFlawMismatch {
         flaw: String,
         expected_virtue: String,
@@ -61,9 +57,7 @@ pub enum ValidationError {
     #[error("virtue {virtue} > 4 from chargen priority alone (got {got})")]
     VirtueChargenOverFour { virtue: String, got: u8 },
 
-    #[error(
-        "background chargen-priority dots total = {got}, expected 7"
-    )]
+    #[error("background chargen-priority dots total = {got}, expected 7")]
     BackgroundChargenDotsWrong { got: u32 },
 
     #[error("background {background} has > 3 dots from chargen priority (got {got})")]
@@ -81,9 +75,7 @@ pub enum ValidationError {
     #[error("fewer than 5 caste/favored ability charms (got {got})")]
     CasteFavoredCharmsTooFew { got: usize },
 
-    #[error(
-        "charm {charm} requires Ability {ability} >= {required} (character has {got})"
-    )]
+    #[error("charm {charm} requires Ability {ability} >= {required} (character has {got})")]
     CharmAbilityBelowMin {
         charm: String,
         ability: String,
@@ -98,9 +90,7 @@ pub enum ValidationError {
         got: u8,
     },
 
-    #[error(
-        "charm {charm} requires Attribute {attribute} >= {required} (character has {got})"
-    )]
+    #[error("charm {charm} requires Attribute {attribute} >= {required} (character has {got})")]
     CharmAttributeBelowMin {
         charm: String,
         attribute: String,
@@ -111,9 +101,7 @@ pub enum ValidationError {
     #[error("charm {charm} requires at least one {ability} Excellency")]
     CharmPrereqAnyExcellencyMissing { charm: String, ability: String },
 
-    #[error(
-        "charm {charm} requires at least {required} {ability} Excellencies (has {got})"
-    )]
+    #[error("charm {charm} requires at least {required} {ability} Excellencies (has {got})")]
     CharmPrereqNExcellenciesMissing {
         charm: String,
         ability: String,
@@ -135,9 +123,7 @@ pub enum ValidationError {
     #[error("bonus points spent = {got}, expected 15")]
     BonusPointsWrong { got: u32 },
 
-    #[error(
-        "willpower bonus-point purchases push it above 8 without two Virtues >= 4 (got {got})"
-    )]
+    #[error("willpower bonus-point purchases push it above 8 without two Virtues >= 4 (got {got})")]
     WillpowerOverEightWithoutHighVirtues { got: u8 },
 
     #[error("essence > 5 at chargen (got {got})")]
@@ -146,9 +132,7 @@ pub enum ValidationError {
     #[error("xp spent ({spent}) exceeds xp earned ({earned})")]
     XpOverspent { spent: u32, earned: u32 },
 
-    #[error(
-        "xp purchase for {trait_name} cost {paid}, canonical cost is {expected}"
-    )]
+    #[error("xp purchase for {trait_name} cost {paid}, canonical cost is {expected}")]
     XpCostWrong {
         trait_name: String,
         paid: u32,
@@ -191,9 +175,7 @@ pub enum ValidationError {
     )]
     ComboCharmNotComboable { combo: String, charm: String },
 
-    #[error(
-        "combo {combo} mixes a Combo-Basic charm with non-Reflexive charm {charm}"
-    )]
+    #[error("combo {combo} mixes a Combo-Basic charm with non-Reflexive charm {charm}")]
     ComboBasicWithNonReflexive { combo: String, charm: String },
 
     #[error("combo {combo} contains {count} Simple charms (max 1)")]
@@ -210,7 +192,9 @@ pub enum ValidationError {
     #[error("ability {ability} has {got} distinct specialties; max 3 (Linguistics is exempt)")]
     SpecialtiesOverMax { ability: String, got: usize },
 
-    #[error("ability {ability} specialty {specialty:?} has {got} dots; max 3 (Linguistics is exempt)")]
+    #[error(
+        "ability {ability} specialty {specialty:?} has {got} dots; max 3 (Linguistics is exempt)"
+    )]
     SpecialtyOverMaxDots {
         ability: String,
         specialty: String,
@@ -253,34 +237,32 @@ pub enum ValidationError {
     )]
     FollowersWithoutSupport { followers: u8, support: u8 },
 
-    #[error(
-        "bonus-point purchase for {trait_name} cost {paid} BP, canonical cost is {expected}"
-    )]
+    #[error("bonus-point purchase for {trait_name} cost {paid} BP, canonical cost is {expected}")]
     BpCostWrong {
         trait_name: String,
         paid: u32,
         expected: u32,
     },
 
-    #[error(
-        "willpower permanent spent ({spent}) exceeds permanent rating ({permanent})"
-    )]
+    #[error("willpower permanent spent ({spent}) exceeds permanent rating ({permanent})")]
     WillpowerPermanentOverspent { spent: u8, permanent: u8 },
 
-    #[error(
-        "willpower temporary ({temporary}) exceeds available permanent dots ({available})"
-    )]
+    #[error("willpower temporary ({temporary}) exceeds available permanent dots ({available})")]
     WillpowerTemporaryOverAvailable { temporary: u8, available: u8 },
 
-    #[error(
-        "personal essence overspent: spent {spent} + committed {committed} > max {max}"
-    )]
-    PersonalEssenceOverspent { max: u16, spent: u16, committed: u16 },
+    #[error("personal essence overspent: spent {spent} + committed {committed} > max {max}")]
+    PersonalEssenceOverspent {
+        max: u16,
+        spent: u16,
+        committed: u16,
+    },
 
-    #[error(
-        "peripheral essence overspent: spent {spent} + committed {committed} > max {max}"
-    )]
-    PeripheralEssenceOverspent { max: u16, spent: u16, committed: u16 },
+    #[error("peripheral essence overspent: spent {spent} + committed {committed} > max {max}")]
+    PeripheralEssenceOverspent {
+        max: u16,
+        spent: u16,
+        committed: u16,
+    },
 
     #[error("hearthstones = {got}, exceeds total Manse background dots {max}")]
     TooManyHearthstones { got: usize, max: u8 },
@@ -288,9 +270,7 @@ pub enum ValidationError {
     #[error("artifacts = {got}, exceeds total Artifact background dots {max}")]
     TooManyArtifacts { got: usize, max: u8 },
 
-    #[error(
-        "artifact {artifact} has {socketed} socketed hearthstones but only {sockets} sockets"
-    )]
+    #[error("artifact {artifact} has {socketed} socketed hearthstones but only {sockets} sockets")]
     OversocketedArtifact {
         artifact: String,
         sockets: u8,
@@ -305,13 +285,8 @@ pub enum ValidationError {
         hearthstone: String,
     },
 
-    #[error(
-        "{item} references artifact {artifact_name} that does not exist"
-    )]
-    MissingLinkedArtifact {
-        item: String,
-        artifact_name: String,
-    },
+    #[error("{item} references artifact {artifact_name} that does not exist")]
+    MissingLinkedArtifact { item: String, artifact_name: String },
 
     #[error("note: {message}")]
     Note { message: String },

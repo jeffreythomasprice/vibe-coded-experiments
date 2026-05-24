@@ -4,7 +4,7 @@
 //! total to N − 1. Returns the desired new total, already clamped to
 //! `[min, max]`, or `None` if nothing was clicked.
 
-use egui::{vec2, Color32, Response, Sense, Stroke};
+use egui::{Color32, Response, Sense, Stroke, vec2};
 
 pub struct DotsGrid {
     current: u8,
@@ -54,49 +54,46 @@ impl DotsGrid {
         let mut new_total: Option<u8> = None;
         let mut row_response: Option<Response> = None;
 
-        let render_row = |ui: &mut egui::Ui, range: std::ops::Range<u8>| -> (Response, Option<u8>) {
-            let mut local_resp: Option<Response> = None;
-            let mut clicked_to: Option<u8> = None;
-            ui.horizontal(|ui| {
-                for i in range {
-                    let (rect, resp) = ui.allocate_exact_size(vec2(size, size), Sense::click());
-                    let center = rect.center();
-                    let is_filled = i < current;
-                    let is_base = i < min;
-                    let color = if is_filled {
-                        if is_base {
-                            base_color
+        let render_row =
+            |ui: &mut egui::Ui, range: std::ops::Range<u8>| -> (Response, Option<u8>) {
+                let mut local_resp: Option<Response> = None;
+                let mut clicked_to: Option<u8> = None;
+                ui.horizontal(|ui| {
+                    for i in range {
+                        let (rect, resp) = ui.allocate_exact_size(vec2(size, size), Sense::click());
+                        let center = rect.center();
+                        let is_filled = i < current;
+                        let is_base = i < min;
+                        let color = if is_filled {
+                            if is_base { base_color } else { filled_color }
                         } else {
-                            filled_color
-                        }
-                    } else {
-                        Color32::TRANSPARENT
-                    };
-                    if is_filled {
-                        ui.painter().circle(center, radius, color, stroke);
-                    } else {
-                        ui.painter().circle_stroke(center, radius, stroke);
-                    }
-                    if resp.clicked() {
-                        // Click on filled dot N -> total = N (unfill this dot and above).
-                        // Click on empty dot N -> total = N+1 (fill 1..=N+1).
-                        let target = if is_filled {
-                            (i as u16).max(min as u16) as u8
-                        } else {
-                            ((i as u16) + 1).min(max as u16) as u8
+                            Color32::TRANSPARENT
                         };
-                        if target != current {
-                            clicked_to = Some(target);
+                        if is_filled {
+                            ui.painter().circle(center, radius, color, stroke);
+                        } else {
+                            ui.painter().circle_stroke(center, radius, stroke);
                         }
+                        if resp.clicked() {
+                            // Click on filled dot N -> total = N (unfill this dot and above).
+                            // Click on empty dot N -> total = N+1 (fill 1..=N+1).
+                            let target = if is_filled {
+                                (i as u16).max(min as u16) as u8
+                            } else {
+                                ((i as u16) + 1).min(max as u16) as u8
+                            };
+                            if target != current {
+                                clicked_to = Some(target);
+                            }
+                        }
+                        local_resp = Some(match local_resp.take() {
+                            Some(prev) => prev.union(resp),
+                            None => resp,
+                        });
                     }
-                    local_resp = Some(match local_resp.take() {
-                        Some(prev) => prev.union(resp),
-                        None => resp,
-                    });
-                }
-            });
-            (local_resp.expect("at least one dot per row"), clicked_to)
-        };
+                });
+                (local_resp.expect("at least one dot per row"), clicked_to)
+            };
 
         if max <= per_row {
             let (resp, clicked) = render_row(ui, 0..max);

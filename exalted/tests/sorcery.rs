@@ -9,9 +9,12 @@ fn solar_circle_spell_rejected_at_chargen() {
     let mut c = valid_dawn();
     // Replace one chargen-priority charm with a chargen-priority Solar Circle
     // spell, keeping the 10-pick budget balanced.
-    c.charms.retain(|ch| !ch.is_id("first-awareness-excellency"));
-    c.spells
-        .push(SpellRef::lookup("total-annihilation", DotSource::ChargenPriority));
+    c.charms
+        .retain(|ch| !ch.is_id("first-awareness-excellency"));
+    c.spells.push(SpellRef::lookup(
+        "total-annihilation",
+        DotSource::ChargenPriority,
+    ));
     let report = c.validate_chargen();
     assert!(
         report
@@ -27,7 +30,8 @@ fn solar_circle_spell_rejected_at_chargen() {
 fn terrestrial_circle_spell_counts_toward_ten_picks() {
     let mut c = valid_dawn();
     // Swap a Charm for a Terrestrial spell — the count should still be 10.
-    c.charms.retain(|ch| !ch.is_id("first-awareness-excellency"));
+    c.charms
+        .retain(|ch| !ch.is_id("first-awareness-excellency"));
     c.spells.push(SpellRef::lookup(
         "death-of-obsidian-butterflies",
         DotSource::ChargenPriority,

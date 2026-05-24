@@ -2,9 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::traits::{AbilityKind, VirtueKind};
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Caste {
     Dawn,
     Zenith,
@@ -132,7 +130,10 @@ pub enum VirtueFlaw {
     /// Valor. Trigger: losing odds, single combat, any chance to prove
     /// bravery. Duration: 1 full day.
     FoolhardyContempt,
-    Custom { name: String, virtue: VirtueKind },
+    Custom {
+        name: String,
+        virtue: VirtueKind,
+    },
 }
 
 impl VirtueFlaw {

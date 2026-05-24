@@ -3,9 +3,9 @@
 
 use crate::character::{Character, DotSource, SpellCircle, SpellRef};
 use crate::render::names::spell_circle_label;
-use crate::rules::database::{database, SpellEntry};
+use crate::rules::database::{SpellEntry, database};
 use crate::ui::pickers::PickerOutcome;
-use crate::ui::widgets::dot_source::{dot_source_editor, DotSourceKind};
+use crate::ui::widgets::dot_source::{DotSourceKind, dot_source_editor};
 
 const PICKER_SOURCES: &[DotSourceKind] = &[
     DotSourceKind::ChargenPriority,
@@ -95,8 +95,7 @@ pub fn show(
                             ui.end_row();
 
                             for entry in &entries {
-                                let selected =
-                                    state.selected_id.as_deref() == Some(&entry.id);
+                                let selected = state.selected_id.as_deref() == Some(&entry.id);
                                 let resp = ui.selectable_label(selected, &entry.name);
                                 if resp.clicked() {
                                     state.selected_id = Some(entry.id.clone());
@@ -138,12 +137,7 @@ pub fn show(
 
             ui.horizontal(|ui| {
                 ui.label("Pay with");
-                dot_source_editor(
-                    ui,
-                    "spell-picker-source",
-                    &mut state.source,
-                    PICKER_SOURCES,
-                );
+                dot_source_editor(ui, "spell-picker-source", &mut state.source, PICKER_SOURCES);
             });
 
             ui.horizontal(|ui| {

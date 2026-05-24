@@ -23,9 +23,7 @@ fn combo_xp(name: &str, ids: &[&str]) -> Combo {
     Combo {
         name: name.to_string(),
         charm_ids: ids.iter().map(|s| s.to_string()).collect(),
-        source: DotSource::Xp {
-            spent: xp_for(ids),
-        },
+        source: DotSource::Xp { spent: xp_for(ids) },
         notes: Vec::new(),
     }
 }
@@ -199,7 +197,19 @@ fn markdown_render_includes_combo_section() {
         &["first-awareness-excellency", "first-dodge-excellency"],
     )];
     let md = exalted::render::character_to_markdown(&c);
-    assert!(md.contains("## Combos (1)"), "missing combo header in: {}", md);
-    assert!(md.contains("Twin Excellence"), "missing combo name in: {}", md);
-    assert!(md.contains("Activation: +1 WP"), "missing activation reminder in: {}", md);
+    assert!(
+        md.contains("## Combos (1)"),
+        "missing combo header in: {}",
+        md
+    );
+    assert!(
+        md.contains("Twin Excellence"),
+        "missing combo name in: {}",
+        md
+    );
+    assert!(
+        md.contains("Activation: +1 WP"),
+        "missing activation reminder in: {}",
+        md
+    );
 }

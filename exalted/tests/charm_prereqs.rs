@@ -6,9 +6,7 @@ mod common;
 use std::collections::BTreeMap;
 
 use common::valid_dawn;
-use exalted::character::{
-    AbilityKind, AttributeKind, CharmRef, DotSource, SpellRef,
-};
+use exalted::character::{AbilityKind, AttributeKind, CharmRef, DotSource, SpellRef};
 use exalted::error::ValidationError;
 use exalted::rules::database::{CharmEntry, CharmType};
 
@@ -33,14 +31,11 @@ fn missing_named_prereq_is_hard_error() {
     ));
     let report = c.validate_chargen();
     assert!(
-        report
-            .errors
-            .iter()
-            .any(|e| matches!(
-                e,
-                ValidationError::CharmPrereqMissing { missing, .. }
-                    if missing == "there-is-no-wind"
-            )),
+        report.errors.iter().any(|e| matches!(
+            e,
+            ValidationError::CharmPrereqMissing { missing, .. }
+                if missing == "there-is-no-wind"
+        )),
         "expected hard CharmPrereqMissing for there-is-no-wind; got {:#?}",
         report.errors,
     );
@@ -171,11 +166,10 @@ fn terrestrial_spell_requires_terrestrial_circle_sorcery() {
     // Add a Terrestrial spell via the chargen sorcery swap, drop one Charm
     // to keep the pick count at 10, but DON'T add terrestrial-circle-sorcery.
     let mut c = valid_dawn();
-    c.charms.retain(|ch| !ch.is_id("first-awareness-excellency"));
-    c.spells.push(SpellRef::lookup(
-        "cirrus-skiff",
-        DotSource::ChargenPriority,
-    ));
+    c.charms
+        .retain(|ch| !ch.is_id("first-awareness-excellency"));
+    c.spells
+        .push(SpellRef::lookup("cirrus-skiff", DotSource::ChargenPriority));
     let report = c.validate_chargen();
     assert!(
         report.errors.iter().any(|e| matches!(
@@ -202,18 +196,16 @@ fn terrestrial_spell_with_sorcery_charm_passes_gate() {
         0,
         CharmRef::lookup("terrestrial-circle-sorcery", DotSource::ChargenPriority),
     );
-    c.spells.push(SpellRef::lookup(
-        "cirrus-skiff",
-        DotSource::ChargenPriority,
-    ));
+    c.spells
+        .push(SpellRef::lookup("cirrus-skiff", DotSource::ChargenPriority));
     // Occult is 3, so terrestrial-circle-sorcery's mins are met (Occult 3,
     // Essence 1+). Bump Essence isn't needed.
     let report = c.validate_chargen();
     assert!(
-        !report.errors.iter().any(|e| matches!(
-            e,
-            ValidationError::SpellRequiresSorceryCharm { .. }
-        )),
+        !report
+            .errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::SpellRequiresSorceryCharm { .. })),
         "should not fire sorcery-gate when terrestrial-circle-sorcery is present: {:#?}",
         report.errors,
     );

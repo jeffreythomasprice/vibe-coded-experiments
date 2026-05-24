@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::character::{Character, HealthDamage};
 use crate::character::traits::{AbilityKind, AttributeKind};
+use crate::character::{Character, HealthDamage};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum HealthLevelKind {
@@ -31,13 +31,41 @@ impl Default for OxBodyPattern {
 }
 
 const BASE_TRACK: &[HealthLevel] = &[
-    HealthLevel { penalty: 0, label: "-0", kind: HealthLevelKind::Wound },
-    HealthLevel { penalty: -1, label: "-1", kind: HealthLevelKind::Wound },
-    HealthLevel { penalty: -1, label: "-1", kind: HealthLevelKind::Wound },
-    HealthLevel { penalty: -2, label: "-2", kind: HealthLevelKind::Wound },
-    HealthLevel { penalty: -2, label: "-2", kind: HealthLevelKind::Wound },
-    HealthLevel { penalty: -4, label: "-4", kind: HealthLevelKind::Wound },
-    HealthLevel { penalty: 0, label: "Incap", kind: HealthLevelKind::Incap },
+    HealthLevel {
+        penalty: 0,
+        label: "-0",
+        kind: HealthLevelKind::Wound,
+    },
+    HealthLevel {
+        penalty: -1,
+        label: "-1",
+        kind: HealthLevelKind::Wound,
+    },
+    HealthLevel {
+        penalty: -1,
+        label: "-1",
+        kind: HealthLevelKind::Wound,
+    },
+    HealthLevel {
+        penalty: -2,
+        label: "-2",
+        kind: HealthLevelKind::Wound,
+    },
+    HealthLevel {
+        penalty: -2,
+        label: "-2",
+        kind: HealthLevelKind::Wound,
+    },
+    HealthLevel {
+        penalty: -4,
+        label: "-4",
+        kind: HealthLevelKind::Wound,
+    },
+    HealthLevel {
+        penalty: 0,
+        label: "Incap",
+        kind: HealthLevelKind::Incap,
+    },
 ];
 
 /// Walk Ox-Body Technique purchases in order, returning each purchase's
@@ -62,16 +90,38 @@ pub fn health_track(character: &Character) -> Vec<HealthLevel> {
     for pattern in ox_body_patterns(character) {
         let to_add: &[HealthLevel] = match pattern {
             OxBodyPattern::OneZero => &[HealthLevel {
-                penalty: 0, label: "-0", kind: HealthLevelKind::Wound,
+                penalty: 0,
+                label: "-0",
+                kind: HealthLevelKind::Wound,
             }],
             OxBodyPattern::TwoMinusOne => &[
-                HealthLevel { penalty: -1, label: "-1", kind: HealthLevelKind::Wound },
-                HealthLevel { penalty: -1, label: "-1", kind: HealthLevelKind::Wound },
+                HealthLevel {
+                    penalty: -1,
+                    label: "-1",
+                    kind: HealthLevelKind::Wound,
+                },
+                HealthLevel {
+                    penalty: -1,
+                    label: "-1",
+                    kind: HealthLevelKind::Wound,
+                },
             ],
             OxBodyPattern::OneMinusOneTwoMinusTwo => &[
-                HealthLevel { penalty: -1, label: "-1", kind: HealthLevelKind::Wound },
-                HealthLevel { penalty: -2, label: "-2", kind: HealthLevelKind::Wound },
-                HealthLevel { penalty: -2, label: "-2", kind: HealthLevelKind::Wound },
+                HealthLevel {
+                    penalty: -1,
+                    label: "-1",
+                    kind: HealthLevelKind::Wound,
+                },
+                HealthLevel {
+                    penalty: -2,
+                    label: "-2",
+                    kind: HealthLevelKind::Wound,
+                },
+                HealthLevel {
+                    penalty: -2,
+                    label: "-2",
+                    kind: HealthLevelKind::Wound,
+                },
             ],
         };
         for level in to_add {
@@ -82,7 +132,9 @@ pub fn health_track(character: &Character) -> Vec<HealthLevel> {
     let dying = character.attribute(AttributeKind::Stamina) as usize;
     for _ in 0..dying {
         track.push(HealthLevel {
-            penalty: 0, label: "Dying", kind: HealthLevelKind::Dying,
+            penalty: 0,
+            label: "Dying",
+            kind: HealthLevelKind::Dying,
         });
     }
     track

@@ -4,7 +4,7 @@ use crate::character::{DotSource, RatedTrait, VirtueKind};
 use crate::render::names::virtue_name;
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::DotSourceKind;
-use crate::ui::widgets::rated_trait::{rated_trait_editor, RatedTraitOpts};
+use crate::ui::widgets::rated_trait::{RatedTraitOpts, rated_trait_editor};
 
 const VIRTUE_SOURCES: &[DotSourceKind] = &[
     DotSourceKind::Base,

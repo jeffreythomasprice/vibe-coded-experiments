@@ -180,9 +180,7 @@ fn check_abilities(c: &Character, report: &mut ValidationReport) {
         .map(|t| t.chargen_priority_dots() as u32)
         .sum();
     if chargen_total != ABILITY_CHARGEN_POOL {
-        report.push(ValidationError::AbilityChargenDotsWrong {
-            got: chargen_total,
-        });
+        report.push(ValidationError::AbilityChargenDotsWrong { got: chargen_total });
     }
 
     let cf_total: u32 = c
@@ -253,9 +251,7 @@ fn check_virtues(c: &Character, report: &mut ValidationReport) {
         .map(|t| t.chargen_priority_dots() as u32)
         .sum();
     if chargen_total != VIRTUE_CHARGEN_POOL {
-        report.push(ValidationError::VirtueChargenDotsWrong {
-            got: chargen_total,
-        });
+        report.push(ValidationError::VirtueChargenDotsWrong { got: chargen_total });
     }
 
     match c.primary_virtue {
@@ -318,9 +314,7 @@ fn check_backgrounds(c: &Character, report: &mut ValidationReport) {
         .map(|b| b.trait_().chargen_priority_dots() as u32)
         .sum();
     if chargen_total != BACKGROUND_CHARGEN_POOL {
-        report.push(ValidationError::BackgroundChargenDotsWrong {
-            got: chargen_total,
-        });
+        report.push(ValidationError::BackgroundChargenDotsWrong { got: chargen_total });
     }
 
     for bg in &c.backgrounds {
@@ -403,7 +397,6 @@ fn check_charms(c: &Character, report: &mut ValidationReport) {
         }
     }
 
-
     let mut cf_chargen_count = 0usize;
     for charm in &c.charms {
         let display = charm.display_name(db).to_string();
@@ -469,15 +462,11 @@ fn check_charms(c: &Character, report: &mut ValidationReport) {
                             });
                         }
                         Prereq::AnyExcellencies { ability, count } if count <= 1 => {
-                            report.push(
-                                ValidationError::CharmPrereqAnyExcellencyMissing {
-                                    charm: display.clone(),
-                                    ability: crate::rules::database::ability_display_name(
-                                        ability,
-                                    )
+                            report.push(ValidationError::CharmPrereqAnyExcellencyMissing {
+                                charm: display.clone(),
+                                ability: crate::rules::database::ability_display_name(ability)
                                     .to_string(),
-                                },
-                            );
+                            });
                         }
                         Prereq::AnyExcellencies { ability, count } => {
                             let ids = prereq::excellency_ids_for(ability);
@@ -485,17 +474,13 @@ fn check_charms(c: &Character, report: &mut ValidationReport) {
                                 .iter()
                                 .filter(|id| c.charms.iter().any(|ch| ch.is_id(id)))
                                 .count() as u8;
-                            report.push(
-                                ValidationError::CharmPrereqNExcellenciesMissing {
-                                    charm: display.clone(),
-                                    ability: crate::rules::database::ability_display_name(
-                                        ability,
-                                    )
+                            report.push(ValidationError::CharmPrereqNExcellenciesMissing {
+                                charm: display.clone(),
+                                ability: crate::rules::database::ability_display_name(ability)
                                     .to_string(),
-                                    required: count,
-                                    got,
-                                },
-                            );
+                                required: count,
+                                got,
+                            });
                         }
                     }
                 }
@@ -581,10 +566,9 @@ fn check_combos(c: &Character, report: &mut ValidationReport) {
                 });
                 continue;
             };
-            let comboable = entry
-                .keywords
-                .iter()
-                .any(|k| k.eq_ignore_ascii_case("Combo-OK") || k.eq_ignore_ascii_case("Combo-Basic"));
+            let comboable = entry.keywords.iter().any(|k| {
+                k.eq_ignore_ascii_case("Combo-OK") || k.eq_ignore_ascii_case("Combo-Basic")
+            });
             if !comboable {
                 report.push(ValidationError::ComboCharmNotComboable {
                     combo: combo_name.clone(),
@@ -655,7 +639,10 @@ fn check_willpower_base(c: &Character, report: &mut ValidationReport) {
     let expected = willpower_from_virtues(c);
     let base = c.willpower.base_dots;
     if base != expected {
-        report.push(ValidationError::WillpowerNotFromVirtues { expected, got: base });
+        report.push(ValidationError::WillpowerNotFromVirtues {
+            expected,
+            got: base,
+        });
     }
     if c.willpower_dots() > 10 {
         report.push(ValidationError::WillpowerOverTen {

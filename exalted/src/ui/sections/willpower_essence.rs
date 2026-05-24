@@ -3,7 +3,7 @@
 use crate::character::DotSource;
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::DotSourceKind;
-use crate::ui::widgets::rated_trait::{rated_trait_editor, RatedTraitOpts};
+use crate::ui::widgets::rated_trait::{RatedTraitOpts, rated_trait_editor};
 
 const WP_SOURCES: &[DotSourceKind] = &[
     DotSourceKind::Base,
@@ -12,8 +12,11 @@ const WP_SOURCES: &[DotSourceKind] = &[
     DotSourceKind::Xp,
 ];
 
-const ESSENCE_SOURCES: &[DotSourceKind] =
-    &[DotSourceKind::Base, DotSourceKind::BonusPoints, DotSourceKind::Xp];
+const ESSENCE_SOURCES: &[DotSourceKind] = &[
+    DotSourceKind::Base,
+    DotSourceKind::BonusPoints,
+    DotSourceKind::Xp,
+];
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     ui.heading("Willpower & Essence");

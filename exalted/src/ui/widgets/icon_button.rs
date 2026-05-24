@@ -4,7 +4,7 @@
 //! cover it. To keep the UI portable we embed a tiny SVG icon and render
 //! it through `egui_extras`' SVG loader.
 
-use egui::{include_image, vec2, Button, Image, Response, Ui};
+use egui::{Button, Image, Response, Ui, include_image, vec2};
 
 const ICON_SIZE: f32 = 12.0;
 

@@ -9,13 +9,13 @@ use crate::character::{
     KnownLanguage, LanguageFamily, MotePool, Note, RatedTrait, SpellRef, VirtueKind,
 };
 use crate::rules::database::database;
-use crate::rules::derived::{knockdown, movement, stunning, EXALT_HEALING_TABLE};
-use crate::rules::essence::{personal_essence_max, peripheral_essence_max};
-use crate::rules::health::{health_track, wound_penalty, HealthLevelKind};
+use crate::rules::derived::{EXALT_HEALING_TABLE, knockdown, movement, stunning};
+use crate::rules::essence::{peripheral_essence_max, personal_essence_max};
+use crate::rules::health::{HealthLevelKind, health_track, wound_penalty};
 
 use super::names::{
-    ability_name, attr_name, caste_name, group_name, intimacy_kind, source_tag,
-    spell_circle_label, virtue_name,
+    ability_name, attr_name, caste_name, group_name, intimacy_kind, source_tag, spell_circle_label,
+    virtue_name,
 };
 
 pub fn character_to_markdown(c: &Character) -> String {
@@ -68,7 +68,11 @@ fn dots(rating: u8, max: u8) -> String {
 
 fn section_identity(c: &Character, out: &mut String) {
     let id = &c.identity;
-    let name = if id.name.is_empty() { "<unnamed>" } else { &id.name };
+    let name = if id.name.is_empty() {
+        "<unnamed>"
+    } else {
+        &id.name
+    };
     writeln!(out, "# {}", name).unwrap();
     writeln!(out).unwrap();
     writeln!(out, "**Caste:** {}", caste_name(c.caste)).unwrap();
@@ -159,16 +163,8 @@ fn section_attributes(c: &Character, out: &mut String) {
     .unwrap();
     writeln!(out).unwrap();
 
-    writeln!(
-        out,
-        "| Physical | | Social | | Mental | |"
-    )
-    .unwrap();
-    writeln!(
-        out,
-        "|---|---|---|---|---|---|"
-    )
-    .unwrap();
+    writeln!(out, "| Physical | | Social | | Mental | |").unwrap();
+    writeln!(out, "|---|---|---|---|---|---|").unwrap();
     let phys = AttributeGroup::Physical.members();
     let soc = AttributeGroup::Social.members();
     let men = AttributeGroup::Mental.members();
@@ -195,11 +191,8 @@ fn section_abilities(c: &Character, out: &mut String) {
     writeln!(out, "## Abilities").unwrap();
     writeln!(out, "| Ability | Dots | C/F | Specialties |").unwrap();
     writeln!(out, "|---|---|---|---|").unwrap();
-    let mut rows: Vec<(AbilityKind, u8)> = c
-        .abilities
-        .iter()
-        .map(|(k, t)| (*k, t.dots()))
-        .collect();
+    let mut rows: Vec<(AbilityKind, u8)> =
+        c.abilities.iter().map(|(k, t)| (*k, t.dots())).collect();
     rows.sort_by_key(|(k, _)| ability_name(*k));
     for (ab, _) in &rows {
         let dots_n = c.ability(*ab);
@@ -240,7 +233,11 @@ fn section_virtues(c: &Character, out: &mut String) {
     writeln!(out, "| Virtue | Dots | Primary? |").unwrap();
     writeln!(out, "|---|---|---|").unwrap();
     for v in VirtueKind::ALL {
-        let primary = if c.primary_virtue == Some(*v) { "★" } else { "" };
+        let primary = if c.primary_virtue == Some(*v) {
+            "★"
+        } else {
+            ""
+        };
         let n = c.virtue(*v);
         writeln!(
             out,
@@ -280,7 +277,12 @@ fn section_virtues(c: &Character, out: &mut String) {
         })
         .collect();
     if !channels.is_empty() {
-        writeln!(out, "**Channels remaining this story:** {}", channels.join(" · ")).unwrap();
+        writeln!(
+            out,
+            "**Channels remaining this story:** {}",
+            channels.join(" · ")
+        )
+        .unwrap();
     }
     writeln!(out).unwrap();
 }
@@ -379,7 +381,9 @@ fn section_combos(c: &Character, out: &mut String) {
                             writeln!(
                                 out,
                                 "  - {} — {} ({})",
-                                display, entry.cost, entry.charm_type.display()
+                                display,
+                                entry.cost,
+                                entry.charm_type.display()
                             )
                             .unwrap();
                         }
@@ -438,7 +442,11 @@ fn section_backgrounds(c: &Character, out: &mut String) {
             out,
             "| {} | {} | {} ({}) |",
             bg.display_name(db),
-            if bg.label().is_empty() { "—" } else { bg.label() },
+            if bg.label().is_empty() {
+                "—"
+            } else {
+                bg.label()
+            },
             dots(n, 5),
             n,
         )
@@ -487,7 +495,11 @@ fn section_familiar(c: &Character, out: &mut String) {
         return;
     };
     writeln!(out, "## Familiar").unwrap();
-    let name = if fam.name.is_empty() { "<unnamed>" } else { &fam.name };
+    let name = if fam.name.is_empty() {
+        "<unnamed>"
+    } else {
+        &fam.name
+    };
     writeln!(out, "- Name: {}", name).unwrap();
     let d = &fam.health_damage;
     writeln!(
@@ -514,11 +526,7 @@ fn section_equipment(eq: &Equipment, out: &mut String) {
             "| Name | Ability | Speed | Acc | Dmg | Type | Def | Rate | Range | Tags |"
         )
         .unwrap();
-        writeln!(
-            out,
-            "|---|---|---|---|---|---|---|---|---|---|"
-        )
-        .unwrap();
+        writeln!(out, "|---|---|---|---|---|---|---|---|---|---|").unwrap();
         for w in &eq.weapons {
             let dmg_type = match w.damage_type {
                 crate::character::equipment::DamageType::Bashing => "B",
@@ -598,12 +606,7 @@ fn section_equipment(eq: &Equipment, out: &mut String) {
                 writeln!(out, "  - {}", a.description).unwrap();
             }
             if !a.socketed_hearthstones.is_empty() {
-                writeln!(
-                    out,
-                    "  - Socketed: {}",
-                    a.socketed_hearthstones.join(", ")
-                )
-                .unwrap();
+                writeln!(out, "  - Socketed: {}", a.socketed_hearthstones.join(", ")).unwrap();
             }
         }
     }
@@ -710,7 +713,12 @@ fn section_movement_combat(c: &Character, out: &mut String) {
     let s = stunning(c);
     writeln!(out, "## Movement").unwrap();
     writeln!(out, "- **Move:** {} yd/tick (reflexive)", m.move_).unwrap();
-    writeln!(out, "- **Dash:** {} yd/tick (Speed 3, −2 DV, cannot parry)", m.dash).unwrap();
+    writeln!(
+        out,
+        "- **Dash:** {} yd/tick (Speed 3, −2 DV, cannot parry)",
+        m.dash
+    )
+    .unwrap();
     writeln!(
         out,
         "- **Jump:** {} yd vertical / {} yd horizontal",

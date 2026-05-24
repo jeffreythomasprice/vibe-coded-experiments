@@ -1,22 +1,18 @@
 active:
 
-In the UI we have a set of checkboxes for favored abilities, and then later on a section where we control how many dots in each ability we have and specialties. I want to merge these into one section. Checkboxes for favored abilities should go in with the rest of the ability stuff.
+In the UI, when we're adding a charm, we get a table view of all charms. If you then scroll down this table the header isn't visible any more. I want the header to always be visible even if we scroll down the page.
+This should be true for all tables, not just charms, if there are other sections that use tables.
 
 
 todo:
 
-why does running all tests take a while?
+We should support fully custom backgrounds, charms, spells, and combos. While the pickers for the existing things are nice, we may want to use homebrew content at some point and should be able to add something that opens up a custom UI for that feature and lets us fully specify everything.
 
 
-UI, table of charms, should show table header at all times even when scrolling
-if there are other tables, same thing
+In the UI, it would be helpful to have a tooltip on most fields explaining what this is in a 1-3 sentences. Iterate through the whole UI and add tooltips. Generate the text from the rule book as necessary. We can do batches of them in parallel in subagents.
 
 
-UI mode should have tooltips for rules explanations
-
-
-UI mode should support fully custom backgrounds, charms, spells, combos
-not just the dropdown from the database
+pdf_render tests are very slow
 
 
 pdf, what does the series of checkboxes for essence pol and anima pool actually mean? I can only select one of them like they're radio buttons

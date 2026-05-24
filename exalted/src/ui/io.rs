@@ -42,8 +42,7 @@ pub fn load_character_from_path(path: &Path) -> Result<Character, IoError> {
 }
 
 pub fn save_character_to_path(character: &Character, path: &Path) -> Result<(), IoError> {
-    let text =
-        toml::to_string_pretty(character).map_err(|source| IoError::Serialize { source })?;
+    let text = toml::to_string_pretty(character).map_err(|source| IoError::Serialize { source })?;
     fs::write(path, text.as_bytes()).map_err(|source| IoError::Write {
         path: path.display().to_string(),
         source,

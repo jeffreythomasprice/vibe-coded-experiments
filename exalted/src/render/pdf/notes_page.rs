@@ -5,7 +5,7 @@
 //! generated plain-text pages to the end of the document. Layout uses the
 //! built-in Type1 Helvetica font so no font embedding is required.
 
-use lopdf::{dictionary, Document, Object, Stream};
+use lopdf::{Document, Object, Stream, dictionary};
 
 use super::PdfRenderError;
 use crate::character::{Character, Note, XpAward};

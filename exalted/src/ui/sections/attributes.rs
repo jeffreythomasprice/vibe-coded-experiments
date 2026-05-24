@@ -5,7 +5,7 @@ use crate::character::{AttributeGroup, DotSource, RatedTrait};
 use crate::render::names::{attr_name, group_name};
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::DotSourceKind;
-use crate::ui::widgets::rated_trait::{rated_trait_editor, RatedTraitOpts};
+use crate::ui::widgets::rated_trait::{RatedTraitOpts, rated_trait_editor};
 
 const ATTRIBUTE_SOURCES: &[DotSourceKind] = &[
     DotSourceKind::Base,
@@ -34,11 +34,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             for group in AttributeGroup::ALL {
                 let pri_dots = state.character.attribute_priority.dots_for(*group);
                 ui.vertical(|ui| {
-                    ui.label(
-                        egui::RichText::new(group_name(*group))
-                            .strong()
-                            .underline(),
-                    );
+                    ui.label(egui::RichText::new(group_name(*group)).strong().underline());
                     ui.small(format!("chargen pool: {} dots", pri_dots));
                 });
             }
@@ -58,12 +54,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                             default_add_source: default_source,
                             show_specialties: false,
                         };
-                        if rated_trait_editor(
-                            ui,
-                            ("attr", *attr as usize),
-                            entry,
-                            &opts,
-                        ) {
+                        if rated_trait_editor(ui, ("attr", *attr as usize), entry, &opts) {
                             any_changed = true;
                         }
                     }

@@ -6,7 +6,7 @@ use crate::render::names::ability_name;
 use crate::rules::database::database;
 use crate::ui::pickers::charm_picker::CharmPickerState;
 use crate::ui::state::AppState;
-use crate::ui::widgets::dot_source::{dot_source_editor, DotSourceKind};
+use crate::ui::widgets::dot_source::{DotSourceKind, dot_source_editor};
 use crate::ui::widgets::icon_button::trash_button_with_label;
 use crate::ui::widgets::notes_list::notes_editor;
 

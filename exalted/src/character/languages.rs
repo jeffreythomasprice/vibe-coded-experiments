@@ -4,9 +4,7 @@ use serde::{Deserialize, Serialize};
 /// 1-per-Linguistics-dot families (p.111-112). `TribalTongue(name)` is a
 /// distinct category: each Linguistics dot grants four of them, separately
 /// from the per-family count.
-#[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum LanguageFamily {
     HighRealm,
     LowRealm,

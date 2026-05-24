@@ -18,9 +18,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     } else if let Some(familiar) = state.character.familiar.as_mut() {
         ui.horizontal(|ui| {
             ui.label("Name");
-            let resp = ui.add(
-                egui::TextEdit::singleline(&mut familiar.name).desired_width(240.0),
-            );
+            let resp = ui.add(egui::TextEdit::singleline(&mut familiar.name).desired_width(240.0));
             if resp.changed() {
                 any_changed = true;
             }

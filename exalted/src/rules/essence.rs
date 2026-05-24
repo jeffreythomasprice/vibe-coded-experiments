@@ -38,10 +38,7 @@ pub fn validate_pool_state(character: &Character) -> ValidationReport {
     let permanent = character.willpower_dots();
     let spent = character.pool_state.willpower_permanent_spent;
     if spent > permanent {
-        report.push(ValidationError::WillpowerPermanentOverspent {
-            spent,
-            permanent,
-        });
+        report.push(ValidationError::WillpowerPermanentOverspent { spent, permanent });
     }
     let available = permanent.saturating_sub(spent);
     if character.pool_state.willpower_temporary > available {

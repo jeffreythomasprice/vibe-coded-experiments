@@ -6,8 +6,8 @@
 
 mod acroform;
 mod checkboxes;
-mod field_map;
 mod dots;
+mod field_map;
 mod notes_page;
 mod overlay;
 mod specialties;

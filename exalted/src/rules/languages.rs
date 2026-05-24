@@ -52,14 +52,20 @@ pub fn validate_languages(c: &Character, report: &mut ValidationReport) {
         }
     }
 
-    if c.languages.iter().any(|l| l.family == LanguageFamily::OldRealm) {
+    if c.languages
+        .iter()
+        .any(|l| l.family == LanguageFamily::OldRealm)
+    {
         let lore = c.ability(AbilityKind::Lore);
         if lore < 1 {
             report.push(ValidationError::OldRealmRequiresLore { lore });
         }
     }
 
-    if c.languages.iter().any(|l| l.family == LanguageFamily::GuildCant) {
+    if c.languages
+        .iter()
+        .any(|l| l.family == LanguageFamily::GuildCant)
+    {
         let guild_backing = c
             .backgrounds_of(BackgroundKind::Backing)
             .filter(|b| b.label().eq_ignore_ascii_case("guild"))

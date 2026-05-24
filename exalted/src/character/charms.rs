@@ -82,8 +82,12 @@ impl CharmRef {
 
     pub fn ox_body_pattern(&self) -> Option<OxBodyPattern> {
         match self {
-            Self::Lookup { ox_body_pattern, .. }
-            | Self::Custom { ox_body_pattern, .. } => *ox_body_pattern,
+            Self::Lookup {
+                ox_body_pattern, ..
+            }
+            | Self::Custom {
+                ox_body_pattern, ..
+            } => *ox_body_pattern,
         }
     }
 

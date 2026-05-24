@@ -5,12 +5,10 @@ use crate::ui::dialogs::confirm_discard::{self, DiscardChoice};
 use crate::ui::dialogs::file_picker;
 use crate::ui::io::{load_character_from_path, save_character_to_path};
 use crate::ui::menu::{self, MenuAction};
-use crate::ui::pickers::{
-    background_picker, charm_picker, spell_picker, PickerOutcome,
-};
+use crate::ui::pickers::{PickerOutcome, background_picker, charm_picker, spell_picker};
 use crate::ui::sections;
 use crate::ui::sidebar;
-use crate::ui::state::{blank_character, AppState, PendingAction, StartupAction, StatusKind};
+use crate::ui::state::{AppState, PendingAction, StartupAction, StatusKind, blank_character};
 
 pub struct App {
     state: AppState,
@@ -135,10 +133,9 @@ impl App {
             .as_ref()
             .and_then(|p| p.file_name().map(|s| s.to_string_lossy().into_owned()))
             .unwrap_or_else(|| "character.toml".to_string());
-        let Some(path) = file_picker::save_character(
-            self.state.last_dir.as_deref(),
-            Some(&suggested),
-        ) else {
+        let Some(path) =
+            file_picker::save_character(self.state.last_dir.as_deref(), Some(&suggested))
+        else {
             return false;
         };
         if self.write_to(&path) {
@@ -170,30 +167,28 @@ impl App {
             .state
             .file_path
             .as_ref()
-            .and_then(|p| p.file_stem().map(|s| format!("{}.pdf", s.to_string_lossy())))
+            .and_then(|p| {
+                p.file_stem()
+                    .map(|s| format!("{}.pdf", s.to_string_lossy()))
+            })
             .unwrap_or_else(|| "character.pdf".to_string());
-        let Some(path) =
-            file_picker::export_pdf(self.state.last_dir.as_deref(), Some(&suggested))
+        let Some(path) = file_picker::export_pdf(self.state.last_dir.as_deref(), Some(&suggested))
         else {
             return;
         };
         let bytes = match character_to_pdf(&self.state.character) {
             Ok(b) => b,
             Err(e) => {
-                self.state.status_message = Some((
-                    StatusKind::Error,
-                    format!("PDF render failed: {}", e),
-                ));
+                self.state.status_message =
+                    Some((StatusKind::Error, format!("PDF render failed: {}", e)));
                 return;
             }
         };
         match std::fs::write(&path, &bytes) {
             Ok(()) => {
                 self.state.last_dir = path.parent().map(Path::to_path_buf);
-                self.state.status_message = Some((
-                    StatusKind::Info,
-                    format!("Exported {}", path.display()),
-                ));
+                self.state.status_message =
+                    Some((StatusKind::Info, format!("Exported {}", path.display())));
             }
             Err(e) => {
                 self.state.status_message = Some((
@@ -393,4 +388,3 @@ impl App {
         }
     }
 }
-

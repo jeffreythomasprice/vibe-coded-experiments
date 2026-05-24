@@ -32,17 +32,22 @@ fn validate_subcommand_still_parses() {
         .expect("validate must parse");
     match cli.command.expect("expected a subcommand") {
         Cmd::Validate { file } => {
-            assert_eq!(file, std::path::PathBuf::from("assets/sample-character.toml"));
+            assert_eq!(
+                file,
+                std::path::PathBuf::from("assets/sample-character.toml")
+            );
         }
-        other => panic!("expected Validate, got {:?}", std::mem::discriminant(&other)),
+        other => panic!(
+            "expected Validate, got {:?}",
+            std::mem::discriminant(&other)
+        ),
     }
 }
 
 #[test]
 fn global_output_format_flag_carries_through_subcommands() {
-    let cli =
-        Cli::try_parse_from(["exalted", "--output-format", "json", "validate", "x.toml"])
-            .expect("global flag with subcommand must parse");
+    let cli = Cli::try_parse_from(["exalted", "--output-format", "json", "validate", "x.toml"])
+        .expect("global flag with subcommand must parse");
     assert_eq!(cli.output_format, OutputFormat::Json);
     assert!(matches!(cli.command, Some(Cmd::Validate { .. })));
 }
@@ -54,7 +59,11 @@ fn render_subcommand_with_pdf_format_parses() {
     ])
     .expect("render with pdf format must parse");
     match cli.command.expect("subcommand") {
-        Cmd::Render { file, output, format } => {
+        Cmd::Render {
+            file,
+            output,
+            format,
+        } => {
             assert_eq!(file, std::path::PathBuf::from("x.toml"));
             assert_eq!(output, Some(std::path::PathBuf::from("out.pdf")));
             assert_eq!(format, exalted::cli::RenderFormat::Pdf);

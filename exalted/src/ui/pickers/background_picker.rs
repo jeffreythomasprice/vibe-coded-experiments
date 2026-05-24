@@ -3,7 +3,7 @@
 //! `BackgroundRef` with an empty trait the section then lets the player rate.
 
 use crate::character::{BackgroundKind, BackgroundRef, RatedTrait};
-use crate::rules::database::{database, BackgroundEntry};
+use crate::rules::database::{BackgroundEntry, database};
 use crate::ui::pickers::PickerOutcome;
 
 pub struct BackgroundPickerState {
@@ -20,7 +20,10 @@ impl BackgroundPickerState {
     }
 }
 
-pub fn show(ctx: &egui::Context, state: &mut BackgroundPickerState) -> PickerOutcome<BackgroundRef> {
+pub fn show(
+    ctx: &egui::Context,
+    state: &mut BackgroundPickerState,
+) -> PickerOutcome<BackgroundRef> {
     let mut outcome = PickerOutcome::Stay;
     let db = database();
     let mut entries: Vec<&BackgroundEntry> = db.iter_backgrounds().collect();
@@ -38,8 +41,7 @@ pub fn show(ctx: &egui::Context, state: &mut BackgroundPickerState) -> PickerOut
                     .max_height(ui.available_height() - 100.0)
                     .show(ui, |ui| {
                         for entry in &entries {
-                            let selected =
-                                state.selected_id.as_deref() == Some(&entry.id);
+                            let selected = state.selected_id.as_deref() == Some(&entry.id);
                             if ui.selectable_label(selected, &entry.name).clicked() {
                                 state.selected_id = Some(entry.id.clone());
                             }
@@ -73,11 +75,7 @@ pub fn show(ctx: &egui::Context, state: &mut BackgroundPickerState) -> PickerOut
                         .selected_text(format!("{:?}", custom.kind))
                         .show_ui(ui, |ui| {
                             for k in BackgroundKind::ALL {
-                                ui.selectable_value(
-                                    &mut custom.kind,
-                                    *k,
-                                    format!("{:?}", k),
-                                );
+                                ui.selectable_value(&mut custom.kind, *k, format!("{:?}", k));
                             }
                         });
                 });

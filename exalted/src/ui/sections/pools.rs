@@ -43,8 +43,11 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         .enumerate()
     {
         ui.horizontal(|ui| {
-            let resp = ui
-                .add(egui::TextEdit::singleline(&mut c.name).desired_width(200.0).hint_text("name"));
+            let resp = ui.add(
+                egui::TextEdit::singleline(&mut c.name)
+                    .desired_width(200.0)
+                    .hint_text("name"),
+            );
             if resp.changed() {
                 any = true;
             }
@@ -79,11 +82,15 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         any = true;
     }
     if ui.button("+ Add commitment").clicked() {
-        state.character.pool_state.committed_motes.push(MoteCommitment {
-            name: String::new(),
-            pool: MotePool::Personal,
-            motes: 0,
-        });
+        state
+            .character
+            .pool_state
+            .committed_motes
+            .push(MoteCommitment {
+                name: String::new(),
+                pool: MotePool::Personal,
+                motes: 0,
+            });
         any = true;
     }
 

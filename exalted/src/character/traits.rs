@@ -157,9 +157,7 @@ impl RatedTrait {
 // Attributes
 // ---------------------------------------------------------------------------
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum AttributeKind {
     Strength,
     Dexterity,
@@ -190,19 +188,17 @@ impl AttributeKind {
             AttributeKind::Strength | AttributeKind::Dexterity | AttributeKind::Stamina => {
                 AttributeGroup::Physical
             }
-            AttributeKind::Charisma
-            | AttributeKind::Manipulation
-            | AttributeKind::Appearance => AttributeGroup::Social,
-            AttributeKind::Perception
-            | AttributeKind::Intelligence
-            | AttributeKind::Wits => AttributeGroup::Mental,
+            AttributeKind::Charisma | AttributeKind::Manipulation | AttributeKind::Appearance => {
+                AttributeGroup::Social
+            }
+            AttributeKind::Perception | AttributeKind::Intelligence | AttributeKind::Wits => {
+                AttributeGroup::Mental
+            }
         }
     }
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum AttributeGroup {
     Physical,
     Social,
@@ -270,7 +266,12 @@ impl AttributePriority {
     pub fn is_well_formed(self) -> bool {
         let mut groups = [self.primary, self.secondary, self.tertiary];
         groups.sort();
-        groups == [AttributeGroup::Physical, AttributeGroup::Social, AttributeGroup::Mental]
+        groups
+            == [
+                AttributeGroup::Physical,
+                AttributeGroup::Social,
+                AttributeGroup::Mental,
+            ]
     }
 }
 
@@ -278,9 +279,7 @@ impl AttributePriority {
 // Abilities
 // ---------------------------------------------------------------------------
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum AbilityKind {
     // Dawn
     Archery,
@@ -348,9 +347,7 @@ impl AbilityKind {
 // Virtues
 // ---------------------------------------------------------------------------
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum VirtueKind {
     Compassion,
     Conviction,

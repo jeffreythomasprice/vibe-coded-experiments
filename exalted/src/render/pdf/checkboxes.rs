@@ -7,11 +7,11 @@ use std::collections::{HashMap, HashSet};
 use lopdf::Document;
 
 use crate::character::{AbilityKind, Character, VirtueKind};
-use crate::rules::health::{health_track, HealthLevelKind};
+use crate::rules::health::{HealthLevelKind, health_track};
 
-use super::acroform::{set_checkbox, FieldIndex};
-use super::field_map;
 use super::PdfRenderError;
+use super::acroform::{FieldIndex, set_checkbox};
+use super::field_map;
 
 pub(super) fn fill(
     doc: &mut Document,

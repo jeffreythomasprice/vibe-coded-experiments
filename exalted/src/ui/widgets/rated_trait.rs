@@ -4,7 +4,7 @@
 use std::cmp::Ordering;
 
 use crate::character::{DotPurchase, DotSource, RatedTrait, Specialty};
-use crate::ui::widgets::dot_source::{dot_source_editor, DotSourceKind};
+use crate::ui::widgets::dot_source::{DotSourceKind, dot_source_editor};
 use crate::ui::widgets::dots_grid::DotsGrid;
 use crate::ui::widgets::icon_button::trash_button;
 
@@ -33,10 +33,26 @@ pub fn rated_trait_editor(
     trait_: &mut RatedTrait,
     opts: &RatedTraitOpts,
 ) -> bool {
+    rated_trait_editor_with_prefix(ui, id_source, trait_, opts, |_| false)
+}
+
+/// Like [`rated_trait_editor`] but renders `prefix` inside the head
+/// `ui.horizontal` row, immediately before the label. Used by the Abilities
+/// section to fold the favored-ability checkbox into each row.
+pub fn rated_trait_editor_with_prefix(
+    ui: &mut egui::Ui,
+    id_source: impl std::hash::Hash + Copy,
+    trait_: &mut RatedTrait,
+    opts: &RatedTraitOpts,
+    prefix: impl FnOnce(&mut egui::Ui) -> bool,
+) -> bool {
     let mut changed = false;
     let salt = egui::Id::new(id_source);
 
     ui.horizontal(|ui| {
+        if prefix(ui) {
+            changed = true;
+        }
         ui.add_sized([140.0, 0.0], egui::Label::new(opts.label));
 
         // Clickable dot row replaces the old "n / max" label + ± buttons.

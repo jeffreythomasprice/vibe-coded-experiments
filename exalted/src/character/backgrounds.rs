@@ -4,9 +4,7 @@ use super::notes::Note;
 use super::traits::RatedTrait;
 use crate::rules::database::{BackgroundEntry, RulesDatabase};
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum BackgroundKind {
     Allies,
     Artifact,

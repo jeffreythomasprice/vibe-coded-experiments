@@ -4,9 +4,9 @@
 
 use crate::character::{AbilityKind, Character, CharmRef, DotSource};
 use crate::render::names::ability_name;
-use crate::rules::database::{database, CharmEntry};
+use crate::rules::database::{CharmEntry, database};
 use crate::ui::pickers::PickerOutcome;
-use crate::ui::widgets::dot_source::{dot_source_editor, DotSourceKind};
+use crate::ui::widgets::dot_source::{DotSourceKind, dot_source_editor};
 
 const PICKER_SOURCES: &[DotSourceKind] = &[
     DotSourceKind::ChargenPriority,
@@ -93,26 +93,25 @@ pub fn show(
                 egui::ComboBox::from_id_salt("charm-picker-exalt")
                     .selected_text(exalt_label)
                     .show_ui(ui, |ui| {
-                        let options =
-                            ["(any)", "solar", "lunar", "sidereal", "terrestrial", "abyssal"];
+                        let options = [
+                            "(any)",
+                            "solar",
+                            "lunar",
+                            "sidereal",
+                            "terrestrial",
+                            "abyssal",
+                        ];
                         for o in options {
                             let value = if o == "(any)" {
                                 None
                             } else {
                                 Some(o.to_string())
                             };
-                            ui.selectable_value(
-                                &mut state.exalt_filter,
-                                value,
-                                o,
-                            );
+                            ui.selectable_value(&mut state.exalt_filter, value, o);
                         }
                     });
 
-                ui.checkbox(
-                    &mut state.respect_character_caps,
-                    "only what I qualify for",
-                );
+                ui.checkbox(&mut state.respect_character_caps, "only what I qualify for");
             });
 
             ui.separator();
@@ -135,8 +134,7 @@ pub fn show(
                             ui.end_row();
 
                             for entry in &entries {
-                                let selected =
-                                    state.selected_id.as_deref() == Some(&entry.id);
+                                let selected = state.selected_id.as_deref() == Some(&entry.id);
                                 let resp = ui.selectable_label(selected, &entry.name);
                                 if resp.clicked() {
                                     state.selected_id = Some(entry.id.clone());
@@ -180,12 +178,7 @@ pub fn show(
 
             ui.horizontal(|ui| {
                 ui.label("Pay with");
-                dot_source_editor(
-                    ui,
-                    "charm-picker-source",
-                    &mut state.source,
-                    PICKER_SOURCES,
-                );
+                dot_source_editor(ui, "charm-picker-source", &mut state.source, PICKER_SOURCES);
                 ui.checkbox(&mut state.non_solar, "non-Solar (Eclipse-only)");
             });
 
@@ -214,11 +207,7 @@ pub fn show(
     outcome
 }
 
-fn passes_filters(
-    entry: &CharmEntry,
-    state: &CharmPickerState,
-    character: &Character,
-) -> bool {
+fn passes_filters(entry: &CharmEntry, state: &CharmPickerState, character: &Character) -> bool {
     // Text search.
     if !state.search.is_empty() {
         let needle = state.search.to_ascii_lowercase();

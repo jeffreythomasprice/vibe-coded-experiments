@@ -3,7 +3,7 @@
 use crate::character::{Combo, DotSource};
 use crate::rules::database::database;
 use crate::ui::state::AppState;
-use crate::ui::widgets::dot_source::{dot_source_editor, DotSourceKind};
+use crate::ui::widgets::dot_source::{DotSourceKind, dot_source_editor};
 use crate::ui::widgets::icon_button::trash_button_with_label;
 use crate::ui::widgets::notes_list::notes_editor;
 
@@ -48,20 +48,15 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("Name");
-                    let resp = ui
-                        .add(egui::TextEdit::singleline(&mut combo.name).desired_width(240.0));
+                    let resp =
+                        ui.add(egui::TextEdit::singleline(&mut combo.name).desired_width(240.0));
                     if resp.changed() {
                         any_changed = true;
                     }
                 });
                 ui.horizontal(|ui| {
                     ui.label("Source");
-                    if dot_source_editor(
-                        ui,
-                        ("combo-src", i),
-                        &mut combo.source,
-                        COMBO_SOURCES,
-                    ) {
+                    if dot_source_editor(ui, ("combo-src", i), &mut combo.source, COMBO_SOURCES) {
                         any_changed = true;
                     }
                     if trash_button_with_label(ui, "remove combo").clicked() {

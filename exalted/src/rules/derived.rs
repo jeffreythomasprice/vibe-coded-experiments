@@ -24,7 +24,11 @@ pub struct Movement {
 }
 
 fn armor_mobility_penalty(c: &Character) -> u8 {
-    c.equipment.armor.as_ref().map(|a| a.mobility_penalty).unwrap_or(0)
+    c.equipment
+        .armor
+        .as_ref()
+        .map(|a| a.mobility_penalty)
+        .unwrap_or(0)
 }
 
 /// Per-tick Move/Dash and per-jump vertical/horizontal yardage
@@ -41,8 +45,7 @@ pub fn movement(c: &Character) -> Movement {
     // Dash = max(Dex + 6 - wound - mob, 2).
     let dash = (dex as i16 + 6 - wound as i16 - mob as i16).max(2) as u8;
     // Jump vertical = max(Str + Athletics - wound - mob, 0).
-    let jump_vertical =
-        (str_ as i16 + ath as i16 - wound as i16 - mob as i16).max(0) as u8;
+    let jump_vertical = (str_ as i16 + ath as i16 - wound as i16 - mob as i16).max(0) as u8;
     let jump_horizontal = jump_vertical.saturating_mul(2);
 
     Movement {

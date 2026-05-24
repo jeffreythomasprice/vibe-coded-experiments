@@ -14,16 +14,8 @@ pub fn render(ui: &mut egui::Ui, character: &Character) {
         let pavail = essence::essence_personal_available(character);
         let pmax2 = essence::peripheral_essence_max(character);
         let pavail2 = essence::essence_peripheral_available(character);
-        ui.label(format!(
-            "Personal:    {:>3} / {:>3}",
-            pavail.max(0),
-            pmax
-        ));
-        ui.label(format!(
-            "Peripheral:  {:>3} / {:>3}",
-            pavail2.max(0),
-            pmax2
-        ));
+        ui.label(format!("Personal:    {:>3} / {:>3}", pavail.max(0), pmax));
+        ui.label(format!("Peripheral:  {:>3} / {:>3}", pavail2.max(0), pmax2));
     });
 
     section(ui, "Willpower", |ui| {
@@ -67,10 +59,7 @@ pub fn render(ui: &mut egui::Ui, character: &Character) {
         ui.label(format!("Join Battle: {}", defense::join_battle(character)));
         ui.label(format!("Wound pen.:  {}", health::wound_penalty(character)));
         if health::is_incapacitated(character) {
-            ui.colored_label(
-                egui::Color32::from_rgb(255, 90, 90),
-                "INCAPACITATED",
-            );
+            ui.colored_label(egui::Color32::from_rgb(255, 90, 90), "INCAPACITATED");
         }
     });
 
@@ -81,7 +70,10 @@ pub fn render(ui: &mut egui::Ui, character: &Character) {
         for (i, level) in track.iter().enumerate() {
             let filled = i < total_damage;
             let marker = if filled { "✕" } else { "·" };
-            ui.label(format!("[{}] {:<6} ({:+})", marker, level.label, level.penalty));
+            ui.label(format!(
+                "[{}] {:<6} ({:+})",
+                marker, level.label, level.penalty
+            ));
         }
     });
 

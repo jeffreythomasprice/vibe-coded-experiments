@@ -3,7 +3,7 @@ mod common;
 use common::valid_dawn;
 use exalted::character::{AbilityKind, AttributeKind, DotSource, Specialty};
 use exalted::rules::{
-    dice_pool, dodge_dv, join_battle, mdv_dodge, personal_essence_max, peripheral_essence_max,
+    dice_pool, dodge_dv, join_battle, mdv_dodge, peripheral_essence_max, personal_essence_max,
     soak_bashing, soak_lethal, wound_penalty,
 };
 
@@ -13,7 +13,10 @@ fn dex_plus_dodge_pool() {
     // Dex = 1 base + 3 chargen + 1 BP = 5. Dodge = 0 base + 3 chargen + 1 BP = 4.
     assert_eq!(c.attribute(AttributeKind::Dexterity), 5);
     assert_eq!(c.ability(AbilityKind::Dodge), 4);
-    assert_eq!(dice_pool(&c, AttributeKind::Dexterity, AbilityKind::Dodge, None), 9);
+    assert_eq!(
+        dice_pool(&c, AttributeKind::Dexterity, AbilityKind::Dodge, None),
+        9
+    );
 }
 
 #[test]
@@ -27,7 +30,12 @@ fn specialty_adds_one_capped_at_three() {
         });
     }
     // Specialty contribution caps at 3.
-    let pool = dice_pool(&c, AttributeKind::Dexterity, AbilityKind::Melee, Some("Daiklave"));
+    let pool = dice_pool(
+        &c,
+        AttributeKind::Dexterity,
+        AbilityKind::Melee,
+        Some("Daiklave"),
+    );
     // Dex 5 + Melee 2 + Specialty min(5, 3) = 10
     assert_eq!(pool, 5 + 2 + 3);
 }

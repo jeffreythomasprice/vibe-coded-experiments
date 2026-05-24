@@ -17,11 +17,7 @@ pub fn enum_combo<T: Copy + PartialEq>(
         .selected_text(selected_label)
         .show_ui(ui, |ui| {
             for (value, label) in options {
-                if ui
-                    .selectable_label(*value == *current, *label)
-                    .clicked()
-                    && *value != *current
-                {
+                if ui.selectable_label(*value == *current, *label).clicked() && *value != *current {
                     *current = *value;
                     changed = true;
                 }

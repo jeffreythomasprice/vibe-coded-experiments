@@ -3,12 +3,12 @@
 
 use chrono::{DateTime, Utc};
 use exalted::Character;
+use exalted::character::identity::VirtueFlaw;
 use exalted::character::{
     AbilityKind, AttributeGroup, AttributeKind, AttributePriority, BackgroundKind, BackgroundRef,
-    Caste, CharmRef, Combo, DotSource, Intimacy, IntimacyKind, KnownLanguage, LanguageFamily,
-    Note, RatedTrait, SpellRef, VirtueKind, XpAward,
+    Caste, CharmRef, Combo, DotSource, Intimacy, IntimacyKind, KnownLanguage, LanguageFamily, Note,
+    RatedTrait, SpellRef, VirtueKind, XpAward,
 };
-use exalted::character::identity::VirtueFlaw;
 
 /// A canonical valid Solar Dawn character used as the baseline for chargen
 /// tests. 15 BP spent, every chargen pool exactly filled.
@@ -37,11 +37,17 @@ pub fn valid_dawn() -> Character {
     add_chargen(c.attributes.get_mut(&AttributeKind::Stamina).unwrap(), 2);
     // Social: 6 → Cha+2, Manip+2, App+2
     add_chargen(c.attributes.get_mut(&AttributeKind::Charisma).unwrap(), 2);
-    add_chargen(c.attributes.get_mut(&AttributeKind::Manipulation).unwrap(), 2);
+    add_chargen(
+        c.attributes.get_mut(&AttributeKind::Manipulation).unwrap(),
+        2,
+    );
     add_chargen(c.attributes.get_mut(&AttributeKind::Appearance).unwrap(), 2);
     // Mental: 4 → Per+2, Int+1, Wits+1
     add_chargen(c.attributes.get_mut(&AttributeKind::Perception).unwrap(), 2);
-    add_chargen(c.attributes.get_mut(&AttributeKind::Intelligence).unwrap(), 1);
+    add_chargen(
+        c.attributes.get_mut(&AttributeKind::Intelligence).unwrap(),
+        1,
+    );
     add_chargen(c.attributes.get_mut(&AttributeKind::Wits).unwrap(), 1);
 
     // Abilities: 28 chargen dots. 5 favored × 3 = 15, 5 caste × 1 = 5
@@ -82,8 +88,10 @@ pub fn valid_dawn() -> Character {
         resources.add_chargen();
     }
     resources.add_bonus(2);
-    c.backgrounds
-        .push(BackgroundRef::lookup_kind(BackgroundKind::Resources, resources));
+    c.backgrounds.push(BackgroundRef::lookup_kind(
+        BackgroundKind::Resources,
+        resources,
+    ));
 
     let mut mentor = RatedTrait::with_base(0);
     for _ in 0..2 {
@@ -98,8 +106,10 @@ pub fn valid_dawn() -> Character {
         contacts.add_chargen();
     }
     contacts.add_bonus(1);
-    c.backgrounds
-        .push(BackgroundRef::lookup_kind(BackgroundKind::Contacts, contacts));
+    c.backgrounds.push(BackgroundRef::lookup_kind(
+        BackgroundKind::Contacts,
+        contacts,
+    ));
 
     // 10 charms: 5 favored excellencies + 5 caste excellencies.
     c.charms = vec![
@@ -320,12 +330,7 @@ fn fixed_note(body: &str, created_rfc3339: &str, updated_rfc3339: &str) -> Note 
 
 /// Same idea as `fixed_note`, but for `XpAward`. Keeps the sample fixture
 /// byte-stable across runs.
-fn fixed_award(
-    amount: u32,
-    body: &str,
-    created_rfc3339: &str,
-    updated_rfc3339: &str,
-) -> XpAward {
+fn fixed_award(amount: u32, body: &str, created_rfc3339: &str, updated_rfc3339: &str) -> XpAward {
     XpAward {
         amount,
         body: body.to_string(),

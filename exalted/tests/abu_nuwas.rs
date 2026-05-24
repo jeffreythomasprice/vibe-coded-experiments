@@ -13,12 +13,12 @@
 //!   the test.
 
 use exalted::Character;
+use exalted::character::identity::VirtueFlaw;
 use exalted::character::{
     AbilityKind, Anima, Appearance, AttributeGroup, AttributeKind, AttributePriority,
-    BackgroundKind, BackgroundRef, Caste, CharmRef, DotSource, Identity, Intimacy,
-    IntimacyKind, KnownLanguage, LanguageFamily, RatedTrait, Specialty, VirtueKind,
+    BackgroundKind, BackgroundRef, Caste, CharmRef, DotSource, Identity, Intimacy, IntimacyKind,
+    KnownLanguage, LanguageFamily, RatedTrait, Specialty, VirtueKind,
 };
-use exalted::character::identity::VirtueFlaw;
 
 fn add_chargen(t: &mut RatedTrait, n: usize) {
     for _ in 0..n {
@@ -72,7 +72,10 @@ fn abu_nuwas() -> Character {
 
     // Mental: 8 dots. Perception 4 (=1+3), Intelligence 3 (=1+2), Wits 4 (=1+3).
     add_chargen(c.attributes.get_mut(&AttributeKind::Perception).unwrap(), 3);
-    add_chargen(c.attributes.get_mut(&AttributeKind::Intelligence).unwrap(), 2);
+    add_chargen(
+        c.attributes.get_mut(&AttributeKind::Intelligence).unwrap(),
+        2,
+    );
     add_chargen(c.attributes.get_mut(&AttributeKind::Wits).unwrap(), 3);
 
     // Physical: 6 dots. Strength 2 (=1+1), Dexterity 4 (=1+3), Stamina 3 (=1+2).
@@ -83,7 +86,10 @@ fn abu_nuwas() -> Character {
     // Social: 4 dots + 1 BP for Charisma. Appearance 2 (=1+1), Manipulation 3
     // (=1+2), Charisma 3 (=1+1 chargen + 1 BP for 4 BP).
     add_chargen(c.attributes.get_mut(&AttributeKind::Appearance).unwrap(), 1);
-    add_chargen(c.attributes.get_mut(&AttributeKind::Manipulation).unwrap(), 2);
+    add_chargen(
+        c.attributes.get_mut(&AttributeKind::Manipulation).unwrap(),
+        2,
+    );
     add_chargen(c.attributes.get_mut(&AttributeKind::Charisma).unwrap(), 1);
     add_bp(c.attributes.get_mut(&AttributeKind::Charisma).unwrap(), 4);
 
@@ -143,14 +149,18 @@ fn abu_nuwas() -> Character {
     for _ in 0..3 {
         resources.add_chargen();
     }
-    c.backgrounds
-        .push(BackgroundRef::lookup_kind(BackgroundKind::Resources, resources));
+    c.backgrounds.push(BackgroundRef::lookup_kind(
+        BackgroundKind::Resources,
+        resources,
+    ));
 
     let mut artifact = RatedTrait::with_base(0);
     artifact.add_chargen();
     artifact.add_bonus(1);
-    c.backgrounds
-        .push(BackgroundRef::lookup_kind(BackgroundKind::Artifact, artifact));
+    c.backgrounds.push(BackgroundRef::lookup_kind(
+        BackgroundKind::Artifact,
+        artifact,
+    ));
 
     // Manse 4 from BP: 1+1+1+2 BP for dots 1,2,3,4.
     let mut manse = RatedTrait::with_base(0);

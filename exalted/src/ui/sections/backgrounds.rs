@@ -8,7 +8,7 @@ use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::DotSourceKind;
 use crate::ui::widgets::icon_button::trash_button_with_label;
 use crate::ui::widgets::notes_list::notes_editor;
-use crate::ui::widgets::rated_trait::{rated_trait_editor, RatedTraitOpts};
+use crate::ui::widgets::rated_trait::{RatedTraitOpts, rated_trait_editor};
 
 const BG_TRAIT_SOURCES: &[DotSourceKind] = &[
     DotSourceKind::ChargenPriority,
@@ -46,10 +46,16 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             .show(ui, |ui| {
                 let (label, trait_, notes) = match bg {
                     BackgroundRef::Lookup {
-                        label, trait_, notes, ..
+                        label,
+                        trait_,
+                        notes,
+                        ..
                     } => (label, trait_, notes),
                     BackgroundRef::Custom {
-                        label, trait_, notes, ..
+                        label,
+                        trait_,
+                        notes,
+                        ..
                     } => (label, trait_, notes),
                 };
                 {

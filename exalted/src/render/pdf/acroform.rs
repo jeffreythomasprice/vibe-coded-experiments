@@ -69,7 +69,9 @@ fn acroform_fields_root(doc: &Document) -> Option<ObjectId> {
 fn walk(doc: &Document, _root: ObjectId, out: &mut HashMap<String, ObjectId>) {
     // Start from /Root/AcroForm/Fields directly.
     let Ok(catalog) = doc.catalog() else { return };
-    let Ok(form_obj) = catalog.get(b"AcroForm") else { return };
+    let Ok(form_obj) = catalog.get(b"AcroForm") else {
+        return;
+    };
     let form_dict = match form_obj {
         Object::Reference(id) => match doc.get_dictionary(*id) {
             Ok(d) => d,
@@ -101,13 +103,10 @@ fn walk_field(
         return;
     };
     // Build qualified name.
-    let local_name = dict
-        .get(b"T")
-        .ok()
-        .and_then(|o| match o {
-            Object::String(b, _) => std::str::from_utf8(b).ok().map(str::to_string),
-            _ => None,
-        });
+    let local_name = dict.get(b"T").ok().and_then(|o| match o {
+        Object::String(b, _) => std::str::from_utf8(b).ok().map(str::to_string),
+        _ => None,
+    });
     let full_name = match (inherited_name, local_name.as_deref()) {
         (None, Some(n)) => Some(n.to_string()),
         (Some(parent), Some(n)) => Some(format!("{}.{}", parent, n)),

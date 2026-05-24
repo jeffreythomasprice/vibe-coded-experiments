@@ -2,7 +2,7 @@
 
 use crate::character::{DotSource, Intimacy, IntimacyKind};
 use crate::ui::state::AppState;
-use crate::ui::widgets::dot_source::{dot_source_editor, DotSourceKind};
+use crate::ui::widgets::dot_source::{DotSourceKind, dot_source_editor};
 use crate::ui::widgets::icon_button::trash_button;
 
 const INTIMACY_SOURCES: &[DotSourceKind] = &[
@@ -51,7 +51,13 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             }
             let prev = intimacy.kind;
             egui::ComboBox::from_id_salt(("intimacy-kind", i))
-                .selected_text(KINDS.iter().find(|(k, _)| *k == intimacy.kind).map(|(_, n)| *n).unwrap_or(""))
+                .selected_text(
+                    KINDS
+                        .iter()
+                        .find(|(k, _)| *k == intimacy.kind)
+                        .map(|(_, n)| *n)
+                        .unwrap_or(""),
+                )
                 .show_ui(ui, |ui| {
                     for (k, n) in KINDS {
                         ui.selectable_value(&mut intimacy.kind, *k, *n);
@@ -69,8 +75,12 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             if intimacy.rating != prev_rating {
                 any_changed = true;
             }
-            if dot_source_editor(ui, ("intimacy-src", i), &mut intimacy.source, INTIMACY_SOURCES)
-            {
+            if dot_source_editor(
+                ui,
+                ("intimacy-src", i),
+                &mut intimacy.source,
+                INTIMACY_SOURCES,
+            ) {
                 any_changed = true;
             }
             if trash_button(ui).clicked() {

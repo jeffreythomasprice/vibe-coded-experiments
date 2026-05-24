@@ -20,11 +20,32 @@ pub(super) fn append_circle(out: &mut Vec<u8>, cx: f64, cy: f64, r: f64, filled:
          {:.3} {:.3} {:.3} {:.3} {:.3} {:.3} c\n\
          {:.3} {:.3} {:.3} {:.3} {:.3} {:.3} c\n\
          {:.3} {:.3} {:.3} {:.3} {:.3} {:.3} c\n",
-        cx - r, cy,
-        cx - r, cy + k, cx - k, cy + r, cx, cy + r,
-        cx + k, cy + r, cx + r, cy + k, cx + r, cy,
-        cx + r, cy - k, cx + k, cy - r, cx, cy - r,
-        cx - k, cy - r, cx - r, cy - k, cx - r, cy,
+        cx - r,
+        cy,
+        cx - r,
+        cy + k,
+        cx - k,
+        cy + r,
+        cx,
+        cy + r,
+        cx + k,
+        cy + r,
+        cx + r,
+        cy + k,
+        cx + r,
+        cy,
+        cx + r,
+        cy - k,
+        cx + k,
+        cy - r,
+        cx,
+        cy - r,
+        cx - k,
+        cy - r,
+        cx - r,
+        cy - k,
+        cx - r,
+        cy,
     );
     out.extend_from_slice(path.as_bytes());
     out.extend_from_slice(if filled { b"f\n" } else { b"S\n" });
@@ -69,8 +90,10 @@ pub(super) fn append_page_content(
     page_id: ObjectId,
     content_bytes: Vec<u8>,
 ) -> Result<(), PdfRenderError> {
-    let new_stream_id =
-        doc.add_object(Object::Stream(Stream::new(Dictionary::new(), content_bytes)));
+    let new_stream_id = doc.add_object(Object::Stream(Stream::new(
+        Dictionary::new(),
+        content_bytes,
+    )));
 
     let page = doc
         .get_object_mut(page_id)
@@ -83,7 +106,10 @@ pub(super) fn append_page_content(
         Some(Object::Reference(id)) => {
             page.set(
                 "Contents",
-                Object::Array(vec![Object::Reference(id), Object::Reference(new_stream_id)]),
+                Object::Array(vec![
+                    Object::Reference(id),
+                    Object::Reference(new_stream_id),
+                ]),
             );
         }
         Some(Object::Array(mut arr)) => {

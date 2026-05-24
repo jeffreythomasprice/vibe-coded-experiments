@@ -79,19 +79,31 @@ fn weapons(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
             });
             ui.horizontal(|ui| {
                 if ui
-                    .add(egui::DragValue::new(&mut w.speed).range(-5i8..=20).prefix("spd "))
+                    .add(
+                        egui::DragValue::new(&mut w.speed)
+                            .range(-5i8..=20)
+                            .prefix("spd "),
+                    )
                     .changed()
                 {
                     *any = true;
                 }
                 if ui
-                    .add(egui::DragValue::new(&mut w.accuracy).range(-5i8..=20).prefix("acc "))
+                    .add(
+                        egui::DragValue::new(&mut w.accuracy)
+                            .range(-5i8..=20)
+                            .prefix("acc "),
+                    )
                     .changed()
                 {
                     *any = true;
                 }
                 if ui
-                    .add(egui::DragValue::new(&mut w.damage).range(-5i8..=20).prefix("dmg "))
+                    .add(
+                        egui::DragValue::new(&mut w.damage)
+                            .range(-5i8..=20)
+                            .prefix("dmg "),
+                    )
                     .changed()
                 {
                     *any = true;
@@ -102,19 +114,31 @@ fn weapons(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
                     .show_ui(ui, |ui| {
                         ui.selectable_value(&mut w.damage_type, DamageType::Bashing, "Bashing");
                         ui.selectable_value(&mut w.damage_type, DamageType::Lethal, "Lethal");
-                        ui.selectable_value(&mut w.damage_type, DamageType::Aggravated, "Aggravated");
+                        ui.selectable_value(
+                            &mut w.damage_type,
+                            DamageType::Aggravated,
+                            "Aggravated",
+                        );
                     });
                 if w.damage_type != prev_dt {
                     *any = true;
                 }
                 if ui
-                    .add(egui::DragValue::new(&mut w.defense).range(-5i8..=20).prefix("def "))
+                    .add(
+                        egui::DragValue::new(&mut w.defense)
+                            .range(-5i8..=20)
+                            .prefix("def "),
+                    )
                     .changed()
                 {
                     *any = true;
                 }
                 if ui
-                    .add(egui::DragValue::new(&mut w.rate).range(0u8..=20).prefix("rate "))
+                    .add(
+                        egui::DragValue::new(&mut w.rate)
+                            .range(0u8..=20)
+                            .prefix("rate "),
+                    )
                     .changed()
                 {
                     *any = true;
@@ -200,31 +224,51 @@ fn armor(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
     if let Some(a) = state.character.equipment.armor.as_mut() {
         ui.horizontal(|ui| {
             if ui
-                .add(egui::DragValue::new(&mut a.soak_bashing).range(0u8..=20).prefix("soakB "))
+                .add(
+                    egui::DragValue::new(&mut a.soak_bashing)
+                        .range(0u8..=20)
+                        .prefix("soakB "),
+                )
                 .changed()
             {
                 *any = true;
             }
             if ui
-                .add(egui::DragValue::new(&mut a.soak_lethal).range(0u8..=20).prefix("soakL "))
+                .add(
+                    egui::DragValue::new(&mut a.soak_lethal)
+                        .range(0u8..=20)
+                        .prefix("soakL "),
+                )
                 .changed()
             {
                 *any = true;
             }
             if ui
-                .add(egui::DragValue::new(&mut a.soak_aggravated).range(0u8..=20).prefix("soakA "))
+                .add(
+                    egui::DragValue::new(&mut a.soak_aggravated)
+                        .range(0u8..=20)
+                        .prefix("soakA "),
+                )
                 .changed()
             {
                 *any = true;
             }
             if ui
-                .add(egui::DragValue::new(&mut a.mobility_penalty).range(0u8..=10).prefix("mob -"))
+                .add(
+                    egui::DragValue::new(&mut a.mobility_penalty)
+                        .range(0u8..=10)
+                        .prefix("mob -"),
+                )
                 .changed()
             {
                 *any = true;
             }
             if ui
-                .add(egui::DragValue::new(&mut a.fatigue).range(0u8..=10).prefix("fat "))
+                .add(
+                    egui::DragValue::new(&mut a.fatigue)
+                        .range(0u8..=10)
+                        .prefix("fat "),
+                )
                 .changed()
             {
                 *any = true;
@@ -268,12 +312,20 @@ fn possessions(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
             }
             let mut has_second = p.secondary_location.is_some();
             if ui.checkbox(&mut has_second, "alt").changed() {
-                p.secondary_location = if has_second { Some(String::new()) } else { None };
+                p.secondary_location = if has_second {
+                    Some(String::new())
+                } else {
+                    None
+                };
                 *any = true;
             }
             if let Some(s) = p.secondary_location.as_mut() {
                 if ui
-                    .add(egui::TextEdit::singleline(s).desired_width(120.0).hint_text("alt loc"))
+                    .add(
+                        egui::TextEdit::singleline(s)
+                            .desired_width(120.0)
+                            .hint_text("alt loc"),
+                    )
                     .changed()
                 {
                     *any = true;
@@ -320,19 +372,31 @@ fn artifacts(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
                     *any = true;
                 }
                 if ui
-                    .add(egui::DragValue::new(&mut a.rating).range(1u8..=5).prefix("★"))
+                    .add(
+                        egui::DragValue::new(&mut a.rating)
+                            .range(1u8..=5)
+                            .prefix("★"),
+                    )
                     .changed()
                 {
                     *any = true;
                 }
                 if ui
-                    .add(egui::DragValue::new(&mut a.attunement_motes).range(0u8..=30).suffix("m"))
+                    .add(
+                        egui::DragValue::new(&mut a.attunement_motes)
+                            .range(0u8..=30)
+                            .suffix("m"),
+                    )
                     .changed()
                 {
                     *any = true;
                 }
                 if ui
-                    .add(egui::DragValue::new(&mut a.hearthstone_sockets).range(0u8..=8).prefix("sockets "))
+                    .add(
+                        egui::DragValue::new(&mut a.hearthstone_sockets)
+                            .range(0u8..=8)
+                            .prefix("sockets "),
+                    )
                     .changed()
                 {
                     *any = true;

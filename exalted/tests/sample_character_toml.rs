@@ -15,8 +15,7 @@ fn sample_matches_valid_dawn_fixture() {
         "assets/sample-character.toml missing; run \
          `cargo test --test sample_character_toml -- --ignored regen_sample_character_toml` to regenerate",
     );
-    let actual: exalted::Character =
-        toml::from_str(&text).expect("parse sample-character.toml");
+    let actual: exalted::Character = toml::from_str(&text).expect("parse sample-character.toml");
     assert_eq!(
         actual, expected,
         "assets/sample-character.toml does not match the valid_dawn_with_notes_demo() fixture; \

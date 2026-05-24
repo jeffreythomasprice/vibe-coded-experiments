@@ -1,8 +1,7 @@
 //! Identity section: name/concept/motivation/etc., Caste, Anima totem,
-//! Appearance, Favored Abilities, Virtue Flaw.
+//! Appearance, Virtue Flaw.
 
-use crate::character::{AbilityKind, Caste, VirtueFlaw, VirtueKind};
-use crate::render::names::ability_name;
+use crate::character::{Caste, VirtueFlaw, VirtueKind};
 use crate::ui::state::AppState;
 use crate::ui::widgets::enum_combo::enum_combo;
 use crate::ui::widgets::labeled::{labeled_text_area, labeled_text_edit};
@@ -30,18 +29,10 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     if labeled_text_edit(ui, "Concept", &mut state.character.identity.concept) {
         state.mark_dirty();
     }
-    if labeled_text_edit(
-        ui,
-        "Motivation",
-        &mut state.character.identity.motivation,
-    ) {
+    if labeled_text_edit(ui, "Motivation", &mut state.character.identity.motivation) {
         state.mark_dirty();
     }
-    if labeled_text_edit(
-        ui,
-        "Personality",
-        &mut state.character.identity.personality,
-    ) {
+    if labeled_text_edit(ui, "Personality", &mut state.character.identity.personality) {
         state.mark_dirty();
     }
 
@@ -56,55 +47,15 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     });
 
     // Anima totem.
-    if labeled_text_edit(
-        ui,
-        "Anima totem",
-        &mut state.character.identity.anima.totem,
-    ) {
+    if labeled_text_edit(ui, "Anima totem", &mut state.character.identity.anima.totem) {
         state.mark_dirty();
     }
-
-    // Favored Abilities.
-    favored_abilities_editor(ui, state);
 
     // VirtueFlaw.
     virtue_flaw_editor(ui, state);
 
     // Appearance.
     appearance_editor(ui, state);
-}
-
-fn favored_abilities_editor(ui: &mut egui::Ui, state: &mut AppState) {
-    ui.add_space(6.0);
-    let count = state.character.favored_abilities.len();
-    ui.label(format!("Favored Abilities ({}/5)", count));
-    egui::CollapsingHeader::new("Pick favored abilities")
-        .id_salt("favored-abilities-grid")
-        .default_open(count != 5)
-        .show(ui, |ui| {
-            egui::Grid::new("favored-grid")
-                .num_columns(5)
-                .spacing([8.0, 4.0])
-                .show(ui, |ui| {
-                    for (i, ab) in AbilityKind::ALL.iter().enumerate() {
-                        let mut checked = state.character.favored_abilities.contains(ab);
-                        let resp = ui.checkbox(&mut checked, ability_name(*ab));
-                        if resp.changed() {
-                            let already = state.character.favored_abilities.contains(ab);
-                            if checked && !already {
-                                state.character.favored_abilities.push(*ab);
-                                state.mark_dirty();
-                            } else if !checked && already {
-                                state.character.favored_abilities.retain(|x| x != ab);
-                                state.mark_dirty();
-                            }
-                        }
-                        if (i + 1) % 5 == 0 {
-                            ui.end_row();
-                        }
-                    }
-                });
-        });
 }
 
 fn virtue_flaw_editor(ui: &mut egui::Ui, state: &mut AppState) {
@@ -119,13 +70,17 @@ fn virtue_flaw_editor(ui: &mut egui::Ui, state: &mut AppState) {
         Custom,
     }
     const NAMED: &[(&str, fn() -> VirtueFlaw)] = &[
-        ("Compassionate Martyrdom", || VirtueFlaw::CompassionateMartyrdom),
+        ("Compassionate Martyrdom", || {
+            VirtueFlaw::CompassionateMartyrdom
+        }),
         ("Heart of Tears", || VirtueFlaw::HeartOfTears),
         ("Red Rage of Compassion", || VirtueFlaw::RedRageOfCompassion),
         ("Deliberate Cruelty", || VirtueFlaw::DeliberateCruelty),
         ("Heart of Flint", || VirtueFlaw::HeartOfFlint),
         ("Ascetic Drive", || VirtueFlaw::AsceticDrive),
-        ("Contempt of the Virtuous", || VirtueFlaw::ContemptOfTheVirtuous),
+        ("Contempt of the Virtuous", || {
+            VirtueFlaw::ContemptOfTheVirtuous
+        }),
         ("Overindulgence", || VirtueFlaw::Overindulgence),
         ("Berserk Anger", || VirtueFlaw::BerserkAnger),
         ("Foolhardy Contempt", || VirtueFlaw::FoolhardyContempt),
@@ -208,40 +163,42 @@ fn virtue_label(v: VirtueKind) -> &'static str {
 
 fn appearance_editor(ui: &mut egui::Ui, state: &mut AppState) {
     ui.add_space(6.0);
-    egui::CollapsingHeader::new("Appearance").default_open(false).show(ui, |ui| {
-        let app = &mut state.character.identity.appearance;
-        let mut any = false;
-        any |= labeled_text_edit(ui, "Sex", &mut app.sex);
-        ui.horizontal(|ui| {
-            ui.add_sized([120.0, 0.0], egui::Label::new("Age"));
-            let mut has_age = app.age.is_some();
-            if ui.checkbox(&mut has_age, "").changed() {
-                if has_age {
-                    app.age = Some(app.age.unwrap_or(0));
-                } else {
-                    app.age = None;
-                }
-                any = true;
-            }
-            if let Some(age) = app.age.as_mut() {
-                let resp = ui.add(egui::DragValue::new(age).range(0u32..=10_000));
-                if resp.changed() {
+    egui::CollapsingHeader::new("Appearance")
+        .default_open(false)
+        .show(ui, |ui| {
+            let app = &mut state.character.identity.appearance;
+            let mut any = false;
+            any |= labeled_text_edit(ui, "Sex", &mut app.sex);
+            ui.horizontal(|ui| {
+                ui.add_sized([120.0, 0.0], egui::Label::new("Age"));
+                let mut has_age = app.age.is_some();
+                if ui.checkbox(&mut has_age, "").changed() {
+                    if has_age {
+                        app.age = Some(app.age.unwrap_or(0));
+                    } else {
+                        app.age = None;
+                    }
                     any = true;
                 }
+                if let Some(age) = app.age.as_mut() {
+                    let resp = ui.add(egui::DragValue::new(age).range(0u32..=10_000));
+                    if resp.changed() {
+                        any = true;
+                    }
+                }
+            });
+            any |= labeled_text_edit(ui, "Hair", &mut app.hair);
+            any |= labeled_text_edit(ui, "Eyes", &mut app.eyes);
+            any |= labeled_text_edit(ui, "Skin", &mut app.skin);
+            any |= labeled_text_edit(ui, "Homeland", &mut app.homeland);
+            any |= labeled_text_area(
+                ui,
+                "Distinguishing features",
+                &mut app.distinguishing_features,
+                2,
+            );
+            if any {
+                state.mark_dirty();
             }
         });
-        any |= labeled_text_edit(ui, "Hair", &mut app.hair);
-        any |= labeled_text_edit(ui, "Eyes", &mut app.eyes);
-        any |= labeled_text_edit(ui, "Skin", &mut app.skin);
-        any |= labeled_text_edit(ui, "Homeland", &mut app.homeland);
-        any |= labeled_text_area(
-            ui,
-            "Distinguishing features",
-            &mut app.distinguishing_features,
-            2,
-        );
-        if any {
-            state.mark_dirty();
-        }
-    });
 }

@@ -44,8 +44,9 @@ fn correct_xp_purchase_passes() {
         .push(DotPurchase::new(DotSource::Xp { spent: 3 }));
 
     let str_ = c.attributes.get_mut(&AttributeKind::Strength).unwrap();
-    str_.purchases
-        .push(DotPurchase::new(DotSource::Xp { spent: str_increase }));
+    str_.purchases.push(DotPurchase::new(DotSource::Xp {
+        spent: str_increase,
+    }));
 
     let report = c.validate_xp();
     assert!(report.is_ok(), "{:?}", report.errors);
@@ -66,7 +67,11 @@ fn wrong_xp_cost_caught() {
     let report = c.validate_xp();
     assert!(report.errors.iter().any(|e| matches!(
         e,
-        ValidationError::XpCostWrong { expected: 9, paid: 8, .. }
+        ValidationError::XpCostWrong {
+            expected: 9,
+            paid: 8,
+            ..
+        }
     )));
 }
 
@@ -85,7 +90,10 @@ fn overspending_caught() {
     let report = c.validate_xp();
     assert!(report.errors.iter().any(|e| matches!(
         e,
-        ValidationError::XpOverspent { spent: 9, earned: 5 }
+        ValidationError::XpOverspent {
+            spent: 9,
+            earned: 5
+        }
     )));
 }
 
@@ -99,10 +107,12 @@ fn banked_total_must_balance() {
         .purchases
         .push(DotPurchase::new(DotSource::Xp { spent: 9 }));
     let report = c.validate_xp();
-    assert!(report.errors.iter().any(|e| matches!(
-        e,
-        ValidationError::XpBankedWrong { banked: 10, .. }
-    )));
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::XpBankedWrong { banked: 10, .. }))
+    );
 }
 
 #[test]

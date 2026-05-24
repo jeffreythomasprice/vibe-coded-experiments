@@ -2,9 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::traits::DotSource;
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum IntimacyKind {
     Person,
     Place,

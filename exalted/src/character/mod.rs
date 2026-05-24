@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-pub use backgrounds::{canonical_id as background_canonical_id, BackgroundKind, BackgroundRef};
+pub use backgrounds::{BackgroundKind, BackgroundRef, canonical_id as background_canonical_id};
 pub use charms::CharmRef;
 pub use combos::Combo;
 pub use equipment::{Armor, Artifact, Equipment, Possession, Weapon};
@@ -123,10 +123,7 @@ impl Character {
     }
 
     pub fn attribute(&self, kind: AttributeKind) -> u8 {
-        self.attributes
-            .get(&kind)
-            .map(|t| t.dots())
-            .unwrap_or(0)
+        self.attributes.get(&kind).map(|t| t.dots()).unwrap_or(0)
     }
 
     pub fn ability(&self, kind: AbilityKind) -> u8 {
@@ -149,10 +146,7 @@ impl Character {
             .sum()
     }
 
-    pub fn backgrounds_of(
-        &self,
-        kind: BackgroundKind,
-    ) -> impl Iterator<Item = &BackgroundRef> {
+    pub fn backgrounds_of(&self, kind: BackgroundKind) -> impl Iterator<Item = &BackgroundRef> {
         let db = crate::rules::database::database();
         self.backgrounds
             .iter()

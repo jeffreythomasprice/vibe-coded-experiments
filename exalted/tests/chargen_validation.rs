@@ -2,8 +2,8 @@ mod common;
 
 use common::valid_dawn;
 use exalted::character::{
-    AbilityKind, BackgroundKind, BackgroundRef, CharmRef, DotPurchase, DotSource,
-    KnownLanguage, LanguageFamily, RatedTrait, Specialty,
+    AbilityKind, BackgroundKind, BackgroundRef, CharmRef, DotPurchase, DotSource, KnownLanguage,
+    LanguageFamily, RatedTrait, Specialty,
 };
 use exalted::error::ValidationError;
 
@@ -70,10 +70,12 @@ fn ability_chargen_pool_mismatch_caught() {
         .purchases
         .pop();
     let report = c.validate_chargen();
-    assert!(report.errors.iter().any(|e| matches!(
-        e,
-        ValidationError::AbilityChargenDotsWrong { got: 27 }
-    )));
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::AbilityChargenDotsWrong { got: 27 }))
+    );
 }
 
 #[test]
@@ -83,19 +85,27 @@ fn virtue_below_three_breaks_primary() {
     // both chargen dots and move them to Conviction (already at 3 — would
     // make 5 which violates virtue chargen-over-4 rule, so add elsewhere).
     {
-        let comp = c.virtues.get_mut(&exalted::character::VirtueKind::Compassion).unwrap();
+        let comp = c
+            .virtues
+            .get_mut(&exalted::character::VirtueKind::Compassion)
+            .unwrap();
         comp.purchases.clear();
     }
     {
-        let temp = c.virtues.get_mut(&exalted::character::VirtueKind::Temperance).unwrap();
+        let temp = c
+            .virtues
+            .get_mut(&exalted::character::VirtueKind::Temperance)
+            .unwrap();
         temp.add_chargen();
         temp.add_chargen();
     }
     let report = c.validate_chargen();
-    assert!(report.errors.iter().any(|e| matches!(
-        e,
-        ValidationError::PrimaryVirtueTooLow { .. }
-    )));
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::PrimaryVirtueTooLow { .. }))
+    );
 }
 
 #[test]
@@ -114,22 +124,27 @@ fn bonus_point_total_mismatch_caught() {
         .purchases
         .push(DotPurchase::new(DotSource::BonusPoints { spent: 2 }));
     let report = c.validate_chargen();
-    assert!(report.errors.iter().any(|e| matches!(
-        e,
-        ValidationError::BonusPointsWrong { got: 17 }
-    )));
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::BonusPointsWrong { got: 17 }))
+    );
 }
 
 #[test]
 fn charm_count_wrong_caught() {
     let mut c = valid_dawn();
     // Remove the second-to-last chargen charm; leaves 9 ChargenPriority charms.
-    c.charms.retain(|ch| !ch.is_id("first-athletics-excellency"));
+    c.charms
+        .retain(|ch| !ch.is_id("first-athletics-excellency"));
     let report = c.validate_chargen();
-    assert!(report.errors.iter().any(|e| matches!(
-        e,
-        ValidationError::CharmCountWrong { got: 9 }
-    )));
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::CharmCountWrong { got: 9 }))
+    );
 }
 
 #[test]
@@ -158,10 +173,12 @@ fn caste_favored_charm_minimum_caught() {
         idx += 1;
     }
     let report = c.validate_chargen();
-    assert!(report.errors.iter().any(|e| matches!(
-        e,
-        ValidationError::CasteFavoredCharmsTooFew { .. }
-    )));
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::CasteFavoredCharmsTooFew { .. }))
+    );
 }
 
 #[test]
@@ -175,10 +192,12 @@ fn essence_over_chargen_max_caught() {
             .push(DotPurchase::new(DotSource::BonusPoints { spent: 7 }));
     }
     let report = c.validate_chargen();
-    assert!(report.errors.iter().any(|e| matches!(
-        e,
-        ValidationError::EssenceOverMaxAtChargen { .. }
-    )));
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::EssenceOverMaxAtChargen { .. }))
+    );
 }
 
 #[test]
@@ -219,14 +238,19 @@ fn followers_without_support_caught() {
     }
     followers.add_bonus(1);
     followers.add_bonus(2);
-    c.backgrounds
-        .push(BackgroundRef::lookup_kind(BackgroundKind::Followers, followers));
+    c.backgrounds.push(BackgroundRef::lookup_kind(
+        BackgroundKind::Followers,
+        followers,
+    ));
     let report = c.validate_chargen();
     assert!(
-        report
-            .errors
-            .iter()
-            .any(|e| matches!(e, ValidationError::FollowersWithoutSupport { followers: 5, support: 4 })),
+        report.errors.iter().any(|e| matches!(
+            e,
+            ValidationError::FollowersWithoutSupport {
+                followers: 5,
+                support: 4
+            }
+        )),
         "expected FollowersWithoutSupport, got {:#?}",
         report.errors
     );
@@ -255,7 +279,10 @@ fn native_language_missing_dialect_caught() {
 fn bp_cost_mismatch_caught_on_attribute() {
     let mut c = valid_dawn();
     // valid_dawn pays 4 BP for Dex 4→5. Change it to a wrong amount.
-    let dex = c.attributes.get_mut(&exalted::character::AttributeKind::Dexterity).unwrap();
+    let dex = c
+        .attributes
+        .get_mut(&exalted::character::AttributeKind::Dexterity)
+        .unwrap();
     for p in dex.purchases.iter_mut() {
         if let DotSource::BonusPoints { spent } = p.source {
             // Wrong BP cost: should be 4, say it was 3.
@@ -403,11 +430,13 @@ fn four_dot_specialty_caught() {
         DotSource::Xp { spent: 0 },
     );
     let report = c.validate_chargen();
-    let found = report.errors.iter().any(|e| matches!(
-        e,
-        ValidationError::SpecialtyOverMaxDots { ability, specialty, got }
-            if ability == "Melee" && specialty == "Sword" && *got == 4
-    ));
+    let found = report.errors.iter().any(|e| {
+        matches!(
+            e,
+            ValidationError::SpecialtyOverMaxDots { ability, specialty, got }
+                if ability == "Melee" && specialty == "Sword" && *got == 4
+        )
+    });
     assert!(
         found,
         "expected SpecialtyOverMaxDots on Melee::Sword=4, got: {:?}",

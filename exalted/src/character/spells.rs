@@ -13,9 +13,7 @@ use crate::rules::database::{RulesDatabase, SpellEntry};
 /// that the rules database can store necromantic spells; chargen rules for
 /// necromancy are not yet enforced beyond inheriting the same Solar-style
 /// gate where applicable.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SpellCircle {
     Terrestrial,
