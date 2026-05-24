@@ -12,6 +12,7 @@ name = "exalted"
 path = "src/main.rs"
 
 [dependencies]
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
 clap = { version = "4", features = ["derive"] }
 lopdf = "0.40"
 serde = { version = "1.0.228", features = ["derive"] }

@@ -1,6 +1,6 @@
 ---
 name: create-character
-description: Walk the user through building an Exalted 2E Solar character sheet for the `exalted` tool. Solicit choices step-by-step, write the TOML, validate it with the release binary, and save any non-mechanical backstory to a sidecar markdown file. Handles both fresh-chargen characters and post-chargen characters with earned XP to spend.
+description: Walk the user through building an Exalted 2E Solar character sheet for the `exalted` tool. Solicit choices step-by-step, write the TOML, and validate it with the release binary. Any non-mechanical backstory the user provides goes into the TOML's `[[notes]]` array alongside everything else; XP earned in play goes into `[[xp_awards]]` (timestamped entries that must sum to `xp_earned`) so the running total has a per-session audit trail. Handles both fresh-chargen characters and post-chargen characters with earned XP to spend.
 ---
 
 # create-character
@@ -100,8 +100,8 @@ That gives you Steps 1–5, the bonus-point table, and Virtue Flaw lists. Enough
 
 Ask the user, with `AskUserQuestion`, two things before doing anything else (you can do this in one question):
 
-1. **Build type.** New chargen character (15 BP, no XP earned yet) **vs** existing character with some XP earned and spent. If XP, also ask how much has been earned and how much they expect to bank.
-2. **Output path.** Where to save the TOML — this is the user's choice and is typically *not* inside the exalted source repo. Suggest a path under the current working directory (e.g. `./characters/<name>.toml`) unless the user specifies otherwise. The sidecar backstory markdown will live next to it as `<same-stem>.notes.md`.
+1. **Build type.** New chargen character (15 BP, no XP earned yet) **vs** existing character with some XP earned and spent. If XP, also ask how much has been earned and how much they expect to bank. For post-chargen characters with multiple sessions of history, ask whether they want to log each award (date + amount + what it was for) as `[[xp_awards]]` entries; if they do, those entries must sum to `xp_earned`.
+2. **Output path.** Where to save the TOML — this is the user's choice and is typically *not* inside the exalted source repo. Suggest a path under the current working directory (e.g. `./characters/<name>.toml`) unless the user specifies otherwise. Everything about the character — mechanics and backstory alike — lives in this one file.
 
 If they say "make something up" / "surprise me", pick reasonable defaults and tell them what you picked — don't grind them through every option.
 
@@ -132,9 +132,11 @@ favored_abilities = ["Awareness", "Dodge", "Stealth", "Survival", "Athletics"]
 primary_virtue = "Compassion"           # Compassion|Conviction|Temperance|Valor
 virtue_flaw = "CompassionateMartyrdom"  # PascalCase id from the primary virtue's flaw list
 spells = []                             # array of charm-style refs (see below); usually [] at chargen
-xp_earned = 0
-xp_banked = 0
+xp_earned = 0                           # total XP earned across the campaign
+xp_banked = 0                           # = xp_earned - sum of all Xp-source purchases
 hearthstones = []
+# Optional: `[[xp_awards]]` entries below log each grant individually.
+# When present, their `amount` values must sum to `xp_earned`. See "XP awards".
 ```
 
 ### Identity / appearance / languages
@@ -234,6 +236,12 @@ non_solar = false                   # true only for non-Solar Charms
 
 [charms.source]
 kind = "ChargenPriority"            # or BonusPoints { spent = N } / Xp { spent = N }
+
+# Optional: any number of timestamped notes. See "Notes" below for the shape.
+[[charms.notes]]
+body = "Reflexive — use to detect ambushes during downtime travel."
+created_at = "2026-04-18T20:15:00Z"
+updated_at = "2026-05-02T19:30:00Z"
 ```
 
 ### Backgrounds
@@ -252,6 +260,49 @@ specialties = []
 [[backgrounds.trait.purchases]]
 [backgrounds.trait.purchases.source]
 kind = "ChargenPriority"
+
+# Optional: notes use the same shape on every entity.
+[[backgrounds.notes]]
+body = "Old Sifu Wen, master of the Silken Reed style. Lives in Nexus."
+created_at = "2026-03-12T09:00:00Z"
+updated_at = "2026-03-12T09:00:00Z"
+```
+
+### Spells
+
+```toml
+[[spells]]
+kind = "lookup"
+id = "blood-lash"                   # canonical slug; verify with `exalted spells <id>`
+
+[spells.source]
+kind = "Xp"                         # or ChargenPriority (sorcery swap) / BonusPoints
+spent = 10
+
+[[spells.notes]]                    # optional, same shape
+body = "Learnt from a Nexus binder during the Festival of Waters."
+created_at = "2026-04-30T22:10:00Z"
+updated_at = "2026-04-30T22:10:00Z"
+```
+
+### Combos
+
+```toml
+[[combos]]
+name = "Watchful Step"
+charm_ids = [
+    "first-awareness-excellency",   # must match the `id` of a CharmRef the
+    "first-dodge-excellency",       # character already owns
+]
+
+[combos.source]
+kind = "Xp"                         # or BonusPoints (BP cost = # of member Charms)
+spent = 2                           # XP cost = sum of member min Ability ratings
+
+[[combos.notes]]                    # optional, same shape
+body = "Default opener when ambushed in alleys — boost JB then dodge."
+created_at = "2026-05-04T18:45:00Z"
+updated_at = "2026-05-09T12:00:00Z"
 ```
 
 ### Intimacies
@@ -287,9 +338,40 @@ bashing = 0 ; lethal = 0 ; aggravated = 0
 
 [pool_state.virtue_channels_used]   # empty table
 
-[notes]                             # short structured key/value snippets only;
-                                    # prose goes in the sidecar markdown
+# Top-level notes use the same shape as notes on any individual Charm /
+# Background / Spell / Combo: a free-form `body` plus RFC3339 timestamps.
+# Omit the `[[notes]]` block entirely if the character has none.
+[[notes]]
+body = "Session 1: party rescued the river-orphans of Nexus's Firewander District."
+created_at = "2026-04-12T23:30:00Z"
+updated_at = "2026-04-12T23:30:00Z"
 ```
+
+### XP awards
+
+Optional per-award history for `xp_earned`. Same timestamp shape as notes, with
+an extra `amount` field. When **any** `[[xp_awards]]` entry exists, the sum of
+`amount` values across all entries must equal `xp_earned` or `validate` will
+emit `XpAwardSumMismatch`. Omit the block entirely to skip tracking (legacy
+mode — `xp_earned` then stands on its own).
+
+```toml
+[[xp_awards]]
+amount = 4
+body = "Session 1 (Firewander orphans): 4 base + 0 stunt"
+created_at = "2026-04-12T23:30:00Z"
+updated_at = "2026-04-12T23:30:00Z"
+
+[[xp_awards]]
+amount = 6
+body = "Session 2 (dockside ambush): 4 base + 2 dramatic"
+created_at = "2026-04-19T23:30:00Z"
+updated_at = "2026-04-19T23:30:00Z"
+```
+
+Prefer one entry per session/award rather than rolling many sessions into a
+single big entry — they render as individual rows in the markdown XP History
+table and as separate lines on the PDF appendix's Experience section.
 
 ## 4. Validate
 
@@ -308,6 +390,7 @@ Common error names you'll see:
 - `CharmAbilityBelowMin` / `CharmEssenceBelowMin` / `CharmPrereqMissing` — Charm tree / prereq violation.
 - `BonusPointsWrong` — BP ledger doesn't sum to 15 (or whatever was spent).
 - `XpOverspent` / `XpCostWrong` / `XpBankedWrong` — XP accounting.
+- `XpAwardSumMismatch` — `[[xp_awards]]` is non-empty but its `amount` values don't sum to `xp_earned`. Either add/remove an entry or correct the totals.
 - `WillpowerNotFromVirtues` — `willpower.base_dots` doesn't equal top-two-Virtues.
 - `VirtueFlawMismatch` / `PrimaryVirtueTooLow` — flaw not from primary Virtue's list, or primary Virtue under 3.
 - `OldRealmRequiresLore` / `GuildCantRequiresBacking` — language prerequisites.
@@ -315,38 +398,44 @@ Common error names you'll see:
 
 The error message text usually says exactly what's wrong (expected vs. actual). If a particular error or XP cost is ambiguous, query `document-search --tags exalted` for the rule book passage rather than guessing.
 
-## 5. Save the sidecar notes
+## 5. Capture non-mechanical material as `[[notes]]`
 
-Anything the user says about the character that **isn't a game mechanic** (backstory, motivations behind the motivation, personality vignettes, NPCs in the character's life, prelude details, plot hooks) goes in `<stem>.notes.md` next to the TOML. The TOML's `[notes]` table is for short structured key/value snippets only — prose belongs in the sidecar.
+Everything the user tells you about the character that **isn't a game mechanic** — backstory, the motivations behind the motivation, personality vignettes, NPCs in their life, prelude / exaltation details, plot hooks, GM threads — goes in the TOML's top-level `[[notes]]` array. Notes can also attach to any individual Background / Charm / Spell / Combo (see §3); use those when the material is specifically about that one item (who the Mentor is, what the artifact does, a tactical reminder for a Charm) rather than the character as a whole.
 
-Suggested sidecar sections (use only what applies):
+Each entry is a `body` plus RFC3339 `created_at` / `updated_at` timestamps. For chargen, set both timestamps to the current moment.
 
-```markdown
-# <Character Name>
+```toml
+[[notes]]
+body = """
+Backstory: born in the Firewander District of Nexus, exalted at 19 during
+a Guild raid on her dojo. Carries a grudge against the Guild factor who
+ordered the raid.
+"""
+created_at = "2026-05-24T18:00:00Z"
+updated_at = "2026-05-24T18:00:00Z"
 
-## Backstory
-…
-
-## Personality
-…
-
-## Relationships & Social Ties
-…
-
-## Prelude / Exaltation
-…
-
-## Open threads & GM hooks
-…
+[[notes]]
+body = "Open thread: the factor's name is unknown; party suspects a Realm tie."
+created_at = "2026-05-24T18:00:00Z"
+updated_at = "2026-05-24T18:00:00Z"
 ```
 
-Write the sidecar alongside the TOML even if it's short — explicit empty headings are fine and easier for the user to fill in later than a missing file.
+Prefer multiple shorter `[[notes]]` entries (one per topic) over one giant blob — they render more readably on the markdown sheet and in the appended PDF Notes page, and individual entries can be updated independently as the campaign progresses.
+
+Topics worth a separate note when the user has supplied content for them:
+
+- Backstory / origin
+- Personality
+- Relationships & social ties
+- Prelude / Exaltation
+- Open threads & GM hooks
+
+Skip any topic the user didn't actually provide material for — no empty placeholders.
 
 ## 6. Hand off
 
 Once `validate` is clean, tell the user:
 - the TOML path,
-- the sidecar notes path,
 - a one-line summary (caste, concept, BP/XP spent),
 - the renderable commands they'll likely want:
   - `/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted render <toml>` — markdown to stdout

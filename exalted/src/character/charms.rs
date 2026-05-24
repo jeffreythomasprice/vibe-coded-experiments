@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use super::notes::Note;
 use super::traits::{AbilityKind, DotSource};
 use crate::rules::database::{CharmEntry, RulesDatabase};
 use crate::rules::health::OxBodyPattern;
@@ -20,8 +21,8 @@ pub enum CharmRef {
         source: DotSource,
         #[serde(default)]
         non_solar: bool,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        notes: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        notes: Vec<Note>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ox_body_pattern: Option<OxBodyPattern>,
     },
@@ -30,8 +31,8 @@ pub enum CharmRef {
         source: DotSource,
         #[serde(default)]
         non_solar: bool,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        notes: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        notes: Vec<Note>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ox_body_pattern: Option<OxBodyPattern>,
     },
@@ -43,8 +44,21 @@ impl CharmRef {
             id: id.into(),
             source,
             non_solar: false,
-            notes: None,
+            notes: Vec::new(),
             ox_body_pattern: None,
+        }
+    }
+
+    /// Append a fresh note and return self for chaining.
+    pub fn with_notes(mut self, body: impl Into<String>) -> Self {
+        self.push_note(body);
+        self
+    }
+
+    pub fn push_note(&mut self, body: impl Into<String>) {
+        let n = Note::new(body);
+        match self {
+            Self::Lookup { notes, .. } | Self::Custom { notes, .. } => notes.push(n),
         }
     }
 
@@ -60,9 +74,9 @@ impl CharmRef {
         }
     }
 
-    pub fn notes(&self) -> Option<&str> {
+    pub fn notes(&self) -> &[Note] {
         match self {
-            Self::Lookup { notes, .. } | Self::Custom { notes, .. } => notes.as_deref(),
+            Self::Lookup { notes, .. } | Self::Custom { notes, .. } => notes,
         }
     }
 

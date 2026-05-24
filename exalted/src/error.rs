@@ -163,6 +163,11 @@ pub enum ValidationError {
         expected: i64,
     },
 
+    #[error(
+        "xp_awards sum to {sum}, but xp_earned = {earned} (the two must match when xp_awards is non-empty)"
+    )]
+    XpAwardSumMismatch { sum: u32, earned: u32 },
+
     #[error("note: charm {charm} not in rules database; prereqs not checked")]
     UnknownCharm { charm: String },
 

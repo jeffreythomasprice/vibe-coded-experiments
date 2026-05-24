@@ -104,7 +104,7 @@ fn any_n_excellencies_wildcard_counted() {
         entry: custom,
         source: DotSource::BonusPoints { spent: 4 },
         non_solar: false,
-        notes: None,
+        notes: Vec::new(),
         ox_body_pattern: None,
     });
     let report = c.validate_chargen();
@@ -150,7 +150,7 @@ fn attribute_minimum_enforced() {
         entry: custom,
         source: DotSource::BonusPoints { spent: 4 },
         non_solar: false,
-        notes: None,
+        notes: Vec::new(),
         ox_body_pattern: None,
     });
     let report = c.validate_chargen();

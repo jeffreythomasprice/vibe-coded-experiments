@@ -1,11 +1,12 @@
 //! Shared test helpers. Build a fully-valid Solar character we can mutate
 //! per-test to exercise specific rules.
 
+use chrono::{DateTime, Utc};
 use exalted::Character;
 use exalted::character::{
     AbilityKind, AttributeGroup, AttributeKind, AttributePriority, BackgroundKind, BackgroundRef,
-    Caste, CharmRef, DotSource, Intimacy, IntimacyKind, KnownLanguage, LanguageFamily, RatedTrait,
-    VirtueKind,
+    Caste, CharmRef, Combo, DotSource, Intimacy, IntimacyKind, KnownLanguage, LanguageFamily,
+    Note, RatedTrait, SpellRef, VirtueKind, XpAward,
 };
 use exalted::character::identity::VirtueFlaw;
 
@@ -153,6 +154,190 @@ pub fn valid_dawn() -> Character {
     }];
 
     c
+}
+
+/// Build the canonical sample character used by `assets/sample-character.toml`.
+#[allow(dead_code)]
+/// Extends [`valid_dawn`] with post-chargen XP purchases (an Essence boost,
+/// the Terrestrial Circle Sorcery Charm, a Terrestrial spell, and a Combo)
+/// plus pinned-timestamp notes on every supported location: the Character,
+/// one Background, one Charm, the spell, the Combo, and a top-level journal.
+/// Existing in-game rules require the sorcery Charm + Essence 3 before a
+/// spell can be learnt, hence the 46 XP outlay.
+pub fn valid_dawn_with_notes_demo() -> Character {
+    exalted::rules::database::init_database().ok();
+    let mut c = valid_dawn();
+
+    // Attach a note to one Charm in place. Pulled out as a helper so the
+    // `if let` to reach inside the variant stays compact.
+    push_note_on_charm(
+        &mut c,
+        "first-awareness-excellency",
+        fixed_note(
+            "Reflexive — use to detect ambushes during downtime travel.",
+            "2026-04-18T20:15:00Z",
+            "2026-05-02T19:30:00Z",
+        ),
+    );
+
+    // Attach a note to the Mentor background.
+    push_note_on_background(
+        &mut c,
+        BackgroundKind::Mentor,
+        fixed_note(
+            "Old Sifu Wen, master of the Silken Reed style. Lives in Nexus.",
+            "2026-03-12T09:00:00Z",
+            "2026-03-12T09:00:00Z",
+        ),
+    );
+
+    // Essence 2 → 3 (24 XP), Terrestrial Circle Sorcery (10 XP, Occult is
+    // non-C/F here), Blood Lash spell (10 XP), and the Watchful Step Combo
+    // bundling First Awareness + First Dodge (2 XP, sum of member min
+    // Ability ratings). 46 XP earned, 0 banked.
+    c.essence.add_xp(24);
+    c.charms.push(CharmRef::lookup(
+        "terrestrial-circle-sorcery",
+        DotSource::Xp { spent: 10 },
+    ));
+
+    let mut spell = SpellRef::lookup("blood-lash", DotSource::Xp { spent: 10 });
+    if let SpellRef::Lookup { notes, .. } = &mut spell {
+        notes.push(fixed_note(
+            "Learnt from a Nexus binder during the Festival of Waters.",
+            "2026-04-30T22:10:00Z",
+            "2026-04-30T22:10:00Z",
+        ));
+    }
+    c.spells.push(spell);
+
+    c.combos.push(Combo {
+        name: "Watchful Step".to_string(),
+        charm_ids: vec![
+            "first-awareness-excellency".to_string(),
+            "first-dodge-excellency".to_string(),
+        ],
+        source: DotSource::Xp { spent: 2 },
+        notes: vec![fixed_note(
+            "Default opener when ambushed in alleys — boost JB then dodge.",
+            "2026-05-04T18:45:00Z",
+            "2026-05-09T12:00:00Z",
+        )],
+    });
+
+    c.xp_earned = 46;
+    c.xp_banked = 0;
+    c.xp_awards = vec![
+        fixed_award(
+            8,
+            "Session 1 (Firewander orphans): 4 base + 2 stunt + 1 training + 1 RP",
+            "2026-04-12T23:30:00Z",
+            "2026-04-12T23:30:00Z",
+        ),
+        fixed_award(
+            7,
+            "Session 2 (dockside ambush): 4 base + 2 dramatic + 1 training",
+            "2026-04-19T23:30:00Z",
+            "2026-04-19T23:30:00Z",
+        ),
+        fixed_award(
+            6,
+            "Downtime arc — studying the Silken Reed manuals under Sifu Wen",
+            "2026-04-26T19:00:00Z",
+            "2026-04-26T19:00:00Z",
+        ),
+        fixed_award(
+            10,
+            "Session 3 (Festival of Waters): tracked the Nexus binder; bonus for learning Blood Lash in fiction",
+            "2026-04-30T23:30:00Z",
+            "2026-05-02T17:10:00Z",
+        ),
+        fixed_award(
+            9,
+            "Session 4 (Guild factor confrontation): 4 base + 2 stunt + 2 dramatic + 1 RP",
+            "2026-05-09T23:30:00Z",
+            "2026-05-09T23:30:00Z",
+        ),
+        fixed_award(
+            6,
+            "Session 5 (downtime, dojo reconstruction): 4 base + 2 training",
+            "2026-05-16T23:30:00Z",
+            "2026-05-16T23:30:00Z",
+        ),
+    ];
+
+    c.notes = vec![
+        fixed_note(
+            "Session 1: party rescued the river-orphans of Nexus's Firewander District.",
+            "2026-04-12T23:30:00Z",
+            "2026-04-12T23:30:00Z",
+        ),
+        fixed_note(
+            "Suspect the Guild factor is laundering jade through the dockside cult.",
+            "2026-05-04T20:00:00Z",
+            "2026-05-11T19:20:00Z",
+        ),
+    ];
+
+    c
+}
+
+fn push_note_on_charm(c: &mut Character, id: &str, note: Note) {
+    let charm = c
+        .charms
+        .iter_mut()
+        .find(|ch| ch.is_id(id))
+        .unwrap_or_else(|| panic!("charm {id} not in baseline fixture"));
+    match charm {
+        CharmRef::Lookup { notes, .. } | CharmRef::Custom { notes, .. } => notes.push(note),
+    }
+}
+
+fn push_note_on_background(c: &mut Character, kind: BackgroundKind, note: Note) {
+    let db = exalted::rules::database::database();
+    let bg = c
+        .backgrounds
+        .iter_mut()
+        .find(|b| b.kind(db) == Some(kind))
+        .unwrap_or_else(|| panic!("no {kind:?} background in baseline fixture"));
+    match bg {
+        BackgroundRef::Lookup { notes, .. } | BackgroundRef::Custom { notes, .. } => {
+            notes.push(note)
+        }
+    }
+}
+
+/// Build a `Note` with explicit RFC3339 timestamps so the regenerated
+/// `sample-character.toml` is byte-stable. Panics if the strings can't be
+/// parsed (test-only helper).
+fn fixed_note(body: &str, created_rfc3339: &str, updated_rfc3339: &str) -> Note {
+    Note {
+        body: body.to_string(),
+        created_at: parse_ts(created_rfc3339),
+        updated_at: parse_ts(updated_rfc3339),
+    }
+}
+
+/// Same idea as `fixed_note`, but for `XpAward`. Keeps the sample fixture
+/// byte-stable across runs.
+fn fixed_award(
+    amount: u32,
+    body: &str,
+    created_rfc3339: &str,
+    updated_rfc3339: &str,
+) -> XpAward {
+    XpAward {
+        amount,
+        body: body.to_string(),
+        created_at: parse_ts(created_rfc3339),
+        updated_at: parse_ts(updated_rfc3339),
+    }
+}
+
+fn parse_ts(s: &str) -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339(s)
+        .unwrap_or_else(|e| panic!("bad fixed timestamp {s:?}: {e}"))
+        .with_timezone(&Utc)
 }
 
 fn add_chargen(t: &mut RatedTrait, n: usize) {

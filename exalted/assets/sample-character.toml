@@ -8,8 +8,7 @@ favored_abilities = [
 ]
 primary_virtue = "Compassion"
 virtue_flaw = "CompassionateMartyrdom"
-spells = []
-xp_earned = 0
+xp_earned = 46
 xp_banked = 0
 hearthstones = []
 
@@ -488,8 +487,13 @@ specialties = []
 
 [essence]
 base_dots = 2
-purchases = []
 specialties = []
+
+[[essence.purchases]]
+
+[essence.purchases.source]
+kind = "Xp"
+spent = 24
 
 [[charms]]
 kind = "lookup"
@@ -498,6 +502,11 @@ non_solar = false
 
 [charms.source]
 kind = "ChargenPriority"
+
+[[charms.notes]]
+body = "Reflexive — use to detect ambushes during downtime travel."
+created_at = "2026-04-18T20:15:00Z"
+updated_at = "2026-05-02T19:30:00Z"
 
 [[charms]]
 kind = "lookup"
@@ -580,6 +589,44 @@ non_solar = false
 kind = "BonusPoints"
 spent = 4
 
+[[charms]]
+kind = "lookup"
+id = "terrestrial-circle-sorcery"
+non_solar = false
+
+[charms.source]
+kind = "Xp"
+spent = 10
+
+[[combos]]
+name = "Watchful Step"
+charm_ids = [
+    "first-awareness-excellency",
+    "first-dodge-excellency",
+]
+
+[combos.source]
+kind = "Xp"
+spent = 2
+
+[[combos.notes]]
+body = "Default opener when ambushed in alleys — boost JB then dodge."
+created_at = "2026-05-04T18:45:00Z"
+updated_at = "2026-05-09T12:00:00Z"
+
+[[spells]]
+kind = "lookup"
+id = "blood-lash"
+
+[spells.source]
+kind = "Xp"
+spent = 10
+
+[[spells.notes]]
+body = "Learnt from a Nexus binder during the Festival of Waters."
+created_at = "2026-04-30T22:10:00Z"
+updated_at = "2026-04-30T22:10:00Z"
+
 [[backgrounds]]
 kind_tag = "lookup"
 id = "resources"
@@ -635,6 +682,11 @@ kind = "ChargenPriority"
 kind = "BonusPoints"
 spent = 1
 
+[[backgrounds.notes]]
+body = "Old Sifu Wen, master of the Silken Reed style. Lives in Nexus."
+created_at = "2026-03-12T09:00:00Z"
+updated_at = "2026-03-12T09:00:00Z"
+
 [[backgrounds]]
 kind_tag = "lookup"
 id = "contacts"
@@ -689,6 +741,42 @@ weapons = []
 other = []
 artifacts = []
 
+[[xp_awards]]
+amount = 8
+body = "Session 1 (Firewander orphans): 4 base + 2 stunt + 1 training + 1 RP"
+created_at = "2026-04-12T23:30:00Z"
+updated_at = "2026-04-12T23:30:00Z"
+
+[[xp_awards]]
+amount = 7
+body = "Session 2 (dockside ambush): 4 base + 2 dramatic + 1 training"
+created_at = "2026-04-19T23:30:00Z"
+updated_at = "2026-04-19T23:30:00Z"
+
+[[xp_awards]]
+amount = 6
+body = "Downtime arc — studying the Silken Reed manuals under Sifu Wen"
+created_at = "2026-04-26T19:00:00Z"
+updated_at = "2026-04-26T19:00:00Z"
+
+[[xp_awards]]
+amount = 10
+body = "Session 3 (Festival of Waters): tracked the Nexus binder; bonus for learning Blood Lash in fiction"
+created_at = "2026-04-30T23:30:00Z"
+updated_at = "2026-05-02T17:10:00Z"
+
+[[xp_awards]]
+amount = 9
+body = "Session 4 (Guild factor confrontation): 4 base + 2 stunt + 2 dramatic + 1 RP"
+created_at = "2026-05-09T23:30:00Z"
+updated_at = "2026-05-09T23:30:00Z"
+
+[[xp_awards]]
+amount = 6
+body = "Session 5 (downtime, dojo reconstruction): 4 base + 2 training"
+created_at = "2026-05-16T23:30:00Z"
+updated_at = "2026-05-16T23:30:00Z"
+
 [pool_state]
 personal_motes_spent = 0
 peripheral_motes_spent = 0
@@ -704,7 +792,15 @@ aggravated = 0
 
 [pool_state.virtue_channels_used]
 
-[notes]
+[[notes]]
+body = "Session 1: party rescued the river-orphans of Nexus's Firewander District."
+created_at = "2026-04-12T23:30:00Z"
+updated_at = "2026-04-12T23:30:00Z"
+
+[[notes]]
+body = "Suspect the Guild factor is laundering jade through the dockside cult."
+created_at = "2026-05-04T20:00:00Z"
+updated_at = "2026-05-11T19:20:00Z"
 
 [[languages]]
 family = "Riverspeak"

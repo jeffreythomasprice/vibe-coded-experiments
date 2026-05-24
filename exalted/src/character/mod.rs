@@ -7,6 +7,7 @@ pub mod hearthstone;
 pub mod identity;
 pub mod intimacies;
 pub mod languages;
+pub mod notes;
 pub mod spells;
 pub mod state;
 pub mod traits;
@@ -25,12 +26,14 @@ pub use hearthstone::Hearthstone;
 pub use identity::{Anima, Appearance, Caste, Identity, VirtueFlaw};
 pub use intimacies::{Intimacy, IntimacyKind};
 pub use languages::{KnownLanguage, LanguageFamily};
+pub use notes::Note;
 pub use spells::{SpellCircle, SpellRef};
 pub use state::{HealthDamage, MoteCommitment, MotePool, PoolState};
 pub use traits::{
     AbilityKind, AttributeGroup, AttributeKind, AttributePriority, DotPurchase, DotSource,
     RatedTrait, Specialty, VirtueKind,
 };
+pub use xp::XpAward;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Character {
@@ -56,8 +59,11 @@ pub struct Character {
     pub equipment: Equipment,
     pub xp_earned: u32,
     pub xp_banked: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub xp_awards: Vec<XpAward>,
     pub pool_state: PoolState,
-    pub notes: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<Note>,
     #[serde(default)]
     pub languages: Vec<KnownLanguage>,
     #[serde(default)]
@@ -107,8 +113,9 @@ impl Character {
             equipment: Equipment::default(),
             xp_earned: 0,
             xp_banked: 0,
+            xp_awards: Vec::new(),
             pool_state: PoolState::default(),
-            notes: BTreeMap::new(),
+            notes: Vec::new(),
             languages: Vec::new(),
             hearthstones: Vec::new(),
             familiar: None,

@@ -11,7 +11,7 @@ use lopdf::Document;
 
 use crate::character::xp::total_xp_spent;
 use crate::character::{
-    AbilityKind, AttributeKind, BackgroundRef, Character, KnownLanguage, LanguageFamily, Weapon,
+    AttributeKind, BackgroundRef, Character, KnownLanguage, LanguageFamily, Weapon,
 };
 use crate::rules::database::{database, RulesDatabase};
 use crate::rules::defense::{
@@ -32,7 +32,6 @@ pub(super) fn fill(
 ) -> Result<(), PdfRenderError> {
     fill_identity(doc, index, c)?;
     fill_attributes(doc, index, c)?;
-    fill_abilities(doc, index, c)?;
     fill_specialties(doc, index, c)?;
     fill_backgrounds(doc, index, c)?;
     fill_intimacies(doc, index, c)?;
@@ -79,22 +78,6 @@ fn fill_attributes(
     for (i, kind) in AttributeKind::ALL.iter().enumerate() {
         let field = format!("attributes{}", i + 1);
         write(doc, index, &field, &c.attribute(*kind).to_string())?;
-    }
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Abilities (numeric values + caste/favored marks set elsewhere)
-// ---------------------------------------------------------------------------
-
-fn fill_abilities(
-    doc: &mut Document,
-    index: &FieldIndex,
-    c: &Character,
-) -> Result<(), PdfRenderError> {
-    for (i, kind) in AbilityKind::ALL.iter().enumerate() {
-        let field = format!("skills{}", i + 1);
-        write(doc, index, &field, &c.ability(*kind).to_string())?;
     }
     Ok(())
 }
@@ -309,26 +292,25 @@ fn fill_armor_and_defense(
 }
 
 // ---------------------------------------------------------------------------
-// Charms (CHARMS table) and spells (SORCERY table).
-//
-// The sheet exposes two tables that share the `charms/sorcery…` field prefix:
+// Charms (page 2 CHARMS table) and spells (page 3 SORCERY table).
 //
 //   CHARMS table — 14 rows × 5 columns (NAME | TYPE | DURATION | COST | EFFECT)
-//     Row N (1..14): `sorceryN`, `sorcery{N+14}`, `sorcery{N+28}`,
-//                    `sorcery{N+42}`, `sorcery{N+56}`.
+//     Row N (1..14): `charms/sorceryN`, `charms/sorcery{N+14}`,
+//                    `charms/sorcery{N+28}`, `charms/sorcery{N+42}`,
+//                    `charms/sorcery{N+56}`.
+//     The page-2 sheet also has 5 unlabeled rows directly under this table
+//     (`charms/sorcery{N+9}x` …) that look like a small sorcery stub. They
+//     are NOT the labeled SORCERY table and we leave them blank — writing
+//     spells there makes them appear to spill out the bottom of CHARMS.
 //
-//   SORCERY table — 5 rows × 5 columns (NAME | (unused) | DURATION | COST | EFFECT)
-//     Row N (1..5), let M = N+9:
-//     `sorcery{M}x`, `sorcery{M+14}x`, `sorcery{M+28}x`,
-//     `sorcery{M+42}x`, `sorcery{M+56}x`.
-//     The second column is present in the AcroForm but not labeled on the
-//     printed sheet; we leave it blank.
+//   SORCERY table — 10 rows × 4 columns (NAME | DURATION | COST | EFFECT),
+//     on page 3. Row N (1..10): `soxN`, `sox{N+10}`, `sox{N+20}`, `sox{N+30}`.
 //
 // Field layout was verified via `cargo run --example dump_dots`.
 // ---------------------------------------------------------------------------
 
 const CHARM_ROWS: usize = 14;
-const SPELL_ROWS: usize = 5;
+const SPELL_ROWS: usize = 10;
 
 fn fill_charms_and_spells(
     doc: &mut Document,
@@ -349,13 +331,12 @@ fn fill_charms_and_spells(
     }
 
     for (i, spell) in c.spells.iter().take(SPELL_ROWS).enumerate() {
-        let m = i + 10;
-        write(doc, index, &format!("charms/sorcery{}x", m), spell.display_name(db))?;
+        let n = i + 1;
+        write(doc, index, &format!("sox{}", n), spell.display_name(db))?;
         if let Some(entry) = spell.entry(db) {
-            // Column 2 (`sorcery{m+14}x`) is unlabeled on the sheet — skip.
-            write(doc, index, &format!("charms/sorcery{}x", m + 28), &entry.duration)?;
-            write(doc, index, &format!("charms/sorcery{}x", m + 42), &entry.cost)?;
-            write(doc, index, &format!("charms/sorcery{}x", m + 56), &entry.effect)?;
+            write(doc, index, &format!("sox{}", n + 10), &entry.duration)?;
+            write(doc, index, &format!("sox{}", n + 20), &entry.cost)?;
+            write(doc, index, &format!("sox{}", n + 30), &entry.effect)?;
         }
     }
 

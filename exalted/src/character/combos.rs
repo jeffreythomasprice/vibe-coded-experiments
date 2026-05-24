@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use super::notes::Note;
 use super::traits::DotSource;
 
 /// A named Combo on the character sheet — a pre-purchased bundle of Charms
@@ -22,6 +23,6 @@ pub struct Combo {
     pub name: String,
     pub charm_ids: Vec<String>,
     pub source: DotSource,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub notes: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<Note>,
 }

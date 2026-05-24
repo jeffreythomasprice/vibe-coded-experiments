@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use super::notes::Note;
 use super::traits::RatedTrait;
 use crate::rules::database::{BackgroundEntry, RulesDatabase};
 
@@ -62,8 +63,9 @@ pub fn canonical_id(kind: BackgroundKind) -> &'static str {
 ///
 /// `label` is the short distinguisher used when the same kind is taken more
 /// than once (e.g. `"Realm"` vs `"Guild"` for Backing, or the name of a
-/// specific artifact). `notes` is free-form text describing this particular
-/// instance — what the artifact is, who the mentor is, etc.
+/// specific artifact). `notes` is a list of timestamped free-form notes
+/// describing this particular instance — what the artifact is, who the
+/// mentor is, in-play updates, etc.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind_tag", rename_all = "lowercase")]
 pub enum BackgroundRef {
@@ -73,8 +75,8 @@ pub enum BackgroundRef {
         trait_: RatedTrait,
         #[serde(default)]
         label: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        notes: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        notes: Vec<Note>,
     },
     Custom {
         entry: BackgroundEntry,
@@ -82,8 +84,8 @@ pub enum BackgroundRef {
         trait_: RatedTrait,
         #[serde(default)]
         label: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        notes: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        notes: Vec<Note>,
     },
 }
 
@@ -93,7 +95,7 @@ impl BackgroundRef {
             id: id.into(),
             trait_,
             label: String::new(),
-            notes: None,
+            notes: Vec::new(),
         }
     }
 
@@ -109,12 +111,18 @@ impl BackgroundRef {
         self
     }
 
-    pub fn with_notes(mut self, notes: impl Into<String>) -> Self {
-        let n = Some(notes.into());
-        match &mut self {
-            Self::Lookup { notes, .. } | Self::Custom { notes, .. } => *notes = n,
-        }
+    /// Append a fresh note (with current timestamp) and return self for
+    /// chaining. To add multiple notes, call this multiple times.
+    pub fn with_notes(mut self, body: impl Into<String>) -> Self {
+        self.push_note(body);
         self
+    }
+
+    pub fn push_note(&mut self, body: impl Into<String>) {
+        let n = Note::new(body);
+        match self {
+            Self::Lookup { notes, .. } | Self::Custom { notes, .. } => notes.push(n),
+        }
     }
 
     /// Lookup id (None for Custom).
@@ -143,9 +151,9 @@ impl BackgroundRef {
         }
     }
 
-    pub fn notes(&self) -> Option<&str> {
+    pub fn notes(&self) -> &[Note] {
         match self {
-            Self::Lookup { notes, .. } | Self::Custom { notes, .. } => notes.as_deref(),
+            Self::Lookup { notes, .. } | Self::Custom { notes, .. } => notes,
         }
     }
 

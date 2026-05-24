@@ -8,6 +8,7 @@ mod acroform;
 mod checkboxes;
 mod field_map;
 mod dots;
+mod notes_page;
 mod overlay;
 mod specialties;
 mod template;
@@ -34,6 +35,7 @@ pub fn character_to_pdf(c: &Character) -> Result<Vec<u8>, PdfRenderError> {
     text_fields::fill(&mut doc, &index, c)?;
     checkboxes::fill(&mut doc, &index, c)?;
     dots::fill(&mut doc, &index, c)?;
+    notes_page::append(&mut doc, c)?;
     acroform::finalize_form(&mut doc);
 
     let mut buf = Vec::new();

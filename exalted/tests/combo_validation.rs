@@ -26,7 +26,7 @@ fn combo_xp(name: &str, ids: &[&str]) -> Combo {
         source: DotSource::Xp {
             spent: xp_for(ids),
         },
-        notes: None,
+        notes: Vec::new(),
     }
 }
 
@@ -116,7 +116,7 @@ fn non_comboable_member_is_hard_error() {
         id: "ox-body-technique".to_string(),
         source: DotSource::BonusPoints { spent: 4 },
         non_solar: false,
-        notes: None,
+        notes: Vec::new(),
         ox_body_pattern: Some(exalted::rules::health::OxBodyPattern::OneZero),
     };
     c.combos = vec![combo_xp(
@@ -143,7 +143,7 @@ fn invalid_source_chargen_priority_is_hard_error() {
         name: "Free Combo".to_string(),
         charm_ids: vec!["first-awareness-excellency".to_string()],
         source: DotSource::ChargenPriority,
-        notes: None,
+        notes: Vec::new(),
     }];
     c.xp_earned = 0;
     let report = c.validate_chargen();
@@ -168,7 +168,7 @@ fn xp_cost_mismatch_is_hard_error() {
             "first-dodge-excellency".to_string(),
         ],
         source: DotSource::Xp { spent: 1 },
-        notes: None,
+        notes: Vec::new(),
     }];
     c.xp_earned = 1;
     let report = c.validate_xp();

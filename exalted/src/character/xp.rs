@@ -1,8 +1,46 @@
 //! Character-side helpers for reasoning about XP totals. The canonical XP
 //! cost table lives in `crate::rules::xp_costs`.
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
 use crate::character::{Character, DotSource};
 use crate::rules::chargen::specialty_bp_cost_for_ability;
+
+/// A single XP award entered by the user — a timestamped, free-form note
+/// alongside the XP amount earned. `xp_earned` on the `Character` is the
+/// authoritative running total; when `xp_awards` is non-empty, validation
+/// requires it to match the sum of these amounts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct XpAward {
+    pub amount: u32,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl XpAward {
+    pub fn new(amount: u32, body: impl Into<String>) -> Self {
+        let now = Utc::now();
+        Self {
+            amount,
+            body: body.into(),
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    pub fn edit(&mut self, amount: u32, body: impl Into<String>) {
+        self.amount = amount;
+        self.body = body.into();
+        self.updated_at = Utc::now();
+    }
+}
+
+/// Sum of every `XpAward.amount` on the character.
+pub fn total_xp_awarded(c: &Character) -> u32 {
+    c.xp_awards.iter().map(|a| a.amount).sum()
+}
 
 /// Total XP spent across every rated trait, charm, and specialty.
 pub fn total_xp_spent(c: &Character) -> u32 {
@@ -81,4 +119,29 @@ pub fn total_bp_spent(c: &Character) -> u32 {
         total += bg.trait_().bp_spent_on_dots();
     }
     total
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn xp_award_new_sets_both_timestamps_equal() {
+        let a = XpAward::new(4, "session 1");
+        assert_eq!(a.amount, 4);
+        assert_eq!(a.body, "session 1");
+        assert_eq!(a.created_at, a.updated_at);
+    }
+
+    #[test]
+    fn xp_award_edit_preserves_created_and_advances_updated() {
+        let mut a = XpAward::new(2, "first");
+        let original_created = a.created_at;
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        a.edit(3, "second");
+        assert_eq!(a.amount, 3);
+        assert_eq!(a.body, "second");
+        assert_eq!(a.created_at, original_created);
+        assert!(a.updated_at > original_created);
+    }
 }

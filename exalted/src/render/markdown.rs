@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 use crate::character::xp::total_xp_spent;
 use crate::character::{
     AbilityKind, AttributeGroup, Character, CharmRef, DotSource, Equipment, Hearthstone,
-    KnownLanguage, LanguageFamily, MotePool, RatedTrait, SpellRef, VirtueKind,
+    KnownLanguage, LanguageFamily, MotePool, Note, RatedTrait, SpellRef, VirtueKind,
 };
 use crate::rules::database::database;
 use crate::rules::derived::{knockdown, movement, stunning, EXALT_HEALING_TABLE};
@@ -42,6 +42,15 @@ pub fn character_to_markdown(c: &Character) -> String {
     section_notes(&c.notes, &mut out);
 
     out
+}
+
+/// Write a sub-list block of notes indented under a parent bullet. Each note
+/// is one line tagged with its `updated_at` timestamp.
+fn write_notes_block(notes: &[Note], indent: &str, out: &mut String) {
+    for n in notes {
+        let ts = n.updated_at.format("%Y-%m-%d %H:%M UTC");
+        writeln!(out, "{}- _{}_ — {}", indent, ts, n.body).unwrap();
+    }
 }
 
 fn dots(rating: u8, max: u8) -> String {
@@ -340,9 +349,7 @@ fn section_charms(c: &Character, out: &mut String) {
                 suffix.push_str(" *(non-Solar)*");
             }
             writeln!(out, "- {}{}", charm.display_name(db), suffix).unwrap();
-            if let Some(notes) = charm.notes() {
-                writeln!(out, "  - {}", notes).unwrap();
-            }
+            write_notes_block(charm.notes(), "  ", out);
         }
     }
     writeln!(out).unwrap();
@@ -387,9 +394,7 @@ fn section_combos(c: &Character, out: &mut String) {
             }
         }
         writeln!(out, "  - Activation: +1 WP").unwrap();
-        if let Some(notes) = &combo.notes {
-            writeln!(out, "  - Notes: {}", notes).unwrap();
-        }
+        write_notes_block(&combo.notes, "  ", out);
     }
     writeln!(out).unwrap();
 }
@@ -412,9 +417,7 @@ fn section_spells(spells: &[SpellRef], out: &mut String) {
             source_tag(s.source())
         )
         .unwrap();
-        if let Some(notes) = s.notes() {
-            writeln!(out, "  - {}", notes).unwrap();
-        }
+        write_notes_block(s.notes(), "  ", out);
     }
     writeln!(out).unwrap();
 }
@@ -427,22 +430,34 @@ fn section_backgrounds(c: &Character, out: &mut String) {
         return;
     }
     let db = database();
-    writeln!(out, "| Background | Label | Dots | Notes |").unwrap();
-    writeln!(out, "|---|---|---|---|").unwrap();
+    writeln!(out, "| Background | Label | Dots |").unwrap();
+    writeln!(out, "|---|---|---|").unwrap();
     for bg in &c.backgrounds {
         let n = bg.trait_().dots();
         writeln!(
             out,
-            "| {} | {} | {} ({}) | {} |",
+            "| {} | {} | {} ({}) |",
             bg.display_name(db),
             if bg.label().is_empty() { "—" } else { bg.label() },
             dots(n, 5),
             n,
-            bg.notes().unwrap_or(""),
         )
         .unwrap();
     }
     writeln!(out).unwrap();
+    for bg in &c.backgrounds {
+        if bg.notes().is_empty() {
+            continue;
+        }
+        let header = if bg.label().is_empty() {
+            bg.display_name(db).to_string()
+        } else {
+            format!("{} ({})", bg.display_name(db), bg.label())
+        };
+        writeln!(out, "**{} notes:**", header).unwrap();
+        write_notes_block(bg.notes(), "", out);
+        writeln!(out).unwrap();
+    }
 }
 
 fn section_intimacies(c: &Character, out: &mut String) {
@@ -745,6 +760,18 @@ fn section_xp(c: &Character, out: &mut String) {
     writeln!(out, "- Banked (declared): {}", c.xp_banked).unwrap();
     writeln!(out).unwrap();
 
+    if !c.xp_awards.is_empty() {
+        writeln!(out, "### XP History").unwrap();
+        writeln!(out, "| Date | Amount | Note |").unwrap();
+        writeln!(out, "|---|---|---|").unwrap();
+        for award in &c.xp_awards {
+            let when = award.created_at.format("%Y-%m-%d");
+            let body = award.body.replace('\n', " ").replace('|', "\\|");
+            writeln!(out, "| {} | {} | {} |", when, award.amount, body).unwrap();
+        }
+        writeln!(out).unwrap();
+    }
+
     let purchases = collect_xp_purchases(c);
     if !purchases.is_empty() {
         writeln!(out, "### XP Purchases").unwrap();
@@ -815,14 +842,20 @@ fn push_xp_spec_rows(rows: &mut Vec<(String, u32)>, label: &str, t: &RatedTrait)
     }
 }
 
-fn section_notes(notes: &BTreeMap<String, String>, out: &mut String) {
+fn section_notes(notes: &[Note], out: &mut String) {
     if notes.is_empty() {
         return;
     }
     writeln!(out, "## Notes").unwrap();
-    for (k, v) in notes {
-        writeln!(out, "### {}", k).unwrap();
-        writeln!(out, "{}", v).unwrap();
+    for n in notes {
+        let created = n.created_at.format("%Y-%m-%d %H:%M UTC");
+        let updated = n.updated_at.format("%Y-%m-%d %H:%M UTC");
+        if n.created_at == n.updated_at {
+            writeln!(out, "### {}", created).unwrap();
+        } else {
+            writeln!(out, "### {} (updated {})", created, updated).unwrap();
+        }
+        writeln!(out, "{}", n.body).unwrap();
         writeln!(out).unwrap();
     }
 }

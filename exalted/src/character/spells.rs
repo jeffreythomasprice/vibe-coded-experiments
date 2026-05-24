@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use super::notes::Note;
 use super::traits::DotSource;
 use crate::rules::database::{RulesDatabase, SpellEntry};
 
@@ -50,14 +51,14 @@ pub enum SpellRef {
     Lookup {
         id: String,
         source: DotSource,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        notes: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        notes: Vec<Note>,
     },
     Custom {
         entry: SpellEntry,
         source: DotSource,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        notes: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        notes: Vec<Note>,
     },
 }
 
@@ -66,7 +67,20 @@ impl SpellRef {
         Self::Lookup {
             id: id.into(),
             source,
-            notes: None,
+            notes: Vec::new(),
+        }
+    }
+
+    /// Append a fresh note and return self for chaining.
+    pub fn with_notes(mut self, body: impl Into<String>) -> Self {
+        self.push_note(body);
+        self
+    }
+
+    pub fn push_note(&mut self, body: impl Into<String>) {
+        let n = Note::new(body);
+        match self {
+            Self::Lookup { notes, .. } | Self::Custom { notes, .. } => notes.push(n),
         }
     }
 
@@ -76,9 +90,9 @@ impl SpellRef {
         }
     }
 
-    pub fn notes(&self) -> Option<&str> {
+    pub fn notes(&self) -> &[Note] {
         match self {
-            Self::Lookup { notes, .. } | Self::Custom { notes, .. } => notes.as_deref(),
+            Self::Lookup { notes, .. } | Self::Custom { notes, .. } => notes,
         }
     }
 

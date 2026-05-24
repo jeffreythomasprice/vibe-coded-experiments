@@ -1126,5 +1126,18 @@ pub fn validate_xp(c: &Character) -> ValidationReport {
         });
     }
 
+    // XP award history: when the user has begun tracking awards, the running
+    // total must match xp_earned. Empty award list is the legacy/untracked
+    // mode and skips this check.
+    if !c.xp_awards.is_empty() {
+        let sum = crate::character::xp::total_xp_awarded(c);
+        if sum != c.xp_earned {
+            report.push(ValidationError::XpAwardSumMismatch {
+                sum,
+                earned: c.xp_earned,
+            });
+        }
+    }
+
     report
 }

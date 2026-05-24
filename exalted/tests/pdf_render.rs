@@ -444,7 +444,7 @@ fn health_track_ox_body_one_zero_extends_minus_zero_row() {
             id: "ox-body-technique".to_string(),
             source: DotSource::BonusPoints { spent: 4 },
             non_solar: false,
-            notes: None,
+            notes: Vec::new(),
             ox_body_pattern: Some(OxBodyPattern::OneZero),
         });
         c.pool_state.health_damage.bashing = 2;
@@ -470,7 +470,7 @@ fn health_track_ox_body_minus_one_two_minus_two_routes_by_penalty() {
             id: "ox-body-technique".to_string(),
             source: DotSource::BonusPoints { spent: 4 },
             non_solar: false,
-            notes: None,
+            notes: Vec::new(),
             ox_body_pattern: Some(OxBodyPattern::OneMinusOneTwoMinusTwo),
         });
         c.pool_state.health_damage.bashing = 5;
@@ -845,7 +845,7 @@ fn charm_row_fills_all_five_columns() {
             entry: custom,
             source: DotSource::BonusPoints { spent: 4 },
             non_solar: false,
-            notes: None,
+            notes: Vec::new(),
             ox_body_pattern: None,
         });
     });
@@ -878,8 +878,11 @@ fn charm_row_fills_all_five_columns() {
 }
 
 // ---------------------------------------------------------------------------
-// SORCERY table: spells write to `charms/sorcery{M}x` fields, NOT into the
-// CHARMS rows. Row 1 of the SORCERY table uses M=10.
+// SORCERY table (page 3): spells write to `sox{N}` fields. Row 1 uses N=1,
+// with NAME=sox1, DURATION=sox11, COST=sox21, EFFECT=sox31. Spells must NOT
+// leak into the CHARMS table on page 2, nor into the page-2 5-row stub that
+// uses `charms/sorcery{M}x` (those rows visually look like a charms overflow
+// and aren't the labeled SORCERY table).
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -905,37 +908,41 @@ fn spell_row_writes_to_sorcery_table_not_charms_table() {
         c.spells.push(SpellRef::Custom {
             entry: custom,
             source: DotSource::BonusPoints { spent: 7 },
-            notes: None,
+            notes: Vec::new(),
         });
     });
 
-    // SORCERY table row 1 → M = 10.
     assert_eq!(
-        read_text_field(&doc, "charms/sorcery10x").as_deref(),
+        read_text_field(&doc, "sox1").as_deref(),
         Some("Test Render Spell"),
         "SORCERY NAME column"
     );
     assert_eq!(
-        read_text_field(&doc, "charms/sorcery38x").as_deref(),
+        read_text_field(&doc, "sox11").as_deref(),
         Some("One scene"),
         "SORCERY DURATION column"
     );
     assert_eq!(
-        read_text_field(&doc, "charms/sorcery52x").as_deref(),
+        read_text_field(&doc, "sox21").as_deref(),
         Some("15m"),
         "SORCERY COST column"
     );
     assert_eq!(
-        read_text_field(&doc, "charms/sorcery66x").as_deref(),
+        read_text_field(&doc, "sox31").as_deref(),
         Some("Spell effect summary"),
         "SORCERY EFFECT column"
     );
 
-    // The spell must NOT have leaked into the CHARMS table.
     let charms_row1 = read_text_field(&doc, "charms/sorcery1").unwrap_or_default();
     assert!(
         !charms_row1.contains("Test Render Spell"),
         "spell name leaked into CHARMS NAME row 1: {:?}",
         charms_row1
+    );
+    let charms_stub_row1 = read_text_field(&doc, "charms/sorcery10x").unwrap_or_default();
+    assert!(
+        !charms_stub_row1.contains("Test Render Spell"),
+        "spell name leaked into page-2 charms stub: {:?}",
+        charms_stub_row1
     );
 }
