@@ -25,6 +25,11 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     }
 
     let db = database();
+    let default_source = if state.character.is_in_chargen() {
+        DotSource::ChargenPriority
+    } else {
+        DotSource::Xp { spent: 0 }
+    };
     let mut any_changed = false;
     let mut delete_idx: Option<usize> = None;
     for (i, bg) in state.character.backgrounds.iter_mut().enumerate() {
@@ -67,7 +72,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                         label: &name,
                         max_dots: 5,
                         allowed_sources: BG_TRAIT_SOURCES,
-                        default_add_source: DotSource::ChargenPriority,
+                        default_add_source: default_source,
                         show_specialties: false,
                     };
                     if rated_trait_editor(ui, ("bg-trait", i), trait_, &opts) {

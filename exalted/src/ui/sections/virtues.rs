@@ -37,6 +37,11 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         state.mark_dirty();
     }
 
+    let default_source = if state.character.is_in_chargen() {
+        DotSource::ChargenPriority
+    } else {
+        DotSource::Xp { spent: 0 }
+    };
     let mut any_changed = false;
     for v in VirtueKind::ALL {
         let entry = state
@@ -53,7 +58,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             label: &label,
             max_dots: 5,
             allowed_sources: VIRTUE_SOURCES,
-            default_add_source: DotSource::ChargenPriority,
+            default_add_source: default_source,
             show_specialties: false,
         };
         if rated_trait_editor(ui, ("virtue", *v as usize), entry, &opts) {

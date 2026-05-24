@@ -4,6 +4,7 @@
 
 pub mod dot_source;
 pub mod dots_display;
+pub mod dots_grid;
 pub mod enum_combo;
 pub mod icon_button;
 pub mod labeled;

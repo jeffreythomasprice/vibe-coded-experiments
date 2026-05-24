@@ -22,11 +22,23 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
          Essence caps at 5 during chargen.",
     );
 
+    let in_chargen = state.character.is_in_chargen();
+    let wp_default = if in_chargen {
+        DotSource::BonusPoints { spent: 2 }
+    } else {
+        DotSource::Xp { spent: 0 }
+    };
+    let essence_default = if in_chargen {
+        DotSource::BonusPoints { spent: 7 }
+    } else {
+        DotSource::Xp { spent: 0 }
+    };
+
     let opts_wp = RatedTraitOpts {
         label: "Willpower",
         max_dots: 10,
         allowed_sources: WP_SOURCES,
-        default_add_source: DotSource::BonusPoints { spent: 2 },
+        default_add_source: wp_default,
         show_specialties: false,
     };
     let mut any = false;
@@ -38,7 +50,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         label: "Essence",
         max_dots: 10,
         allowed_sources: ESSENCE_SOURCES,
-        default_add_source: DotSource::Xp { spent: 0 },
+        default_add_source: essence_default,
         show_specialties: false,
     };
     if rated_trait_editor(ui, "essence", &mut state.character.essence, &opts_essence) {

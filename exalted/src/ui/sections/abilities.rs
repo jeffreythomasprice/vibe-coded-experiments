@@ -16,6 +16,11 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     ui.heading("Abilities");
     ui.small("C = Caste, F = Favored. Specialties are capped at 3 per ability except Linguistics.");
 
+    let default_source = if state.character.is_in_chargen() {
+        DotSource::ChargenPriority
+    } else {
+        DotSource::Xp { spent: 0 }
+    };
     let mut any_changed = false;
     for ab in AbilityKind::ALL {
         let label_marker = match (
@@ -36,7 +41,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             label: &label,
             max_dots: 5,
             allowed_sources: ABILITY_SOURCES,
-            default_add_source: DotSource::ChargenPriority,
+            default_add_source: default_source,
             show_specialties: true,
         };
         if rated_trait_editor(ui, ("ability", *ab as usize), entry, &opts) {

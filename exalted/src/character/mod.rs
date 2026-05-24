@@ -163,6 +163,13 @@ impl Character {
         self.essence.dots()
     }
 
+    /// True while the character is still in character-creation — i.e. no XP
+    /// has been earned yet. Used by the UI to pick the default source for
+    /// newly purchased dots (ChargenPriority / BonusPoints vs Xp).
+    pub fn is_in_chargen(&self) -> bool {
+        self.xp_earned == 0
+    }
+
     pub fn willpower_dots(&self) -> u8 {
         self.willpower.dots()
     }

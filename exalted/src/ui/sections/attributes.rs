@@ -21,6 +21,11 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     ui.add_space(8.0);
 
     // Three columns: Physical | Social | Mental.
+    let default_source = if state.character.is_in_chargen() {
+        DotSource::ChargenPriority
+    } else {
+        DotSource::Xp { spent: 0 }
+    };
     let mut any_changed = false;
     egui::Grid::new("attributes-grid")
         .num_columns(3)
@@ -50,7 +55,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                             label: attr_name(*attr),
                             max_dots: 5,
                             allowed_sources: ATTRIBUTE_SOURCES,
-                            default_add_source: DotSource::ChargenPriority,
+                            default_add_source: default_source,
                             show_specialties: false,
                         };
                         if rated_trait_editor(

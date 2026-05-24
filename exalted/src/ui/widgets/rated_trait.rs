@@ -1,8 +1,11 @@
 //! The workhorse: edit a `RatedTrait` (base_dots + purchases + specialties).
 //! Used by every attribute, ability, virtue, and per-background trait.
 
+use std::cmp::Ordering;
+
 use crate::character::{DotPurchase, DotSource, RatedTrait, Specialty};
 use crate::ui::widgets::dot_source::{dot_source_editor, DotSourceKind};
+use crate::ui::widgets::dots_grid::DotsGrid;
 use crate::ui::widgets::icon_button::trash_button;
 
 pub struct RatedTraitOpts<'a> {
@@ -36,31 +39,12 @@ pub fn rated_trait_editor(
     ui.horizontal(|ui| {
         ui.add_sized([140.0, 0.0], egui::Label::new(opts.label));
 
-        // Live dot count (base + purchases).
-        let current = trait_.dots();
-        ui.label(format!("{} / {}", current, opts.max_dots));
-
-        // − removes the most recent purchase. Disabled when there is none
-        // (we never decrement `base_dots` here; that's an explicit field
-        // edit below).
-        let minus = ui.add_enabled(
-            !trait_.purchases.is_empty(),
-            egui::Button::new("−"),
-        );
-        if minus.clicked() {
-            trait_.purchases.pop();
-            changed = true;
-        }
-
-        // + adds a purchase with `default_add_source`. Disabled at max.
-        let plus = ui.add_enabled(
-            current < opts.max_dots,
-            egui::Button::new("+"),
-        );
-        if plus.clicked() {
-            trait_
-                .purchases
-                .push(DotPurchase::new(opts.default_add_source));
+        // Clickable dot row replaces the old "n / max" label + ± buttons.
+        if let Some(target) = DotsGrid::new(trait_.dots(), opts.max_dots)
+            .min(trait_.base_dots)
+            .show(ui, salt.with("dots"))
+        {
+            apply_dot_target(trait_, target, opts.default_add_source);
             changed = true;
         }
 
@@ -156,4 +140,25 @@ pub fn rated_trait_editor(
     }
 
     changed
+}
+
+/// Drive `trait_.dots()` toward `target` by appending purchases (using
+/// `add_source`) or truncating the most recent ones. `base_dots` is the floor —
+/// targets below it snap up to it, so we never lose the free starting dots.
+fn apply_dot_target(trait_: &mut RatedTrait, target: u8, add_source: DotSource) {
+    let target = target.max(trait_.base_dots);
+    let current = trait_.dots();
+    match target.cmp(&current) {
+        Ordering::Greater => {
+            for _ in 0..(target - current) {
+                trait_.purchases.push(DotPurchase::new(add_source));
+            }
+        }
+        Ordering::Less => {
+            // purchases.len() == new_dots − base_dots
+            let keep = (target - trait_.base_dots) as usize;
+            trait_.purchases.truncate(keep);
+        }
+        Ordering::Equal => {}
+    }
 }
