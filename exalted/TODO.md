@@ -1,14 +1,16 @@
 active:
 
-We currently track xp spent as part of validation. We should also track xp earned over time. Individual amounts of xp with a notes system that works similar to other notes. We should make sure to render the xp history (i.e. timestamps + note strings) in the markdown and pdf output.
-
-
 I want to introduce an egui gui for character editing. We should support all the fields we currently render to markdown and/or pdf, as well as a UI version of the validate functinoality. We should read and write the the same toml file as the other commands.
 
 The default command when we run the app should be to launch the UI. There should still be subcommands that do the other things we currently support (validate, render).
 
 
 todo:
+
+UI mode should have tooltips for rules explanations
+
+UI mode should support custom backgrounds, charms, spells, combos
+
 
 what does the series of checkboxes for essence pol and anima pool actually mean? I can only select one of them like they're radio buttons
 
