@@ -1,6 +1,13 @@
 active:
 
+I want the UI to make it easy to roll dice, or to tell me me what dice I should be rolling for various actions. Suggest some UI changes that will support this.
+We're just brainstorming here, don't write any code.
+
+
 todo:
+
+UI should remember the state of the derived and validation side panel visibilty
+
 
 In the UI, it would be helpful to have a tooltip on most fields explaining what this is in a 1-3 sentences. Iterate through the whole UI and add tooltips. Generate the text from the rule book as necessary. We can do batches of them in parallel in subagents.
 

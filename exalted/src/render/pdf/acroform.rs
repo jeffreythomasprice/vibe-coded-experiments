@@ -2,9 +2,10 @@
 
 use std::collections::HashMap;
 
-use lopdf::{Dictionary, Document, Object, ObjectId, Stream};
+use lopdf::{Dictionary, Document, Object, ObjectId, Stream, StringFormat};
 
 use super::PdfRenderError;
+use super::encoding::{to_text_string, winansi_literal};
 
 /// Index of AcroForm field name → terminal field object ID.
 ///
@@ -197,7 +198,10 @@ pub(super) fn set_text_field(
             .map_err(PdfRenderError::TemplateParse)?
             .as_dict_mut()
             .map_err(PdfRenderError::TemplateParse)?;
-        dict.set("V", Object::string_literal(value));
+        dict.set(
+            "V",
+            Object::String(to_text_string(value), StringFormat::Hexadecimal),
+        );
         dict.remove(b"AP");
     }
 
@@ -355,23 +359,6 @@ fn pick_font_size(declared: f64, height: f64) -> f64 {
     chosen.min(max_for_height).max(4.0)
 }
 
-/// Escape a Rust string into bytes suitable for a PDF literal string `(…)`:
-/// backslash-escape `\`, `(`, `)`; map characters to Latin-1, replacing
-/// anything outside the 0x20..=0xFE printable range with `?`.
-fn pdf_escape_text(s: &str) -> Vec<u8> {
-    let mut out = Vec::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            '\\' => out.extend_from_slice(b"\\\\"),
-            '(' => out.extend_from_slice(b"\\("),
-            ')' => out.extend_from_slice(b"\\)"),
-            c if (c as u32) <= 0xFF && (c as u32) >= 0x20 => out.push(c as u8),
-            _ => out.push(b'?'),
-        }
-    }
-    out
-}
-
 /// Build a Form XObject containing a single line of text rendered with
 /// Helv at `size` points inside the widget's bbox. Returns the new
 /// object's ID; the caller wires it into the widget's `/AP /N`.
@@ -385,7 +372,7 @@ fn build_text_appearance(
     let w = (rect[2] - rect[0]).max(0.0);
     let h = (rect[3] - rect[1]).max(0.0);
     let baseline = ((h - size) / 2.0).max(1.0);
-    let escaped = pdf_escape_text(value);
+    let escaped = winansi_literal(value);
 
     let mut content: Vec<u8> = Vec::with_capacity(escaped.len() + 96);
     content.extend_from_slice(b"/Tx BMC\nq\n");

@@ -6,8 +6,22 @@
 use crate::character::Character;
 use crate::rules::{defense, derived, essence, health};
 
-pub fn render(ui: &mut egui::Ui, character: &Character) {
-    ui.heading("Derived");
+/// Renders the derived-values sidebar. Returns true if the user clicked the
+/// close button in the header (the caller is expected to collapse the panel).
+pub fn render(ui: &mut egui::Ui, character: &Character) -> bool {
+    let mut close_clicked = false;
+    ui.horizontal(|ui| {
+        ui.heading("Derived");
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui
+                .small_button("✕")
+                .on_hover_text("Hide derived sidebar")
+                .clicked()
+            {
+                close_clicked = true;
+            }
+        });
+    });
 
     section(ui, "Essence", |ui| {
         let pmax = essence::personal_essence_max(character);
@@ -103,6 +117,8 @@ pub fn render(ui: &mut egui::Ui, character: &Character) {
     section(ui, "Feats", |ui| {
         ui.label(format!("Lift: {} lbs", derived::lift_lbs(character)));
     });
+
+    close_clicked
 }
 
 fn section(ui: &mut egui::Ui, title: &str, body: impl FnOnce(&mut egui::Ui)) {

@@ -257,25 +257,6 @@ fn followers_without_support_caught() {
 }
 
 #[test]
-fn native_language_missing_dialect_caught() {
-    let mut c = valid_dawn();
-    c.languages = vec![KnownLanguage {
-        family: LanguageFamily::Riverspeak,
-        dialect_specialty: None, // missing!
-        native: true,
-    }];
-    let report = c.validate_chargen();
-    assert!(
-        report
-            .errors
-            .iter()
-            .any(|e| matches!(e, ValidationError::NativeLanguageMissingDialect { .. })),
-        "expected NativeLanguageMissingDialect, got {:#?}",
-        report.errors
-    );
-}
-
-#[test]
 fn bp_cost_mismatch_caught_on_attribute() {
     let mut c = valid_dawn();
     // valid_dawn pays 4 BP for Dex 4→5. Change it to a wrong amount.

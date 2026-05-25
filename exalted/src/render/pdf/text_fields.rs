@@ -2,17 +2,16 @@
 //!
 //! See `field_map.rs` for the dot/checkbox half. This module handles fields
 //! that the sheet has given a meaningful name to: identity (`name`, `caste`,
-//! `concept`, `MOTIVATION`, `anima`), attribute/ability values
-//! (`attributes1`–`9`, `skills1`–`25`), defensive stats (`soak1`–`3`,
+//! `concept`, `MOTIVATION`, `anima`), defensive stats (`soak1`–`3`,
 //! `dv1`–`3`), weapon lines, charm/spell lines, backgrounds, intimacies,
-//! languages, and XP.
+//! languages, and XP. Attribute/ability ratings live in the dot bubbles
+//! (handled by `dots.rs`); the `attributesN` / `skillsN` text fields next
+//! to them are notes columns and are left blank.
 
 use lopdf::Document;
 
 use crate::character::xp::total_xp_spent;
-use crate::character::{
-    AttributeKind, BackgroundRef, Character, KnownLanguage, LanguageFamily, Weapon,
-};
+use crate::character::{BackgroundRef, Character, KnownLanguage, LanguageFamily, Weapon};
 use crate::rules::database::{RulesDatabase, database};
 use crate::rules::defense::{
     dodge_dv, join_battle, mdv_dodge, parry_dv, soak_aggravated, soak_bashing, soak_lethal,
@@ -31,7 +30,6 @@ pub(super) fn fill(
     c: &Character,
 ) -> Result<(), PdfRenderError> {
     fill_identity(doc, index, c)?;
-    fill_attributes(doc, index, c)?;
     fill_specialties(doc, index, c)?;
     fill_backgrounds(doc, index, c)?;
     fill_intimacies(doc, index, c)?;
@@ -61,24 +59,6 @@ fn fill_identity(
     write(doc, index, "concept", &id.concept)?;
     write(doc, index, "MOTIVATION", &id.motivation)?;
     write(doc, index, "anima", &id.anima.totem)?;
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Attributes (numeric)
-// ---------------------------------------------------------------------------
-
-fn fill_attributes(
-    doc: &mut Document,
-    index: &FieldIndex,
-    c: &Character,
-) -> Result<(), PdfRenderError> {
-    // Sheet ordering matches `AttributeKind::ALL`:
-    //   1=Str, 2=Dex, 3=Sta, 4=Cha, 5=Man, 6=App, 7=Per, 8=Int, 9=Wits
-    for (i, kind) in AttributeKind::ALL.iter().enumerate() {
-        let field = format!("attributes{}", i + 1);
-        write(doc, index, &field, &c.attribute(*kind).to_string())?;
-    }
     Ok(())
 }
 
@@ -196,8 +176,7 @@ fn format_language(l: &KnownLanguage) -> String {
         other => format!("{:?}", other),
     };
     let dialect = l
-        .dialect_specialty
-        .as_ref()
+        .dialect()
         .map(|d| format!(" — {}", d))
         .unwrap_or_default();
     format!("{}{}", family, dialect)

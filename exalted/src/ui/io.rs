@@ -42,10 +42,24 @@ pub fn load_character_from_path(path: &Path) -> Result<Character, IoError> {
 }
 
 pub fn save_character_to_path(character: &Character, path: &Path) -> Result<(), IoError> {
-    let text = toml::to_string_pretty(character).map_err(|source| IoError::Serialize { source })?;
+    let mut to_save = character.clone();
+    normalize_for_save(&mut to_save);
+    let text = toml::to_string_pretty(&to_save).map_err(|source| IoError::Serialize { source })?;
     fs::write(path, text.as_bytes()).map_err(|source| IoError::Write {
         path: path.display().to_string(),
         source,
     })?;
     Ok(())
+}
+
+fn normalize_for_save(c: &mut Character) {
+    for lang in c.languages.iter_mut() {
+        if lang
+            .dialect_specialty
+            .as_deref()
+            .is_none_or(|d| d.trim().is_empty())
+        {
+            lang.dialect_specialty = None;
+        }
+    }
 }

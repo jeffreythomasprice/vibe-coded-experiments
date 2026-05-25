@@ -5,6 +5,7 @@
 
 mod app;
 mod dialogs;
+mod fonts;
 pub mod io;
 mod menu;
 mod pickers;
@@ -29,6 +30,7 @@ pub fn launch(start: StartupAction) -> eframe::Result<()> {
         "Exalted",
         native_options,
         Box::new(move |cc| {
+            fonts::install(&cc.egui_ctx);
             egui_extras::install_image_loaders(&cc.egui_ctx);
             Ok(Box::new(App::new(start)))
         }),

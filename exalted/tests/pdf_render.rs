@@ -35,8 +35,24 @@ fn read_text_field(doc: &Document, name: &str) -> Option<String> {
     let id = find_field(doc, name)?;
     let dict = doc.get_dictionary(id).ok()?;
     match dict.get(b"V").ok()? {
-        Object::String(b, _) => std::str::from_utf8(b).ok().map(str::to_string),
+        Object::String(b, _) => decode_pdf_text_string(b),
         _ => None,
+    }
+}
+
+/// Decode the bytes of a PDF text string. Per the PDF spec, bytes prefixed
+/// with `FE FF` are UTF-16BE; otherwise they're PDFDocEncoding (which for the
+/// ASCII range coincides with UTF-8). Used by tests to compare `/V` against
+/// the source character string.
+fn decode_pdf_text_string(b: &[u8]) -> Option<String> {
+    if b.starts_with(&[0xFE, 0xFF]) {
+        let units: Vec<u16> = b[2..]
+            .chunks_exact(2)
+            .map(|c| u16::from_be_bytes([c[0], c[1]]))
+            .collect();
+        String::from_utf16(&units).ok()
+    } else {
+        std::str::from_utf8(b).ok().map(str::to_string)
     }
 }
 

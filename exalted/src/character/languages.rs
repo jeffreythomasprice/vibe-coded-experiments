@@ -44,6 +44,17 @@ impl LanguageFamily {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KnownLanguage {
     pub family: LanguageFamily,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dialect_specialty: Option<String>,
     pub native: bool,
+}
+
+impl KnownLanguage {
+    /// Returns the dialect specialty if it is set and not just whitespace.
+    pub fn dialect(&self) -> Option<&str> {
+        self.dialect_specialty
+            .as_deref()
+            .map(str::trim)
+            .filter(|d| !d.is_empty())
+    }
 }

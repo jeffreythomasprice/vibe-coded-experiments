@@ -65,25 +65,20 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                 }
             }
 
-            // Dialect specialty.
-            let mut has = lang.dialect_specialty.is_some();
-            if ui.checkbox(&mut has, "dialect").changed() {
-                if has {
-                    lang.dialect_specialty = Some(String::new());
+            // Dialect specialty (optional; empty / whitespace is omitted on save).
+            let mut dialect = lang.dialect_specialty.clone().unwrap_or_default();
+            let resp = ui.add(
+                egui::TextEdit::singleline(&mut dialect)
+                    .desired_width(140.0)
+                    .hint_text("dialect (optional)"),
+            );
+            if resp.changed() {
+                lang.dialect_specialty = if dialect.is_empty() {
+                    None
                 } else {
-                    lang.dialect_specialty = None;
-                }
+                    Some(dialect)
+                };
                 any_changed = true;
-            }
-            if let Some(d) = lang.dialect_specialty.as_mut() {
-                let resp = ui.add(
-                    egui::TextEdit::singleline(d)
-                        .desired_width(140.0)
-                        .hint_text("dialect name"),
-                );
-                if resp.changed() {
-                    any_changed = true;
-                }
             }
 
             // Native checkbox.

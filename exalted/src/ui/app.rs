@@ -305,19 +305,26 @@ impl eframe::App for App {
             self.state.status_message = None;
         }
 
-        // Bottom dock: validation panel (collapsible via View menu).
+        // Bottom dock: validation panel (collapsible via View menu or the
+        // close button in its header).
         if !self.state.validation_panel_collapsed {
+            let mut close_validation = false;
             egui::Panel::bottom("validation_dock")
                 .resizable(true)
                 .default_size(180.0)
                 .min_size(80.0)
                 .show_inside(ui, |ui| {
-                    sidebar::validation::render(ui, &mut self.state);
+                    close_validation = sidebar::validation::render(ui, &mut self.state);
                 });
+            if close_validation {
+                self.state.validation_panel_collapsed = true;
+            }
         }
 
-        // Right dock: derived values (collapsible via View menu).
+        // Right dock: derived values (collapsible via View menu or the close
+        // button in its header).
         if !self.state.sidebar_collapsed {
+            let mut close_derived = false;
             egui::Panel::right("derived_sidebar")
                 .resizable(true)
                 .default_size(260.0)
@@ -326,9 +333,12 @@ impl eframe::App for App {
                     egui::ScrollArea::vertical()
                         .auto_shrink([false; 2])
                         .show(ui, |ui| {
-                            sidebar::derived::render(ui, &self.state.character);
+                            close_derived = sidebar::derived::render(ui, &self.state.character);
                         });
                 });
+            if close_derived {
+                self.state.sidebar_collapsed = true;
+            }
         }
 
         egui::CentralPanel::default().show_inside(ui, |ui| {

@@ -222,9 +222,6 @@ pub enum ValidationError {
     #[error("duplicate language family {family}")]
     DuplicateLanguageFamily { family: String },
 
-    #[error("native language {family} is missing its dialect specialty (rules p.112)")]
-    NativeLanguageMissingDialect { family: String },
-
     #[error("Ox-Body Technique stacked {got} times, exceeds Resistance cap {max}")]
     OxBodyOverResistance { got: usize, max: u8 },
 

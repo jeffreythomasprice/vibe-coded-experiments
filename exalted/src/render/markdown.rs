@@ -658,8 +658,7 @@ fn section_languages(langs: &[KnownLanguage], out: &mut String) {
     for l in langs {
         let native = if l.native { " *(native)*" } else { "" };
         let dialect = l
-            .dialect_specialty
-            .as_ref()
+            .dialect()
             .map(|d| format!(" — dialect: {}", d))
             .unwrap_or_default();
         let family = match &l.family {

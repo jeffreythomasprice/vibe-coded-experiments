@@ -8,6 +8,7 @@
 use lopdf::{Document, Object, Stream, dictionary};
 
 use super::PdfRenderError;
+use super::encoding::winansi_literal;
 use crate::character::{Character, Note, XpAward};
 use crate::rules::database::database;
 
@@ -359,38 +360,9 @@ fn emit_text(out: &mut Vec<u8>, x: f64, y: f64, font: &str, size: f64, text: &st
     out.extend_from_slice(format!("/{} {} Tf\n", font, size).as_bytes());
     out.extend_from_slice(format!("{:.2} {:.2} Td\n", x, y).as_bytes());
     out.extend_from_slice(b"(");
-    out.extend_from_slice(&pdf_escape(text));
+    out.extend_from_slice(&winansi_literal(text));
     out.extend_from_slice(b") Tj\n");
     out.extend_from_slice(b"ET\n");
-}
-
-/// Escape a string for a PDF literal (Tj operand), encoding it as WinAnsi.
-/// Replaces common Unicode punctuation with their WinAnsi-mapped byte; falls
-/// back to '?' for unrecognized non-ASCII characters.
-fn pdf_escape(s: &str) -> Vec<u8> {
-    let mut out = Vec::with_capacity(s.len() + 8);
-    for ch in s.chars() {
-        match ch {
-            '\\' => out.extend_from_slice(b"\\\\"),
-            '(' => out.extend_from_slice(b"\\("),
-            ')' => out.extend_from_slice(b"\\)"),
-            '\n' => out.extend_from_slice(b"\\n"),
-            '\r' => out.extend_from_slice(b"\\r"),
-            '\t' => out.extend_from_slice(b"\\t"),
-            c if (c as u32) < 0x80 => out.push(c as u8),
-            // WinAnsi punctuation mappings for chars we use in notes.
-            '\u{2013}' => out.push(0x96), // en dash
-            '\u{2014}' => out.push(0x97), // em dash
-            '\u{2018}' => out.push(0x91), // left single quote
-            '\u{2019}' => out.push(0x92), // right single quote
-            '\u{201C}' => out.push(0x93), // left double quote
-            '\u{201D}' => out.push(0x94), // right double quote
-            '\u{2026}' => out.push(0x85), // ellipsis
-            '\u{00A0}'..='\u{00FF}' => out.push(ch as u8),
-            _ => out.push(b'?'),
-        }
-    }
-    out
 }
 
 #[cfg(test)]
@@ -421,11 +393,4 @@ mod tests {
         assert_eq!(wrapped, vec!["first", "", "third"]);
     }
 
-    #[test]
-    fn pdf_escape_handles_parens_and_em_dash() {
-        let bytes = pdf_escape("hi (there) — and");
-        assert!(bytes.windows(2).any(|w| w == b"\\("));
-        assert!(bytes.windows(2).any(|w| w == b"\\)"));
-        assert!(bytes.contains(&0x97));
-    }
 }

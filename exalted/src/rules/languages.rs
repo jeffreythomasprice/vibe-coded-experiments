@@ -7,16 +7,7 @@ pub fn validate_languages(c: &Character, report: &mut ValidationReport) {
     let natives: Vec<_> = c.languages.iter().filter(|l| l.native).collect();
     match natives.len() {
         0 => report.push(ValidationError::NoNativeLanguage),
-        1 => {
-            // p.112: the native tongue comes with a free dialect specialty
-            // (the dialect spoken in the character's homeland).
-            let native = natives[0];
-            if native.dialect_specialty.is_none() {
-                report.push(ValidationError::NativeLanguageMissingDialect {
-                    family: format!("{:?}", native.family),
-                });
-            }
-        }
+        1 => {}
         n => report.push(ValidationError::MultipleNativeLanguages { got: n }),
     }
 

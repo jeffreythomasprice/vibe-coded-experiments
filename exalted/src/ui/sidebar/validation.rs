@@ -6,7 +6,9 @@
 use crate::error::{ValidationError, ValidationReport};
 use crate::ui::state::AppState;
 
-pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
+/// Renders the validation dock. Returns true if the user clicked the close
+/// button in the header (the caller is expected to collapse the panel).
+pub fn render(ui: &mut egui::Ui, state: &mut AppState) -> bool {
     if state.validation_dirty {
         let mut report = ValidationReport::new();
         report.extend(state.character.validate_chargen());
@@ -15,6 +17,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         state.validation_dirty = false;
     }
 
+    let mut close_clicked = false;
     ui.horizontal(|ui| {
         ui.heading("Validation");
         ui.colored_label(
@@ -28,6 +31,15 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         if ui.button("Re-validate").clicked() {
             state.validation_dirty = true;
         }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui
+                .small_button("✕")
+                .on_hover_text("Hide validation panel")
+                .clicked()
+            {
+                close_clicked = true;
+            }
+        });
     });
 
     egui::ScrollArea::vertical()
@@ -48,6 +60,8 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                 false,
             );
         });
+
+    close_clicked
 }
 
 fn list_section(

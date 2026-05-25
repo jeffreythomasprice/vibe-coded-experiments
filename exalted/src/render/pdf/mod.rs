@@ -7,6 +7,7 @@
 mod acroform;
 mod checkboxes;
 mod dots;
+mod encoding;
 mod field_map;
 mod notes_page;
 mod overlay;
