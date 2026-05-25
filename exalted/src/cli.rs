@@ -1,4 +1,4 @@
-//! `clap` types for the `exalted` binary. Lives in the library so
+//! `clap` types for the `ecs` binary. Lives in the library so
 //! integration tests can exercise `Cli::try_parse_from` without spawning the
 //! binary.
 
@@ -8,10 +8,11 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
 #[command(
-    name = "exalted",
+    name = "ecs",
     version,
-    about = "Exalted 2e character sheet tools. With no subcommand, launches the GUI editor; \
-             an optional FILE positional opens that character on startup."
+    about = "ecs (Exalted Character Sheet) — Exalted 2e character sheet tools. \
+             With no subcommand, launches the GUI editor; an optional FILE \
+             positional opens that character on startup."
 )]
 pub struct Cli {
     /// Output format for command results and error messages.

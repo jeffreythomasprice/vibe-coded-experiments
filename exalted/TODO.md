@@ -5,9 +5,6 @@ todo:
 In the UI, it would be helpful to have a tooltip on most fields explaining what this is in a 1-3 sentences. Iterate through the whole UI and add tooltips. Generate the text from the rule book as necessary. We can do batches of them in parallel in subagents.
 
 
-pdf_render tests are very slow
-
-
 pdf, what does the series of checkboxes for essence pool and anima pool actually mean? I can only select one of them like they're radio buttons
 
 

@@ -8,7 +8,7 @@ name = "exalted"
 path = "src/lib.rs"
 
 [[bin]]
-name = "exalted"
+name = "ecs"
 path = "src/main.rs"
 
 [dependencies]

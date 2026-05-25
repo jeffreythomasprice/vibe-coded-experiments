@@ -1,21 +1,17 @@
 ---
 name: create-character
-description: Walk the user through building an Exalted 2E Solar character sheet for the `exalted` tool. Solicit choices step-by-step, write the TOML, and validate it with the release binary. Any non-mechanical backstory the user provides goes into the TOML's `[[notes]]` array alongside everything else; XP earned in play goes into `[[xp_awards]]` (timestamped entries that must sum to `xp_earned`) so the running total has a per-session audit trail. Handles both fresh-chargen characters and post-chargen characters with earned XP to spend.
+description: Walk the user through building an Exalted 2E Solar character sheet for the `ecs` tool. Solicit choices step-by-step, write the TOML, and validate it with the `ecs` binary. Any non-mechanical backstory the user provides goes into the TOML's `[[notes]]` array alongside everything else; XP earned in play goes into `[[xp_awards]]` (timestamped entries that must sum to `xp_earned`) so the running total has a per-session audit trail. Handles both fresh-chargen characters and post-chargen characters with earned XP to spend.
 ---
 
 # create-character
 
-Interactively build a character TOML the `exalted` CLI can validate and render.
+Interactively build a character TOML the `ecs` (Exalted Character Sheet) CLI can validate and render.
 
-This skill is portable: every path below is absolute, so it works regardless of the current working directory.
+This skill assumes the `ecs` binary is installed and available on `PATH`. If `ecs --help` fails, stop and tell the user — don't try to build, install, or guess at an alternative invocation.
 
 ## The binary is the only source of truth
 
-Use **one** absolute path — the release binary. Every piece of rules data (charms, backgrounds, spells, the chargen summary, the core-rules summary) is exposed as a subcommand. Do **not** read or reference loose files under `rules/`, `assets/`, or `src/` — query the binary instead.
-
-- **App binary:** `/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted`
-
-If the binary doesn't exist, ask the user to build it once with `cargo build --release` from `/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/`. Don't attempt to compile from another working directory.
+Every piece of rules data (charms, backgrounds, spells, the chargen summary, the core-rules summary) is exposed as a subcommand of `ecs`. Do **not** read or reference loose files under `rules/`, `assets/`, or `src/` — query the binary instead.
 
 ### Subcommand catalog (every command this skill ever needs)
 
@@ -24,60 +20,60 @@ All commands accept `--output-format {text|json}` at the top level. `text` is hu
 ```bash
 # ── Rules summaries ───────────────────────────────────────────────────────
 # Chargen walkthrough (Steps 1–5, BP table, etc.)
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted rules-markdown chargen
+ecs rules-markdown chargen
 
 # Core-rules summary (combat, social, sorcery, anima, etc.)
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted rules-markdown rules
+ecs rules-markdown rules
 
 # ── Backgrounds ───────────────────────────────────────────────────────────
 # List every background as markdown (sorted by id; canonical ids appear in `(parens)` after the name)
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted backgrounds
+ecs backgrounds
 
 # Show one by id (markdown)
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted backgrounds artifact
+ecs backgrounds artifact
 
 # All backgrounds as JSON (structs with id/name/kind/source/description) — useful for filtering with jq
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted --output-format json backgrounds
+ecs --output-format json backgrounds
 
 # ── Charms ────────────────────────────────────────────────────────────────
 # List every Solar/Abyssal/etc. charm (markdown). Long. Pipe to less or grep.
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted charms
+ecs charms
 
 # One charm by id (markdown) — note: Excellencies are per-Ability, e.g. `first-archery-excellency`,
 # not a generic `first-ability-excellency`.
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted charms first-archery-excellency
+ecs charms first-archery-excellency
 
 # Filter by ability or keyword using JSON + jq
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted --output-format json charms \
+ecs --output-format json charms \
   | jq '.[] | select(.exalt_type=="solar" and .ability=="awareness") | {id,name,mins_ability,mins_essence}'
 
 # ── Spells ────────────────────────────────────────────────────────────────
 # All spells (markdown)
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted spells
+ecs spells
 
 # One spell
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted spells abjuration-of-the-maidens
+ecs spells abjuration-of-the-maidens
 
 # Filter to e.g. Terrestrial-Circle spells only
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted --output-format json spells \
+ecs --output-format json spells \
   | jq '.[] | select(.circle=="terrestrial") | .id'
 
 # ── Validate ──────────────────────────────────────────────────────────────
 # Human-readable
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted validate /path/to/char.toml
+ecs validate /path/to/char.toml
 
 # Machine-readable: {"ok": bool, "errors": [...], "notes": [...]} — use this in iteration loops
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted --output-format json validate /path/to/char.toml
+ecs --output-format json validate /path/to/char.toml
 
 # ── Render ────────────────────────────────────────────────────────────────
 # Markdown to stdout
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted render /path/to/char.toml
+ecs render /path/to/char.toml
 
 # Markdown to a file
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted render /path/to/char.toml -o /path/to/char.md
+ecs render /path/to/char.toml -o /path/to/char.md
 
 # Filled PDF (PDF requires `-o` because binary output isn't TTY-safe)
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted render --format pdf /path/to/char.toml -o /path/to/char.pdf
+ecs render --format pdf /path/to/char.toml -o /path/to/char.pdf
 ```
 
 Unknown ids exit with status 2 and print `no such {kind}: <id>` on stderr — handy for catching typos in scripts.
@@ -91,7 +87,7 @@ Unknown ids exit with status 2 and print `no such {kind}: <id>` on stderr — ha
 Once per session, unless already cached in conversation, run:
 
 ```bash
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted rules-markdown chargen
+ecs rules-markdown chargen
 ```
 
 That gives you Steps 1–5, the bonus-point table, and Virtue Flaw lists. Enough for the common cases.
@@ -114,8 +110,8 @@ Step-by-step prompts:
 1. **Concept & Caste.** Caste is one of `Dawn / Zenith / Twilight / Night / Eclipse`. Concept + Motivation are short sentences. Anima totem is free text.
 2. **Attributes.** Get the Physical/Social/Mental priority spread (8/6/4), then the within-category distribution. Reminder: every attribute starts at 1; the 8/6/4 are *additional*. None above 5 at creation.
 3. **Abilities.** Caste Abilities are fixed by caste — list them back so the user knows. Get 5 Favored Abilities (no overlap with Caste). Then distribute 28 dots: ≥10 in Caste/Favored, ≥1 in each Favored, none above 3 without BP. Specialties optional.
-4. **Backgrounds.** 7 dots total, none above 3 without BP, Cult ≤ 2 for Solars at creation. Each entry needs a canonical `id`; query `exalted backgrounds` to see the catalog or `exalted backgrounds <id>` to verify one. Some Backgrounds (Artifact, Allies, Familiar, Manse) can be taken multiple times — use a `label` field to distinguish instances.
-5. **Charms.** 10 picks, ≥5 from Caste/Favored. Each Charm reference uses `kind = "lookup"` and a canonical `id`. Prereqs (Ability min, Essence min, prerequisite Charms in tree) must be met by final traits — `validate` will catch misses. If the user names a Charm by description rather than slug, use `exalted --output-format json charms | jq '.[] | select(.name|test("<keyword>";"i")) | {id,name,ability}'` to find the id, or `document-search --tags exalted` for the full text and adjacent context.
+4. **Backgrounds.** 7 dots total, none above 3 without BP, Cult ≤ 2 for Solars at creation. Each entry needs a canonical `id`; query `ecs backgrounds` to see the catalog or `ecs backgrounds <id>` to verify one. Some Backgrounds (Artifact, Allies, Familiar, Manse) can be taken multiple times — use a `label` field to distinguish instances.
+5. **Charms.** 10 picks, ≥5 from Caste/Favored. Each Charm reference uses `kind = "lookup"` and a canonical `id`. Prereqs (Ability min, Essence min, prerequisite Charms in tree) must be met by final traits — `validate` will catch misses. If the user names a Charm by description rather than slug, use `ecs --output-format json charms | jq '.[] | select(.name|test("<keyword>";"i")) | {id,name,ability}'` to find the id, or `document-search --tags exalted` for the full text and adjacent context.
 6. **Virtues & Flaw.** 5 additional dots across Compassion/Conviction/Temperance/Valor (each starts at 1). Primary Virtue must be 3+ and determines which Virtue Flaw list to pick from (Virtue Flaw lists are in the chargen summary).
 7. **Finishing touches.** Intimacies (start with Compassion count; raise up to Willpower + Compassion at 3 BP each), Languages (one native family + dialect specialty free; Linguistics gives more), Willpower (= top two Virtues, raise with BP if desired), Essence (Solars start at 2).
 8. **Identity & appearance** (Spark of Life). Hair, eyes, skin, distinguishing features, homeland, sex, anima totem. The homeland choice should be consistent with the native language family.
@@ -231,7 +227,7 @@ specialties = []
 ```toml
 [[charms]]
 kind = "lookup"
-id = "first-awareness-excellency"   # canonical slug; verify with `exalted charms <id>`
+id = "first-awareness-excellency"   # canonical slug; verify with `ecs charms <id>`
 non_solar = false                   # true only for non-Solar Charms
 
 [charms.source]
@@ -249,7 +245,7 @@ updated_at = "2026-05-02T19:30:00Z"
 ```toml
 [[backgrounds]]
 kind_tag = "lookup"
-id = "resources"                    # canonical slug; verify with `exalted backgrounds <id>`
+id = "resources"                    # canonical slug; verify with `ecs backgrounds <id>`
 label = ""                          # distinguishing name (required for repeatable backgrounds:
                                     # Artifact, Allies, Familiar, Manse)
 
@@ -273,7 +269,7 @@ updated_at = "2026-03-12T09:00:00Z"
 ```toml
 [[spells]]
 kind = "lookup"
-id = "blood-lash"                   # canonical slug; verify with `exalted spells <id>`
+id = "blood-lash"                   # canonical slug; verify with `ecs spells <id>`
 
 [spells.source]
 kind = "Xp"                         # or ChargenPriority (sorcery swap) / BonusPoints
@@ -378,7 +374,7 @@ table and as separate lines on the PDF appendix's Experience section.
 Run validation and iterate until clean:
 
 ```bash
-/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted --output-format json validate /path/to/char.toml
+ecs --output-format json validate /path/to/char.toml
 ```
 
 JSON shape: `{ "ok": bool, "errors": [...], "notes": [...] }`. `notes` are informational; `errors` are fatal. Fix every error before declaring done.
@@ -438,16 +434,16 @@ Once `validate` is clean, tell the user:
 - the TOML path,
 - a one-line summary (caste, concept, BP/XP spent),
 - the renderable commands they'll likely want:
-  - `/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted render <toml>` — markdown to stdout
-  - `/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/target/release/exalted render --format pdf <toml> -o <out.pdf>` — filled PDF
+  - `ecs render <toml>` — markdown to stdout
+  - `ecs render --format pdf <toml> -o <out.pdf>` — filled PDF
 
 ## Tips & gotchas
 
-- **Don't invent Charm / Background / Spell IDs.** Verify every `id` with `exalted charms <id>` / `exalted backgrounds <id>` / `exalted spells <id>` before writing it into the TOML. A non-zero exit status means the slug is wrong.
+- **Don't invent Charm / Background / Spell IDs.** Verify every `id` with `ecs charms <id>` / `ecs backgrounds <id>` / `ecs spells <id>` before writing it into the TOML. A non-zero exit status means the slug is wrong.
 - **Caste Charms vs Favored Charms.** Both count toward the "≥5 Caste/Favored" requirement and both get the BP/XP discount.
 - **Excellencies share an `id` per Ability.** E.g. `first-awareness-excellency`, `second-stealth-excellency`. There's no generic excellency entry — the `charms` subcommand expands the per-Ability variants at startup, so pass the expanded slug.
 - **Languages.** The free native family/dialect doesn't cost a Linguistics dot — Linguistics 0 still gets it. Each Linguistics dot adds *one more family*. Old Realm needs Lore 1+; Guild Cant needs Backing(Guild) 2+.
 - **Solar Circle spells are forbidden at chargen** — `validate` will reject them via `SolarCircleAtChargen`.
 - **If the user changes their mind partway** (e.g. swaps caste after picking Charms), re-derive Caste Abilities and re-check the ≥5-from-Caste/Favored Charm constraint before re-validating.
-- **Binary missing or stale?** Rebuild with `cargo build --release` from `/home/jeff/workspaces/personal/vibe-coded-experiments/exalted/`. The new `rules-markdown`, `backgrounds`, `charms`, and `spells` subcommands were added recently — if `--help` doesn't list them, the binary is out of date.
+- **Binary missing?** If `ecs --help` exits non-zero, the user needs to install `ecs` and put it on `PATH` — surface that and stop, rather than trying to work around it.
 - **Rule books over summaries.** The chargen and core-rules summaries shipped with the binary are *summaries*. For anything ambiguous, use `document-search --tags exalted` against the actual books and prefer that answer.
