@@ -1,28 +1,16 @@
-//! Derived-values sidebar. Read-only summary of the things the rules
+//! Derived-values panel body. Read-only summary of the things the rules
 //! engine computes from the current `Character`: DVs, soak, essence pools,
 //! health track, movement, and a few combat thresholds. Recomputed every
 //! frame (cheap; nothing here allocates significantly).
+//!
+//! The tab strip and close button are owned by `sidebar::panel`; this
+//! function only renders the body content.
 
 use crate::character::Character;
 use crate::rules::{defense, derived, essence, health};
 
-/// Renders the derived-values sidebar. Returns true if the user clicked the
-/// close button in the header (the caller is expected to collapse the panel).
-pub fn render(ui: &mut egui::Ui, character: &Character) -> bool {
-    let mut close_clicked = false;
-    ui.horizontal(|ui| {
-        ui.heading("Derived");
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui
-                .small_button("✕")
-                .on_hover_text("Hide derived sidebar")
-                .clicked()
-            {
-                close_clicked = true;
-            }
-        });
-    });
-
+/// Renders the derived-values body into the current `Ui` (no header).
+pub fn render_body(ui: &mut egui::Ui, character: &Character) {
     section(ui, "Essence", |ui| {
         let pmax = essence::personal_essence_max(character);
         let pavail = essence::essence_personal_available(character);
@@ -117,8 +105,6 @@ pub fn render(ui: &mut egui::Ui, character: &Character) -> bool {
     section(ui, "Feats", |ui| {
         ui.label(format!("Lift: {} lbs", derived::lift_lbs(character)));
     });
-
-    close_clicked
 }
 
 fn section(ui: &mut egui::Ui, title: &str, body: impl FnOnce(&mut egui::Ui)) {

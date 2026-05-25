@@ -107,11 +107,7 @@ fn show_lookup_panel(
             .show_ui(ui, |ui| {
                 ui.selectable_value(&mut state.circle_filter, None, "(any)");
                 for c in SpellCircle::ALL {
-                    ui.selectable_value(
-                        &mut state.circle_filter,
-                        Some(*c),
-                        spell_circle_label(*c),
-                    );
+                    ui.selectable_value(&mut state.circle_filter, Some(*c), spell_circle_label(*c));
                 }
             });
     });

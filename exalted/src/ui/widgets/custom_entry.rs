@@ -452,11 +452,7 @@ fn exalt_type_combo(ui: &mut egui::Ui, id_salt: &str, value: &mut String) -> boo
         .selected_text(label)
         .show_ui(ui, |ui| {
             for opt in EXALT_TYPES {
-                if ui
-                    .selectable_label(value == opt, *opt)
-                    .clicked()
-                    && value != opt
-                {
+                if ui.selectable_label(value == opt, *opt).clicked() && value != opt {
                     *value = (*opt).to_string();
                     changed = true;
                 }
@@ -476,7 +472,9 @@ fn ability_combo(ui: &mut egui::Ui, id_salt: &str, value: &mut String) -> bool {
     egui::ComboBox::from_id_salt((id_salt, "ability"))
         .selected_text(label)
         .show_ui(ui, |ui| {
-            if ui.selectable_label(value == ABILITY_ANY, ABILITY_ANY).clicked()
+            if ui
+                .selectable_label(value == ABILITY_ANY, ABILITY_ANY)
+                .clicked()
                 && value != ABILITY_ANY
             {
                 *value = ABILITY_ANY.to_string();
@@ -542,10 +540,7 @@ fn attribute_map_editor(
         ui.push_id((id_salt, *k), |ui| {
             ui.horizontal(|ui| {
                 ui.label(attr_name(*k));
-                if ui
-                    .add(egui::DragValue::new(v).range(1u8..=5))
-                    .changed()
-                {
+                if ui.add(egui::DragValue::new(v).range(1u8..=5)).changed() {
                     changed = true;
                 }
                 if trash_button(ui).clicked() {

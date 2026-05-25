@@ -6,6 +6,7 @@ use clap::Parser;
 use serde::Serialize;
 
 use exalted::Character;
+use exalted::Config;
 use exalted::cli::{Cli, Cmd, OutputFormat, RenderFormat, RulesTopic};
 use exalted::error::{ValidationError, ValidationReport};
 use exalted::render::{
@@ -19,6 +20,9 @@ use exalted::rules::database::{
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    let config = Config::load_or_create();
+    let _log_guard = exalted::logging::init(&config.log_file);
+    config.warn_unknown_keys();
     let fmt = cli.output_format;
     if let Err(e) = init_database() {
         emit_error(&format!("failed to load rules database: {}", e), fmt);
@@ -35,19 +39,19 @@ fn main() -> ExitCode {
         Some(Cmd::Backgrounds { id }) => run_backgrounds(id, fmt),
         Some(Cmd::Charms { id }) => run_charms(id, fmt),
         Some(Cmd::Spells { id }) => run_spells(id, fmt),
-        None => run_ui(cli.file),
+        None => run_ui(cli.file, config),
     }
 }
 
-fn run_ui(file: Option<PathBuf>) -> ExitCode {
+fn run_ui(file: Option<PathBuf>, config: Config) -> ExitCode {
     let start = match file {
         Some(p) => exalted::ui::StartupAction::OpenFile(p),
         None => exalted::ui::StartupAction::Empty,
     };
-    match exalted::ui::launch(start) {
+    match exalted::ui::launch(start, config) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("ui error: {}", e);
+            tracing::error!("ui error: {}", e);
             ExitCode::from(2)
         }
     }

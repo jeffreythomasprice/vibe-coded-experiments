@@ -1,0 +1,263 @@
+//! Persistent UI preferences (panel locations, visibility, active tabs).
+//!
+//! Lives at the path configured in `config.toml` (default
+//! `<config_dir>/state.toml`). Read once on startup; written synchronously
+//! every time a tracked toggle changes. Unknown keys are logged and dropped
+//! on the next rewrite.
+
+use std::collections::HashSet;
+use std::fs;
+use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
+
+const KNOWN_KEYS: &[&str] = &[
+    "derived_location",
+    "derived_visible",
+    "validation_location",
+    "validation_visible",
+    "left_active",
+    "right_active",
+    "bottom_active",
+];
+
+/// Where a dockable item can live.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PanelLocation {
+    Left,
+    Right,
+    Bottom,
+}
+
+impl PanelLocation {
+    pub const ALL: [PanelLocation; 3] = [
+        PanelLocation::Left,
+        PanelLocation::Right,
+        PanelLocation::Bottom,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            PanelLocation::Left => "Left sidebar",
+            PanelLocation::Right => "Right sidebar",
+            PanelLocation::Bottom => "Bottom panel",
+        }
+    }
+}
+
+/// A dockable item that can be moved between locations and tabbed with
+/// other items in the same location.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PanelItem {
+    Derived,
+    Validation,
+}
+
+impl PanelItem {
+    /// Stable presentation order when multiple items share a panel.
+    pub const ORDER: [PanelItem; 2] = [PanelItem::Derived, PanelItem::Validation];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            PanelItem::Derived => "Derived",
+            PanelItem::Validation => "Validation",
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_derived_location() -> PanelLocation {
+    PanelLocation::Right
+}
+
+fn default_validation_location() -> PanelLocation {
+    PanelLocation::Bottom
+}
+
+#[derive(Serialize, Deserialize)]
+struct UiStateFile {
+    #[serde(default = "default_derived_location")]
+    derived_location: PanelLocation,
+    #[serde(default = "default_true")]
+    derived_visible: bool,
+    #[serde(default = "default_validation_location")]
+    validation_location: PanelLocation,
+    #[serde(default = "default_true")]
+    validation_visible: bool,
+    #[serde(default)]
+    left_active: Option<PanelItem>,
+    #[serde(default)]
+    right_active: Option<PanelItem>,
+    #[serde(default)]
+    bottom_active: Option<PanelItem>,
+}
+
+impl Default for UiStateFile {
+    fn default() -> Self {
+        Self {
+            derived_location: default_derived_location(),
+            derived_visible: true,
+            validation_location: default_validation_location(),
+            validation_visible: true,
+            left_active: None,
+            right_active: None,
+            bottom_active: None,
+        }
+    }
+}
+
+pub struct UiState {
+    path: PathBuf,
+    pub derived_location: PanelLocation,
+    pub derived_visible: bool,
+    pub validation_location: PanelLocation,
+    pub validation_visible: bool,
+    pub left_active: Option<PanelItem>,
+    pub right_active: Option<PanelItem>,
+    pub bottom_active: Option<PanelItem>,
+}
+
+impl UiState {
+    pub fn load_or_default(path: PathBuf) -> Self {
+        let text = match fs::read_to_string(&path) {
+            Ok(t) => t,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Self::from_file(path, UiStateFile::default());
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "could not read UI state file {}: {} (using defaults)",
+                    path.display(),
+                    e
+                );
+                return Self::from_file(path, UiStateFile::default());
+            }
+        };
+
+        warn_unknown_keys(&path, &text);
+
+        let parsed: UiStateFile = match toml::from_str(&text) {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(
+                    "could not parse UI state file {}: {} (using defaults)",
+                    path.display(),
+                    e
+                );
+                UiStateFile::default()
+            }
+        };
+
+        Self::from_file(path, parsed)
+    }
+
+    fn from_file(path: PathBuf, file: UiStateFile) -> Self {
+        Self {
+            path,
+            derived_location: file.derived_location,
+            derived_visible: file.derived_visible,
+            validation_location: file.validation_location,
+            validation_visible: file.validation_visible,
+            left_active: file.left_active,
+            right_active: file.right_active,
+            bottom_active: file.bottom_active,
+        }
+    }
+
+    pub fn location_of(&self, item: PanelItem) -> PanelLocation {
+        match item {
+            PanelItem::Derived => self.derived_location,
+            PanelItem::Validation => self.validation_location,
+        }
+    }
+
+    pub fn is_visible(&self, item: PanelItem) -> bool {
+        match item {
+            PanelItem::Derived => self.derived_visible,
+            PanelItem::Validation => self.validation_visible,
+        }
+    }
+
+    pub fn set_visible(&mut self, item: PanelItem, visible: bool) {
+        match item {
+            PanelItem::Derived => self.derived_visible = visible,
+            PanelItem::Validation => self.validation_visible = visible,
+        }
+    }
+
+    pub fn set_location(&mut self, item: PanelItem, location: PanelLocation) {
+        match item {
+            PanelItem::Derived => self.derived_location = location,
+            PanelItem::Validation => self.validation_location = location,
+        }
+    }
+
+    pub fn active(&self, location: PanelLocation) -> Option<PanelItem> {
+        match location {
+            PanelLocation::Left => self.left_active,
+            PanelLocation::Right => self.right_active,
+            PanelLocation::Bottom => self.bottom_active,
+        }
+    }
+
+    pub fn set_active(&mut self, location: PanelLocation, item: Option<PanelItem>) {
+        match location {
+            PanelLocation::Left => self.left_active = item,
+            PanelLocation::Right => self.right_active = item,
+            PanelLocation::Bottom => self.bottom_active = item,
+        }
+    }
+
+    pub fn save(&self) {
+        let file = UiStateFile {
+            derived_location: self.derived_location,
+            derived_visible: self.derived_visible,
+            validation_location: self.validation_location,
+            validation_visible: self.validation_visible,
+            left_active: self.left_active,
+            right_active: self.right_active,
+            bottom_active: self.bottom_active,
+        };
+        let text = match toml::to_string_pretty(&file) {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::error!("could not serialize UI state: {}", e);
+                return;
+            }
+        };
+        if let Some(parent) = self.path.parent() {
+            if let Err(e) = fs::create_dir_all(parent) {
+                tracing::error!(
+                    "could not create directory {} for UI state: {}",
+                    parent.display(),
+                    e
+                );
+                return;
+            }
+        }
+        if let Err(e) = fs::write(&self.path, text.as_bytes()) {
+            tracing::error!("could not write UI state to {}: {}", self.path.display(), e);
+        }
+    }
+}
+
+fn warn_unknown_keys(path: &std::path::Path, text: &str) {
+    let Ok(table): Result<toml::Table, _> = toml::from_str(text) else {
+        return;
+    };
+    let known: HashSet<&str> = KNOWN_KEYS.iter().copied().collect();
+    for key in table.keys() {
+        if !known.contains(key.as_str()) {
+            tracing::warn!(
+                "unrecognized key `{}` in UI state file {} — ignoring (will be removed on next save)",
+                key,
+                path.display()
+            );
+        }
+    }
+}

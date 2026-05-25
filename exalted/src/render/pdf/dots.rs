@@ -217,8 +217,8 @@ fn fill_background_dots(
         }
     }
     if overflow > 0 {
-        eprintln!(
-            "warning: {} background dot row(s) beyond slot 18 not rendered",
+        tracing::warn!(
+            "{} background dot row(s) beyond slot 18 not rendered",
             overflow
         );
     }
@@ -246,10 +246,7 @@ fn fill_intimacy_dots(
         }
     }
     if overflow > 0 {
-        eprintln!(
-            "warning: {} intimacy/-ies beyond slot 10 not rendered",
-            overflow
-        );
+        tracing::warn!("{} intimacy/-ies beyond slot 10 not rendered", overflow);
     }
     Ok(())
 }

@@ -1,26 +1,27 @@
 use std::path::Path;
 
+use crate::Config;
 use crate::character::{BackgroundRef, CharmRef, SpellRef};
 use crate::render::pdf::character_to_pdf;
 use crate::ui::dialogs::confirm_discard::{self, DiscardChoice};
 use crate::ui::dialogs::file_picker;
 use crate::ui::io::{load_character_from_path, save_character_to_path};
 use crate::ui::menu::{self, MenuAction};
+use crate::ui::persisted::{PanelLocation, UiState};
 use crate::ui::pickers::{PickerOutcome, background_picker, charm_picker, spell_picker};
 use crate::ui::sections;
 use crate::ui::sidebar;
 use crate::ui::state::{AppState, PendingAction, StartupAction, StatusKind, blank_character};
-use crate::ui::widgets::custom_entry::{
-    background_entry_form, charm_entry_form, spell_entry_form,
-};
+use crate::ui::widgets::custom_entry::{background_entry_form, charm_entry_form, spell_entry_form};
 
 pub struct App {
     state: AppState,
 }
 
 impl App {
-    pub fn new(start: StartupAction) -> Self {
-        let mut state = AppState::new_empty();
+    pub fn new(start: StartupAction, config: Config) -> Self {
+        let ui_state = UiState::load_or_default(config.state_file);
+        let mut state = AppState::new_with_state(ui_state);
         if let StartupAction::OpenFile(path) = start {
             match load_character_from_path(&path) {
                 Ok(c) => {
@@ -86,10 +87,12 @@ impl App {
                 }
             }
             MenuAction::ToggleSidebar => {
-                self.state.sidebar_collapsed = !self.state.sidebar_collapsed;
+                self.state.ui_state.derived_visible = !self.state.ui_state.derived_visible;
+                self.state.ui_state.save();
             }
             MenuAction::ToggleValidationPanel => {
-                self.state.validation_panel_collapsed = !self.state.validation_panel_collapsed;
+                self.state.ui_state.validation_visible = !self.state.ui_state.validation_visible;
+                self.state.ui_state.save();
             }
         }
     }
@@ -305,41 +308,11 @@ impl eframe::App for App {
             self.state.status_message = None;
         }
 
-        // Bottom dock: validation panel (collapsible via View menu or the
-        // close button in its header).
-        if !self.state.validation_panel_collapsed {
-            let mut close_validation = false;
-            egui::Panel::bottom("validation_dock")
-                .resizable(true)
-                .default_size(180.0)
-                .min_size(80.0)
-                .show_inside(ui, |ui| {
-                    close_validation = sidebar::validation::render(ui, &mut self.state);
-                });
-            if close_validation {
-                self.state.validation_panel_collapsed = true;
-            }
-        }
-
-        // Right dock: derived values (collapsible via View menu or the close
-        // button in its header).
-        if !self.state.sidebar_collapsed {
-            let mut close_derived = false;
-            egui::Panel::right("derived_sidebar")
-                .resizable(true)
-                .default_size(260.0)
-                .min_size(180.0)
-                .show_inside(ui, |ui| {
-                    egui::ScrollArea::vertical()
-                        .auto_shrink([false; 2])
-                        .show(ui, |ui| {
-                            close_derived = sidebar::derived::render(ui, &self.state.character);
-                        });
-                });
-            if close_derived {
-                self.state.sidebar_collapsed = true;
-            }
-        }
+        // Dockable panels. Left & right are rendered before the bottom so
+        // the bottom panel spans the full window width.
+        sidebar::panel::render_location(ui, PanelLocation::Left, &mut self.state);
+        sidebar::panel::render_location(ui, PanelLocation::Right, &mut self.state);
+        sidebar::panel::render_location(ui, PanelLocation::Bottom, &mut self.state);
 
         egui::CentralPanel::default().show_inside(ui, |ui| {
             egui::ScrollArea::vertical()
@@ -389,11 +362,10 @@ impl App {
 
         // Charm.
         if let Some((idx, mut entry)) = self.state.editing_custom_charm.take() {
-            let outcome =
-                show_edit_modal(ctx, "Edit custom charm", "edit-custom-charm", |ui| {
-                    charm_entry_form(ui, "edit-custom-charm", &mut entry);
-                    !entry.id.is_empty() && !entry.name.is_empty()
-                });
+            let outcome = show_edit_modal(ctx, "Edit custom charm", "edit-custom-charm", |ui| {
+                charm_entry_form(ui, "edit-custom-charm", &mut entry);
+                !entry.id.is_empty() && !entry.name.is_empty()
+            });
             match outcome {
                 EditOutcome::Stay => {
                     self.state.editing_custom_charm = Some((idx, entry));
@@ -412,11 +384,10 @@ impl App {
 
         // Spell.
         if let Some((idx, mut entry)) = self.state.editing_custom_spell.take() {
-            let outcome =
-                show_edit_modal(ctx, "Edit custom spell", "edit-custom-spell", |ui| {
-                    spell_entry_form(ui, "edit-custom-spell", &mut entry);
-                    !entry.id.is_empty() && !entry.name.is_empty()
-                });
+            let outcome = show_edit_modal(ctx, "Edit custom spell", "edit-custom-spell", |ui| {
+                spell_entry_form(ui, "edit-custom-spell", &mut entry);
+                !entry.id.is_empty() && !entry.name.is_empty()
+            });
             match outcome {
                 EditOutcome::Stay => {
                     self.state.editing_custom_spell = Some((idx, entry));

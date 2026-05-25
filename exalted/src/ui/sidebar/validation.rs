@@ -1,14 +1,16 @@
-//! Bottom dock: live validation report. Errors in red, notes in yellow.
-//! Recomputes from `Character::validate_chargen()` + `validate_xp()` only
-//! when `state.validation_dirty` is set (after a mutating edit), or on
-//! demand via a "Re-validate" button.
+//! Validation panel body. Live validation report; errors in red, notes in
+//! yellow. Recomputes from `Character::validate_chargen()` + `validate_xp()`
+//! only when `state.validation_dirty` is set (after a mutating edit), or on
+//! demand via the "Re-validate" button.
+//!
+//! The tab strip and close button are owned by `sidebar::panel`; this
+//! function only renders the body content.
 
 use crate::error::{ValidationError, ValidationReport};
 use crate::ui::state::AppState;
 
-/// Renders the validation dock. Returns true if the user clicked the close
-/// button in the header (the caller is expected to collapse the panel).
-pub fn render(ui: &mut egui::Ui, state: &mut AppState) -> bool {
+/// Renders the validation body into the current `Ui` (no header).
+pub fn render_body(ui: &mut egui::Ui, state: &mut AppState) {
     if state.validation_dirty {
         let mut report = ValidationReport::new();
         report.extend(state.character.validate_chargen());
@@ -17,9 +19,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) -> bool {
         state.validation_dirty = false;
     }
 
-    let mut close_clicked = false;
     ui.horizontal(|ui| {
-        ui.heading("Validation");
         ui.colored_label(
             error_color(),
             format!("errors: {}", state.last_validation.errors.len()),
@@ -31,37 +31,22 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) -> bool {
         if ui.button("Re-validate").clicked() {
             state.validation_dirty = true;
         }
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui
-                .small_button("✕")
-                .on_hover_text("Hide validation panel")
-                .clicked()
-            {
-                close_clicked = true;
-            }
-        });
     });
 
-    egui::ScrollArea::vertical()
-        .auto_shrink([false; 2])
-        .show(ui, |ui| {
-            list_section(
-                ui,
-                "Errors",
-                error_color(),
-                &state.last_validation.errors,
-                true,
-            );
-            list_section(
-                ui,
-                "Notes",
-                note_color(),
-                &state.last_validation.notes,
-                false,
-            );
-        });
-
-    close_clicked
+    list_section(
+        ui,
+        "Errors",
+        error_color(),
+        &state.last_validation.errors,
+        true,
+    );
+    list_section(
+        ui,
+        "Notes",
+        note_color(),
+        &state.last_validation.notes,
+        false,
+    );
 }
 
 fn list_section(

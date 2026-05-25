@@ -107,8 +107,8 @@ fn fill_backgrounds(
         }
     }
     if overflow > 0 {
-        eprintln!(
-            "warning: {} background label(s) beyond slot 18 not rendered",
+        tracing::warn!(
+            "{} background label(s) beyond slot 18 not rendered",
             overflow
         );
     }
@@ -175,10 +175,7 @@ fn format_language(l: &KnownLanguage) -> String {
         LanguageFamily::TribalTongue(name) => format!("Tribal Tongue: {}", name),
         other => format!("{:?}", other),
     };
-    let dialect = l
-        .dialect()
-        .map(|d| format!(" — {}", d))
-        .unwrap_or_default();
+    let dialect = l.dialect().map(|d| format!(" — {}", d)).unwrap_or_default();
     format!("{}{}", family, dialect)
 }
 

@@ -8,6 +8,7 @@ mod dialogs;
 mod fonts;
 pub mod io;
 mod menu;
+mod persisted;
 mod pickers;
 mod sections;
 mod sidebar;
@@ -18,7 +19,9 @@ pub use state::StartupAction;
 
 use app::App;
 
-pub fn launch(start: StartupAction) -> eframe::Result<()> {
+use crate::Config;
+
+pub fn launch(start: StartupAction, config: Config) -> eframe::Result<()> {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Exalted")
@@ -32,7 +35,7 @@ pub fn launch(start: StartupAction) -> eframe::Result<()> {
         Box::new(move |cc| {
             fonts::install(&cc.egui_ctx);
             egui_extras::install_image_loaders(&cc.egui_ctx);
-            Ok(Box::new(App::new(start)))
+            Ok(Box::new(App::new(start, config)))
         }),
     )
 }

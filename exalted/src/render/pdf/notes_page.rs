@@ -392,5 +392,4 @@ mod tests {
         let wrapped = wrap_body(body);
         assert_eq!(wrapped, vec!["first", "", "third"]);
     }
-
 }

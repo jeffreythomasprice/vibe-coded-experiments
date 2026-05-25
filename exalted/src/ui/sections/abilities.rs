@@ -45,8 +45,12 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             show_specialties: true,
         };
         let mut favored_toggle: Option<bool> = None;
-        let row_changed =
-            rated_trait_editor_with_prefix(ui, ("ability", ab as usize), entry, &opts, |ui| {
+        let row_changed = rated_trait_editor_with_prefix(
+            ui,
+            ("ability", ab as usize),
+            entry,
+            &opts,
+            |ui| {
                 let mut checked = is_caste || is_favored;
                 let resp = ui.add_enabled(!is_caste, egui::Checkbox::new(&mut checked, ""));
                 let resp = if is_caste {
@@ -62,7 +66,8 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                 } else {
                     false
                 }
-            });
+            },
+        );
         if let Some(now_checked) = favored_toggle {
             if now_checked && !is_favored {
                 state.character.favored_abilities.push(ab);

@@ -30,6 +30,28 @@ ecs charms first-archery-excellency          # show one Charm
 
 Run `ecs --help` for the full subcommand list.
 
+## Configuration
+
+`ecs` keeps its configuration and persistent UI state under the OS-appropriate
+config directory — e.g. `~/.config/ecs/` on Linux, `~/Library/Application
+Support/ecs/` on macOS, `%APPDATA%\ecs\` on Windows. On first launch a default
+`config.toml` is written there:
+
+```toml
+log_file = "/tmp/ecs.log"
+state_file = "./state.toml"
+```
+
+Paths may be absolute or relative; relative paths are resolved against the
+config file's directory. `state.toml` records persistent UI preferences (panel
+visibility) and is rewritten whenever you toggle a tracked option in the GUI;
+unknown keys are logged at startup and dropped on the next rewrite.
+
+Logging uses `tracing` with a default filter of `ecs=trace,exalted=trace,warn`
+(our own crates verbose, everything else quiet). Override it with `RUST_LOG`,
+e.g. `RUST_LOG=debug ecs validate sheet.toml`. Output goes to both stderr and
+the configured `log_file`.
+
 ## Example skill
 
 `example-skills/create-character/SKILL.md` is an **example** Claude Code skill

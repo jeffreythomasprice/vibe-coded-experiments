@@ -112,15 +112,17 @@ fn fill_health_track(
     }
 
     if dropped_dying > 0 {
-        eprintln!(
-            "warning: {} Dying health row(s) not rendered (PDF template has no slots for them)",
+        tracing::warn!(
+            "{} Dying health row(s) not rendered (PDF template has no slots for them)",
             dropped_dying
         );
     }
     for ((penalty, kind), n) in overflow {
-        eprintln!(
-            "warning: {} health level(s) at penalty {} kind {:?} could not be rendered (PDF row is full)",
-            n, penalty, kind
+        tracing::warn!(
+            "{} health level(s) at penalty {} kind {:?} could not be rendered (PDF row is full)",
+            n,
+            penalty,
+            kind
         );
     }
     Ok(())

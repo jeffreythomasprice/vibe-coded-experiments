@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use crate::character::{Caste, Character};
 use crate::error::ValidationReport;
 use crate::rules::database::{BackgroundEntry, CharmEntry, SpellEntry};
+use crate::ui::persisted::UiState;
 use crate::ui::pickers::background_picker::BackgroundPickerState;
 use crate::ui::pickers::charm_picker::CharmPickerState;
 use crate::ui::pickers::spell_picker::SpellPickerState;
@@ -42,8 +43,7 @@ pub struct AppState {
     pub last_validation: ValidationReport,
     pub validation_dirty: bool,
 
-    pub validation_panel_collapsed: bool,
-    pub sidebar_collapsed: bool,
+    pub ui_state: UiState,
 
     pub charm_picker: Option<CharmPickerState>,
     pub spell_picker: Option<SpellPickerState>,
@@ -63,7 +63,7 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new_empty() -> Self {
+    pub fn new_with_state(ui_state: UiState) -> Self {
         let character = blank_character();
         Self {
             character,
@@ -71,8 +71,7 @@ impl AppState {
             dirty: false,
             last_validation: ValidationReport::new(),
             validation_dirty: true,
-            validation_panel_collapsed: false,
-            sidebar_collapsed: false,
+            ui_state,
             charm_picker: None,
             spell_picker: None,
             background_picker: None,
