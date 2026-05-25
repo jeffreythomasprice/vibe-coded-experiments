@@ -2,6 +2,9 @@ active:
 
 todo:
 
+windows verison in wine, the bolded attribute or ability that is selected isn't bold
+
+
 In the UI, it would be helpful to have a tooltip on most fields explaining what this is in a 1-3 sentences. Iterate through the whole UI and add tooltips. Generate the text from the rule book as necessary. We can do batches of them in parallel in subagents.
 
 
