@@ -24,15 +24,16 @@ pub struct RatedTraitOpts<'a> {
     /// Show the specialties sub-editor below the trait. Attributes don't
     /// have specialties; Abilities do.
     pub show_specialties: bool,
-    /// When `Some`, the label becomes a clickable, bold-when-selected
-    /// widget. The widget toggles `clicked` to true if the user clicked the
-    /// label this frame; the caller is responsible for translating that into
-    /// a change to its own selection state.
+    /// When `Some`, the label becomes a clickable widget that renders with a
+    /// filled background when selected. The widget toggles `clicked` to true
+    /// if the user clicked the label this frame; the caller is responsible
+    /// for translating that into a change to its own selection state.
     pub selectable: Option<Selectable<'a>>,
 }
 
 /// Click-to-select handle passed in via `RatedTraitOpts`. The widget reads
-/// `is_selected` to render the label bold; on click, it sets `*clicked = true`.
+/// `is_selected` to render the label with a filled background; on click, it
+/// sets `*clicked = true`.
 pub struct Selectable<'a> {
     pub is_selected: bool,
     pub clicked: &'a mut bool,
@@ -70,13 +71,9 @@ pub fn rated_trait_editor_with_prefix(
                 ui.add_sized([140.0, 0.0], egui::Label::new(opts.label));
             }
             Some(sel) => {
-                let mut text = egui::RichText::new(opts.label);
-                if sel.is_selected {
-                    text = text.strong();
-                }
                 let resp = ui.add_sized(
                     [140.0, 0.0],
-                    egui::Label::new(text).sense(egui::Sense::click()),
+                    egui::Button::selectable(sel.is_selected, opts.label),
                 );
                 if resp.clicked() {
                     *sel.clicked = true;
