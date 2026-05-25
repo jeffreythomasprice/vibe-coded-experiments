@@ -1,3 +1,5 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -18,7 +20,21 @@ use exalted::rules::database::{
     game_rules_markdown, init_database,
 };
 
+// Pairs with `windows_subsystem = "windows"`: no console window on Explorer launch,
+// but CLI subcommands still write to the parent terminal when launched from one.
+#[cfg(windows)]
+fn attach_parent_console() {
+    use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
+    unsafe {
+        AttachConsole(ATTACH_PARENT_PROCESS);
+    }
+}
+
+#[cfg(not(windows))]
+fn attach_parent_console() {}
+
 fn main() -> ExitCode {
+    attach_parent_console();
     let cli = Cli::parse();
     let config = Config::load_or_create();
     let _log_guard = exalted::logging::init(&config.log_file);

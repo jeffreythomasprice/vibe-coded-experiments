@@ -16,6 +16,31 @@ cargo build --release
 Put `target/release/ecs` on your `PATH` (or `cargo install --path .`) so the
 example skill below can find it.
 
+### Release builds (Linux + Windows)
+
+`build-release.sh` builds release binaries for Linux (native) and Windows
+(cross-compiled from Linux via `cargo-xwin`), and stages them in `./release/`
+as `release/linux-x86_64/ecs` and `release/windows-x86_64/ecs.exe`.
+`release/` is gitignored.
+
+One-time setup:
+
+```
+cargo install cargo-xwin
+rustup target add x86_64-pc-windows-msvc
+```
+
+`cargo-xwin` downloads the Microsoft Windows SDK headers/libs on first use, so
+the initial Windows build pulls a few hundred MB and is slow; subsequent builds
+are fast. The resulting `.exe` links to system DLLs that ship with Windows and
+needs no other runtime.
+
+Then:
+
+```
+./build-release.sh
+```
+
 ## A few common invocations
 
 ```

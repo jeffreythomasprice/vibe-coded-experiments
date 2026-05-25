@@ -31,6 +31,9 @@ egui_extras = { version = "0.34", features = ["svg"] }
 rfd = "0.17"
 directories = "6"
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_Console"] }
+
 [[example]]
 name = "dump_dots"
 path = "examples/dump_dots.rs"
