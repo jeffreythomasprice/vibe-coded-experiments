@@ -83,6 +83,37 @@ pub fn excellency_ids_for(ability: AbilityKind) -> [String; 5] {
     ]
 }
 
+/// Which of the five universal excellencies a character has learned for a
+/// given ability. Each field maps to one of the ids returned by
+/// `excellency_ids_for` in the same order.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct KnownExcellencies {
+    pub first: bool,
+    pub second: bool,
+    pub third: bool,
+    pub infinite_mastery: bool,
+    pub essence_flow: bool,
+}
+
+impl KnownExcellencies {
+    pub fn any(self) -> bool {
+        self.first || self.second || self.third || self.infinite_mastery || self.essence_flow
+    }
+}
+
+/// Which universal excellencies the character has learned for `ability`.
+pub fn known_excellencies(character: &Character, ability: AbilityKind) -> KnownExcellencies {
+    let ids = excellency_ids_for(ability);
+    let has = |id: &str| character.charms.iter().any(|ch| ch.is_id(id));
+    KnownExcellencies {
+        first: has(&ids[0]),
+        second: has(&ids[1]),
+        third: has(&ids[2]),
+        infinite_mastery: has(&ids[3]),
+        essence_flow: has(&ids[4]),
+    }
+}
+
 /// True iff the character's `charms` list satisfies this prereq.
 pub fn satisfied_by(prereq: &Prereq, character: &Character, _db: &RulesDatabase) -> bool {
     match prereq {

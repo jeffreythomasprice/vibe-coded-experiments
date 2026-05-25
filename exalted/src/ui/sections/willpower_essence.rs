@@ -37,26 +37,38 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         DotSource::Xp { spent: 0 }
     };
 
-    let opts_wp = RatedTraitOpts {
+    let mut opts_wp = RatedTraitOpts {
         label: "Willpower",
         max_dots: 10,
         allowed_sources: WP_SOURCES,
         default_add_source: wp_default,
         show_specialties: false,
+        selectable: None,
     };
     let mut any = false;
-    if rated_trait_editor(ui, "willpower", &mut state.character.willpower, &opts_wp) {
+    if rated_trait_editor(
+        ui,
+        "willpower",
+        &mut state.character.willpower,
+        &mut opts_wp,
+    ) {
         any = true;
     }
 
-    let opts_essence = RatedTraitOpts {
+    let mut opts_essence = RatedTraitOpts {
         label: "Essence",
         max_dots: 10,
         allowed_sources: ESSENCE_SOURCES,
         default_add_source: essence_default,
         show_specialties: false,
+        selectable: None,
     };
-    if rated_trait_editor(ui, "essence", &mut state.character.essence, &opts_essence) {
+    if rated_trait_editor(
+        ui,
+        "essence",
+        &mut state.character.essence,
+        &mut opts_essence,
+    ) {
         any = true;
     }
 

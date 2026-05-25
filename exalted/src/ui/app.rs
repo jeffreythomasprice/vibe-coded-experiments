@@ -94,6 +94,14 @@ impl App {
                 self.state.ui_state.validation_visible = !self.state.ui_state.validation_visible;
                 self.state.ui_state.save();
             }
+            MenuAction::ToggleActionsPanel => {
+                self.state.ui_state.actions_visible = !self.state.ui_state.actions_visible;
+                self.state.ui_state.save();
+            }
+            MenuAction::ToggleDiceLogPanel => {
+                self.state.ui_state.dicelog_visible = !self.state.ui_state.dicelog_visible;
+                self.state.ui_state.save();
+            }
         }
     }
 

@@ -81,14 +81,15 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                         }
                     });
 
-                    let opts = RatedTraitOpts {
+                    let mut opts = RatedTraitOpts {
                         label: &name,
                         max_dots: 5,
                         allowed_sources: BG_TRAIT_SOURCES,
                         default_add_source: default_source,
                         show_specialties: false,
+                        selectable: None,
                     };
-                    if rated_trait_editor(ui, ("bg-trait", i), trait_, &opts) {
+                    if rated_trait_editor(ui, ("bg-trait", i), trait_, &mut opts) {
                         any_changed = true;
                     }
 

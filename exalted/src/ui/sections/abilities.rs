@@ -5,7 +5,7 @@ use crate::character::{AbilityKind, DotSource, RatedTrait};
 use crate::render::names::ability_name;
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::DotSourceKind;
-use crate::ui::widgets::rated_trait::{RatedTraitOpts, rated_trait_editor_with_prefix};
+use crate::ui::widgets::rated_trait::{RatedTraitOpts, Selectable, rated_trait_editor_with_prefix};
 
 const ABILITY_SOURCES: &[DotSourceKind] = &[
     DotSourceKind::ChargenPriority,
@@ -27,6 +27,8 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         DotSource::Xp { spent: 0 }
     };
     let mut any_changed = false;
+    let mut clicked_ability: Option<AbilityKind> = None;
+    let selected_ability = state.selection.ability;
     for ab in AbilityKind::ALL {
         let ab = *ab;
         let is_caste = state.character.is_caste_ability(ab);
@@ -37,19 +39,24 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             .abilities
             .entry(ab)
             .or_insert_with(|| RatedTrait::with_base(0));
-        let opts = RatedTraitOpts {
+        let mut clicked = false;
+        let mut opts = RatedTraitOpts {
             label: &label,
             max_dots: 5,
             allowed_sources: ABILITY_SOURCES,
             default_add_source: default_source,
             show_specialties: true,
+            selectable: Some(Selectable {
+                is_selected: selected_ability == Some(ab),
+                clicked: &mut clicked,
+            }),
         };
         let mut favored_toggle: Option<bool> = None;
         let row_changed = rated_trait_editor_with_prefix(
             ui,
             ("ability", ab as usize),
             entry,
-            &opts,
+            &mut opts,
             |ui| {
                 let mut checked = is_caste || is_favored;
                 let resp = ui.add_enabled(!is_caste, egui::Checkbox::new(&mut checked, ""));
@@ -68,6 +75,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                 }
             },
         );
+        if clicked {
+            clicked_ability = Some(ab);
+        }
         if let Some(now_checked) = favored_toggle {
             if now_checked && !is_favored {
                 state.character.favored_abilities.push(ab);
@@ -78,6 +88,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         if row_changed {
             any_changed = true;
         }
+    }
+    if let Some(ab) = clicked_ability {
+        state.selection.toggle_ability(ab);
     }
     if any_changed {
         state.mark_dirty();

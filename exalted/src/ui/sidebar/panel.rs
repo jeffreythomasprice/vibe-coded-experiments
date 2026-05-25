@@ -17,7 +17,7 @@
 //! skipped so the central area expands to fill the space.
 
 use crate::ui::persisted::{PanelItem, PanelLocation};
-use crate::ui::sidebar::{derived, validation};
+use crate::ui::sidebar::{actions, derived, dice_log, validation};
 use crate::ui::state::AppState;
 
 pub fn render_location(ui: &mut egui::Ui, location: PanelLocation, state: &mut AppState) {
@@ -132,6 +132,8 @@ fn render_inner(
         .show(ui, |ui| match active {
             PanelItem::Derived => derived::render_body(ui, &state.character),
             PanelItem::Validation => validation::render_body(ui, state),
+            PanelItem::Actions => actions::render_body(ui, state),
+            PanelItem::DiceLog => dice_log::render_body(ui, state),
         });
 
     let mut needs_save = false;

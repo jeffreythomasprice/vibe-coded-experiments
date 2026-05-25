@@ -11,6 +11,8 @@ pub enum MenuAction {
     Quit,
     ToggleSidebar,
     ToggleValidationPanel,
+    ToggleActionsPanel,
+    ToggleDiceLogPanel,
 }
 
 pub fn render(ui: &mut egui::Ui) -> Option<MenuAction> {
@@ -52,6 +54,14 @@ pub fn render(ui: &mut egui::Ui) -> Option<MenuAction> {
             }
             if ui.button("Toggle validation panel").clicked() {
                 action = Some(MenuAction::ToggleValidationPanel);
+                ui.close();
+            }
+            if ui.button("Toggle actions panel").clicked() {
+                action = Some(MenuAction::ToggleActionsPanel);
+                ui.close();
+            }
+            if ui.button("Toggle dice log panel").clicked() {
+                action = Some(MenuAction::ToggleDiceLogPanel);
                 ui.close();
             }
         });

@@ -1,11 +1,11 @@
 //! Attributes section: AttributePriority assignment + each attribute's
 //! RatedTrait editor.
 
-use crate::character::{AttributeGroup, DotSource, RatedTrait};
+use crate::character::{AttributeGroup, AttributeKind, DotSource, RatedTrait};
 use crate::render::names::{attr_name, group_name};
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::DotSourceKind;
-use crate::ui::widgets::rated_trait::{RatedTraitOpts, rated_trait_editor};
+use crate::ui::widgets::rated_trait::{RatedTraitOpts, Selectable, rated_trait_editor};
 
 const ATTRIBUTE_SOURCES: &[DotSourceKind] = &[
     DotSourceKind::Base,
@@ -27,6 +27,8 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         DotSource::Xp { spent: 0 }
     };
     let mut any_changed = false;
+    let mut clicked_attr: Option<AttributeKind> = None;
+    let selected_attr = state.selection.attribute;
     egui::Grid::new("attributes-grid")
         .num_columns(3)
         .spacing([16.0, 4.0])
@@ -47,21 +49,32 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                             .attributes
                             .entry(*attr)
                             .or_insert_with(|| RatedTrait::with_base(1));
-                        let opts = RatedTraitOpts {
+                        let mut clicked = false;
+                        let mut opts = RatedTraitOpts {
                             label: attr_name(*attr),
                             max_dots: 5,
                             allowed_sources: ATTRIBUTE_SOURCES,
                             default_add_source: default_source,
                             show_specialties: false,
+                            selectable: Some(Selectable {
+                                is_selected: selected_attr == Some(*attr),
+                                clicked: &mut clicked,
+                            }),
                         };
-                        if rated_trait_editor(ui, ("attr", *attr as usize), entry, &opts) {
+                        if rated_trait_editor(ui, ("attr", *attr as usize), entry, &mut opts) {
                             any_changed = true;
+                        }
+                        if clicked {
+                            clicked_attr = Some(*attr);
                         }
                     }
                 });
             }
             ui.end_row();
         });
+    if let Some(attr) = clicked_attr {
+        state.selection.toggle_attribute(attr);
+    }
     if any_changed {
         state.mark_dirty();
     }

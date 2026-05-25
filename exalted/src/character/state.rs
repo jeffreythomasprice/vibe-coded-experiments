@@ -109,4 +109,19 @@ impl PoolState {
         *self.virtue_channels_used.entry(virtue).or_insert(0) += 1;
         true
     }
+
+    /// Add `n` motes to the spent counter for `pool`. Saturating; no max
+    /// check (callers should consult `essence::essence_*_available` first if
+    /// they care). The pools section in the UI already lets the user edit the
+    /// raw counter past the max, so this matches existing behavior.
+    pub fn spend_motes(&mut self, pool: MotePool, n: u16) {
+        match pool {
+            MotePool::Personal => {
+                self.personal_motes_spent = self.personal_motes_spent.saturating_add(n);
+            }
+            MotePool::Peripheral => {
+                self.peripheral_motes_spent = self.peripheral_motes_spent.saturating_add(n);
+            }
+        }
+    }
 }

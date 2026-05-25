@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 
-use crate::character::{Caste, Character};
+use crate::character::{AbilityKind, AttributeKind, Caste, Character};
 use crate::error::ValidationReport;
 use crate::rules::database::{BackgroundEntry, CharmEntry, SpellEntry};
 use crate::ui::persisted::UiState;
 use crate::ui::pickers::background_picker::BackgroundPickerState;
 use crate::ui::pickers::charm_picker::CharmPickerState;
 use crate::ui::pickers::spell_picker::SpellPickerState;
+use crate::ui::sidebar::dice_log::DiceLog;
 
 /// What the binary asked the UI to do on launch.
 pub enum StartupAction {
@@ -30,6 +31,34 @@ pub enum PendingAction {
 pub enum StatusKind {
     Info,
     Error,
+}
+
+/// Click-to-select state for the Attributes and Abilities sections. The
+/// selected attribute and selected ability drive the "selection roll" and
+/// Excellency rows in the Actions panel. Session-only; not persisted.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub struct SelectionState {
+    pub attribute: Option<AttributeKind>,
+    pub ability: Option<AbilityKind>,
+}
+
+impl SelectionState {
+    /// Toggle selection of an attribute: click-to-select, click-the-same-one-to-deselect.
+    pub fn toggle_attribute(&mut self, attr: AttributeKind) {
+        self.attribute = if self.attribute == Some(attr) {
+            None
+        } else {
+            Some(attr)
+        };
+    }
+
+    pub fn toggle_ability(&mut self, ability: AbilityKind) {
+        self.ability = if self.ability == Some(ability) {
+            None
+        } else {
+            Some(ability)
+        };
+    }
 }
 
 pub struct AppState {
@@ -60,6 +89,11 @@ pub struct AppState {
     pub status_message: Option<(StatusKind, String)>,
     pub last_dir: Option<PathBuf>,
     pub last_title: String,
+
+    /// Click-to-select attribute/ability for the Actions panel. Session-only.
+    pub selection: SelectionState,
+    /// Rolling log of dice actions. Session-only.
+    pub dice_log: DiceLog,
 }
 
 impl AppState {
@@ -82,6 +116,8 @@ impl AppState {
             status_message: None,
             last_dir: None,
             last_title: String::new(),
+            selection: SelectionState::default(),
+            dice_log: DiceLog::default(),
         }
     }
 

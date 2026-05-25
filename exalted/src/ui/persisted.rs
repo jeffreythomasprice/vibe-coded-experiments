@@ -16,6 +16,10 @@ const KNOWN_KEYS: &[&str] = &[
     "derived_visible",
     "validation_location",
     "validation_visible",
+    "actions_location",
+    "actions_visible",
+    "dicelog_location",
+    "dicelog_visible",
     "left_active",
     "right_active",
     "bottom_active",
@@ -52,17 +56,26 @@ impl PanelLocation {
 #[serde(rename_all = "lowercase")]
 pub enum PanelItem {
     Derived,
+    Actions,
     Validation,
+    DiceLog,
 }
 
 impl PanelItem {
     /// Stable presentation order when multiple items share a panel.
-    pub const ORDER: [PanelItem; 2] = [PanelItem::Derived, PanelItem::Validation];
+    pub const ORDER: [PanelItem; 4] = [
+        PanelItem::Derived,
+        PanelItem::Actions,
+        PanelItem::Validation,
+        PanelItem::DiceLog,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
             PanelItem::Derived => "Derived",
+            PanelItem::Actions => "Actions",
             PanelItem::Validation => "Validation",
+            PanelItem::DiceLog => "Dice Log",
         }
     }
 }
@@ -71,11 +84,23 @@ fn default_true() -> bool {
     true
 }
 
+fn default_false() -> bool {
+    false
+}
+
 fn default_derived_location() -> PanelLocation {
     PanelLocation::Right
 }
 
 fn default_validation_location() -> PanelLocation {
+    PanelLocation::Bottom
+}
+
+fn default_actions_location() -> PanelLocation {
+    PanelLocation::Right
+}
+
+fn default_dicelog_location() -> PanelLocation {
     PanelLocation::Bottom
 }
 
@@ -89,6 +114,14 @@ struct UiStateFile {
     validation_location: PanelLocation,
     #[serde(default = "default_true")]
     validation_visible: bool,
+    #[serde(default = "default_actions_location")]
+    actions_location: PanelLocation,
+    #[serde(default = "default_true")]
+    actions_visible: bool,
+    #[serde(default = "default_dicelog_location")]
+    dicelog_location: PanelLocation,
+    #[serde(default = "default_false")]
+    dicelog_visible: bool,
     #[serde(default)]
     left_active: Option<PanelItem>,
     #[serde(default)]
@@ -104,6 +137,10 @@ impl Default for UiStateFile {
             derived_visible: true,
             validation_location: default_validation_location(),
             validation_visible: true,
+            actions_location: default_actions_location(),
+            actions_visible: true,
+            dicelog_location: default_dicelog_location(),
+            dicelog_visible: false,
             left_active: None,
             right_active: None,
             bottom_active: None,
@@ -117,6 +154,10 @@ pub struct UiState {
     pub derived_visible: bool,
     pub validation_location: PanelLocation,
     pub validation_visible: bool,
+    pub actions_location: PanelLocation,
+    pub actions_visible: bool,
+    pub dicelog_location: PanelLocation,
+    pub dicelog_visible: bool,
     pub left_active: Option<PanelItem>,
     pub right_active: Option<PanelItem>,
     pub bottom_active: Option<PanelItem>,
@@ -163,6 +204,10 @@ impl UiState {
             derived_visible: file.derived_visible,
             validation_location: file.validation_location,
             validation_visible: file.validation_visible,
+            actions_location: file.actions_location,
+            actions_visible: file.actions_visible,
+            dicelog_location: file.dicelog_location,
+            dicelog_visible: file.dicelog_visible,
             left_active: file.left_active,
             right_active: file.right_active,
             bottom_active: file.bottom_active,
@@ -173,6 +218,8 @@ impl UiState {
         match item {
             PanelItem::Derived => self.derived_location,
             PanelItem::Validation => self.validation_location,
+            PanelItem::Actions => self.actions_location,
+            PanelItem::DiceLog => self.dicelog_location,
         }
     }
 
@@ -180,6 +227,8 @@ impl UiState {
         match item {
             PanelItem::Derived => self.derived_visible,
             PanelItem::Validation => self.validation_visible,
+            PanelItem::Actions => self.actions_visible,
+            PanelItem::DiceLog => self.dicelog_visible,
         }
     }
 
@@ -187,6 +236,8 @@ impl UiState {
         match item {
             PanelItem::Derived => self.derived_visible = visible,
             PanelItem::Validation => self.validation_visible = visible,
+            PanelItem::Actions => self.actions_visible = visible,
+            PanelItem::DiceLog => self.dicelog_visible = visible,
         }
     }
 
@@ -194,6 +245,8 @@ impl UiState {
         match item {
             PanelItem::Derived => self.derived_location = location,
             PanelItem::Validation => self.validation_location = location,
+            PanelItem::Actions => self.actions_location = location,
+            PanelItem::DiceLog => self.dicelog_location = location,
         }
     }
 
@@ -213,12 +266,26 @@ impl UiState {
         }
     }
 
+    /// Make `item` visible and set it as the active tab in its current
+    /// location, then persist. Used by the Actions panel to surface the
+    /// Dice Log automatically when the user clicks a roll button.
+    pub fn focus_panel(&mut self, item: PanelItem) {
+        let loc = self.location_of(item);
+        self.set_visible(item, true);
+        self.set_active(loc, Some(item));
+        self.save();
+    }
+
     pub fn save(&self) {
         let file = UiStateFile {
             derived_location: self.derived_location,
             derived_visible: self.derived_visible,
             validation_location: self.validation_location,
             validation_visible: self.validation_visible,
+            actions_location: self.actions_location,
+            actions_visible: self.actions_visible,
+            dicelog_location: self.dicelog_location,
+            dicelog_visible: self.dicelog_visible,
             left_active: self.left_active,
             right_active: self.right_active,
             bottom_active: self.bottom_active,

@@ -54,14 +54,15 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         } else {
             virtue_name(*v).to_string()
         };
-        let opts = RatedTraitOpts {
+        let mut opts = RatedTraitOpts {
             label: &label,
             max_dots: 5,
             allowed_sources: VIRTUE_SOURCES,
             default_add_source: default_source,
             show_specialties: false,
+            selectable: None,
         };
-        if rated_trait_editor(ui, ("virtue", *v as usize), entry, &opts) {
+        if rated_trait_editor(ui, ("virtue", *v as usize), entry, &mut opts) {
             any_changed = true;
         }
     }

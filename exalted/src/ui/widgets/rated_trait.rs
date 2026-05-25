@@ -24,6 +24,18 @@ pub struct RatedTraitOpts<'a> {
     /// Show the specialties sub-editor below the trait. Attributes don't
     /// have specialties; Abilities do.
     pub show_specialties: bool,
+    /// When `Some`, the label becomes a clickable, bold-when-selected
+    /// widget. The widget toggles `clicked` to true if the user clicked the
+    /// label this frame; the caller is responsible for translating that into
+    /// a change to its own selection state.
+    pub selectable: Option<Selectable<'a>>,
+}
+
+/// Click-to-select handle passed in via `RatedTraitOpts`. The widget reads
+/// `is_selected` to render the label bold; on click, it sets `*clicked = true`.
+pub struct Selectable<'a> {
+    pub is_selected: bool,
+    pub clicked: &'a mut bool,
 }
 
 /// Render the trait editor. Returns true if the user changed anything.
@@ -31,7 +43,7 @@ pub fn rated_trait_editor(
     ui: &mut egui::Ui,
     id_source: impl std::hash::Hash + Copy,
     trait_: &mut RatedTrait,
-    opts: &RatedTraitOpts,
+    opts: &mut RatedTraitOpts,
 ) -> bool {
     rated_trait_editor_with_prefix(ui, id_source, trait_, opts, |_| false)
 }
@@ -43,7 +55,7 @@ pub fn rated_trait_editor_with_prefix(
     ui: &mut egui::Ui,
     id_source: impl std::hash::Hash + Copy,
     trait_: &mut RatedTrait,
-    opts: &RatedTraitOpts,
+    opts: &mut RatedTraitOpts,
     prefix: impl FnOnce(&mut egui::Ui) -> bool,
 ) -> bool {
     let mut changed = false;
@@ -53,7 +65,24 @@ pub fn rated_trait_editor_with_prefix(
         if prefix(ui) {
             changed = true;
         }
-        ui.add_sized([140.0, 0.0], egui::Label::new(opts.label));
+        match opts.selectable.as_mut() {
+            None => {
+                ui.add_sized([140.0, 0.0], egui::Label::new(opts.label));
+            }
+            Some(sel) => {
+                let mut text = egui::RichText::new(opts.label);
+                if sel.is_selected {
+                    text = text.strong();
+                }
+                let resp = ui.add_sized(
+                    [140.0, 0.0],
+                    egui::Label::new(text).sense(egui::Sense::click()),
+                );
+                if resp.clicked() {
+                    *sel.clicked = true;
+                }
+            }
+        }
 
         // Clickable dot row replaces the old "n / max" label + ± buttons.
         if let Some(target) = DotsGrid::new(trait_.dots(), opts.max_dots)

@@ -9,6 +9,7 @@ pub mod equipment;
 pub mod essence;
 pub mod health;
 pub mod languages;
+pub mod roll;
 pub mod xp_costs;
 
 pub use anima::{AnimaPower, AnimaPowerKind, powers_for, universal_powers};
@@ -40,6 +41,7 @@ pub use health::{
     wound_penalty,
 };
 pub use languages::validate_languages;
+pub use roll::{RollResult, reroll_failures, roll_pool, roll_pool_with};
 pub use xp_costs::{
     NON_SOLAR_CHARM_XP_COST, xp_cost_ability_increase, xp_cost_attribute_increase, xp_cost_charm,
     xp_cost_combo, xp_cost_essence_increase, xp_cost_new_ability, xp_cost_specialty, xp_cost_spell,
