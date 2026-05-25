@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 
 use lopdf::Document;
 
-use crate::character::{AbilityKind, Character, VirtueKind};
+use crate::character::{AbilityKind, Character, MotePool, VirtueKind};
 use crate::rules::health::{HealthLevelKind, health_track};
 
 use super::PdfRenderError;
@@ -222,20 +222,26 @@ fn fill_essence_pools(
     index: &FieldIndex,
     c: &Character,
 ) -> Result<(), PdfRenderError> {
-    let personal_spent =
-        (c.pool_state.personal_motes_spent as usize).min(field_map::PERSONAL_ESSENCE_BOXES);
+    // Both transient spends and persistent commitments occupy pool slots — the
+    // sheet's single on-state can't distinguish them, so we tick the union.
+    // The MOTE COMMITMENTS table on the same page is what tracks which boxes
+    // are recoverable vs locked.
+    let personal_filled = ((c.pool_state.personal_motes_spent as usize)
+        + (c.pool_state.committed(MotePool::Personal) as usize))
+        .min(field_map::PERSONAL_ESSENCE_BOXES);
     for i in 0..field_map::PERSONAL_ESSENCE_BOXES {
         let f = field_map::personal_essence_field(i);
         if index.has(&f) {
-            set_checkbox(doc, index, &f, i < personal_spent)?;
+            set_checkbox(doc, index, &f, i < personal_filled)?;
         }
     }
-    let peripheral_spent =
-        (c.pool_state.peripheral_motes_spent as usize).min(field_map::PERIPHERAL_ESSENCE_BOXES);
+    let peripheral_filled = ((c.pool_state.peripheral_motes_spent as usize)
+        + (c.pool_state.committed(MotePool::Peripheral) as usize))
+        .min(field_map::PERIPHERAL_ESSENCE_BOXES);
     for i in 0..field_map::PERIPHERAL_ESSENCE_BOXES {
         let f = field_map::peripheral_essence_field(i);
         if index.has(&f) {
-            set_checkbox(doc, index, &f, i < peripheral_spent)?;
+            set_checkbox(doc, index, &f, i < peripheral_filled)?;
         }
     }
     Ok(())
