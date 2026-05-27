@@ -3,6 +3,7 @@
 
 use crate::character::{AttributeGroup, AttributeKind, DotSource, RatedTrait};
 use crate::render::names::{attr_name, group_name};
+use crate::ui::search::{self, MatchTarget, SectionId};
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::DotSourceKind;
 use crate::ui::widgets::rated_trait::{RatedTraitOpts, Selectable, rated_trait_editor};
@@ -15,7 +16,15 @@ const ATTRIBUTE_SOURCES: &[DotSourceKind] = &[
 ];
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
-    ui.heading("Attributes");
+    let heading_hl = state
+        .search
+        .highlight_for(MatchTarget::SectionHeading(SectionId::Attributes));
+    search::highlight_heading(
+        ui,
+        SectionId::Attributes.label(),
+        heading_hl,
+        state.search.scroll_pending,
+    );
 
     attribute_priority_editor(ui, state);
     ui.add_space(8.0);
@@ -36,7 +45,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             for group in AttributeGroup::ALL {
                 let pri_dots = state.character.attribute_priority.dots_for(*group);
                 ui.vertical(|ui| {
-                    ui.label(egui::RichText::new(group_name(*group)).strong().underline());
+                    render_group_header(ui, state, *group);
                     ui.small(format!("chargen pool: {} dots", pri_dots));
                 });
             }
@@ -60,6 +69,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                                 is_selected: selected_attr == Some(*attr),
                                 clicked: &mut clicked,
                             }),
+                            search: Some(&state.search),
+                            label_target: Some(MatchTarget::AttributeLabel(*attr)),
+                            specialty_ability: None,
                         };
                         if rated_trait_editor(ui, ("attr", *attr as usize), entry, &mut opts) {
                             any_changed = true;
@@ -77,6 +89,29 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     }
     if any_changed {
         state.mark_dirty_with("attributes.dots");
+    }
+}
+
+fn render_group_header(ui: &mut egui::Ui, state: &AppState, group: AttributeGroup) {
+    let hl = state
+        .search
+        .highlight_for(MatchTarget::AttributeGroupHeading(group));
+    let text = egui::RichText::new(group_name(group)).strong().underline();
+    match hl {
+        None => {
+            ui.label(text);
+        }
+        Some(k) => {
+            let resp = egui::Frame::default()
+                .fill(search::highlight_fill(k))
+                .inner_margin(egui::Margin::symmetric(3, 0))
+                .corner_radius(2)
+                .show(ui, |ui| ui.label(text.color(egui::Color32::BLACK)))
+                .inner;
+            if k == search::HighlightKind::Focused && state.search.scroll_pending {
+                resp.scroll_to_me(Some(egui::Align::Center));
+            }
+        }
     }
 }
 

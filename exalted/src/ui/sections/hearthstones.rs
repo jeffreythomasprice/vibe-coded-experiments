@@ -1,12 +1,21 @@
 //! Hearthstones section: Vec<Hearthstone> editor.
 
 use crate::character::Hearthstone;
+use crate::ui::search::{self, HsField, MatchTarget, SectionId, TextAreaOpts, TextEditOpts};
 use crate::ui::state::AppState;
 use crate::ui::widgets::icon_button::trash_button;
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     let count = state.character.hearthstones.len();
-    ui.heading(format!("Hearthstones ({})", count));
+    let heading_hl = state
+        .search
+        .highlight_for(MatchTarget::SectionHeading(SectionId::Hearthstones));
+    search::highlight_heading(
+        ui,
+        &format!("{} ({})", SectionId::Hearthstones.label(), count),
+        heading_hl,
+        state.search.scroll_pending,
+    );
 
     if ui.button("+ Add hearthstone").clicked() {
         state.character.hearthstones.push(Hearthstone {
@@ -21,16 +30,37 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     let mut any = false;
     let mut delete_idx: Option<usize> = None;
     for (i, hs) in state.character.hearthstones.iter_mut().enumerate() {
-        egui::CollapsingHeader::new(if hs.name.is_empty() {
+        let force_open = state.search.focused_within(|t| match t {
+            MatchTarget::Hearthstone { idx, .. } => *idx == i,
+            _ => false,
+        });
+        let mut header_widget = egui::CollapsingHeader::new(if hs.name.is_empty() {
             format!("(unnamed hearthstone #{})", i + 1)
         } else {
             format!("{} ({}★)", hs.name, hs.level)
         })
-        .id_salt(("hs", i))
-        .show(ui, |ui| {
+        .id_salt(("hs", i));
+        if force_open {
+            header_widget = header_widget.open(Some(true));
+        }
+        header_widget.show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label("Name");
-                let resp = ui.add(egui::TextEdit::singleline(&mut hs.name).desired_width(240.0));
+                let hl = state.search.highlight_for(MatchTarget::Hearthstone {
+                    idx: i,
+                    field: HsField::Name,
+                });
+                let resp = search::highlighted_singleline(
+                    ui,
+                    &mut hs.name,
+                    &state.search.query,
+                    hl,
+                    TextEditOpts {
+                        desired_width: 240.0,
+                        hint: None,
+                    },
+                    state.search.scroll_pending,
+                );
                 if resp.changed() {
                     any = true;
                 }
@@ -40,7 +70,21 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                     any = true;
                 }
                 ui.label("Aspect");
-                let resp = ui.add(egui::TextEdit::singleline(&mut hs.aspect).desired_width(140.0));
+                let hl = state.search.highlight_for(MatchTarget::Hearthstone {
+                    idx: i,
+                    field: HsField::Aspect,
+                });
+                let resp = search::highlighted_singleline(
+                    ui,
+                    &mut hs.aspect,
+                    &state.search.query,
+                    hl,
+                    TextEditOpts {
+                        desired_width: 140.0,
+                        hint: None,
+                    },
+                    state.search.scroll_pending,
+                );
                 if resp.changed() {
                     any = true;
                 }
@@ -49,10 +93,21 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                 }
             });
             ui.label("Description");
-            let resp = ui.add(
-                egui::TextEdit::multiline(&mut hs.description)
-                    .desired_width(f32::INFINITY)
-                    .desired_rows(2),
+            let hl = state.search.highlight_for(MatchTarget::Hearthstone {
+                idx: i,
+                field: HsField::Description,
+            });
+            let resp = search::highlighted_multiline(
+                ui,
+                &mut hs.description,
+                &state.search.query,
+                hl,
+                TextAreaOpts {
+                    desired_width: f32::INFINITY,
+                    desired_rows: 2,
+                    hint: None,
+                },
+                state.search.scroll_pending,
             );
             if resp.changed() {
                 any = true;

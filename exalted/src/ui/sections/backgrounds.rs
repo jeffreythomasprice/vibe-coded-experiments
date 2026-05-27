@@ -6,6 +6,7 @@
 use crate::character::{BackgroundRef, DotSource};
 use crate::rules::database::{BackgroundEntry, database};
 use crate::ui::pickers::background_picker::BackgroundPickerState;
+use crate::ui::search::{self, BgField, MatchTarget, NoteParent, SectionId, TextEditOpts};
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::DotSourceKind;
 use crate::ui::widgets::icon_button::trash_button_with_label;
@@ -20,7 +21,15 @@ const BG_TRAIT_SOURCES: &[DotSourceKind] = &[
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     let count = state.character.backgrounds.len();
-    ui.heading(format!("Backgrounds ({})", count));
+    let heading_hl = state
+        .search
+        .highlight_for(MatchTarget::SectionHeading(SectionId::Backgrounds));
+    search::highlight_heading(
+        ui,
+        &format!("{} ({})", SectionId::Backgrounds.label(), count),
+        heading_hl,
+        state.search.scroll_pending,
+    );
 
     if ui.button("+ Add background…").clicked() {
         tracing::debug!(picker = "background", "opened picker");
@@ -48,77 +57,111 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             BackgroundRef::Custom { entry, .. } => Some(entry.clone()),
             _ => None,
         };
-        egui::CollapsingHeader::new(header)
+        let force_open = state.search.focused_within(|t| match t {
+            MatchTarget::Background { idx, .. } => *idx == i,
+            MatchTarget::Note {
+                parent: NoteParent::Background(p),
+                ..
+            } => *p == i,
+            _ => false,
+        });
+        let mut header_widget = egui::CollapsingHeader::new(header)
             .id_salt(("bg", i))
-            .default_open(false)
-            .show(ui, |ui| {
-                let (label, trait_, notes) = match bg {
-                    BackgroundRef::Lookup {
-                        label,
-                        trait_,
-                        notes,
-                        ..
-                    } => (label, trait_, notes),
-                    BackgroundRef::Custom {
-                        label,
-                        trait_,
-                        notes,
-                        ..
-                    } => (label, trait_, notes),
-                };
-                {
-                    ui.horizontal(|ui| {
-                        ui.label("Label");
-                        let resp = ui.add(
-                            egui::TextEdit::singleline(label)
-                                .desired_width(220.0)
-                                .hint_text("e.g. \"Realm\" or specific artifact name"),
-                        );
-                        if resp.changed() {
-                            any_changed = true;
-                        }
-                        if trash_button_with_label(ui, "remove").clicked() {
-                            delete_idx = Some(i);
-                        }
-                    });
-
-                    let mut opts = RatedTraitOpts {
-                        label: &name,
-                        max_dots: 5,
-                        allowed_sources: BG_TRAIT_SOURCES,
-                        default_add_source: default_source,
-                        show_specialties: false,
-                        selectable: None,
+            .default_open(false);
+        if force_open {
+            header_widget = header_widget.open(Some(true));
+        }
+        header_widget.show(ui, |ui| {
+            let (label, trait_, notes) = match bg {
+                BackgroundRef::Lookup {
+                    label,
+                    trait_,
+                    notes,
+                    ..
+                } => (label, trait_, notes),
+                BackgroundRef::Custom {
+                    label,
+                    trait_,
+                    notes,
+                    ..
+                } => (label, trait_, notes),
+            };
+            {
+                ui.horizontal(|ui| {
+                    ui.label("Label");
+                    let label_target = MatchTarget::Background {
+                        idx: i,
+                        field: BgField::Label,
                     };
-                    if rated_trait_editor(ui, ("bg-trait", i), trait_, &mut opts) {
+                    let highlight = state.search.highlight_for(label_target);
+                    let resp = search::highlighted_singleline(
+                        ui,
+                        label,
+                        &state.search.query,
+                        highlight,
+                        TextEditOpts {
+                            desired_width: 220.0,
+                            hint: Some("e.g. \"Realm\" or specific artifact name"),
+                        },
+                        state.search.scroll_pending,
+                    );
+                    if resp.changed() {
                         any_changed = true;
                     }
-
-                    ui.add_space(4.0);
-                    ui.label("Notes");
-                    if notes_editor(ui, ("bg-notes", i), notes) {
-                        any_changed = true;
+                    if trash_button_with_label(ui, "remove").clicked() {
+                        delete_idx = Some(i);
                     }
+                });
+
+                let mut opts = RatedTraitOpts {
+                    label: &name,
+                    max_dots: 5,
+                    allowed_sources: BG_TRAIT_SOURCES,
+                    default_add_source: default_source,
+                    show_specialties: false,
+                    selectable: None,
+                    search: Some(&state.search),
+                    label_target: Some(MatchTarget::Background {
+                        idx: i,
+                        field: BgField::CustomName,
+                    }),
+                    specialty_ability: None,
+                };
+                if rated_trait_editor(ui, ("bg-trait", i), trait_, &mut opts) {
+                    any_changed = true;
                 }
 
-                if let Some(entry) = &custom_snapshot {
-                    ui.add_space(6.0);
-                    ui.separator();
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("Custom background").strong());
-                        if ui.small_button("Edit details…").clicked() {
-                            start_edit = Some((i, entry.clone()));
-                        }
-                    });
-                    ui.small(format!("kind: {:?}", entry.kind));
-                    if !entry.source.is_empty() || !entry.pages.is_empty() {
-                        ui.small(format!("source: {}   pages: {}", entry.source, entry.pages));
-                    }
-                    if !entry.description.is_empty() {
-                        ui.small(&entry.description);
-                    }
+                ui.add_space(4.0);
+                ui.label("Notes");
+                if notes_editor(
+                    ui,
+                    ("bg-notes", i),
+                    notes,
+                    NoteParent::Background(i),
+                    &state.search,
+                ) {
+                    any_changed = true;
                 }
-            });
+            }
+
+            if let Some(entry) = &custom_snapshot {
+                ui.add_space(6.0);
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Custom background").strong());
+                    if ui.small_button("Edit details…").clicked() {
+                        start_edit = Some((i, entry.clone()));
+                    }
+                });
+                ui.small(format!("kind: {:?}", entry.kind));
+                if !entry.source.is_empty() || !entry.pages.is_empty() {
+                    ui.small(format!("source: {}   pages: {}", entry.source, entry.pages));
+                }
+                if !entry.description.is_empty() {
+                    ui.small(&entry.description);
+                }
+            }
+        });
     }
     if let Some(i) = delete_idx {
         state.character.backgrounds.remove(i);

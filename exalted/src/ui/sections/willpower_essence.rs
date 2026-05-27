@@ -1,6 +1,7 @@
 //! Willpower & Essence section.
 
 use crate::character::DotSource;
+use crate::ui::search::{self, MatchTarget, SectionId};
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::DotSourceKind;
 use crate::ui::widgets::rated_trait::{RatedTraitOpts, rated_trait_editor};
@@ -19,7 +20,15 @@ const ESSENCE_SOURCES: &[DotSourceKind] = &[
 ];
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
-    ui.heading("Willpower & Essence");
+    let heading_hl = state
+        .search
+        .highlight_for(MatchTarget::SectionHeading(SectionId::WillpowerEssence));
+    search::highlight_heading(
+        ui,
+        SectionId::WillpowerEssence.label(),
+        heading_hl,
+        state.search.scroll_pending,
+    );
     ui.small(
         "Willpower's base normally equals the sum of the two highest Virtues. \
          Essence caps at 5 during chargen.",
@@ -44,6 +53,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         default_add_source: wp_default,
         show_specialties: false,
         selectable: None,
+        search: Some(&state.search),
+        label_target: None,
+        specialty_ability: None,
     };
     let mut any = false;
     if rated_trait_editor(
@@ -62,6 +74,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         default_add_source: essence_default,
         show_specialties: false,
         selectable: None,
+        search: Some(&state.search),
+        label_target: None,
+        specialty_ability: None,
     };
     if rated_trait_editor(
         ui,

@@ -7,6 +7,7 @@ use crate::character::CharmRef;
 use crate::render::names::ability_name;
 use crate::rules::database::{CharmEntry, database};
 use crate::ui::pickers::charm_picker::CharmPickerState;
+use crate::ui::search::{self, MatchTarget, NoteParent, SectionId};
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::{DotSourceKind, dot_source_editor};
 use crate::ui::widgets::icon_button::trash_button_with_label;
@@ -20,7 +21,15 @@ const CHARM_SOURCES: &[DotSourceKind] = &[
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     let count = state.character.charms.len();
-    ui.heading(format!("Charms ({})", count));
+    let heading_hl = state
+        .search
+        .highlight_for(MatchTarget::SectionHeading(SectionId::Charms));
+    search::highlight_heading(
+        ui,
+        &format!("{} ({})", SectionId::Charms.label(), count),
+        heading_hl,
+        state.search.scroll_pending,
+    );
 
     ui.horizontal(|ui| {
         if ui.button("+ Add charm…").clicked() {
@@ -52,93 +61,110 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             CharmRef::Custom { entry, .. } => Some(entry.clone()),
             _ => None,
         };
-        egui::CollapsingHeader::new(header)
+        let force_open = state.search.focused_within(|t| match t {
+            MatchTarget::Charm { idx, .. } => *idx == i,
+            MatchTarget::Note {
+                parent: NoteParent::Charm(p),
+                ..
+            } => *p == i,
+            _ => false,
+        });
+        let mut header_widget = egui::CollapsingHeader::new(header)
             .id_salt(("charm", i))
-            .default_open(false)
-            .show(ui, |ui| {
-                let (source, non_solar, notes) = match charm {
-                    CharmRef::Lookup {
-                        source,
-                        non_solar,
-                        notes,
-                        ..
-                    } => (source, non_solar, notes),
-                    CharmRef::Custom {
-                        source,
-                        non_solar,
-                        notes,
-                        ..
-                    } => (source, non_solar, notes),
-                };
+            .default_open(false);
+        if force_open {
+            header_widget = header_widget.open(Some(true));
+        }
+        header_widget.show(ui, |ui| {
+            let (source, non_solar, notes) = match charm {
+                CharmRef::Lookup {
+                    source,
+                    non_solar,
+                    notes,
+                    ..
+                } => (source, non_solar, notes),
+                CharmRef::Custom {
+                    source,
+                    non_solar,
+                    notes,
+                    ..
+                } => (source, non_solar, notes),
+            };
 
-                ui.horizontal(|ui| {
-                    ui.label("source");
-                    if dot_source_editor(ui, ("charm-src", i), source, CHARM_SOURCES) {
-                        any_changed = true;
-                    }
-                    if ui.checkbox(non_solar, "non-Solar").changed() {
-                        any_changed = true;
-                    }
-                    if trash_button_with_label(ui, "remove").clicked() {
-                        delete_idx = Some(i);
-                    }
-                });
-                match &entry_effect {
-                    Some((effect, mins)) => {
-                        if !effect.is_empty() {
-                            ui.small(effect);
-                        }
-                        ui.small(mins);
-                    }
-                    None => {
-                        ui.small(format!("id {} not in rules database", id_str));
-                    }
-                }
-                ui.add_space(4.0);
-                ui.label("Notes");
-                if notes_editor(ui, ("charm-notes", i), notes) {
+            ui.horizontal(|ui| {
+                ui.label("source");
+                if dot_source_editor(ui, ("charm-src", i), source, CHARM_SOURCES) {
                     any_changed = true;
                 }
-
-                if let Some(entry) = &custom_snapshot {
-                    ui.add_space(6.0);
-                    ui.separator();
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("Custom charm").strong());
-                        if ui.small_button("Edit details…").clicked() {
-                            start_edit = Some((i, entry.clone()));
-                        }
-                    });
-                    ui.small(format!(
-                        "type: {}   keywords: {}",
-                        entry.charm_type.display(),
-                        if entry.keywords.is_empty() {
-                            "—".to_string()
-                        } else {
-                            entry.keywords.join(", ")
-                        }
-                    ));
-                    ui.small(format!(
-                        "duration: {}   prereq: {}",
-                        if entry.duration.is_empty() {
-                            "—"
-                        } else {
-                            entry.duration.as_str()
-                        },
-                        if entry.prerequisites.is_empty() {
-                            "—".to_string()
-                        } else {
-                            entry.prerequisites.join(", ")
-                        }
-                    ));
-                    if !entry.source.is_empty() || !entry.pages.is_empty() {
-                        ui.small(format!("source: {}   pages: {}", entry.source, entry.pages));
-                    }
-                    if !entry.description.is_empty() {
-                        ui.small(&entry.description);
-                    }
+                if ui.checkbox(non_solar, "non-Solar").changed() {
+                    any_changed = true;
+                }
+                if trash_button_with_label(ui, "remove").clicked() {
+                    delete_idx = Some(i);
                 }
             });
+            match &entry_effect {
+                Some((effect, mins)) => {
+                    if !effect.is_empty() {
+                        ui.small(effect);
+                    }
+                    ui.small(mins);
+                }
+                None => {
+                    ui.small(format!("id {} not in rules database", id_str));
+                }
+            }
+            ui.add_space(4.0);
+            ui.label("Notes");
+            if notes_editor(
+                ui,
+                ("charm-notes", i),
+                notes,
+                NoteParent::Charm(i),
+                &state.search,
+            ) {
+                any_changed = true;
+            }
+
+            if let Some(entry) = &custom_snapshot {
+                ui.add_space(6.0);
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Custom charm").strong());
+                    if ui.small_button("Edit details…").clicked() {
+                        start_edit = Some((i, entry.clone()));
+                    }
+                });
+                ui.small(format!(
+                    "type: {}   keywords: {}",
+                    entry.charm_type.display(),
+                    if entry.keywords.is_empty() {
+                        "—".to_string()
+                    } else {
+                        entry.keywords.join(", ")
+                    }
+                ));
+                ui.small(format!(
+                    "duration: {}   prereq: {}",
+                    if entry.duration.is_empty() {
+                        "—"
+                    } else {
+                        entry.duration.as_str()
+                    },
+                    if entry.prerequisites.is_empty() {
+                        "—".to_string()
+                    } else {
+                        entry.prerequisites.join(", ")
+                    }
+                ));
+                if !entry.source.is_empty() || !entry.pages.is_empty() {
+                    ui.small(format!("source: {}   pages: {}", entry.source, entry.pages));
+                }
+                if !entry.description.is_empty() {
+                    ui.small(&entry.description);
+                }
+            }
+        });
     }
     if let Some(i) = delete_idx {
         state.character.charms.remove(i);

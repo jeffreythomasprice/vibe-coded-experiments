@@ -9,6 +9,7 @@ use crate::ui::io::{load_character_from_path, save_character_to_path};
 use crate::ui::menu::{self, MenuAction};
 use crate::ui::persisted::{PanelLocation, UiState};
 use crate::ui::pickers::{PickerOutcome, background_picker, charm_picker, spell_picker};
+use crate::ui::search::{self, SearchBarOutcome};
 use crate::ui::sections;
 use crate::ui::sidebar;
 use crate::ui::state::{AppState, PendingAction, StartupAction, StatusKind, blank_character};
@@ -93,6 +94,9 @@ impl App {
                 } else {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
+            }
+            MenuAction::Find => {
+                self.state.search.open();
             }
             MenuAction::ToggleSidebar => {
                 self.state.ui_state.derived_visible = !self.state.ui_state.derived_visible;
@@ -363,6 +367,20 @@ impl eframe::App for App {
             self.state.status_message = None;
         }
 
+        // Search: handle close shortcut and (re)compute matches before
+        // sections render so highlight queries this frame are accurate.
+        // Enter / Shift+Enter nav is handled inside the search bar itself
+        // so it only fires while the search input has focus.
+        if self.state.search.visible {
+            ctx.input_mut(|i| {
+                use egui::{Key, Modifiers};
+                if i.consume_key(Modifiers::NONE, Key::Escape) {
+                    self.state.search.close();
+                }
+            });
+            self.state.search.recompute(&self.state.character);
+        }
+
         // Dockable panels. Left & right are rendered before the bottom so
         // the bottom panel spans the full window width.
         sidebar::panel::render_location(ui, PanelLocation::Left, &mut self.state);
@@ -376,6 +394,23 @@ impl eframe::App for App {
                     sections::render_all(ui, &mut self.state);
                 });
         });
+
+        // Search bar floats on top of everything below the menu/status bars.
+        let outcome: SearchBarOutcome = search::render_search_bar(&ctx, &mut self.state.search);
+        if outcome.close {
+            self.state.search.close();
+        } else {
+            if outcome.next {
+                self.state.search.next();
+            }
+            if outcome.prev {
+                self.state.search.prev();
+            }
+        }
+
+        // One-shot: scroll requests from this frame have been consumed by the
+        // widgets that called scroll_to_me.
+        self.state.search.scroll_pending = false;
 
         self.drive_pickers(&ctx);
         self.drive_edit_modals(&ctx);

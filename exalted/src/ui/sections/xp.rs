@@ -4,11 +4,20 @@
 use chrono::Utc;
 
 use crate::character::XpAward;
+use crate::ui::search::{self, MatchTarget, SectionId, TextEditOpts};
 use crate::ui::state::AppState;
 use crate::ui::widgets::icon_button::trash_button;
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
-    ui.heading("Experience");
+    let heading_hl = state
+        .search
+        .highlight_for(MatchTarget::SectionHeading(SectionId::Xp));
+    search::highlight_heading(
+        ui,
+        SectionId::Xp.label(),
+        heading_hl,
+        state.search.scroll_pending,
+    );
 
     let mut any = false;
 
@@ -71,10 +80,17 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             }
             ui.small(award.created_at.format("%Y-%m-%d").to_string());
             let prev_body = award.body.clone();
-            let resp = ui.add(
-                egui::TextEdit::singleline(&mut award.body)
-                    .desired_width(f32::INFINITY)
-                    .hint_text("session / award note"),
+            let hl = state.search.highlight_for(MatchTarget::XpAward(i));
+            let resp = search::highlighted_singleline(
+                ui,
+                &mut award.body,
+                &state.search.query,
+                hl,
+                TextEditOpts {
+                    desired_width: f32::INFINITY,
+                    hint: Some("session / award note"),
+                },
+                state.search.scroll_pending,
             );
             if resp.changed() && award.body != prev_body {
                 award.updated_at = Utc::now();

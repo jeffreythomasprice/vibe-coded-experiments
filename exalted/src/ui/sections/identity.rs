@@ -2,9 +2,10 @@
 //! Appearance, Virtue Flaw.
 
 use crate::character::{Caste, VirtueFlaw, VirtueKind};
+use crate::ui::search::{self, IdentityField, MatchTarget, SectionId, TextEditOpts};
 use crate::ui::state::AppState;
 use crate::ui::widgets::enum_combo::enum_combo;
-use crate::ui::widgets::labeled::{labeled_text_area, labeled_text_edit};
+use crate::ui::widgets::labeled::{labeled_text_area_search, labeled_text_edit_search};
 
 const CASTES: &[(Caste, &str)] = &[
     (Caste::Dawn, "Dawn"),
@@ -15,24 +16,68 @@ const CASTES: &[(Caste, &str)] = &[
 ];
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
-    ui.heading("Identity");
+    let heading_hl = state
+        .search
+        .highlight_for(MatchTarget::SectionHeading(SectionId::Identity));
+    search::highlight_heading(
+        ui,
+        SectionId::Identity.label(),
+        heading_hl,
+        state.search.scroll_pending,
+    );
 
-    if labeled_text_edit(ui, "Name", &mut state.character.identity.name) {
+    if labeled_text_edit_search(
+        ui,
+        "Name",
+        &mut state.character.identity.name,
+        MatchTarget::Identity(IdentityField::Name),
+        &state.search,
+    ) {
         state.mark_dirty_with("identity.name");
     }
-    if labeled_text_edit(ui, "Player", &mut state.character.identity.player) {
+    if labeled_text_edit_search(
+        ui,
+        "Player",
+        &mut state.character.identity.player,
+        MatchTarget::Identity(IdentityField::Player),
+        &state.search,
+    ) {
         state.mark_dirty_with("identity.player");
     }
-    if labeled_text_edit(ui, "Chronicle", &mut state.character.identity.chronicle) {
+    if labeled_text_edit_search(
+        ui,
+        "Chronicle",
+        &mut state.character.identity.chronicle,
+        MatchTarget::Identity(IdentityField::Chronicle),
+        &state.search,
+    ) {
         state.mark_dirty_with("identity.chronicle");
     }
-    if labeled_text_edit(ui, "Concept", &mut state.character.identity.concept) {
+    if labeled_text_edit_search(
+        ui,
+        "Concept",
+        &mut state.character.identity.concept,
+        MatchTarget::Identity(IdentityField::Concept),
+        &state.search,
+    ) {
         state.mark_dirty_with("identity.concept");
     }
-    if labeled_text_edit(ui, "Motivation", &mut state.character.identity.motivation) {
+    if labeled_text_edit_search(
+        ui,
+        "Motivation",
+        &mut state.character.identity.motivation,
+        MatchTarget::Identity(IdentityField::Motivation),
+        &state.search,
+    ) {
         state.mark_dirty_with("identity.motivation");
     }
-    if labeled_text_edit(ui, "Personality", &mut state.character.identity.personality) {
+    if labeled_text_edit_search(
+        ui,
+        "Personality",
+        &mut state.character.identity.personality,
+        MatchTarget::Identity(IdentityField::Personality),
+        &state.search,
+    ) {
         state.mark_dirty_with("identity.personality");
     }
 
@@ -47,7 +92,13 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     });
 
     // Anima totem.
-    if labeled_text_edit(ui, "Anima totem", &mut state.character.identity.anima.totem) {
+    if labeled_text_edit_search(
+        ui,
+        "Anima totem",
+        &mut state.character.identity.anima.totem,
+        MatchTarget::Identity(IdentityField::AnimaTotem),
+        &state.search,
+    ) {
         state.mark_dirty_with("identity.anima_totem");
     }
 
@@ -129,7 +180,20 @@ fn virtue_flaw_editor(ui: &mut egui::Ui, state: &mut AppState) {
     if let Some(VirtueFlaw::Custom { name, virtue }) = &mut state.character.virtue_flaw {
         ui.horizontal(|ui| {
             ui.label("Name");
-            let resp = ui.add(egui::TextEdit::singleline(name).desired_width(240.0));
+            let hl = state
+                .search
+                .highlight_for(MatchTarget::Identity(IdentityField::VirtueFlawName));
+            let resp = search::highlighted_singleline(
+                ui,
+                name,
+                &state.search.query,
+                hl,
+                TextEditOpts {
+                    desired_width: 240.0,
+                    hint: None,
+                },
+                state.search.scroll_pending,
+            );
             if resp.changed() {
                 tracing::trace!(
                     field = "identity.virtue_flaw.name",
@@ -174,9 +238,16 @@ fn appearance_editor(ui: &mut egui::Ui, state: &mut AppState) {
     egui::CollapsingHeader::new("Appearance")
         .default_open(false)
         .show(ui, |ui| {
+            let search = &state.search;
             let app = &mut state.character.identity.appearance;
             let mut any = false;
-            any |= labeled_text_edit(ui, "Sex", &mut app.sex);
+            any |= labeled_text_edit_search(
+                ui,
+                "Sex",
+                &mut app.sex,
+                MatchTarget::Identity(IdentityField::AppearanceSex),
+                search,
+            );
             ui.horizontal(|ui| {
                 ui.add_sized([120.0, 0.0], egui::Label::new("Age"));
                 let mut has_age = app.age.is_some();
@@ -195,15 +266,41 @@ fn appearance_editor(ui: &mut egui::Ui, state: &mut AppState) {
                     }
                 }
             });
-            any |= labeled_text_edit(ui, "Hair", &mut app.hair);
-            any |= labeled_text_edit(ui, "Eyes", &mut app.eyes);
-            any |= labeled_text_edit(ui, "Skin", &mut app.skin);
-            any |= labeled_text_edit(ui, "Homeland", &mut app.homeland);
-            any |= labeled_text_area(
+            any |= labeled_text_edit_search(
+                ui,
+                "Hair",
+                &mut app.hair,
+                MatchTarget::Identity(IdentityField::AppearanceHair),
+                search,
+            );
+            any |= labeled_text_edit_search(
+                ui,
+                "Eyes",
+                &mut app.eyes,
+                MatchTarget::Identity(IdentityField::AppearanceEyes),
+                search,
+            );
+            any |= labeled_text_edit_search(
+                ui,
+                "Skin",
+                &mut app.skin,
+                MatchTarget::Identity(IdentityField::AppearanceSkin),
+                search,
+            );
+            any |= labeled_text_edit_search(
+                ui,
+                "Homeland",
+                &mut app.homeland,
+                MatchTarget::Identity(IdentityField::AppearanceHomeland),
+                search,
+            );
+            any |= labeled_text_area_search(
                 ui,
                 "Distinguishing features",
                 &mut app.distinguishing_features,
                 2,
+                MatchTarget::Identity(IdentityField::AppearanceFeatures),
+                search,
             );
             if any {
                 state.mark_dirty_with("identity.appearance");

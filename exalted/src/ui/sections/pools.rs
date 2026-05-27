@@ -3,11 +3,20 @@
 
 use crate::character::{MoteCommitment, MotePool, VirtueKind};
 use crate::render::names::virtue_name;
+use crate::ui::search::{self, MatchTarget, SectionId};
 use crate::ui::state::AppState;
 use crate::ui::widgets::icon_button::trash_button;
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
-    ui.heading("Pools & In-Play State");
+    let heading_hl = state
+        .search
+        .highlight_for(MatchTarget::SectionHeading(SectionId::Pools));
+    search::highlight_heading(
+        ui,
+        SectionId::Pools.label(),
+        heading_hl,
+        state.search.scroll_pending,
+    );
 
     let mut any = false;
 

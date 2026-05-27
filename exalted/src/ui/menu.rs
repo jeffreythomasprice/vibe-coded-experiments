@@ -11,6 +11,7 @@ pub enum MenuAction {
     SaveAs,
     ExportPdf,
     Quit,
+    Find,
     ToggleSidebar,
     ToggleValidationPanel,
     ToggleActionsPanel,
@@ -47,6 +48,12 @@ pub fn render(ui: &mut egui::Ui, current_theme: ThemePreference) -> Option<MenuA
             ui.separator();
             if ui.button("Quit").clicked() {
                 action = Some(MenuAction::Quit);
+                ui.close();
+            }
+        });
+        ui.menu_button("Edit", |ui| {
+            if ui.button("Find…").clicked() {
+                action = Some(MenuAction::Find);
                 ui.close();
             }
         });
@@ -102,6 +109,8 @@ pub fn shortcut_action(ctx: &egui::Context) -> Option<MenuAction> {
             hit = Some(MenuAction::ExportPdf);
         } else if i.consume_key(Modifiers::COMMAND, Key::Q) {
             hit = Some(MenuAction::Quit);
+        } else if i.consume_key(Modifiers::COMMAND, Key::F) {
+            hit = Some(MenuAction::Find);
         }
     });
     hit

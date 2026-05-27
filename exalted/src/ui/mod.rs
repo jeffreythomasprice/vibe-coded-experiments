@@ -10,6 +10,7 @@ pub mod io;
 mod menu;
 mod persisted;
 mod pickers;
+mod search;
 mod sections;
 mod sidebar;
 mod state;

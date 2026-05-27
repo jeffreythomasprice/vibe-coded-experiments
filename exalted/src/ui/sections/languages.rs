@@ -3,12 +3,21 @@
 //! `native`.
 
 use crate::character::{KnownLanguage, LanguageFamily};
+use crate::ui::search::{self, MatchTarget, SectionId, TextEditOpts};
 use crate::ui::state::AppState;
 use crate::ui::widgets::icon_button::trash_button;
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     let count = state.character.languages.len();
-    ui.heading(format!("Languages ({})", count));
+    let heading_hl = state
+        .search
+        .highlight_for(MatchTarget::SectionHeading(SectionId::Languages));
+    search::highlight_heading(
+        ui,
+        &format!("{} ({})", SectionId::Languages.label(), count),
+        heading_hl,
+        state.search.scroll_pending,
+    );
     ui.small(
         "One must be native; 1 + Linguistics non-tribal others; up to 4 × \
          Linguistics tribal tongues. Validation in the bottom panel.",
@@ -41,10 +50,17 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             match &mut lang.family {
                 LanguageFamily::TribalTongue(name) => {
                     ui.label("Tribal");
-                    let resp = ui.add(
-                        egui::TextEdit::singleline(name)
-                            .desired_width(160.0)
-                            .hint_text("tribe name"),
+                    let hl = state.search.highlight_for(MatchTarget::LanguageTribal(i));
+                    let resp = search::highlighted_singleline(
+                        ui,
+                        name,
+                        &state.search.query,
+                        hl,
+                        TextEditOpts {
+                            desired_width: 160.0,
+                            hint: Some("tribe name"),
+                        },
+                        state.search.scroll_pending,
                     );
                     if resp.changed() {
                         any_changed = true;
@@ -67,10 +83,17 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
 
             // Dialect specialty (optional; empty / whitespace is omitted on save).
             let mut dialect = lang.dialect_specialty.clone().unwrap_or_default();
-            let resp = ui.add(
-                egui::TextEdit::singleline(&mut dialect)
-                    .desired_width(140.0)
-                    .hint_text("dialect (optional)"),
+            let hl = state.search.highlight_for(MatchTarget::LanguageDialect(i));
+            let resp = search::highlighted_singleline(
+                ui,
+                &mut dialect,
+                &state.search.query,
+                hl,
+                TextEditOpts {
+                    desired_width: 140.0,
+                    hint: Some("dialect (optional)"),
+                },
+                state.search.scroll_pending,
             );
             if resp.changed() {
                 lang.dialect_specialty = if dialect.is_empty() {

@@ -2,6 +2,7 @@
 
 use crate::character::{DotSource, RatedTrait, VirtueKind};
 use crate::render::names::virtue_name;
+use crate::ui::search::{self, MatchTarget, SectionId};
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::DotSourceKind;
 use crate::ui::widgets::rated_trait::{RatedTraitOpts, rated_trait_editor};
@@ -14,7 +15,15 @@ const VIRTUE_SOURCES: &[DotSourceKind] = &[
 ];
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
-    ui.heading("Virtues");
+    let heading_hl = state
+        .search
+        .highlight_for(MatchTarget::SectionHeading(SectionId::Virtues));
+    search::highlight_heading(
+        ui,
+        SectionId::Virtues.label(),
+        heading_hl,
+        state.search.scroll_pending,
+    );
 
     let prev_primary = state.character.primary_virtue;
     let mut primary = prev_primary;
@@ -61,6 +70,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             default_add_source: default_source,
             show_specialties: false,
             selectable: None,
+            search: Some(&state.search),
+            label_target: Some(MatchTarget::VirtueLabel(*v)),
+            specialty_ability: None,
         };
         if rated_trait_editor(ui, ("virtue", *v as usize), entry, &mut opts) {
             any_changed = true;

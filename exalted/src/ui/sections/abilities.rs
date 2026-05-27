@@ -4,6 +4,7 @@
 
 use crate::character::{AbilityKind, Caste, DotSource, RatedTrait};
 use crate::render::names::{ability_name, caste_name};
+use crate::ui::search::{self, MatchTarget, SectionId};
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::DotSourceKind;
 use crate::ui::widgets::rated_trait::{RatedTraitOpts, Selectable, rated_trait_editor_with_prefix};
@@ -18,7 +19,15 @@ const TOP_ROW: [Caste; 3] = [Caste::Dawn, Caste::Zenith, Caste::Twilight];
 const BOTTOM_ROW: [Caste; 2] = [Caste::Night, Caste::Eclipse];
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
-    ui.heading("Abilities");
+    let heading_hl = state
+        .search
+        .highlight_for(MatchTarget::SectionHeading(SectionId::Abilities));
+    search::highlight_heading(
+        ui,
+        SectionId::Abilities.label(),
+        heading_hl,
+        state.search.scroll_pending,
+    );
     ui.small(format!(
         "Favored: {}/5 selected. Caste abilities are always favored.",
         state.character.favored_abilities.len(),
@@ -40,7 +49,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         .show(ui, |ui| {
             for c in TOP_ROW {
                 ui.vertical(|ui| {
-                    ui.label(egui::RichText::new(caste_name(c)).strong().underline());
+                    render_caste_header(ui, state, c);
                 });
             }
             ui.end_row();
@@ -62,7 +71,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             ui.end_row();
             for c in BOTTOM_ROW {
                 ui.vertical(|ui| {
-                    ui.label(egui::RichText::new(caste_name(c)).strong().underline());
+                    render_caste_header(ui, state, c);
                 });
             }
             ui.vertical(|_| {});
@@ -94,6 +103,27 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     }
 }
 
+fn render_caste_header(ui: &mut egui::Ui, state: &AppState, c: Caste) {
+    let hl = state.search.highlight_for(MatchTarget::CasteHeading(c));
+    let text = egui::RichText::new(caste_name(c)).strong().underline();
+    match hl {
+        None => {
+            ui.label(text);
+        }
+        Some(k) => {
+            let resp = egui::Frame::default()
+                .fill(search::highlight_fill(k))
+                .inner_margin(egui::Margin::symmetric(3, 0))
+                .corner_radius(2)
+                .show(ui, |ui| ui.label(text.color(egui::Color32::BLACK)))
+                .inner;
+            if k == search::HighlightKind::Focused && state.search.scroll_pending {
+                resp.scroll_to_me(Some(egui::Align::Center));
+            }
+        }
+    }
+}
+
 fn render_ability(
     ui: &mut egui::Ui,
     state: &mut AppState,
@@ -122,6 +152,9 @@ fn render_ability(
             is_selected: selected_ability == Some(ab),
             clicked: &mut clicked,
         }),
+        search: Some(&state.search),
+        label_target: Some(MatchTarget::AbilityLabel(ab)),
+        specialty_ability: Some(ab),
     };
     let mut favored_toggle: Option<bool> = None;
     let row_changed = rated_trait_editor_with_prefix(

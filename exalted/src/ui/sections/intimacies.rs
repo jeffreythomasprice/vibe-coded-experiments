@@ -1,6 +1,7 @@
 //! Intimacies section: Vec<Intimacy> editor.
 
 use crate::character::{DotSource, Intimacy, IntimacyKind};
+use crate::ui::search::{self, MatchTarget, SectionId, TextEditOpts};
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::{DotSourceKind, dot_source_editor};
 use crate::ui::widgets::icon_button::trash_button;
@@ -21,7 +22,15 @@ const KINDS: &[(IntimacyKind, &str)] = &[
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     let count = state.character.intimacies.len();
-    ui.heading(format!("Intimacies ({})", count));
+    let heading_hl = state
+        .search
+        .highlight_for(MatchTarget::SectionHeading(SectionId::Intimacies));
+    search::highlight_heading(
+        ui,
+        &format!("{} ({})", SectionId::Intimacies.label(), count),
+        heading_hl,
+        state.search.scroll_pending,
+    );
     ui.small(
         "Compassion-baseline intimacies use source=Base. New ones acquired \
          in play cost 3 BP at chargen or 3 XP afterward.",
@@ -41,10 +50,17 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     let mut delete_idx: Option<usize> = None;
     for (i, intimacy) in state.character.intimacies.iter_mut().enumerate() {
         ui.horizontal(|ui| {
-            let resp = ui.add(
-                egui::TextEdit::singleline(&mut intimacy.description)
-                    .desired_width(280.0)
-                    .hint_text("description"),
+            let highlight = state.search.highlight_for(MatchTarget::Intimacy(i));
+            let resp = search::highlighted_singleline(
+                ui,
+                &mut intimacy.description,
+                &state.search.query,
+                highlight,
+                TextEditOpts {
+                    desired_width: 280.0,
+                    hint: Some("description"),
+                },
+                state.search.scroll_pending,
             );
             if resp.changed() {
                 any_changed = true;

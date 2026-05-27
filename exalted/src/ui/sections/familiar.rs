@@ -2,11 +2,20 @@
 //! a damage track row.
 
 use crate::character::Familiar;
+use crate::ui::search::{self, MatchTarget, SectionId, TextEditOpts};
 use crate::ui::state::AppState;
 use crate::ui::widgets::icon_button::trash_button_with_label;
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
-    ui.heading("Familiar");
+    let heading_hl = state
+        .search
+        .highlight_for(MatchTarget::SectionHeading(SectionId::Familiar));
+    search::highlight_heading(
+        ui,
+        SectionId::Familiar.label(),
+        heading_hl,
+        state.search.scroll_pending,
+    );
     let mut any_changed = false;
     let mut remove = false;
 
@@ -18,7 +27,18 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     } else if let Some(familiar) = state.character.familiar.as_mut() {
         ui.horizontal(|ui| {
             ui.label("Name");
-            let resp = ui.add(egui::TextEdit::singleline(&mut familiar.name).desired_width(240.0));
+            let highlight = state.search.highlight_for(MatchTarget::FamiliarName);
+            let resp = search::highlighted_singleline(
+                ui,
+                &mut familiar.name,
+                &state.search.query,
+                highlight,
+                TextEditOpts {
+                    desired_width: 240.0,
+                    hint: None,
+                },
+                state.search.scroll_pending,
+            );
             if resp.changed() {
                 any_changed = true;
             }

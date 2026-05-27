@@ -7,6 +7,7 @@ use crate::ui::persisted::UiState;
 use crate::ui::pickers::background_picker::BackgroundPickerState;
 use crate::ui::pickers::charm_picker::CharmPickerState;
 use crate::ui::pickers::spell_picker::SpellPickerState;
+use crate::ui::search::SearchState;
 use crate::ui::sidebar::dice_log::DiceLog;
 
 /// What the binary asked the UI to do on launch.
@@ -94,6 +95,8 @@ pub struct AppState {
     pub selection: SelectionState,
     /// Rolling log of dice actions. Session-only.
     pub dice_log: DiceLog,
+    /// Ctrl+F search bar state. Session-only.
+    pub search: SearchState,
 }
 
 impl AppState {
@@ -118,6 +121,7 @@ impl AppState {
             last_title: String::new(),
             selection: SelectionState::default(),
             dice_log: DiceLog::default(),
+            search: SearchState::default(),
         }
     }
 

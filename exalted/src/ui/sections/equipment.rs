@@ -4,11 +4,23 @@
 use crate::character::equipment::DamageType;
 use crate::character::{AbilityKind, Armor, Artifact, Possession, Weapon};
 use crate::render::names::ability_name;
+use crate::ui::search::{
+    self, ArtifactField, EquipmentSubsection, HighlightKind, MatchTarget, PossessionField,
+    SearchState, SectionId, TextAreaOpts, TextEditOpts, WeaponField,
+};
 use crate::ui::state::AppState;
 use crate::ui::widgets::icon_button::{trash_button, trash_button_with_label};
 
 pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
-    ui.heading("Equipment");
+    let heading_hl = state
+        .search
+        .highlight_for(MatchTarget::SectionHeading(SectionId::Equipment));
+    search::highlight_heading(
+        ui,
+        SectionId::Equipment.label(),
+        heading_hl,
+        state.search.scroll_pending,
+    );
 
     let mut any = false;
 
@@ -25,8 +37,31 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     }
 }
 
+fn subsection_label(ui: &mut egui::Ui, state: &AppState, sub: EquipmentSubsection) {
+    let hl = state
+        .search
+        .highlight_for(MatchTarget::EquipmentSubsectionHeading(sub));
+    let text = egui::RichText::new(sub.label()).strong();
+    match hl {
+        None => {
+            ui.label(text);
+        }
+        Some(k) => {
+            let resp = egui::Frame::default()
+                .fill(search::highlight_fill(k))
+                .inner_margin(egui::Margin::symmetric(3, 0))
+                .corner_radius(2)
+                .show(ui, |ui| ui.label(text.color(egui::Color32::BLACK)))
+                .inner;
+            if k == HighlightKind::Focused && state.search.scroll_pending {
+                resp.scroll_to_me(Some(egui::Align::Center));
+            }
+        }
+    }
+}
+
 fn weapons(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
-    ui.label(egui::RichText::new("Weapons").strong());
+    subsection_label(ui, state, EquipmentSubsection::Weapons);
     if ui.button("+ Add weapon").clicked() {
         state.character.equipment.weapons.push(Weapon {
             name: String::new(),
@@ -45,20 +80,40 @@ fn weapons(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
         *any = true;
     }
     let mut delete: Option<usize> = None;
+    let search: &SearchState = &state.search;
     for (i, w) in state.character.equipment.weapons.iter_mut().enumerate() {
-        egui::CollapsingHeader::new(if w.name.is_empty() {
+        let force_open = search.focused_within(|t| match t {
+            MatchTarget::Weapon { idx, .. } => *idx == i,
+            _ => false,
+        });
+        let mut header_widget = egui::CollapsingHeader::new(if w.name.is_empty() {
             format!("(unnamed weapon #{})", i + 1)
         } else {
             w.name.clone()
         })
-        .id_salt(("weapon", i))
-        .show(ui, |ui| {
+        .id_salt(("weapon", i));
+        if force_open {
+            header_widget = header_widget.open(Some(true));
+        }
+        header_widget.show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label("Name");
-                if ui
-                    .add(egui::TextEdit::singleline(&mut w.name).desired_width(200.0))
-                    .changed()
-                {
+                let hl = search.highlight_for(MatchTarget::Weapon {
+                    idx: i,
+                    field: WeaponField::Name,
+                });
+                let resp = search::highlighted_singleline(
+                    ui,
+                    &mut w.name,
+                    &search.query,
+                    hl,
+                    TextEditOpts {
+                        desired_width: 200.0,
+                        hint: None,
+                    },
+                    search.scroll_pending,
+                );
+                if resp.changed() {
                     *any = true;
                 }
                 ui.label("Ability");
@@ -159,10 +214,20 @@ fn weapons(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
                     }
                 }
                 let mut tags = w.tags.join(", ");
-                let resp = ui.add(
-                    egui::TextEdit::singleline(&mut tags)
-                        .desired_width(240.0)
-                        .hint_text("tags (comma-separated)"),
+                let hl = search.highlight_for(MatchTarget::Weapon {
+                    idx: i,
+                    field: WeaponField::Tags,
+                });
+                let resp = search::highlighted_singleline(
+                    ui,
+                    &mut tags,
+                    &search.query,
+                    hl,
+                    TextEditOpts {
+                        desired_width: 240.0,
+                        hint: Some("tags (comma-separated)"),
+                    },
+                    search.scroll_pending,
                 );
                 if resp.changed() {
                     w.tags = tags
@@ -182,7 +247,7 @@ fn weapons(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
 }
 
 fn armor(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
-    ui.label(egui::RichText::new("Armor").strong());
+    subsection_label(ui, state, EquipmentSubsection::Armor);
     if state.character.equipment.armor.is_none() {
         if ui.button("+ Set armor").clicked() {
             state.character.equipment.armor = Some(Armor {
@@ -205,10 +270,19 @@ fn armor(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
     if let Some(a) = state.character.equipment.armor.as_mut() {
         ui.horizontal(|ui| {
             ui.label("Name");
-            if ui
-                .add(egui::TextEdit::singleline(&mut a.name).desired_width(220.0))
-                .changed()
-            {
+            let hl = state.search.highlight_for(MatchTarget::Armor);
+            let resp = search::highlighted_singleline(
+                ui,
+                &mut a.name,
+                &state.search.query,
+                hl,
+                TextEditOpts {
+                    desired_width: 220.0,
+                    hint: None,
+                },
+                state.search.scroll_pending,
+            );
+            if resp.changed() {
                 *any = true;
             }
             if trash_button_with_label(ui, "remove armor").clicked() {
@@ -278,7 +352,7 @@ fn armor(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
 }
 
 fn possessions(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
-    ui.label(egui::RichText::new("Other possessions").strong());
+    subsection_label(ui, state, EquipmentSubsection::OtherPossessions);
     if ui.button("+ Add possession").clicked() {
         state.character.equipment.other.push(Possession {
             name: String::new(),
@@ -288,26 +362,43 @@ fn possessions(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
         *any = true;
     }
     let mut delete: Option<usize> = None;
+    let search: &SearchState = &state.search;
     for (i, p) in state.character.equipment.other.iter_mut().enumerate() {
         ui.horizontal(|ui| {
-            if ui
-                .add(
-                    egui::TextEdit::singleline(&mut p.name)
-                        .desired_width(220.0)
-                        .hint_text("name"),
-                )
-                .changed()
-            {
+            let hl = search.highlight_for(MatchTarget::Possession {
+                idx: i,
+                field: PossessionField::Name,
+            });
+            let resp = search::highlighted_singleline(
+                ui,
+                &mut p.name,
+                &search.query,
+                hl,
+                TextEditOpts {
+                    desired_width: 220.0,
+                    hint: Some("name"),
+                },
+                search.scroll_pending,
+            );
+            if resp.changed() {
                 *any = true;
             }
-            if ui
-                .add(
-                    egui::TextEdit::singleline(&mut p.primary_location)
-                        .desired_width(160.0)
-                        .hint_text("primary location"),
-                )
-                .changed()
-            {
+            let hl = search.highlight_for(MatchTarget::Possession {
+                idx: i,
+                field: PossessionField::Primary,
+            });
+            let resp = search::highlighted_singleline(
+                ui,
+                &mut p.primary_location,
+                &search.query,
+                hl,
+                TextEditOpts {
+                    desired_width: 160.0,
+                    hint: Some("primary location"),
+                },
+                search.scroll_pending,
+            );
+            if resp.changed() {
                 *any = true;
             }
             let mut has_second = p.secondary_location.is_some();
@@ -320,14 +411,22 @@ fn possessions(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
                 *any = true;
             }
             if let Some(s) = p.secondary_location.as_mut() {
-                if ui
-                    .add(
-                        egui::TextEdit::singleline(s)
-                            .desired_width(120.0)
-                            .hint_text("alt loc"),
-                    )
-                    .changed()
-                {
+                let hl = search.highlight_for(MatchTarget::Possession {
+                    idx: i,
+                    field: PossessionField::Secondary,
+                });
+                let resp = search::highlighted_singleline(
+                    ui,
+                    s,
+                    &search.query,
+                    hl,
+                    TextEditOpts {
+                        desired_width: 120.0,
+                        hint: Some("alt loc"),
+                    },
+                    search.scroll_pending,
+                );
+                if resp.changed() {
                     *any = true;
                 }
             }
@@ -343,7 +442,7 @@ fn possessions(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
 }
 
 fn artifacts(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
-    ui.label(egui::RichText::new("Artifacts").strong());
+    subsection_label(ui, state, EquipmentSubsection::Artifacts);
     if ui.button("+ Add artifact").clicked() {
         state.character.equipment.artifacts.push(Artifact {
             name: String::new(),
@@ -356,19 +455,39 @@ fn artifacts(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
         *any = true;
     }
     let mut delete: Option<usize> = None;
+    let search: &SearchState = &state.search;
     for (i, a) in state.character.equipment.artifacts.iter_mut().enumerate() {
-        egui::CollapsingHeader::new(if a.name.is_empty() {
+        let force_open = search.focused_within(|t| match t {
+            MatchTarget::Artifact { idx, .. } => *idx == i,
+            _ => false,
+        });
+        let mut header_widget = egui::CollapsingHeader::new(if a.name.is_empty() {
             format!("(unnamed artifact #{})", i + 1)
         } else {
             format!("{} (★{})", a.name, a.rating)
         })
-        .id_salt(("artifact", i))
-        .show(ui, |ui| {
+        .id_salt(("artifact", i));
+        if force_open {
+            header_widget = header_widget.open(Some(true));
+        }
+        header_widget.show(ui, |ui| {
             ui.horizontal(|ui| {
-                if ui
-                    .add(egui::TextEdit::singleline(&mut a.name).desired_width(240.0))
-                    .changed()
-                {
+                let hl = search.highlight_for(MatchTarget::Artifact {
+                    idx: i,
+                    field: ArtifactField::Name,
+                });
+                let resp = search::highlighted_singleline(
+                    ui,
+                    &mut a.name,
+                    &search.query,
+                    hl,
+                    TextEditOpts {
+                        desired_width: 240.0,
+                        hint: None,
+                    },
+                    search.scroll_pending,
+                );
+                if resp.changed() {
                     *any = true;
                 }
                 if ui
@@ -406,14 +525,22 @@ fn artifacts(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
                 }
             });
             let mut sockets = a.socketed_hearthstones.join(", ");
-            if ui
-                .add(
-                    egui::TextEdit::singleline(&mut sockets)
-                        .desired_width(f32::INFINITY)
-                        .hint_text("socketed hearthstones (comma-separated names)"),
-                )
-                .changed()
-            {
+            let hl = search.highlight_for(MatchTarget::Artifact {
+                idx: i,
+                field: ArtifactField::Sockets,
+            });
+            let resp = search::highlighted_singleline(
+                ui,
+                &mut sockets,
+                &search.query,
+                hl,
+                TextEditOpts {
+                    desired_width: f32::INFINITY,
+                    hint: Some("socketed hearthstones (comma-separated names)"),
+                },
+                search.scroll_pending,
+            );
+            if resp.changed() {
                 a.socketed_hearthstones = sockets
                     .split(',')
                     .map(|s| s.trim().to_string())
@@ -422,14 +549,23 @@ fn artifacts(ui: &mut egui::Ui, state: &mut AppState, any: &mut bool) {
                 *any = true;
             }
             ui.label("Description");
-            if ui
-                .add(
-                    egui::TextEdit::multiline(&mut a.description)
-                        .desired_width(f32::INFINITY)
-                        .desired_rows(2),
-                )
-                .changed()
-            {
+            let hl = search.highlight_for(MatchTarget::Artifact {
+                idx: i,
+                field: ArtifactField::Description,
+            });
+            let resp = search::highlighted_multiline(
+                ui,
+                &mut a.description,
+                &search.query,
+                hl,
+                TextAreaOpts {
+                    desired_width: f32::INFINITY,
+                    desired_rows: 2,
+                    hint: None,
+                },
+                search.scroll_pending,
+            );
+            if resp.changed() {
                 *any = true;
             }
         });

@@ -3,7 +3,8 @@
 
 use std::cmp::Ordering;
 
-use crate::character::{DotPurchase, DotSource, RatedTrait, Specialty};
+use crate::character::{AbilityKind, DotPurchase, DotSource, RatedTrait, Specialty};
+use crate::ui::search::{self, HighlightKind, MatchTarget, SearchState, TextEditOpts};
 use crate::ui::widgets::dot_source::{DotSourceKind, dot_source_editor};
 use crate::ui::widgets::dots_grid::DotsGrid;
 use crate::ui::widgets::icon_button::trash_button;
@@ -29,6 +30,15 @@ pub struct RatedTraitOpts<'a> {
     /// if the user clicked the label this frame; the caller is responsible
     /// for translating that into a change to its own selection state.
     pub selectable: Option<Selectable<'a>>,
+    /// Optional search integration. When `search` is set, the label and any
+    /// specialty rows compare themselves against the active query and apply
+    /// highlight visuals. `label_target` identifies what kind of label this
+    /// is (AttributeLabel / AbilityLabel / VirtueLabel / Background name).
+    /// `specialty_ability` identifies which `AbilityKind` owns these
+    /// specialties so individual specialty matches can be addressed.
+    pub search: Option<&'a SearchState>,
+    pub label_target: Option<MatchTarget>,
+    pub specialty_ability: Option<AbilityKind>,
 }
 
 /// Click-to-select handle passed in via `RatedTraitOpts`. The widget reads
@@ -62,13 +72,23 @@ pub fn rated_trait_editor_with_prefix(
     let mut changed = false;
     let salt = egui::Id::new(id_source);
 
+    let label_highlight: Option<HighlightKind> = match (opts.search, opts.label_target) {
+        (Some(s), Some(t)) => s.highlight_for(t),
+        _ => None,
+    };
+    let scroll_pending = opts.search.is_some_and(|s| s.scroll_pending);
+
     ui.horizontal(|ui| {
         if prefix(ui) {
             changed = true;
         }
         match opts.selectable.as_mut() {
             None => {
-                ui.add_sized([140.0, 0.0], egui::Label::new(opts.label));
+                if label_highlight.is_some() {
+                    search::highlight_label(ui, opts.label, label_highlight, scroll_pending);
+                } else {
+                    ui.add_sized([140.0, 0.0], egui::Label::new(opts.label));
+                }
             }
             Some(sel) => {
                 let resp = ui.add_sized(
@@ -77,6 +97,20 @@ pub fn rated_trait_editor_with_prefix(
                 );
                 if resp.clicked() {
                     *sel.clicked = true;
+                }
+                if label_highlight == Some(HighlightKind::Focused) && scroll_pending {
+                    resp.scroll_to_me(Some(egui::Align::Center));
+                }
+                if let Some(kind) = label_highlight {
+                    let color = match kind {
+                        HighlightKind::Match => {
+                            egui::Color32::from_rgba_unmultiplied(255, 220, 60, 60)
+                        }
+                        HighlightKind::Focused => {
+                            egui::Color32::from_rgba_unmultiplied(255, 140, 0, 90)
+                        }
+                    };
+                    ui.painter().rect_filled(resp.rect, 2.0, color);
                 }
             }
         }
@@ -140,45 +174,77 @@ pub fn rated_trait_editor_with_prefix(
         } else {
             format!("Specialties ({})", trait_.specialties.len())
         };
-        egui::CollapsingHeader::new(header)
-            .id_salt(salt.with("specialties"))
-            .show(ui, |ui| {
-                let mut delete_idx: Option<usize> = None;
-                for (i, s) in trait_.specialties.iter_mut().enumerate() {
-                    ui.horizontal(|ui| {
-                        let resp = ui.add(
+        // Force open when the focused match is one of our specialties.
+        let force_open_specialties = match (opts.search, opts.specialty_ability) {
+            (Some(s), Some(ab)) => s.focused_within(
+                |t| matches!(t, MatchTarget::Specialty { ability, .. } if *ability == ab),
+            ),
+            _ => false,
+        };
+        let mut header_widget =
+            egui::CollapsingHeader::new(header).id_salt(salt.with("specialties"));
+        if force_open_specialties {
+            header_widget = header_widget.open(Some(true));
+        }
+        header_widget.show(ui, |ui| {
+            let mut delete_idx: Option<usize> = None;
+            for (i, s) in trait_.specialties.iter_mut().enumerate() {
+                ui.horizontal(|ui| {
+                    let target = opts.specialty_ability.map(|ab| MatchTarget::Specialty {
+                        ability: ab,
+                        idx: i,
+                    });
+                    let highlight = match (opts.search, target) {
+                        (Some(state), Some(t)) => state.highlight_for(t),
+                        _ => None,
+                    };
+                    let resp = if let Some(state) = opts.search {
+                        search::highlighted_singleline(
+                            ui,
+                            &mut s.name,
+                            &state.query,
+                            highlight,
+                            TextEditOpts {
+                                desired_width: 160.0,
+                                hint: Some("name"),
+                            },
+                            state.scroll_pending,
+                        )
+                    } else {
+                        ui.add(
                             egui::TextEdit::singleline(&mut s.name)
                                 .hint_text("name")
                                 .desired_width(160.0),
-                        );
-                        if resp.changed() {
-                            changed = true;
-                        }
-                        if dot_source_editor(
-                            ui,
-                            salt.with(("specialty-src", i)),
-                            &mut s.source,
-                            opts.allowed_sources,
-                        ) {
-                            changed = true;
-                        }
-                        if trash_button(ui).clicked() {
-                            delete_idx = Some(i);
-                        }
-                    });
-                }
-                if let Some(i) = delete_idx {
-                    trait_.specialties.remove(i);
-                    changed = true;
-                }
-                if ui.button("+ Add specialty").clicked() {
-                    trait_.specialties.push(Specialty {
-                        name: String::new(),
-                        source: opts.default_add_source,
-                    });
-                    changed = true;
-                }
-            });
+                        )
+                    };
+                    if resp.changed() {
+                        changed = true;
+                    }
+                    if dot_source_editor(
+                        ui,
+                        salt.with(("specialty-src", i)),
+                        &mut s.source,
+                        opts.allowed_sources,
+                    ) {
+                        changed = true;
+                    }
+                    if trash_button(ui).clicked() {
+                        delete_idx = Some(i);
+                    }
+                });
+            }
+            if let Some(i) = delete_idx {
+                trait_.specialties.remove(i);
+                changed = true;
+            }
+            if ui.button("+ Add specialty").clicked() {
+                trait_.specialties.push(Specialty {
+                    name: String::new(),
+                    source: opts.default_add_source,
+                });
+                changed = true;
+            }
+        });
     }
 
     changed
