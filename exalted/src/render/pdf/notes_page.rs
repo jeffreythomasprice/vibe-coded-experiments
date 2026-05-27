@@ -49,7 +49,10 @@ struct Section {
 
 #[derive(Debug)]
 struct NoteView {
-    timestamp: String,
+    /// Small bold label drawn above the body — currently only used to
+    /// surface the "+N XP" amount on XP-award entries. `None` for plain
+    /// notes, which get a separator alone.
+    label: Option<String>,
     body: String,
 }
 
@@ -121,36 +124,15 @@ fn collect_sections(c: &Character) -> Vec<Section> {
 }
 
 fn note_view(n: &Note) -> NoteView {
-    let created = n.created_at.format("%Y-%m-%d %H:%M UTC");
-    let timestamp = if n.created_at == n.updated_at {
-        created.to_string()
-    } else {
-        format!(
-            "{} (updated {})",
-            created,
-            n.updated_at.format("%Y-%m-%d %H:%M UTC")
-        )
-    };
     NoteView {
-        timestamp,
+        label: None,
         body: n.body.clone(),
     }
 }
 
 fn award_view(a: &XpAward) -> NoteView {
-    let created = a.created_at.format("%Y-%m-%d %H:%M UTC");
-    let timestamp = if a.created_at == a.updated_at {
-        format!("{} — +{} XP", created, a.amount)
-    } else {
-        format!(
-            "{} (updated {}) — +{} XP",
-            created,
-            a.updated_at.format("%Y-%m-%d %H:%M UTC"),
-            a.amount,
-        )
-    };
     NoteView {
-        timestamp,
+        label: Some(format!("+{} XP", a.amount)),
         body: a.body.clone(),
     }
 }
@@ -164,8 +146,10 @@ enum Line {
     Blank,
     /// Section heading (bg/charm/spell/etc.).
     Heading(String),
-    /// Note timestamp line.
-    Timestamp(String),
+    /// Thin horizontal rule drawn between notes within a section.
+    Separator,
+    /// Small bold per-note label (e.g. "+5 XP").
+    Label(String),
     /// Wrapped body line (continuation lines are also Body).
     Body(String),
 }
@@ -178,7 +162,10 @@ fn build_lines(sections: &[Section]) -> Vec<Line> {
         }
         out.push(Line::Heading(sec.heading.clone()));
         for note in &sec.notes {
-            out.push(Line::Timestamp(note.timestamp.clone()));
+            out.push(Line::Separator);
+            if let Some(label) = &note.label {
+                out.push(Line::Label(label.clone()));
+            }
             for wrapped in wrap_body(&note.body) {
                 out.push(Line::Body(wrapped));
             }
@@ -335,15 +322,15 @@ fn build_content_stream(lines: &[Line]) -> Vec<u8> {
                 emit_text(&mut out, MARGIN, y, "F2", HEADING_SIZE, text);
                 y -= LEADING;
             }
-            Line::Timestamp(text) => {
-                emit_text(
-                    &mut out,
-                    MARGIN + 12.0,
-                    y,
-                    "F1",
-                    BODY_SIZE - 1.0,
-                    &format!("[{}]", text),
-                );
+            Line::Separator => {
+                // Light gray rule sitting just below the previous line's baseline,
+                // splitting groups of notes within a section.
+                let rule_y = y + (LEADING - BODY_SIZE) / 2.0;
+                emit_hline(&mut out, MARGIN + 12.0, rule_y, PAGE_W - MARGIN);
+                y -= LEADING - 4.0;
+            }
+            Line::Label(text) => {
+                emit_text(&mut out, MARGIN + 12.0, y, "F2", BODY_SIZE - 1.0, text);
                 y -= LEADING - 2.0;
             }
             Line::Body(text) => {
@@ -353,6 +340,16 @@ fn build_content_stream(lines: &[Line]) -> Vec<u8> {
         }
     }
     out
+}
+
+fn emit_hline(out: &mut Vec<u8>, x1: f64, y: f64, x2: f64) {
+    out.extend_from_slice(b"q\n");
+    out.extend_from_slice(b"0.75 0.75 0.75 RG\n");
+    out.extend_from_slice(b"0.5 w\n");
+    out.extend_from_slice(format!("{:.2} {:.2} m\n", x1, y).as_bytes());
+    out.extend_from_slice(format!("{:.2} {:.2} l\n", x2, y).as_bytes());
+    out.extend_from_slice(b"S\n");
+    out.extend_from_slice(b"Q\n");
 }
 
 fn emit_text(out: &mut Vec<u8>, x: f64, y: f64, font: &str, size: f64, text: &str) {

@@ -34,7 +34,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     });
     if primary != prev_primary {
         state.character.primary_virtue = primary;
-        state.mark_dirty();
+        state.mark_dirty_with("virtues.primary");
     }
 
     let default_source = if state.character.is_in_chargen() {
@@ -67,6 +67,6 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         }
     }
     if any_changed {
-        state.mark_dirty();
+        state.mark_dirty_with("virtues.dots");
     }
 }

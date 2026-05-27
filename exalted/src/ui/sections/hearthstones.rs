@@ -15,7 +15,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             aspect: String::new(),
             description: String::new(),
         });
-        state.mark_dirty();
+        state.mark_dirty_with("hearthstones.add");
     }
 
     let mut any = false;
@@ -64,6 +64,6 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         any = true;
     }
     if any {
-        state.mark_dirty();
+        state.mark_dirty_with("hearthstones.edit");
     }
 }

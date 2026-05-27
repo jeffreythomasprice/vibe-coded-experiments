@@ -73,6 +73,6 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     }
 
     if any {
-        state.mark_dirty();
+        state.mark_dirty_with("willpower_essence");
     }
 }

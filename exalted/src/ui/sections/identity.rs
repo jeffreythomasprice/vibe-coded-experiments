@@ -18,22 +18,22 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     ui.heading("Identity");
 
     if labeled_text_edit(ui, "Name", &mut state.character.identity.name) {
-        state.mark_dirty();
+        state.mark_dirty_with("identity.name");
     }
     if labeled_text_edit(ui, "Player", &mut state.character.identity.player) {
-        state.mark_dirty();
+        state.mark_dirty_with("identity.player");
     }
     if labeled_text_edit(ui, "Chronicle", &mut state.character.identity.chronicle) {
-        state.mark_dirty();
+        state.mark_dirty_with("identity.chronicle");
     }
     if labeled_text_edit(ui, "Concept", &mut state.character.identity.concept) {
-        state.mark_dirty();
+        state.mark_dirty_with("identity.concept");
     }
     if labeled_text_edit(ui, "Motivation", &mut state.character.identity.motivation) {
-        state.mark_dirty();
+        state.mark_dirty_with("identity.motivation");
     }
     if labeled_text_edit(ui, "Personality", &mut state.character.identity.personality) {
-        state.mark_dirty();
+        state.mark_dirty_with("identity.personality");
     }
 
     ui.add_space(6.0);
@@ -42,13 +42,13 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     ui.horizontal(|ui| {
         ui.add_sized([120.0, 0.0], egui::Label::new("Caste"));
         if enum_combo(ui, "caste-combo", &mut state.character.caste, CASTES) {
-            state.mark_dirty();
+            state.mark_dirty_with("identity.caste");
         }
     });
 
     // Anima totem.
     if labeled_text_edit(ui, "Anima totem", &mut state.character.identity.anima.totem) {
-        state.mark_dirty();
+        state.mark_dirty_with("identity.anima_totem");
     }
 
     // VirtueFlaw.
@@ -123,7 +123,7 @@ fn virtue_flaw_editor(ui: &mut egui::Ui, state: &mut AppState) {
                 virtue: VirtueKind::Compassion,
             }),
         };
-        state.mark_dirty();
+        state.mark_dirty_with("identity.virtue_flaw.kind");
     }
 
     if let Some(VirtueFlaw::Custom { name, virtue }) = &mut state.character.virtue_flaw {
@@ -131,6 +131,10 @@ fn virtue_flaw_editor(ui: &mut egui::Ui, state: &mut AppState) {
             ui.label("Name");
             let resp = ui.add(egui::TextEdit::singleline(name).desired_width(240.0));
             if resp.changed() {
+                tracing::trace!(
+                    field = "identity.virtue_flaw.name",
+                    "document field updated"
+                );
                 state.dirty = true;
                 state.validation_dirty = true;
             }
@@ -145,6 +149,10 @@ fn virtue_flaw_editor(ui: &mut egui::Ui, state: &mut AppState) {
                 });
             if v != *virtue {
                 *virtue = v;
+                tracing::trace!(
+                    field = "identity.virtue_flaw.virtue",
+                    "document field updated"
+                );
                 state.dirty = true;
                 state.validation_dirty = true;
             }
@@ -198,7 +206,7 @@ fn appearance_editor(ui: &mut egui::Ui, state: &mut AppState) {
                 2,
             );
             if any {
-                state.mark_dirty();
+                state.mark_dirty_with("identity.appearance");
             }
         });
 }

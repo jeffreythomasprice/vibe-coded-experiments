@@ -12,20 +12,23 @@ use std::path::{Path, PathBuf};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
-const DEFAULT_LOG_FILE: &str = "/tmp/ecs.log";
 const DEFAULT_STATE_FILE: &str = "./state.toml";
-const KNOWN_KEYS: &[&str] = &["log_file", "state_file"];
+const DEFAULT_LOG_MAX_SIZE_MB: u64 = 10;
+const KNOWN_KEYS: &[&str] = &["log_file", "state_file", "log_max_size_mb"];
 
 #[derive(Default, Serialize, Deserialize)]
 struct ConfigFile {
     log_file: Option<String>,
     state_file: Option<String>,
+    log_max_size_mb: Option<u64>,
 }
 
 pub struct Config {
     pub config_dir: PathBuf,
+    pub config_file: PathBuf,
     pub log_file: PathBuf,
     pub state_file: PathBuf,
+    pub log_max_size_mb: u64,
     unknown_keys: Vec<String>,
 }
 
@@ -57,7 +60,7 @@ impl Config {
                     path.display(),
                     e
                 );
-                return Self::defaults(dir);
+                return Self::defaults(dir, path);
             }
         };
 
@@ -70,7 +73,7 @@ impl Config {
                     e
                 );
             }
-            return Self::defaults(dir);
+            return Self::defaults(dir, path);
         }
 
         let parsed: ConfigFile = match toml::from_str(&raw_text) {
@@ -81,22 +84,28 @@ impl Config {
                     path.display(),
                     e
                 );
-                return Self::defaults(dir);
+                return Self::defaults(dir, path);
             }
         };
 
         let unknown_keys = collect_unknown_keys(&raw_text);
 
-        let log_file = resolve(parsed.log_file.as_deref().unwrap_or(DEFAULT_LOG_FILE), &dir);
+        let log_file = match parsed.log_file.as_deref() {
+            Some(s) => resolve(s, &dir),
+            None => default_log_file(),
+        };
         let state_file = resolve(
             parsed.state_file.as_deref().unwrap_or(DEFAULT_STATE_FILE),
             &dir,
         );
+        let log_max_size_mb = parsed.log_max_size_mb.unwrap_or(DEFAULT_LOG_MAX_SIZE_MB);
 
         Self {
             config_dir: dir,
+            config_file: path,
             log_file,
             state_file,
+            log_max_size_mb,
             unknown_keys,
         }
     }
@@ -110,15 +119,24 @@ impl Config {
         }
     }
 
-    fn defaults(config_dir: PathBuf) -> Self {
-        let log_file = resolve(DEFAULT_LOG_FILE, &config_dir);
+    fn defaults(config_dir: PathBuf, config_file: PathBuf) -> Self {
         let state_file = resolve(DEFAULT_STATE_FILE, &config_dir);
         Self {
             config_dir,
-            log_file,
+            config_file,
+            log_file: default_log_file(),
             state_file,
+            log_max_size_mb: DEFAULT_LOG_MAX_SIZE_MB,
             unknown_keys: Vec::new(),
         }
+    }
+}
+
+fn default_log_file() -> PathBuf {
+    if let Some(proj) = ProjectDirs::from("", "", "ecs") {
+        proj.data_local_dir().join("ecs.log")
+    } else {
+        PathBuf::from("ecs.log")
     }
 }
 
@@ -150,8 +168,16 @@ fn collect_unknown_keys(text: &str) -> Vec<String> {
 fn default_config_text() -> String {
     format!(
         "# ecs configuration. Relative paths are resolved against this file's directory.\n\
-         log_file = \"{}\"\n\
+         # log_file defaults to the platform's local data dir, e.g.\n\
+         #   Linux:   ~/.local/share/ecs/ecs.log\n\
+         #   Windows: %LOCALAPPDATA%\\ecs\\data\\ecs.log\n\
+         #   macOS:   ~/Library/Application Support/ecs/ecs.log\n\
+         # log_file = \"/path/to/ecs.log\"\n\
+         #\n\
+         # On startup, if the log file exceeds this size it is rotated to\n\
+         # `<log_file>.old` (overwriting any prior .old). Default: {}.\n\
+         # log_max_size_mb = {}\n\
          state_file = \"{}\"\n",
-        DEFAULT_LOG_FILE, DEFAULT_STATE_FILE
+        DEFAULT_LOG_MAX_SIZE_MB, DEFAULT_LOG_MAX_SIZE_MB, DEFAULT_STATE_FILE
     )
 }

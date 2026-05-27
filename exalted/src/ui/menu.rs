@@ -1,6 +1,8 @@
 //! Top menu bar. Renders into the TopBottomPanel set up by `App::update`,
 //! and signals user intent via a `MenuAction` enum that the App dispatches.
 
+use crate::ui::persisted::ThemePreference;
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MenuAction {
     New,
@@ -13,9 +15,10 @@ pub enum MenuAction {
     ToggleValidationPanel,
     ToggleActionsPanel,
     ToggleDiceLogPanel,
+    SetTheme(ThemePreference),
 }
 
-pub fn render(ui: &mut egui::Ui) -> Option<MenuAction> {
+pub fn render(ui: &mut egui::Ui, current_theme: ThemePreference) -> Option<MenuAction> {
     let mut action = None;
     egui::MenuBar::new().ui(ui, |ui| {
         ui.menu_button("File", |ui| {
@@ -64,6 +67,18 @@ pub fn render(ui: &mut egui::Ui) -> Option<MenuAction> {
                 action = Some(MenuAction::ToggleDiceLogPanel);
                 ui.close();
             }
+            ui.separator();
+            ui.menu_button("Theme", |ui| {
+                for pref in ThemePreference::ALL {
+                    if ui
+                        .selectable_label(current_theme == pref, pref.label())
+                        .clicked()
+                    {
+                        action = Some(MenuAction::SetTheme(pref));
+                        ui.close();
+                    }
+                }
+            });
         });
     });
     action

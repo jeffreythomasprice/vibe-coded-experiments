@@ -22,6 +22,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     ui.heading(format!("Spells ({})", count));
 
     if ui.button("+ Add spell…").clicked() {
+        tracing::debug!(picker = "spell", "opened picker");
         state.spell_picker = Some(SpellPickerState::new_for_character(&state.character));
     }
 
@@ -116,10 +117,13 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         state.character.spells.remove(i);
         any_changed = true;
     }
+    if let Some((idx, _)) = &start_edit {
+        tracing::debug!(kind = "spell", index = idx, "started custom entry edit");
+    }
     if let Some(payload) = start_edit {
         state.editing_custom_spell = Some(payload);
     }
     if any_changed {
-        state.mark_dirty();
+        state.mark_dirty_with("spells.edit");
     }
 }

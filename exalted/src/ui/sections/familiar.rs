@@ -66,6 +66,6 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         any_changed = true;
     }
     if any_changed {
-        state.mark_dirty();
+        state.mark_dirty_with("familiar");
     }
 }

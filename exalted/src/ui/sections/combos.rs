@@ -20,7 +20,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             source: DotSource::BonusPoints { spent: 0 },
             notes: Vec::new(),
         });
-        state.mark_dirty();
+        state.mark_dirty_with("combos.add");
     }
 
     let owned_charm_ids: Vec<(String, String)> = state
@@ -111,6 +111,6 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         any_changed = true;
     }
     if any_changed {
-        state.mark_dirty();
+        state.mark_dirty_with("combos.edit");
     }
 }

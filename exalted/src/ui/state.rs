@@ -126,6 +126,14 @@ impl AppState {
         self.dirty = true;
         self.validation_dirty = true;
     }
+
+    /// Mark the document dirty *and* emit a TRACE event identifying which
+    /// field was changed. Preferred over `mark_dirty` at section / picker
+    /// call sites so the log shows what specifically was edited.
+    pub fn mark_dirty_with(&mut self, field: &str) {
+        tracing::trace!(field = field, "document field updated");
+        self.mark_dirty();
+    }
 }
 
 /// A minimal starting `Character` for File → New: a blank Dawn Solar with no

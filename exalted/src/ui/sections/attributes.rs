@@ -76,7 +76,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         state.selection.toggle_attribute(attr);
     }
     if any_changed {
-        state.mark_dirty();
+        state.mark_dirty_with("attributes.dots");
     }
 }
 
@@ -104,7 +104,7 @@ fn attribute_priority_editor(ui: &mut egui::Ui, state: &mut AppState) {
         );
     });
     if any {
-        state.mark_dirty();
+        state.mark_dirty_with("attributes.priority");
     }
 }
 

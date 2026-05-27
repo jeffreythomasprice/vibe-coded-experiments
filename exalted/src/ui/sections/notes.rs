@@ -7,6 +7,6 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     let count = state.character.notes.len();
     ui.heading(format!("Notes ({})", count));
     if notes_editor(ui, "character-notes", &mut state.character.notes) {
-        state.mark_dirty();
+        state.mark_dirty_with("notes");
     }
 }

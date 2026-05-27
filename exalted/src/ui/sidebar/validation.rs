@@ -15,6 +15,11 @@ pub fn render_body(ui: &mut egui::Ui, state: &mut AppState) {
         let mut report = ValidationReport::new();
         report.extend(state.character.validate_chargen());
         report.extend(state.character.validate_xp());
+        tracing::info!(
+            errors = report.errors.len(),
+            notes = report.notes.len(),
+            "validation complete"
+        );
         state.last_validation = report;
         state.validation_dirty = false;
     }

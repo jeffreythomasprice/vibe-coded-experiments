@@ -21,7 +21,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     artifacts(ui, state, &mut any);
 
     if any {
-        state.mark_dirty();
+        state.mark_dirty_with("equipment");
     }
 }
 

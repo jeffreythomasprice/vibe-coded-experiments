@@ -37,7 +37,15 @@ fn main() -> ExitCode {
     attach_parent_console();
     let cli = Cli::parse();
     let config = Config::load_or_create();
-    let _log_guard = exalted::logging::init(&config.log_file);
+    let _log_guard = exalted::logging::init(&config.log_file, config.log_max_size_mb);
+    tracing::trace!(
+        config_file = %config.config_file.display(),
+        config_dir = %config.config_dir.display(),
+        log_file = %config.log_file.display(),
+        state_file = %config.state_file.display(),
+        log_max_size_mb = config.log_max_size_mb,
+        "resolved config"
+    );
     config.warn_unknown_keys();
     let fmt = cli.output_format;
     if let Err(e) = init_database() {
@@ -60,6 +68,7 @@ fn main() -> ExitCode {
 }
 
 fn run_ui(file: Option<PathBuf>, config: Config) -> ExitCode {
+    tracing::info!("launching GUI");
     let start = match file {
         Some(p) => exalted::ui::StartupAction::OpenFile(p),
         None => exalted::ui::StartupAction::Empty,
@@ -93,6 +102,7 @@ fn run_render(
     format: RenderFormat,
     fmt: OutputFormat,
 ) -> ExitCode {
+    tracing::info!(file = %file.display(), format = ?format, "render");
     let character = match load_character(&file) {
         Ok(c) => c,
         Err(e) => {
@@ -143,6 +153,7 @@ fn run_render(
 }
 
 fn run_validate(file: PathBuf, fmt: OutputFormat) -> ExitCode {
+    tracing::info!(file = %file.display(), "validate");
     let character = match load_character(&file) {
         Ok(c) => c,
         Err(e) => {
@@ -154,6 +165,11 @@ fn run_validate(file: PathBuf, fmt: OutputFormat) -> ExitCode {
     let mut report = ValidationReport::new();
     report.extend(character.validate_chargen());
     report.extend(character.validate_xp());
+    tracing::info!(
+        errors = report.errors.len(),
+        notes = report.notes.len(),
+        "validation complete"
+    );
 
     match fmt {
         OutputFormat::Text => print_report(&report),
@@ -218,6 +234,7 @@ fn format_err(err: &ValidationError) -> String {
 // --------------------------------------------------------------------------
 
 fn run_rules_markdown(topic: RulesTopic) -> ExitCode {
+    tracing::info!(topic = ?topic, "rules-markdown");
     let md = match topic {
         RulesTopic::Rules => game_rules_markdown(),
         RulesTopic::Chargen => character_creation_markdown(),
@@ -230,6 +247,7 @@ fn run_rules_markdown(topic: RulesTopic) -> ExitCode {
 }
 
 fn run_backgrounds(id: Option<String>, fmt: OutputFormat) -> ExitCode {
+    tracing::info!(id = ?id, "backgrounds");
     let db = database();
     match id {
         Some(id) => match db.background(&id) {
@@ -245,6 +263,7 @@ fn run_backgrounds(id: Option<String>, fmt: OutputFormat) -> ExitCode {
 }
 
 fn run_charms(id: Option<String>, fmt: OutputFormat) -> ExitCode {
+    tracing::info!(id = ?id, "charms");
     let db = database();
     match id {
         Some(id) => match db.charm(&id) {
@@ -260,6 +279,7 @@ fn run_charms(id: Option<String>, fmt: OutputFormat) -> ExitCode {
 }
 
 fn run_spells(id: Option<String>, fmt: OutputFormat) -> ExitCode {
+    tracing::info!(id = ?id, "spells");
     let db = database();
     match id {
         Some(id) => match db.spell(&id) {

@@ -23,6 +23,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
     ui.heading(format!("Backgrounds ({})", count));
 
     if ui.button("+ Add background…").clicked() {
+        tracing::debug!(picker = "background", "opened picker");
         state.background_picker = Some(BackgroundPickerState::new());
     }
 
@@ -123,10 +124,17 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         state.character.backgrounds.remove(i);
         any_changed = true;
     }
+    if let Some((idx, _)) = &start_edit {
+        tracing::debug!(
+            kind = "background",
+            index = idx,
+            "started custom entry edit"
+        );
+    }
     if let Some(payload) = start_edit {
         state.editing_custom_background = Some(payload);
     }
     if any_changed {
-        state.mark_dirty();
+        state.mark_dirty_with("backgrounds.edit");
     }
 }

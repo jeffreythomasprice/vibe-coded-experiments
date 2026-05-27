@@ -31,24 +31,43 @@ pub enum IoError {
 }
 
 pub fn load_character_from_path(path: &Path) -> Result<Character, IoError> {
-    let text = fs::read_to_string(path).map_err(|source| IoError::Read {
-        path: path.display().to_string(),
-        source,
+    tracing::info!(path = %path.display(), "loading character");
+    let text = fs::read_to_string(path).map_err(|source| {
+        tracing::error!(path = %path.display(), error = %source, "could not read character file");
+        IoError::Read {
+            path: path.display().to_string(),
+            source,
+        }
     })?;
-    toml::from_str(&text).map_err(|source| IoError::Parse {
-        path: path.display().to_string(),
-        source,
-    })
+    let bytes = text.len();
+    let character = toml::from_str(&text).map_err(|source| {
+        tracing::error!(path = %path.display(), error = %source, "could not parse character file");
+        IoError::Parse {
+            path: path.display().to_string(),
+            source,
+        }
+    })?;
+    tracing::info!(path = %path.display(), bytes, "loaded character");
+    Ok(character)
 }
 
 pub fn save_character_to_path(character: &Character, path: &Path) -> Result<(), IoError> {
+    tracing::info!(path = %path.display(), "saving character");
     let mut to_save = character.clone();
     normalize_for_save(&mut to_save);
-    let text = toml::to_string_pretty(&to_save).map_err(|source| IoError::Serialize { source })?;
-    fs::write(path, text.as_bytes()).map_err(|source| IoError::Write {
-        path: path.display().to_string(),
-        source,
+    let text = toml::to_string_pretty(&to_save).map_err(|source| {
+        tracing::error!(error = %source, "could not serialize character");
+        IoError::Serialize { source }
     })?;
+    let bytes = text.len();
+    fs::write(path, text.as_bytes()).map_err(|source| {
+        tracing::error!(path = %path.display(), error = %source, "could not write character file");
+        IoError::Write {
+            path: path.display().to_string(),
+            source,
+        }
+    })?;
+    tracing::info!(path = %path.display(), bytes, "saved character");
     Ok(())
 }
 

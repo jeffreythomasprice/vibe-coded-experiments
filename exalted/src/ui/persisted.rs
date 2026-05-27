@@ -23,7 +23,44 @@ const KNOWN_KEYS: &[&str] = &[
     "left_active",
     "right_active",
     "bottom_active",
+    "theme_preference",
 ];
+
+/// User's choice of color theme.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemePreference {
+    Light,
+    Dark,
+    #[default]
+    System,
+}
+
+impl ThemePreference {
+    pub const ALL: [ThemePreference; 3] = [
+        ThemePreference::System,
+        ThemePreference::Dark,
+        ThemePreference::Light,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ThemePreference::Light => "Light",
+            ThemePreference::Dark => "Dark",
+            ThemePreference::System => "System",
+        }
+    }
+}
+
+impl From<ThemePreference> for egui::ThemePreference {
+    fn from(value: ThemePreference) -> Self {
+        match value {
+            ThemePreference::Light => egui::ThemePreference::Light,
+            ThemePreference::Dark => egui::ThemePreference::Dark,
+            ThemePreference::System => egui::ThemePreference::System,
+        }
+    }
+}
 
 /// Where a dockable item can live.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -128,6 +165,8 @@ struct UiStateFile {
     right_active: Option<PanelItem>,
     #[serde(default)]
     bottom_active: Option<PanelItem>,
+    #[serde(default)]
+    theme_preference: ThemePreference,
 }
 
 impl Default for UiStateFile {
@@ -144,6 +183,7 @@ impl Default for UiStateFile {
             left_active: None,
             right_active: None,
             bottom_active: None,
+            theme_preference: ThemePreference::default(),
         }
     }
 }
@@ -161,6 +201,7 @@ pub struct UiState {
     pub left_active: Option<PanelItem>,
     pub right_active: Option<PanelItem>,
     pub bottom_active: Option<PanelItem>,
+    pub theme_preference: ThemePreference,
 }
 
 impl UiState {
@@ -211,6 +252,7 @@ impl UiState {
             left_active: file.left_active,
             right_active: file.right_active,
             bottom_active: file.bottom_active,
+            theme_preference: file.theme_preference,
         }
     }
 
@@ -233,6 +275,10 @@ impl UiState {
     }
 
     pub fn set_visible(&mut self, item: PanelItem, visible: bool) {
+        if self.is_visible(item) == visible {
+            return;
+        }
+        tracing::debug!(panel = ?item, visible, "panel visibility toggled");
         match item {
             PanelItem::Derived => self.derived_visible = visible,
             PanelItem::Validation => self.validation_visible = visible,
@@ -242,6 +288,10 @@ impl UiState {
     }
 
     pub fn set_location(&mut self, item: PanelItem, location: PanelLocation) {
+        if self.location_of(item) == location {
+            return;
+        }
+        tracing::debug!(panel = ?item, location = ?location, "panel relocated");
         match item {
             PanelItem::Derived => self.derived_location = location,
             PanelItem::Validation => self.validation_location = location,
@@ -259,11 +309,23 @@ impl UiState {
     }
 
     pub fn set_active(&mut self, location: PanelLocation, item: Option<PanelItem>) {
+        if self.active(location) == item {
+            return;
+        }
+        tracing::debug!(location = ?location, active = ?item, "panel active tab changed");
         match location {
             PanelLocation::Left => self.left_active = item,
             PanelLocation::Right => self.right_active = item,
             PanelLocation::Bottom => self.bottom_active = item,
         }
+    }
+
+    pub fn set_theme_preference(&mut self, pref: ThemePreference) {
+        if self.theme_preference == pref {
+            return;
+        }
+        tracing::debug!(theme = ?pref, "theme preference changed");
+        self.theme_preference = pref;
     }
 
     /// Make `item` visible and set it as the active tab in its current
@@ -289,6 +351,7 @@ impl UiState {
             left_active: self.left_active,
             right_active: self.right_active,
             bottom_active: self.bottom_active,
+            theme_preference: self.theme_preference,
         };
         let text = match toml::to_string_pretty(&file) {
             Ok(t) => t,

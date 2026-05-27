@@ -21,7 +21,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                 dialect_specialty: None,
                 native: false,
             });
-            state.mark_dirty();
+            state.mark_dirty_with("languages.add");
         }
         if ui.button("+ Add tribal tongue").clicked() {
             state.character.languages.push(KnownLanguage {
@@ -29,7 +29,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
                 dialect_specialty: None,
                 native: false,
             });
-            state.mark_dirty();
+            state.mark_dirty_with("languages.add_tribal");
         }
     });
 
@@ -96,7 +96,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
         any_changed = true;
     }
     if any_changed {
-        state.mark_dirty();
+        state.mark_dirty_with("languages.edit");
     }
 }
 

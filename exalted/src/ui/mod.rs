@@ -35,7 +35,7 @@ pub fn launch(start: StartupAction, config: Config) -> eframe::Result<()> {
         Box::new(move |cc| {
             fonts::install(&cc.egui_ctx);
             egui_extras::install_image_loaders(&cc.egui_ctx);
-            Ok(Box::new(App::new(start, config)))
+            Ok(Box::new(App::new(&cc.egui_ctx, start, config)))
         }),
     )
 }
