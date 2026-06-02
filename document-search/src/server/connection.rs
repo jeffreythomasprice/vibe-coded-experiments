@@ -110,13 +110,20 @@ pub(crate) async fn handle(
         return Ok(());
     }
 
-    if let Request::List { tags, match_all } = &req {
+    if let Request::List {
+        tags,
+        match_all,
+        verbose,
+    } = &req
+    {
         let (db, snapshot) = {
             let g = state.lock().unwrap();
             (Arc::clone(&g.db), g.snapshot())
         };
         let result = match output_mode {
-            OutputMode::Text => commands::list_text(&db, &snapshot, tags, *match_all).await,
+            OutputMode::Text => {
+                commands::list_text(&db, &snapshot, tags, *match_all, *verbose).await
+            }
             OutputMode::Json => commands::list_json(&db, &snapshot, tags, *match_all).await,
         };
         match result {

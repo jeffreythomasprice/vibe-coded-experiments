@@ -628,11 +628,14 @@ async fn delete_by_ids(
 }
 
 struct ListedDocument {
+    id: i64,
     path: String,
     doc_type: String,
     total_size_bytes: i64,
     total_size_pages: Option<i64>,
     created_at: String,
+    /// Tags attached to this document, normalized + sorted ascending.
+    tags: Vec<String>,
 }
 
 pub async fn list_text(
@@ -640,9 +643,10 @@ pub async fn list_text(
     snapshot: &StatusSnapshot,
     raw_tags: &[String],
     match_all: bool,
+    verbose: bool,
 ) -> Result<String, CommandError> {
     let docs = gather_listed_documents(db, raw_tags, match_all).await?;
-    Ok(format_list(&docs, snapshot))
+    Ok(format_list(&docs, snapshot, verbose))
 }
 
 pub async fn list_json(
@@ -661,6 +665,7 @@ pub async fn list_json(
                 "total_size_bytes": d.total_size_bytes,
                 "total_size_pages": d.total_size_pages,
                 "created_at": d.created_at,
+                "tags": d.tags,
             })
         })
         .collect();
@@ -806,7 +811,7 @@ async fn gather_listed_documents(
 
     let mut rows = if tags.is_empty() {
         conn.query(
-            "SELECT path, doc_type, total_size_bytes, total_size_pages, created_at \
+            "SELECT id, path, doc_type, total_size_bytes, total_size_pages, created_at \
              FROM document ORDER BY created_at",
             (),
         )
@@ -822,7 +827,7 @@ async fn gather_listed_documents(
             .join(", ");
         let sql = if match_all {
             format!(
-                "SELECT d.path, d.doc_type, d.total_size_bytes, d.total_size_pages, d.created_at \
+                "SELECT d.id, d.path, d.doc_type, d.total_size_bytes, d.total_size_pages, d.created_at \
                  FROM document d JOIN document_tag t ON t.document_id = d.id \
                  WHERE t.tag IN ({placeholders}) \
                  GROUP BY d.id \
@@ -831,7 +836,7 @@ async fn gather_listed_documents(
             )
         } else {
             format!(
-                "SELECT d.path, d.doc_type, d.total_size_bytes, d.total_size_pages, d.created_at \
+                "SELECT d.id, d.path, d.doc_type, d.total_size_bytes, d.total_size_pages, d.created_at \
                  FROM document d \
                  WHERE EXISTS (SELECT 1 FROM document_tag t \
                                 WHERE t.document_id = d.id AND t.tag IN ({placeholders})) \
@@ -855,19 +860,23 @@ async fn gather_listed_documents(
         op: "list_text.next",
         source,
     })? {
-        let path: String = row.get(0).map_err(|source| CommandError::Db {
+        let id: i64 = row.get(0).map_err(|source| CommandError::Db {
+            op: "list_text.get.id",
+            source,
+        })?;
+        let path: String = row.get(1).map_err(|source| CommandError::Db {
             op: "list_text.get.path",
             source,
         })?;
-        let doc_type: String = row.get(1).map_err(|source| CommandError::Db {
+        let doc_type: String = row.get(2).map_err(|source| CommandError::Db {
             op: "list_text.get.doc_type",
             source,
         })?;
-        let total_size_bytes: i64 = row.get(2).map_err(|source| CommandError::Db {
+        let total_size_bytes: i64 = row.get(3).map_err(|source| CommandError::Db {
             op: "list_text.get.bytes",
             source,
         })?;
-        let total_size_pages: Option<i64> = match row.get_value(3) {
+        let total_size_pages: Option<i64> = match row.get_value(4) {
             Ok(Value::Null) => None,
             Ok(Value::Integer(n)) => Some(n),
             Ok(other) => panic!("unexpected total_size_pages value {other:?}"),
@@ -878,23 +887,63 @@ async fn gather_listed_documents(
                 });
             }
         };
-        let created_at: String = row.get(4).map_err(|source| CommandError::Db {
+        let created_at: String = row.get(5).map_err(|source| CommandError::Db {
             op: "list_text.get.created_at",
             source,
         })?;
         docs.push(ListedDocument {
+            id,
             path,
             doc_type,
             total_size_bytes,
             total_size_pages,
             created_at,
+            tags: Vec::new(),
         });
+    }
+
+    // Second pass: attach tags. A single query over all listed documents,
+    // aggregated in Rust, keeps this on the same fresh connection without a
+    // per-document round trip.
+    if !docs.is_empty() {
+        let placeholders = std::iter::repeat("?")
+            .take(docs.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT document_id, tag FROM document_tag \
+             WHERE document_id IN ({placeholders}) ORDER BY tag"
+        );
+        let params: Vec<Value> = docs.iter().map(|d| Value::Integer(d.id)).collect();
+        let mut tag_rows = conn
+            .query(&sql, Params::Positional(params))
+            .await
+            .map_err(|source| CommandError::Db {
+                op: "list_text.tags.query",
+                source,
+            })?;
+        while let Some(row) = tag_rows.next().await.map_err(|source| CommandError::Db {
+            op: "list_text.tags.next",
+            source,
+        })? {
+            let document_id: i64 = row.get(0).map_err(|source| CommandError::Db {
+                op: "list_text.tags.get.id",
+                source,
+            })?;
+            let tag: String = row.get(1).map_err(|source| CommandError::Db {
+                op: "list_text.tags.get.tag",
+                source,
+            })?;
+            if let Some(doc) = docs.iter_mut().find(|d| d.id == document_id) {
+                doc.tags.push(tag);
+            }
+        }
     }
 
     Ok(docs)
 }
 
-fn format_list(docs: &[ListedDocument], snapshot: &StatusSnapshot) -> String {
+fn format_list(docs: &[ListedDocument], snapshot: &StatusSnapshot, verbose: bool) -> String {
     let mut out = String::new();
 
     let path_w = docs.iter().map(|d| d.path.len()).max().unwrap_or(0);
@@ -924,6 +973,14 @@ fn format_list(docs: &[ListedDocument], snapshot: &StatusSnapshot) -> String {
             bytes = d.total_size_bytes,
             created = d.created_at,
         );
+        if verbose {
+            let tags = if d.tags.is_empty() {
+                "(none)".to_string()
+            } else {
+                d.tags.join(", ")
+            };
+            let _ = writeln!(out, "    tags: {tags}");
+        }
     }
 
     if let Some(c) = &snapshot.current {

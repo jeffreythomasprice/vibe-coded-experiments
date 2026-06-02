@@ -76,6 +76,10 @@ pub enum Request {
         tags: Vec<String>,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         match_all: bool,
+        /// Text mode only: print each document's tags on a second line.
+        /// Ignored in JSON mode, where tags are always included.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        verbose: bool,
     },
     Delete { path: PathBuf },
     TagAdd { path: PathBuf, tags: Vec<String> },
@@ -154,7 +158,9 @@ impl Request {
             Request::QueueDelete { id } => format!("queue delete {id}"),
             Request::QueueClear => "queue clear".to_string(),
             Request::QueueCleanup => "queue cleanup".to_string(),
-            Request::List { tags, match_all } => {
+            Request::List {
+                tags, match_all, ..
+            } => {
                 if tags.is_empty() {
                     "list".to_string()
                 } else {

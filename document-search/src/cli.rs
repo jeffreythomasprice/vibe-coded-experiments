@@ -116,6 +116,11 @@ pub enum Command {
         /// With multiple --tag, require ALL tags to match (default: ANY).
         #[arg(long, requires = "tags")]
         match_all: bool,
+
+        /// Text mode: also print each document's tags on a second line.
+        /// (In JSON mode tags are always included.)
+        #[arg(short = 'v', long)]
+        verbose: bool,
     },
 
     /// Delete an ingested document and all of its chunks/embeddings.

@@ -119,7 +119,15 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             QueueCommand::Clear => Ok(Request::QueueClear),
             QueueCommand::Cleanup => Ok(Request::QueueCleanup),
         },
-        Command::List { tags, match_all } => Ok(Request::List { tags, match_all }),
+        Command::List {
+            tags,
+            match_all,
+            verbose,
+        } => Ok(Request::List {
+            tags,
+            match_all,
+            verbose,
+        }),
         Command::Delete { path } => Ok(Request::Delete { path }),
         Command::Tag { action } => match action {
             TagCommand::Add { path, tags } => Ok(Request::TagAdd { path, tags }),
