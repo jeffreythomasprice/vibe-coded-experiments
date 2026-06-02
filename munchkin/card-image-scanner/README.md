@@ -9,6 +9,8 @@ PNG files.
 - Rust (edition 2024) / `cargo`
 - The `tesseract` CLI on `PATH` (the tool shells out to it). On Debian/Ubuntu:
   `sudo apt install tesseract-ocr`.
+- For the optional illustration vectorizer (`vectorize-illustrations.sh`): the
+  `vtracer` CLI on `PATH` (`cargo install vtracer`).
 
 ## Usage
 
@@ -77,6 +79,60 @@ illustration band (green), OCR lines (blue), and bottom-corner zones
 | `--aspect-min/--aspect-max` | `0.55`/`0.78` | Card aspect-ratio acceptance band |
 | `--rows`/`--cols` | auto | Force a fixed grid |
 | `--debug` | off | Write intermediate/annotated images |
+
+## Vectorizing illustrations
+
+`vectorize-illustrations.sh` is an optional post-processing step that converts the
+extracted `*_illustration.png` crops into SVG vector art with
+[`vtracer`](https://github.com/visioncortex/vtracer). The flat, bold-outlined
+Munchkin art vectorizes cleanly, and the result scales to any size without
+pixelation.
+
+Install `vtracer` once (`cargo install vtracer`), then run:
+
+```sh
+./vectorize-illustrations.sh [IN_DIR] [OUT_DIR]
+```
+
+Defaults are `IN_DIR=./out` and `OUT_DIR=./out/svg`. The script finds every
+`*_illustration.png` in `IN_DIR`, vectorizes them in parallel (one job per core),
+and writes a matching `<name>.svg` into `OUT_DIR`.
+
+### Tweaking the output
+
+The defaults are tuned for these cards: they flatten the parchment background
+(which otherwise explodes into hundreds of tiny paths) while keeping the
+character art faithful — roughly 80 paths/card instead of 750. Override any
+parameter by setting an env var on the command line:
+
+```sh
+# keep more fine detail (noisier background, larger files)
+FILTER_SPECKLE=6 COLOR_PRECISION=6 ./vectorize-illustrations.sh
+
+# angular, low-poly look instead of smooth curves
+MODE=polygon ./vectorize-illustrations.sh
+```
+
+| Env var | Default | Effect |
+|---------|---------|--------|
+| `COLOR_PRECISION` | `5` | Bits of color per channel. Higher = more colors / closer to the original shading; lower = flatter. |
+| `FILTER_SPECKLE` | `12` | Discard blobs smaller than N px. Higher = less scan noise but loses fine detail; lower = keeps detail. |
+| `GRADIENT_STEP` | `24` | Color difference between stacked gradient layers. Higher = fewer, flatter color bands. |
+| `CORNER_THRESHOLD` | `60` | Min angle (deg) treated as a sharp corner vs. a smooth curve. |
+| `MODE` | `spline` | `spline` (smooth curves), `polygon` (straight edges), or `pixel`. |
+| `JOBS` | `nproc` | Number of parallel `vtracer` workers. |
+
+To preview a result without a dedicated SVG rasterizer, open the `.svg` in a
+browser, or screenshot it with headless Chrome:
+
+```sh
+google-chrome --headless --screenshot=/tmp/preview.png \
+  --window-size=W,H "file://$PWD/out/svg/<name>.svg"
+```
+
+Note: vtracer traces every color region including the background, so the SVGs are
+opaque (no transparency). Isolating the character on a transparent background is a
+separate masking step.
 
 ## Accuracy notes
 

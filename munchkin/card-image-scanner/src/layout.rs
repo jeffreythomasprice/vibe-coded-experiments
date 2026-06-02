@@ -41,7 +41,6 @@ pub fn analyze(crop: &RgbImage, lines: &[RawLine], cfg: &LayoutConfig) -> Analys
             continue;
         }
         let cy = l.bbox.center_y();
-        let cx = l.bbox.center_x();
 
         // Drop OCR noise picked out of the cartoon. Keep confident multi-word
         // lines (a banner like "GO UP A LEVEL") and anything in the title zone.
@@ -50,13 +49,20 @@ pub fn analyze(crop: &RgbImage, lines: &[RawLine], cfg: &LayoutConfig) -> Analys
             continue;
         }
 
-        // Bottom-corner detection takes precedence.
+        // Bottom-corner detection takes precedence. A corner label can be wide
+        // enough that its center sits inside the middle third (e.g. "400 Gold
+        // Pieces"), so classify by which corner third the line's edges reach
+        // into rather than by its center. A line reaching exactly one corner is
+        // assigned there; one reaching neither (centered) or both (full-width)
+        // falls through to the body.
         if l.bbox.bottom() as f32 >= bottom_cut {
-            if cx < left_third {
+            let reaches_left = (l.bbox.x as f32) < left_third;
+            let reaches_right = (l.bbox.right() as f32) > right_third;
+            if reaches_left && !reaches_right {
                 bottom_left.push(l);
                 continue;
             }
-            if cx > right_third {
+            if reaches_right && !reaches_left {
                 bottom_right.push(l);
                 continue;
             }
