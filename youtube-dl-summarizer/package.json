@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "bun src/index.ts",
+    "build": "bun build --compile --outfile dist/yt-summarize src/index.ts",
     "test": "bun test"
   },
   "devDependencies": {

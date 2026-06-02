@@ -9,8 +9,6 @@ const DEFAULT_PROMPT = `You are summarizing a YouTube video transcript that incl
 
 Use the exact [HH:MM:SS] format from the transcript for timestamps. Be concise and informative. Focus on the main ideas and takeaways.`;
 
-const client = new Anthropic();
-
 export async function summarize(
   cacheDir: string,
   verbose: boolean,
@@ -30,6 +28,8 @@ export async function summarize(
 
   console.error("Summarizing with Claude...");
 
+  // Construct lazily so loadEnv() has already populated ANTHROPIC_API_KEY.
+  const client = new Anthropic();
   const message = await client.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 4096,

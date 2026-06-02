@@ -1,6 +1,9 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
 import { runPipeline } from "./pipeline.ts";
+import { loadEnv } from "./utils/load-env.ts";
+
+await loadEnv();
 
 const program = new Command();
 
