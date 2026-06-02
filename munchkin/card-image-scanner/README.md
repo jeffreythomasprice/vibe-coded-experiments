@@ -134,6 +134,13 @@ Note: vtracer traces every color region including the background, so the SVGs ar
 opaque (no transparency). Isolating the character on a transparent background is a
 separate masking step.
 
+## Known omissions
+
+- **Convenient Addition Error** — this card is absent from our data set. It was a
+  promotional card that isn't included in every version of the game, so it never
+  appeared in the scans. We're fine without it; it's documented here only so its
+  absence doesn't read as a scanning bug.
+
 ## Accuracy notes
 
 Card segmentation and the body/corner text are reliable. The stylized small-caps
