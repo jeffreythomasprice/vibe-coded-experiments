@@ -1,19 +1,24 @@
-refactoring:
-- drop useless ocr fields
-  - title_match_score
-  - bbox
-  - raw_line
-  - title_raw
-- rename, and document the field ordering:
-  - above_title
-  - title
-  - below_title
-  - body
-- all fields that contain text can be either strings or arrays of strings
+check all cards manually
+next: door11_02
+
+
+document the order of card layout:
+- above_title
+- title
+- below_title
+- illustration_path
+- body
+- bottom_left, bottom_right
+
 
 double check cards.toml to make sure all monsters have
 - a level (where? above_title?)
 - treasures
+
+
+make sure all copies of each duplicate card have the same text
+e.g. all 3 wizards
+
 
 markdown in various text fields? at least bold and italics
 
