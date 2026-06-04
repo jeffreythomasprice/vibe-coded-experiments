@@ -43,6 +43,8 @@ card_type = "door"
 title = "Curse! Lose 1 Small Item"
 body = """Choose one small item to discard. Any item that is not designated "big" is small."""
 card_image_path = "images/raw/door10_02_card.png"
+illustration_path = "images/raw/door10_02_illustration.png"
+card_image_svg_path = "images/svg/door10_02_illustration.svg"
 
 [[card]]
 id = "door10_03"
@@ -1178,6 +1180,8 @@ below_title = "+1 to Run Away."
 body = "Bad Stuff: If you fail to Run Away, you must drop all your Big items."
 bottom_right = "1 Treasure"
 card_image_path = "images/raw/door9_08_card.png"
+illustration_path = "images/raw/door9_08_illustration.png"
+card_image_svg_path = "images/svg/door9_08_illustration.svg"
 
 [[card]]
 id = "loot1_00"

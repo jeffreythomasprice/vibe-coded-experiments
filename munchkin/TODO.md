@@ -1,4 +1,5 @@
-door9_08 and door10_02 are missing extracted illustration and svg
+clean up the svg data to have transparent backgrounds
+
 
 
 document the order of card layout (modify layout while we're at it?):
@@ -22,7 +23,7 @@ e.g. all 3 wizards
 markdown in various text fields? at least bold and italics
 
 
-clean up the svg data to have transparent backgrounds
-
-
 make a card renderer
+
+
+get the munchkin font

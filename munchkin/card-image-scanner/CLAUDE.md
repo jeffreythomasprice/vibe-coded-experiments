@@ -98,11 +98,18 @@ actual `${VAR:-...}` lines are authoritative (5/12/24). If you touch the
 defaults, fix the comment too — `README.md` documents the real values and must
 also stay in sync.
 
-### Known limitation
+### Stripping the background (separate script)
 
-`vtracer` traces every color region including the background, so output SVGs are
-opaque (no transparency). Isolating the character on a transparent background
-would be a separate masking step — not currently implemented.
+`vtracer` traces every color region including the background, so raw output SVGs
+are opaque. `make-illustrations-transparent.py` is a standalone Python
+post-processing step (no deps; takes `[DIR]` + `--apply`) that removes it. The
+background is always the leading `<path>`(s): shapes anchored at `M0 0` whose
+coordinates span the full canvas (two stacked for two-tone cards). The script
+deletes every such leading full-canvas path and stops at the first real-artwork
+path; it's conservative (requires both the `M0 0` start and edge-spanning extent),
+keeps at least one path, and is idempotent. See the "Making the background
+transparent" section in `README.md`. If you change the detection heuristic, keep
+both in sync.
 
 ## When you change either stage
 

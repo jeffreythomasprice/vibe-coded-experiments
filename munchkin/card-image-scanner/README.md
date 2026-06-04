@@ -130,9 +130,34 @@ google-chrome --headless --screenshot=/tmp/preview.png \
   --window-size=W,H "file://$PWD/out/svg/<name>.svg"
 ```
 
-Note: vtracer traces every color region including the background, so the SVGs are
-opaque (no transparency). Isolating the character on a transparent background is a
-separate masking step.
+### Making the background transparent
+
+vtracer traces every color region, including the card's parchment background, so
+its SVGs are opaque. `make-illustrations-transparent.py` removes that background
+so you can composite the character art over your own backdrop.
+
+The key observation: the background is always the **first** `<path>` in the file
+— a shape anchored at the origin (`d="M0 0 ..."`) whose coordinates span the whole
+canvas. Some cards have a two-tone background, so vtracer stacks two such
+full-canvas paths at the front. The script deletes every leading path that *both*
+starts at `M0 0` *and* reaches the canvas edges, then stops at the first path that
+doesn't qualify (the actual artwork). SVG has no default backdrop, so what remains
+renders on transparency.
+
+```sh
+# dry run — lists what would change, touches nothing
+./make-illustrations-transparent.py out/svg
+
+# write the changes in place
+./make-illustrations-transparent.py out/svg --apply
+```
+
+`DIR` defaults to `./out/svg`. Detection is conservative (a foreground element
+that merely touches an edge, or starts somewhere other than the origin, is left
+alone) and at least one path is always kept. The operation is idempotent — a
+second run finds no full-canvas paths and does nothing — so it's safe to re-run,
+and since the SVGs are tracked in git an over-eager removal is recoverable with
+`git checkout`.
 
 ## Known omissions
 
