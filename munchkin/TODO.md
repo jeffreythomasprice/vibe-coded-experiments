@@ -1,8 +1,4 @@
-check all cards manually
-next: loot6_00
-
-
-document the order of card layout:
+document the order of card layout (modify layout while we're at it?):
 - above_title
 - title
 - below_title

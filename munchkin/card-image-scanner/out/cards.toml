@@ -1573,8 +1573,7 @@ id = "loot6_01"
 source_image = "loot6.jpg"
 card_type = "loot"
 title = "Bow with Ribbons"
-below_title = ["+4"]
-body = "ay, 3"
+above_title = ["+4 Bonus", "Usable by Elf Only"]
 bottom_left = "2 Hands"
 bottom_right = "800 Gold Pieces"
 card_image_path = "loot6_01_card.png"
@@ -1585,7 +1584,7 @@ id = "loot6_02"
 source_image = "loot6.jpg"
 card_type = "loot"
 title = "Nasty-Tasting Sports Drink"
-body = "Use during any combat. +2 to either ip Usable once only."
+body = "Use during any combat. +2 to either side. Usable once only."
 bottom_right = "200 Gold Pieces"
 card_image_path = "loot6_02_card.png"
 illustration_path = "loot6_02_illustration.png"
@@ -1595,10 +1594,7 @@ id = "loot6_03"
 source_image = "loot6.jpg"
 card_type = "loot"
 title = "Magic Lamp"
-body = """
-You may use the Lamp only on your own turn. It summons a genie who makes a
-single monster vanish, even if you had already failed your Run Away roll and it was about to catch you. If it was the only monster you were facing, you may take its treasure, but you don't gain a level. Usable"""
-bottom_left = "once only,"
+body = "You may use the Lamp only on your own turn. It summons a genie who makes a single monster vanish, even if you had already failed your Run Away roll and it was about to catch you. If it was the only monster you were facing, you may take its treasure, but you don't gain a level. Usable once only."
 bottom_right = "500 Gold Pieces"
 card_image_path = "loot6_03_card.png"
 illustration_path = "loot6_03_illustration.png"
@@ -1608,13 +1604,9 @@ id = "loot6_04"
 source_image = "loot6.jpg"
 card_type = "loot"
 title = "Rat on a Stick"
-below_title = ["No Bonus"]
-body = """
-Lot
-Discard for automatic escape from any"""
-bottom_left = """
-monster of level 8 or below.
-1 Hand"""
+above_title = ["No Bonus"]
+body = "Discard for automatic escape from any monster of level 8 or below."
+bottom_left = "1 Hand"
 bottom_right = "No Value"
 card_image_path = "loot6_04_card.png"
 illustration_path = "loot6_04_illustration.png"
@@ -1624,11 +1616,8 @@ id = "loot6_05"
 source_image = "loot6.jpg"
 card_type = "loot"
 title = "Huge Rock"
-below_title = [": #3 BONUS"]
-body = """
-4
-Venn"""
-bottom_left = "ao"
+above_title = "+3 Bonus"
+bottom_left = ["2 Hands", "Big"]
 bottom_right = "No Value"
 card_image_path = "loot6_05_card.png"
 illustration_path = "loot6_05_illustration.png"
@@ -1638,7 +1627,7 @@ id = "loot6_06"
 source_image = "loot6.jpg"
 card_type = "loot"
 title = "Slimy Armor"
-below_title = ["BONUS"]
+above_title = "1 Bonus"
 bottom_left = "Armor"
 bottom_right = "200 Gold Pieces"
 card_image_path = "loot6_06_card.png"
@@ -1649,7 +1638,10 @@ id = "loot6_07"
 source_image = "loot6.jpg"
 card_type = "loot"
 title = "Gentlemen's Club"
-below_title = ["Usable by Male Players Only", "(or sex-changed females)"]
+above_title = [
+    "+3 Bouns",
+    "Usable by Male Players Only (or sex-changed females)",
+]
 bottom_left = "1 Hand"
 bottom_right = "400 Gold Pieces"
 card_image_path = "loot6_07_card.png"
@@ -1660,6 +1652,7 @@ id = "loot6_08"
 source_image = "loot6.jpg"
 card_type = "loot"
 title = "Boots of Butt-Kicking"
+above_title = "+2 Bonus"
 bottom_left = "Footgear"
 bottom_right = "400 Gold Pieces"
 card_image_path = "loot6_08_card.png"
@@ -1690,8 +1683,7 @@ id = "loot7_02"
 source_image = "loot7.jpg"
 card_type = "loot"
 title = "Mace of Sharpness"
-below_title = ["+4 BONUS"]
-body = "3"
+above_title = ["+4 Bouns", "Usable by CLeric Only"]
 bottom_left = "1 Hand"
 bottom_right = "600 Gold Pieces"
 card_image_path = "loot7_02_card.png"
@@ -1702,7 +1694,7 @@ id = "loot7_03"
 source_image = "loot7.jpg"
 card_type = "loot"
 title = "Flaming Armor"
-below_title = ["+2 BONUS"]
+above_title = ["+2 Bonus"]
 bottom_left = "Armor"
 bottom_right = "400 Gold Pieces"
 card_image_path = "loot7_03_card.png"
@@ -1714,7 +1706,7 @@ source_image = "loot7.jpg"
 card_type = "loot"
 title = "Potion of Halitosis"
 body = "Use during any combat. +2 to either side, or instantly kills Floating Nose. Usable once only."
-bottom_right = "Gold Pieces"
+bottom_right = "100 Gold Pieces"
 card_image_path = "loot7_04_card.png"
 illustration_path = "loot7_04_illustration.png"
 
@@ -1723,9 +1715,7 @@ id = "loot7_05"
 source_image = "loot7.jpg"
 card_type = "loot"
 title = "Transferral Potion"
-below_title = ["=~"]
-body = "Play during any combat. Any other player (your choice) fights the monster(s), may ask for help normally, and gets the treasure and levels if he wins. The original player then resumes his turn, and may loot the room whether the combat was won or lost."
-bottom_left = "Usable once only."
+body = "Play during any combat. Any other player (your choice) fights the monster(s), may ask for help normally, and gets the treasure and levels if he wins. The original player then resumes his turn, and may loot the room whether the combat was won or lost. Usable once only."
 bottom_right = "300 Gold Pisces"
 card_image_path = "loot7_05_card.png"
 illustration_path = "loot7_05_illustration.png"
@@ -1735,9 +1725,8 @@ id = "loot7_06"
 source_image = "loot7.jpg"
 card_type = "loot"
 title = "Chainsaw of Bloody Dismemberment"
-below_title = ["+3 BONUS"]
-body = "2"
-bottom_left = "2 Hands Big"
+above_title = "+3 Bonus"
+bottom_left = ["2 Hands", "Big"]
 bottom_right = "600 Gold Pieces"
 card_image_path = "loot7_06_card.png"
 illustration_path = "loot7_06_illustration.png"
@@ -1747,12 +1736,8 @@ id = "loot7_07"
 source_image = "loot7.jpg"
 card_type = "loot"
 title = "Hireling"
-body = '''
-\
-ed
-\\
-Keep this wat in front of you, with your'''
-bottom_left = "treasures."
+below_title = "Follows you around and carries things for you. Allows you to carry and use one extr Big item. Will not fight for you!"
+body = "Keep this card in front of you, with your treasures."
 card_image_path = "loot7_07_card.png"
 illustration_path = "loot7_07_illustration.png"
 
@@ -1761,8 +1746,7 @@ id = "loot7_08"
 source_image = "loot7.jpg"
 card_type = "loot"
 title = "Really Impressive Title"
-below_title = ["+3 BONUS"]
-body = "=."
+above_title = "+3 Bonus"
 bottom_right = "No Value"
 card_image_path = "loot7_08_card.png"
 illustration_path = "loot7_08_illustration.png"
@@ -1772,7 +1756,7 @@ id = "loot8_00"
 source_image = "loot8.jpg"
 card_type = "loot"
 title = "Pointy Hat of Power"
-below_title = ["*3 BONUS", "Usable by Wizard Only"]
+above_title = ["+3 Bonus", "Usable by Wizard Only"]
 bottom_left = "Headgear"
 bottom_right = "400 Gold Pieces"
 card_image_path = "loot8_00_card.png"
@@ -1783,14 +1767,8 @@ id = "loot8_01"
 source_image = "loot8.jpg"
 card_type = "loot"
 title = "Mutilate the Bodies"
-below_title = [
-    "This card may only be played after",
-    "combat, but it does not have to be your",
-    "combat.",
-]
-body = """
-7)
-Go UP A LEVEL"""
+below_title = "This card may only be played after combat, but it does not have to be your combat."
+body = "Go Up A Level"
 card_image_path = "loot8_01_card.png"
 illustration_path = "loot8_01_illustration.png"
 
@@ -1819,7 +1797,7 @@ id = "loot8_04"
 source_image = "loot8.jpg"
 card_type = "loot"
 title = "Stepladder"
-below_title = ["+3 BONUS", "Usable by Halfling Only"]
+above_title = ["+3 Bonus", "Usable by Halfling Only"]
 bottom_left = "Big"
 bottom_right = "400 Gold Pieces"
 card_image_path = "loot8_04_card.png"
@@ -1830,8 +1808,8 @@ id = "loot8_05"
 source_image = "loot8.jpg"
 card_type = "loot"
 title = "Swiss Army Polearm"
-below_title = ["*4 Bonus", "Usable by Human Only"]
-bottom_left = "2 Hands"
+above_title = ["+4 Bonus", "Usable by Human Only"]
+bottom_left = ["2 Hands", "Big"]
 bottom_right = "600 Gold Pieces"
 card_image_path = "loot8_05_card.png"
 illustration_path = "loot8_05_illustration.png"
@@ -1841,11 +1819,7 @@ id = "loot8_06"
 source_image = "loot8.jpg"
 card_type = "loot"
 title = "Cheese Grater of Peace"
-below_title = ["43 Bonus", "Usable by Cleric Only", "OF PEACE"]
-body = """
-ih
-2
-0g?"""
+above_title = ["+3 Bonus", "Usable by Cleric Only"]
 bottom_left = "1 Hand"
 bottom_right = "400 Gold Pieces"
 card_image_path = "loot8_06_card.png"
@@ -1856,11 +1830,7 @@ id = "loot8_07"
 source_image = "loot8.jpg"
 card_type = "loot"
 title = "Pretty Balloons"
-below_title = ["i"]
-body = """
-wv
-2
-Use during any combat, distraction. +5 to either side. Usable once only,"""
+body = "Use during any combat, distraction. +5 to either side. Usable once only."
 bottom_right = "No Value"
 card_image_path = "loot8_07_card.png"
 illustration_path = "loot8_07_illustration.png"
@@ -1880,7 +1850,7 @@ id = "loot9_00"
 source_image = "loot9.jpg"
 card_type = "loot"
 title = "Buckler of Swashing"
-below_title = ["+2 BONUS"]
+above_title = ["+2 Bonus"]
 bottom_left = "1 Hand"
 bottom_right = "400 Gold Pieces"
 card_image_path = "loot9_00_card.png"
