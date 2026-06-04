@@ -359,7 +359,7 @@ card_type = "door"
 title = "Thief"
 body = [
     "Backstabbing: You may discard a card to backstab another player (-2 in combat). You may do this only once per victim per combat, but if two players are fighting a monster together, you may backstab each of them.",
-    "Theft: You may discard a card to try to steal a small item carried by another player. Roll a die; 4 or more succeeds, Otherwise you get whacked and lose 1 Level.",
+    "Theft: You may discard a card to try to steal a small item carried by another player. Roll a die; 4 or more succeeds. Otherwise, you get whacked and lose 1 Level.",
 ]
 card_image_path = "images/raw/door2_06_card.png"
 illustration_path = "images/raw/door2_06_illustration.png"
@@ -406,7 +406,7 @@ card_type = "door"
 title = "Thief"
 body = [
     "Backstabbing: You may discard a card to backstab another player (-2 in combat). You may do this only once per victim per combat, but if two players are fighting a monster together, you may backstab each of them.",
-    "Theft: You may discard a card to try to steal a small item carried by another player. Roll a die; 4 or more succeeds, Otherwise, you get whacked and lose 1 Level.",
+    "Theft: You may discard a card to try to steal a small item carried by another player. Roll a die; 4 or more succeeds. Otherwise, you get whacked and lose 1 Level.",
 ]
 card_image_path = "images/raw/door3_01_card.png"
 illustration_path = "images/raw/door3_01_illustration.png"
@@ -929,7 +929,7 @@ source_image = "door7.jpg"
 card_type = "door"
 title = "Halfling"
 below_title = [
-    "-l to Run Away.",
+    "-1 to Run Away.",
     "You may sell one item each turn for double price (other items are at normal price).",
 ]
 card_image_path = "images/raw/door7_07_card.png"
@@ -982,7 +982,7 @@ card_type = "door"
 title = "Cleric"
 body = [
     "Resurrection: When it is time for you to draw a card face-up, you may instead take the top card from the appropriate discard pile. You must then discard one card from your hand.",
-    "Turning: You may discard up to 3 cards in combat against an Undead creature Each discard gives you a +3 bonus",
+    "Turning: You may discard up to 3 cards in combat against an Undead creature. Each discard gives you a +3 bonus.",
 ]
 card_image_path = "images/raw/door8_02_card.png"
 illustration_path = "images/raw/door8_02_illustration.png"
@@ -995,7 +995,7 @@ card_type = "door"
 title = "Gazebo"
 above_title = "Level 8"
 below_title = ["No one can help you. You must face the Gazebo alone."]
-bottom_left = "Bad Stuff: Lose 3 Levels"
+body = "Bad Stuff: Lose 3 Levels."
 bottom_right = "2 Treasures"
 card_image_path = "images/raw/door8_03_card.png"
 illustration_path = "images/raw/door8_03_illustration.png"
@@ -1137,7 +1137,7 @@ source_image = "door9.jpg"
 card_type = "door"
 title = "Dwarf"
 below_title = [
-    "You can carry any number of Big items,",
+    "You can carry any number of Big items.",
     "You can have 6 cards in your hand.",
 ]
 card_image_path = "images/raw/door9_05_card.png"
@@ -1692,7 +1692,7 @@ id = "loot5_08"
 source_image = "loot5.jpg"
 card_type = "loot"
 title = "Magic Lamp"
-body = "You may use the Lamp only on your own turn. It summons a genie who makes a genie who makes a single monster vanish, even if you had already failed your Run Away roll and it was about to catch you. If it was the only monster you were facing, you may take its treasure, but you don't gain a level. Usable once only."
+body = "You may use the Lamp only on your own turn. It summons a genie who makes a single monster vanish, even if you had already failed your Run Away roll and it was about to catch you. If it was the only monster you were facing, you may take its treasure, but you don't gain a level. Usable once only."
 bottom_right = "500 Gold Pieces"
 card_image_path = "images/raw/loot5_08_card.png"
 illustration_path = "images/raw/loot5_08_illustration.png"
