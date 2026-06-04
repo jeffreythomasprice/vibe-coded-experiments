@@ -1,5 +1,5 @@
 check all cards manually
-next: door11_02
+next: loot6_00
 
 
 document the order of card layout:
@@ -12,7 +12,7 @@ document the order of card layout:
 
 
 double check cards.toml to make sure all monsters have
-- a level (where? above_title?)
+- a level in above_title
 - treasures
 
 
