@@ -101,15 +101,28 @@ also stay in sync.
 ### Stripping the background (separate script)
 
 `vtracer` traces every color region including the background, so raw output SVGs
-are opaque. `make-illustrations-transparent.py` is a standalone Python
-post-processing step (no deps; takes `[DIR]` + `--apply`) that removes it. The
-background is always the leading `<path>`(s): shapes anchored at `M0 0` whose
-coordinates span the full canvas (two stacked for two-tone cards). The script
-deletes every such leading full-canvas path and stops at the first real-artwork
-path; it's conservative (requires both the `M0 0` start and edge-spanning extent),
-keeps at least one path, and is idempotent. See the "Making the background
-transparent" section in `README.md`. If you change the detection heuristic, keep
-both in sync.
+are opaque. `make-illustrations-transparent.py` is a standalone post-processing
+step (takes `[DIR]` + `--apply`) that removes it. It is **not** no-dep and **not**
+path-based: vtracer splits the parchment across many shades scattered through the
+z-order (some painted over the art) and some cards layer the parchment over a
+solid full-canvas base, so neither path order nor fill color identifies the
+background — only **edge-connectivity** does. The script renders the SVG to a
+bitmap (cairosvg), **flood-fills the background inward from the four borders**
+(growing within a per-step color tolerance and staying near the sampled border
+color), inverts to a foreground mask, traces that mask's outline into vector
+contours (marching squares), and wraps the original untouched paths in a
+`<g clip-path=...>` whose `<clipPath id="bg-clip">` is that outline. The vector
+art is preserved; only a clip silhouette is added. This handles dark-base cards
+because the base only survives *inside* the foreground silhouette.
+
+It's a PEP 723 inline-deps script run with **uv** (`uv run
+make-illustrations-transparent.py [DIR] [--apply]`); uv fetches `cairosvg`,
+`pillow`, `numpy`, `scipy`, `scikit-image` into an ephemeral env — nothing is
+installed system wide. Idempotent: a processed file carries the `id="bg-clip"`
+marker and is skipped. Tunables are env vars (`NEIGHBOR_TOL`, `SEED_TOL`,
+`ERODE_PX`, `SIMPLIFY_TOL`, `MIN_BG_PCT`). See the "Making the background
+transparent" section in `README.md`. If you change the algorithm, keep both in
+sync.
 
 ## When you change either stage
 

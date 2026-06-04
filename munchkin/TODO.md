@@ -1,7 +1,3 @@
-clean up the svg data to have transparent backgrounds
-
-
-
 document the order of card layout (modify layout while we're at it?):
 - above_title
 - title

@@ -136,28 +136,47 @@ vtracer traces every color region, including the card's parchment background, so
 its SVGs are opaque. `make-illustrations-transparent.py` removes that background
 so you can composite the character art over your own backdrop.
 
-The key observation: the background is always the **first** `<path>` in the file
-— a shape anchored at the origin (`d="M0 0 ..."`) whose coordinates span the whole
-canvas. Some cards have a two-tone background, so vtracer stacks two such
-full-canvas paths at the front. The script deletes every leading path that *both*
-starts at `M0 0` *and* reaches the canvas edges, then stops at the first path that
-doesn't qualify (the actual artwork). SVG has no default backdrop, so what remains
-renders on transparency.
+The background can't be picked out by path order or fill color: vtracer splits
+the parchment across many paths in slightly different shades, scattered through
+the z-order (some under the art, some over it), and some cards paint it on top of
+a solid full-canvas base. The only reliable signal is **edge-connectivity** — the
+background is whatever is reachable from the canvas border without crossing into
+the art. So the script works on *pixels*, not paths:
+
+1. Render the SVG to a bitmap.
+2. **Flood-fill inward from the four borders**, growing through pixels within a
+   small per-step color tolerance (and staying within a looser tolerance of the
+   sampled border color, so the fill can't leap an edge into the art). That
+   region is the background.
+3. Invert to a foreground mask; fill interior holes, close, and erode 1px to drop
+   the anti-aliased fringe.
+4. Trace the foreground outline into vector contours (marching squares) and add
+   them as a `<clipPath>`, wrapping the original (untouched) vtracer paths in a
+   `<g clip-path=...>`. The art stays fully vector; only a clip outline is added.
+
+This removes all background regardless of how many paths or shades drew it, and
+handles dark-base cards correctly — the dark base only survives where it's
+*inside* the foreground silhouette (the actual character).
+
+The script declares its dependencies inline (PEP 723) and is run with **uv**,
+which fetches them into an ephemeral environment — nothing is installed system
+wide:
 
 ```sh
 # dry run — lists what would change, touches nothing
-./make-illustrations-transparent.py out/svg
+uv run make-illustrations-transparent.py out/svg
 
 # write the changes in place
-./make-illustrations-transparent.py out/svg --apply
+uv run make-illustrations-transparent.py out/svg --apply
 ```
 
-`DIR` defaults to `./out/svg`. Detection is conservative (a foreground element
-that merely touches an edge, or starts somewhere other than the origin, is left
-alone) and at least one path is always kept. The operation is idempotent — a
-second run finds no full-canvas paths and does nothing — so it's safe to re-run,
-and since the SVGs are tracked in git an over-eager removal is recoverable with
-`git checkout`.
+`DIR` defaults to `./out/svg`. The operation is idempotent — a processed file
+carries a `<clipPath id="bg-clip">` marker and is skipped on re-runs — so it's
+safe to re-run, and since the SVGs are tracked in git any result is recoverable
+with `git checkout`. Tunables (env vars): `NEIGHBOR_TOL` (per-step fill tolerance,
+default 30), `SEED_TOL` (max distance from the border color, default 85),
+`ERODE_PX` (fringe trim, default 1), `SIMPLIFY_TOL` (contour simplification px,
+default 1.5), `MIN_BG_PCT` (skip near-background-less files, default 1.0).
 
 ## Known omissions
 
