@@ -23,6 +23,3 @@ clean up the svg data to have transparent backgrounds
 
 
 make a card renderer
-
-
-commit card-image-scanner/out, maybe under a better path
