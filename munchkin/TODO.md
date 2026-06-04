@@ -1,3 +1,6 @@
+door9_08 and door10_02 are missing extracted illustration and svg
+
+
 document the order of card layout (modify layout while we're at it?):
 - above_title
 - title

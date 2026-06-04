@@ -2,13 +2,13 @@
 id = "loot-back_00"
 source_image = "loot-back.jpg"
 card_type = "loot"
-card_image_path = "loot-back_00_card.png"
+card_image_path = "images/raw/loot-back_00_card.png"
 
 [[card]]
 id = "door-back_00"
 source_image = "door-back.jpg"
 card_type = "door"
-card_image_path = "door-back_00_card.png"
+card_image_path = "images/raw/door-back_00_card.png"
 
 [[card]]
 id = "door10_00"
@@ -19,8 +19,9 @@ body = [
     "Resurrection: When it is time for you to draw a card face-up, you may instead take the top card from the appropriate discard pile. You must then discard one card from your hand.",
     "Turning: You may discard up to 3 cards in combat against an Undead creature. Each discard gives you a +3 bonus.",
 ]
-card_image_path = "door10_00_card.png"
-illustration_path = "door10_00_illustration.png"
+card_image_path = "images/raw/door10_00_card.png"
+illustration_path = "images/raw/door10_00_illustration.png"
+card_image_svg_path = "images/svg/door10_00_illustration.svg"
 
 [[card]]
 id = "door10_01"
@@ -31,8 +32,9 @@ below_title = [
     "You can carry any number of Big items.",
     "You can have 6 cards in your hand.",
 ]
-card_image_path = "door10_01_card.png"
-illustration_path = "door10_01_illustration.png"
+card_image_path = "images/raw/door10_01_card.png"
+illustration_path = "images/raw/door10_01_illustration.png"
+card_image_svg_path = "images/svg/door10_01_illustration.svg"
 
 [[card]]
 id = "door10_02"
@@ -40,8 +42,7 @@ source_image = "door10.jpg"
 card_type = "door"
 title = "Curse! Lose 1 Small Item"
 body = """Choose one small item to discard. Any item that is not designated "big" is small."""
-card_image_path = "door10_02_card.png"
-# TODO missing illustration
+card_image_path = "images/raw/door10_02_card.png"
 
 [[card]]
 id = "door10_03"
@@ -52,8 +53,9 @@ above_title = "Level 4"
 below_title = ["He's gross! +5 against Elves."]
 body = "Bad Stuff: He takes 2 items from you - one chosen by the player on either side of you."
 bottom_right = "2 Treasures"
-card_image_path = "door10_03_card.png"
-illustration_path = "door10_03_illustration.png"
+card_image_path = "images/raw/door10_03_card.png"
+illustration_path = "images/raw/door10_03_illustration.png"
+card_image_svg_path = "images/svg/door10_03_illustration.svg"
 
 [[card]]
 id = "door10_04"
@@ -64,8 +66,9 @@ above_title = "Level 1"
 below_title = ["Yucky slime! +4 against Elves."]
 body = "Bad Stuff: Discard the Footgear you are wearing. Lose 1 Level if you have no Footgear."
 bottom_right = "1 Treasure"
-card_image_path = "door10_04_card.png"
-illustration_path = "door10_04_illustration.png"
+card_image_path = "images/raw/door10_04_card.png"
+illustration_path = "images/raw/door10_04_illustration.png"
+card_image_svg_path = "images/svg/door10_04_illustration.svg"
 
 [[card]]
 id = "door10_05"
@@ -73,8 +76,9 @@ source_image = "door10.jpg"
 card_type = "door"
 title = "Curse! Change Sex"
 body = "-5 to your next combat due to distraction. After that, there is no further penalty. However, the change is permanent."
-card_image_path = "door10_05_card.png"
-illustration_path = "door10_05_illustration.png"
+card_image_path = "images/raw/door10_05_card.png"
+illustration_path = "images/raw/door10_05_illustration.png"
+card_image_svg_path = "images/svg/door10_05_illustration.svg"
 
 [[card]]
 id = "door10_06"
@@ -85,8 +89,9 @@ above_title = ["Level 4", "Undead"]
 below_title = "+5 against Dwarves."
 body = "Bad Stuff: Kicks, bites, and smells awful. Lose 2 Levels."
 bottom_right = "2 Treasures"
-card_image_path = "door10_06_card.png"
-illustration_path = "door10_06_illustration.png"
+card_image_path = "images/raw/door10_06_card.png"
+illustration_path = "images/raw/door10_06_illustration.png"
+card_image_svg_path = "images/svg/door10_06_illustration.svg"
 
 [[card]]
 id = "door10_07"
@@ -97,8 +102,9 @@ above_title = "Level 8"
 below_title = ["It's gross! +6 against Elves."]
 body = "Bad Stuff: When it sucks your face off, your Headgear goes with it. Discard all Headgear worn, and lose 1 Level."
 bottom_right = "2 Treasures"
-card_image_path = "door10_07_card.png"
-illustration_path = "door10_07_illustration.png"
+card_image_path = "images/raw/door10_07_card.png"
+illustration_path = "images/raw/door10_07_illustration.png"
+card_image_svg_path = "images/svg/door10_07_illustration.svg"
 
 [[card]]
 id = "door10_08"
@@ -109,8 +115,9 @@ above_title = "Level 6"
 below_title = "Gain an extra Level if you defeat it without using help or bonuses."
 body = "Bad Stuff: Projectile vomiting attack! Discard your whole hand."
 bottom_right = "2 Treasures"
-card_image_path = "door10_08_card.png"
-illustration_path = "door10_08_illustration.png"
+card_image_path = "images/raw/door10_08_card.png"
+illustration_path = "images/raw/door10_08_illustration.png"
+card_image_svg_path = "images/svg/door10_08_illustration.svg"
 
 [[card]]
 id = "door11_00"
@@ -120,8 +127,9 @@ title = "Mate"
 below_title = [
     "Another monster appears, of the same Level and with all the same bonuses. If the monsters are defated, draw treasure for each and go up levels for each. If player flees, he is at -1 to Run Away.",
 ]
-card_image_path = "door11_00_card.png"
-illustration_path = "door11_00_illustration.png"
+card_image_path = "images/raw/door11_00_card.png"
+illustration_path = "images/raw/door11_00_illustration.png"
+card_image_svg_path = "images/svg/door11_00_illustration.svg"
 
 [[card]]
 id = "door11_01"
@@ -129,8 +137,9 @@ source_image = "door11.jpg"
 card_type = "door"
 title = "Out to Lunch"
 body = "The monster in this room is on break. Play this card during any combat. The player facing the monster(s) discards them all and draws 2 Treasure cards immediately."
-card_image_path = "door11_01_card.png"
-illustration_path = "door11_01_illustration.png"
+card_image_path = "images/raw/door11_01_card.png"
+illustration_path = "images/raw/door11_01_illustration.png"
+card_image_svg_path = "images/svg/door11_01_illustration.svg"
 
 [[card]]
 id = "door11_02"
@@ -144,8 +153,9 @@ below_title = [
 body = "Bad Stuff: Lose all your items and all cards in your hand."
 bottom_left = "2 Levels"
 bottom_right = "4 Treasures"
-card_image_path = "door11_02_card.png"
-illustration_path = "door11_02_illustration.png"
+card_image_path = "images/raw/door11_02_card.png"
+illustration_path = "images/raw/door11_02_illustration.png"
+card_image_svg_path = "images/svg/door11_02_illustration.svg"
 
 [[card]]
 id = "door11_03"
@@ -158,8 +168,9 @@ below_title = [
 ]
 body = "Bad Stuff: Your level becomes equal to the lowest level of any character in play."
 bottom_right = "2 Treasures"
-card_image_path = "door11_03_card.png"
-illustration_path = "door11_03_illustration.png"
+card_image_path = "images/raw/door11_03_card.png"
+illustration_path = "images/raw/door11_03_illustration.png"
+card_image_svg_path = "images/svg/door11_03_illustration.svg"
 
 [[card]]
 id = "door1_00"
@@ -170,8 +181,9 @@ body = [
     "Berserking: You may discard up to 3 cards in combat; each one gives you a +1 bonus.",
     "You win ties in combat.",
 ]
-card_image_path = "door1_00_card.png"
-illustration_path = "door1_00_illustration.png"
+card_image_path = "images/raw/door1_00_card.png"
+illustration_path = "images/raw/door1_00_illustration.png"
+card_image_svg_path = "images/svg/door1_00_illustration.svg"
 
 [[card]]
 id = "door1_01"
@@ -182,8 +194,9 @@ body = [
     "Flight Spell: You may discard up to 3 cards while Running Away; each one gives you a +1 bonus to flee.",
     "Charm Spell: You may discard your whole hand to charm a single Monster instead of fighting it. Discard the Monster and take its Treasure, but don't gain levels. If there are other monsters in the combat, fight them normally.",
 ]
-card_image_path = "door1_01_card.png"
-illustration_path = "door1_01_illustration.png"
+card_image_path = "images/raw/door1_01_card.png"
+illustration_path = "images/raw/door1_01_illustration.png"
+card_image_svg_path = "images/svg/door1_01_illustration.svg"
 
 [[card]]
 id = "door1_02"
@@ -191,8 +204,9 @@ source_image = "door1.jpg"
 card_type = "door"
 title = "Super Munchkin"
 body = "You may have 2 Class cards, and have all the advantages and disadvantages of each."
-card_image_path = "door1_02_card.png"
-illustration_path = "door1_02_illustration.png"
+card_image_path = "images/raw/door1_02_card.png"
+illustration_path = "images/raw/door1_02_illustration.png"
+card_image_svg_path = "images/svg/door1_02_illustration.svg"
 
 [[card]]
 id = "door1_03"
@@ -203,8 +217,9 @@ body = [
     "Flight Spell: You may discard up to 3 cards while Running Away; each one gives you a +1 bonus to flee.",
     "Charm Spell: You may discard your whole hand to charm a single Monster instead of fighting it. Discard the Monster and take its Treasure, but don't gain levels. If there are other monsters in the combat, fight them normally.",
 ]
-card_image_path = "door1_03_card.png"
-illustration_path = "door1_03_illustration.png"
+card_image_path = "images/raw/door1_03_card.png"
+illustration_path = "images/raw/door1_03_illustration.png"
+card_image_svg_path = "images/svg/door1_03_illustration.svg"
 
 [[card]]
 id = "door1_04"
@@ -215,8 +230,9 @@ body = [
     "Resurrection: When it is time for you to draw a card face-up, you may instead take the top card from the appropriate discard pile. You must then discard one card from your hand.",
     "Turning: You may discard up to 3 cards in combat against an Undead creature. Each discard gives you a +3 bonus.",
 ]
-card_image_path = "door1_04_card.png"
-illustration_path = "door1_04_illustration.png"
+card_image_path = "images/raw/door1_04_card.png"
+illustration_path = "images/raw/door1_04_illustration.png"
+card_image_svg_path = "images/svg/door1_04_illustration.svg"
 
 [[card]]
 id = "door1_05"
@@ -224,8 +240,9 @@ source_image = "door1.jpg"
 card_type = "door"
 title = "Half-Breed"
 body = "You may have two Race cards, and have all the advantages and disadvantages of each. Or you may have one Race card and have all of its advantages and none of its disadvantages (for example, monsters that hate Elves will have no bonus against a half-Elf). Lose this card if you lose your Race card(s)."
-card_image_path = "door1_05_card.png"
-illustration_path = "door1_05_illustration.png"
+card_image_path = "images/raw/door1_05_card.png"
+illustration_path = "images/raw/door1_05_illustration.png"
+card_image_svg_path = "images/svg/door1_05_illustration.svg"
 
 [[card]]
 id = "door1_06"
@@ -233,8 +250,9 @@ source_image = "door1.jpg"
 card_type = "door"
 title = "Curse! Duck of Doom"
 body = "You should know better than to pick up a duck in a dungeon. Lose 2 Levels."
-card_image_path = "door1_06_card.png"
-illustration_path = "door1_06_illustration.png"
+card_image_path = "images/raw/door1_06_card.png"
+illustration_path = "images/raw/door1_06_illustration.png"
+card_image_svg_path = "images/svg/door1_06_illustration.svg"
 
 [[card]]
 id = "door1_07"
@@ -242,8 +260,9 @@ source_image = "door1.jpg"
 card_type = "door"
 title = "Truly Obnoxious Curse!"
 body = "Lose The Item That Gives You The Biggest Bonus"
-card_image_path = "door1_07_card.png"
-illustration_path = "door1_07_illustration.png"
+card_image_path = "images/raw/door1_07_card.png"
+illustration_path = "images/raw/door1_07_illustration.png"
+card_image_svg_path = "images/svg/door1_07_illustration.svg"
 
 [[card]]
 id = "door1_08"
@@ -254,8 +273,9 @@ below_title = [
     "+1 to Run Away.",
     "You go up 1 Level for every monster you help someone else kill.",
 ]
-card_image_path = "door1_08_card.png"
-illustration_path = "door1_08_illustration.png"
+card_image_path = "images/raw/door1_08_card.png"
+illustration_path = "images/raw/door1_08_illustration.png"
+card_image_svg_path = "images/svg/door1_08_illustration.svg"
 
 [[card]]
 id = "door2_00"
@@ -265,8 +285,9 @@ title = "Wandering Monster"
 below_title = [
     "Play this card, with a Monster from your hand, when someone (including you!) is in combat. Your monster joins the one already fighting - add their Levels. If the character(s) must flee, resolve the Run Away attempts separately, in the order the victim chooses.",
 ]
-card_image_path = "door2_00_card.png"
-illustration_path = "door2_00_illustration.png"
+card_image_path = "images/raw/door2_00_card.png"
+illustration_path = "images/raw/door2_00_illustration.png"
+card_image_svg_path = "images/svg/door2_00_illustration.svg"
 
 [[card]]
 id = "door2_01"
@@ -274,8 +295,9 @@ source_image = "door2.jpg"
 card_type = "door"
 title = "Curse!"
 body = "Lose The Armor You Are Wearing."
-card_image_path = "door2_01_card.png"
-illustration_path = "door2_01_illustration.png"
+card_image_path = "images/raw/door2_01_card.png"
+illustration_path = "images/raw/door2_01_illustration.png"
+card_image_svg_path = "images/svg/door2_01_illustration.svg"
 
 [[card]]
 id = "door2_02"
@@ -286,8 +308,9 @@ body = [
     "Berserking: You may discard up to 3 cards in combat; each one gives you a +1 bonus.",
     "You win ties in combat.",
 ]
-card_image_path = "door2_02_card.png"
-illustration_path = "door2_02_illustration.png"
+card_image_path = "images/raw/door2_02_card.png"
+illustration_path = "images/raw/door2_02_illustration.png"
+card_image_svg_path = "images/svg/door2_02_illustration.svg"
 
 [[card]]
 id = "door2_03"
@@ -300,8 +323,9 @@ below_title = [
 ]
 body = "Bad Stuff: You You have had your butt kicked by a woman. Your macho munchkin pride is lost. Lose your Class(es). If you already had no Class, lose 3 Levels."
 bottom_right = "2 Treasures"
-card_image_path = "door2_03_card.png"
-illustration_path = "door2_03_illustration.png"
+card_image_path = "images/raw/door2_03_card.png"
+illustration_path = "images/raw/door2_03_illustration.png"
+card_image_svg_path = "images/svg/door2_03_illustration.svg"
 
 [[card]]
 id = "door2_04"
@@ -312,8 +336,9 @@ below_title = [
     "You can carry any number of Big items.",
     "You can have 6 cards in your hand.",
 ]
-card_image_path = "door2_04_card.png"
-illustration_path = "door2_04_illustration.png"
+card_image_path = "images/raw/door2_04_card.png"
+illustration_path = "images/raw/door2_04_illustration.png"
+card_image_svg_path = "images/svg/door2_04_illustration.svg"
 
 [[card]]
 id = "door2_05"
@@ -321,8 +346,9 @@ source_image = "door2.jpg"
 card_type = "door"
 title = "Divine Intervention"
 body = "Regardless of who drew this card, or how, all Clerics immediately go up 1 Level. If this ends the game, the winner is entitled to mock the other players mercilessly."
-card_image_path = "door2_05_card.png"
-illustration_path = "door2_05_illustration.png"
+card_image_path = "images/raw/door2_05_card.png"
+illustration_path = "images/raw/door2_05_illustration.png"
+card_image_svg_path = "images/svg/door2_05_illustration.svg"
 
 [[card]]
 id = "door2_06"
@@ -333,8 +359,9 @@ body = [
     "Backstabbing: You may discard a card to backstab another player (-2 in combat). You may do this only once per victim per combat, but if two players are fighting a monster together, you may backstab each of them.",
     "Theft: You may discard a card to try to steal a small item carried by another player. Roll a die; 4 or more succeeds, Otherwise you get whacked and lose 1 Level.",
 ]
-card_image_path = "door2_06_card.png"
-illustration_path = "door2_06_illustration.png"
+card_image_path = "images/raw/door2_06_card.png"
+illustration_path = "images/raw/door2_06_illustration.png"
+card_image_svg_path = "images/svg/door2_06_illustration.svg"
 
 [[card]]
 id = "door2_07"
@@ -345,8 +372,9 @@ below_title = [
     "+10 To Level Of Monster",
     "Play during combat. If the monster is defeated, draw 2 extra Treasure cards.",
 ]
-card_image_path = "door2_07_card.png"
-illustration_path = "door2_07_illustration.png"
+card_image_path = "images/raw/door2_07_card.png"
+illustration_path = "images/raw/door2_07_illustration.png"
+card_image_svg_path = "images/svg/door2_07_illustration.svg"
 
 [[card]]
 id = "door2_08"
@@ -354,8 +382,9 @@ source_image = "door2.jpg"
 card_type = "door"
 title = "Super Munchkin"
 body = "You may have 2 Class cards, and have all the advantages and disadvantages of each."
-card_image_path = "door2_08_card.png"
-illustration_path = "door2_08_illustration.png"
+card_image_path = "images/raw/door2_08_card.png"
+illustration_path = "images/raw/door2_08_illustration.png"
+card_image_svg_path = "images/svg/door2_08_illustration.svg"
 
 [[card]]
 id = "door3_00"
@@ -364,8 +393,9 @@ card_type = "door"
 title = "Curse!"
 below_title = "Lose Your Class"
 body = "Discard your Class card, if you have one. If you have 2 Classes in play, lose one of them (your choice). If you have no Class, lose 1 Level."
-card_image_path = "door3_00_card.png"
-illustration_path = "door3_00_illustration.png"
+card_image_path = "images/raw/door3_00_card.png"
+illustration_path = "images/raw/door3_00_illustration.png"
+card_image_svg_path = "images/svg/door3_00_illustration.svg"
 
 [[card]]
 id = "door3_01"
@@ -376,8 +406,9 @@ body = [
     "Backstabbing: You may discard a card to backstab another player (-2 in combat). You may do this only once per victim per combat, but if two players are fighting a monster together, you may backstab each of them.",
     "Theft: You may discard a card to try to steal a small item carried by another player. Roll a die; 4 or more succeeds, Otherwise, you get whacked and lose 1 Level.",
 ]
-card_image_path = "door3_01_card.png"
-illustration_path = "door3_01_illustration.png"
+card_image_path = "images/raw/door3_01_card.png"
+illustration_path = "images/raw/door3_01_illustration.png"
+card_image_svg_path = "images/svg/door3_01_illustration.svg"
 
 [[card]]
 id = "door3_02"
@@ -386,8 +417,9 @@ card_type = "door"
 title = "Curse!"
 below_title = "Lose Two Cards"
 body = "First the player to the left draws a card from your hand and keeps it. Then the player on the right does same."
-card_image_path = "door3_02_card.png"
-illustration_path = "door3_02_illustration.png"
+card_image_path = "images/raw/door3_02_card.png"
+illustration_path = "images/raw/door3_02_illustration.png"
+card_image_svg_path = "images/svg/door3_02_illustration.svg"
 
 [[card]]
 id = "door3_03"
@@ -395,8 +427,9 @@ source_image = "door3.jpg"
 card_type = "door"
 title = "Curse!"
 body = "Lose the Footgear You Are Wearing."
-card_image_path = "door3_03_card.png"
-illustration_path = "door3_03_illustration.png"
+card_image_path = "images/raw/door3_03_card.png"
+illustration_path = "images/raw/door3_03_illustration.png"
+card_image_svg_path = "images/svg/door3_03_illustration.svg"
 
 [[card]]
 id = "door3_04"
@@ -407,8 +440,9 @@ above_title = "Level 4"
 below_title = ["-2 to Run Away."]
 body = "Bad Stuff: They steal your treasure. Roll a die and lose that many items or cards in your hand - your choice."
 bottom_right = "2 Treasures"
-card_image_path = "door3_04_card.png"
-illustration_path = "door3_04_illustration.png"
+card_image_path = "images/raw/door3_04_card.png"
+illustration_path = "images/raw/door3_04_illustration.png"
+card_image_svg_path = "images/svg/door3_04_illustration.svg"
 
 [[card]]
 id = "door3_05"
@@ -420,8 +454,9 @@ below_title = ["Will not pursue anyone of Level 4 or below."]
 body = "Bad Stuff: You are flayed to death."
 bottom_left = "2 Levels"
 bottom_right = "5 Treasures"
-card_image_path = "door3_05_card.png"
-illustration_path = "door3_05_illustration.png"
+card_image_path = "images/raw/door3_05_card.png"
+illustration_path = "images/raw/door3_05_illustration.png"
+card_image_svg_path = "images/svg/door3_05_illustration.svg"
 
 [[card]]
 id = "door3_06"
@@ -432,8 +467,9 @@ below_title = [
     "-1 to Run Away.",
     "You may sell one item each turn for double price (other items are at normal price).",
 ]
-card_image_path = "door3_06_card.png"
-illustration_path = "door3_06_illustration.png"
+card_image_path = "images/raw/door3_06_card.png"
+illustration_path = "images/raw/door3_06_illustration.png"
+card_image_svg_path = "images/svg/door3_06_illustration.svg"
 
 [[card]]
 id = "door3_07"
@@ -446,8 +482,9 @@ below_title = [
 ]
 body = "Bad Stuff: A really disgusting kiss costs you 2 Levels (3 for Elves)."
 bottom_right = "3 Treasures"
-card_image_path = "door3_07_card.png"
-illustration_path = "door3_07_illustration.png"
+card_image_path = "images/raw/door3_07_card.png"
+illustration_path = "images/raw/door3_07_illustration.png"
+card_image_svg_path = "images/svg/door3_07_illustration.svg"
 
 [[card]]
 id = "door3_08"
@@ -458,8 +495,9 @@ above_title = "Level 12"
 below_title = ["+3 against Dwarves and Halflings."]
 body = "Bad Stuff: Stomps you flat and eats your hat. Lose the Headgear you were wearing."
 bottom_right = "3 Treasures"
-card_image_path = "door3_08_card.png"
-illustration_path = "door3_08_illustration.png"
+card_image_path = "images/raw/door3_08_card.png"
+illustration_path = "images/raw/door3_08_illustration.png"
+card_image_svg_path = "images/svg/door3_08_illustration.svg"
 
 [[card]]
 id = "door4_00"
@@ -468,8 +506,9 @@ card_type = "door"
 title = "Curse!"
 below_title = ["Lose 1 Big Item"]
 body = "Choose one big item to discard."
-card_image_path = "door4_00_card.png"
-illustration_path = "door4_00_illustration.png"
+card_image_path = "images/raw/door4_00_card.png"
+illustration_path = "images/raw/door4_00_illustration.png"
+card_image_svg_path = "images/svg/door4_00_illustration.svg"
 
 [[card]]
 id = "door4_01"
@@ -480,8 +519,9 @@ above_title = "Level 14"
 below_title = ["Your Level does not count. Fight him only with your bonuses!"]
 body = "Bad Stuff: You buy insurance. Lose 1,000 gold pieces' worth of items. If you don't have that much, lose all you have."
 bottom_right = "4 Treasures"
-card_image_path = "door4_01_card.png"
-illustration_path = "door4_01_illustration.png"
+card_image_path = "images/raw/door4_01_card.png"
+illustration_path = "images/raw/door4_01_illustration.png"
+card_image_svg_path = "images/svg/door4_01_illustration.svg"
 
 [[card]]
 id = "door4_02"
@@ -489,8 +529,9 @@ source_image = "door4.jpg"
 card_type = "door"
 title = "Illusion"
 body = "Play this card during any combat. Discard any one monster in this combat, along with any cards that have been played to modify it, and replace with a monster card from your hand."
-card_image_path = "door4_02_card.png"
-illustration_path = "door4_02_illustration.png"
+card_image_path = "images/raw/door4_02_card.png"
+illustration_path = "images/raw/door4_02_illustration.png"
+card_image_svg_path = "images/svg/door4_02_illustration.svg"
 
 [[card]]
 id = "door4_03"
@@ -499,8 +540,9 @@ card_type = "door"
 title = "Curse!"
 below_title = "Change Class"
 body = "If you have no Class now, this curse has no effect. Otherwise, go back through the discard pile, starting with the top discard. The first Class card you come to replaces your current Class(es). If you go through the discards without finding a Class card, you just lose your own Class(es)."
-card_image_path = "door4_03_card.png"
-illustration_path = "door4_03_illustration.png"
+card_image_path = "images/raw/door4_03_card.png"
+illustration_path = "images/raw/door4_03_illustration.png"
+card_image_svg_path = "images/svg/door4_03_illustration.svg"
 
 [[card]]
 id = "door4_04"
@@ -511,8 +553,9 @@ body = [
     "Flight Spell: You may discard up to 3 cards while Running Away; each one gives you a +1 bonus to flee.",
     "Charm Spell: You may discard your whole hand to charm a single Monster instead of fighting it. Discard the Monster and take its Treasure, but don't gain levels. If there are other monsters in the combat, fight them normally.",
 ]
-card_image_path = "door4_04_card.png"
-illustration_path = "door4_04_illustration.png"
+card_image_path = "images/raw/door4_04_card.png"
+illustration_path = "images/raw/door4_04_illustration.png"
+card_image_svg_path = "images/svg/door4_04_illustration.svg"
 
 [[card]]
 id = "door4_05"
@@ -520,8 +563,9 @@ source_image = "door4.jpg"
 card_type = "door"
 title = "Curse!"
 body = "Lose 1 Level."
-card_image_path = "door4_05_card.png"
-illustration_path = "door4_05_illustration.png"
+card_image_path = "images/raw/door4_05_card.png"
+illustration_path = "images/raw/door4_05_illustration.png"
+card_image_svg_path = "images/svg/door4_05_illustration.svg"
 
 [[card]]
 id = "door4_06"
@@ -533,8 +577,9 @@ below_title = ["Will not pursue anyone of Level 5 or below."]
 body = "Bad Stuff: You are roasted and eaten."
 bottom_left = "2 Levels"
 bottom_right = "5 Treasures"
-card_image_path = "door4_06_card.png"
-illustration_path = "door4_06_illustration.png"
+card_image_path = "images/raw/door4_06_card.png"
+illustration_path = "images/raw/door4_06_illustration.png"
+card_image_svg_path = "images/svg/door4_06_illustration.svg"
 
 [[card]]
 id = "door4_07"
@@ -543,8 +588,9 @@ card_type = "door"
 title = "Curse!"
 below_title = ["Lose 1 Small Item"]
 body = 'Choose one small item to discard. Any item that is not designated "big" is small.'
-card_image_path = "door4_07_card.png"
-illustration_path = "door4_07_illustration.png"
+card_image_path = "images/raw/door4_07_card.png"
+illustration_path = "images/raw/door4_07_illustration.png"
+card_image_svg_path = "images/svg/door4_07_illustration.svg"
 
 [[card]]
 id = "door4_08"
@@ -552,8 +598,9 @@ source_image = "door4.jpg"
 card_type = "door"
 title = "Curse!"
 body = "Lose the Headgear You Are Wearing."
-card_image_path = "door4_08_card.png"
-illustration_path = "door4_08_illustration.png"
+card_image_path = "images/raw/door4_08_card.png"
+illustration_path = "images/raw/door4_08_illustration.png"
+card_image_svg_path = "images/svg/door4_08_illustration.svg"
 
 [[card]]
 id = "door5_00"
@@ -561,8 +608,9 @@ source_image = "door5.jpg"
 card_type = "door"
 title = "Help Me Out Here!"
 body = "Play this card. while you are in combat. Take one item from any other playet. At the moment you take it, that item must make the difference between your winning and losing that combat. You may discard something of your own before taking the item, if you wish."
-card_image_path = "door5_00_card.png"
-illustration_path = "door5_00_illustration.png"
+card_image_path = "images/raw/door5_00_card.png"
+illustration_path = "images/raw/door5_00_illustration.png"
+card_image_svg_path = "images/svg/door5_00_illustration.svg"
 
 [[card]]
 id = "door5_01"
@@ -575,8 +623,9 @@ below_title = [
 ]
 body = "Bad Stuff: Blocks the door and tells you about his character. Lose 3 Levels."
 bottom_right = "3 Treasures"
-card_image_path = "door5_01_card.png"
-illustration_path = "door5_01_illustration.png"
+card_image_path = "images/raw/door5_01_card.png"
+illustration_path = "images/raw/door5_01_illustration.png"
+card_image_svg_path = "images/svg/door5_01_illustration.svg"
 
 [[card]]
 id = "door5_02"
@@ -587,8 +636,9 @@ above_title = "Level 2"
 below_title = ["-1 to Run Away."]
 body = "Bad Stuff: They bite! Lose 2 Levels."
 bottom_right = "1 Treasure"
-card_image_path = "door5_02_card.png"
-illustration_path = "door5_02_illustration.png"
+card_image_path = "images/raw/door5_02_card.png"
+illustration_path = "images/raw/door5_02_illustration.png"
+card_image_svg_path = "images/svg/door5_02_illustration.svg"
 
 [[card]]
 id = "door5_03"
@@ -601,8 +651,9 @@ below_title = [
 ]
 body = "Bad Stuff: Fang marks in your butt. Lose 2 Levels."
 bottom_right = "1 Treasure"
-card_image_path = "door5_03_card.png"
-illustration_path = "door5_03_illustration.png"
+card_image_path = "images/raw/door5_03_card.png"
+illustration_path = "images/raw/door5_03_illustration.png"
+card_image_svg_path = "images/svg/door5_03_illustration.svg"
 
 [[card]]
 id = "door5_04"
@@ -613,8 +664,9 @@ above_title = "Level 1"
 below_title = ["+1 to Run Away."]
 body = "Bad Stuff: He whacks you with his crutch. Lose 1 Level."
 bottom_right = "1 Treasure"
-card_image_path = "door5_04_card.png"
-illustration_path = "door5_04_illustration.png"
+card_image_path = "images/raw/door5_04_card.png"
+illustration_path = "images/raw/door5_04_illustration.png"
+card_image_svg_path = "images/svg/door5_04_illustration.svg"
 
 [[card]]
 id = "door5_05"
@@ -624,8 +676,9 @@ title = "Wandering Monster"
 below_title = [
     "Play this card, with a Monster from your hand, when someone (including you!) is in combat. Your monster joins the one already fighting - add their Levels. If the character(s) must flee, resolve the Run Away attempts separately, in the order the victim chooses.",
 ]
-card_image_path = "door5_05_card.png"
-illustration_path = "door5_05_illustration.png"
+card_image_path = "images/raw/door5_05_card.png"
+illustration_path = "images/raw/door5_05_illustration.png"
+card_image_svg_path = "images/svg/door5_05_illustration.svg"
 
 [[card]]
 id = "door5_06"
@@ -634,8 +687,9 @@ card_type = "door"
 title = "Baby"
 below_title = ["-5 to Level of Monster", "(minimum level 1)"]
 body = "Play during combat. If the monster is defeated, draw 1 less Treasure (minimum 1)."
-card_image_path = "door5_06_card.png"
-illustration_path = "door5_06_illustration.png"
+card_image_path = "images/raw/door5_06_card.png"
+illustration_path = "images/raw/door5_06_illustration.png"
+card_image_svg_path = "images/svg/door5_06_illustration.svg"
 
 [[card]]
 id = "door5_07"
@@ -644,8 +698,9 @@ card_type = "door"
 title = "Curse!"
 below_title = ["Income Tax"]
 body = "Discard one item of your choice. Every other player must now discard an item, or items, totaling at least as much value as the item you discarded. If they don't have enough to pay the full tax, they must discard all their items and lose a Level."
-card_image_path = "door5_07_card.png"
-illustration_path = "door5_07_illustration.png"
+card_image_path = "images/raw/door5_07_card.png"
+illustration_path = "images/raw/door5_07_illustration.png"
+card_image_svg_path = "images/svg/door5_07_illustration.svg"
 
 [[card]]
 id = "door5_08"
@@ -658,8 +713,9 @@ below_title = [
 ]
 body = "Bad Stuff: He hits you with an injunction. Let each other player draw one card from your hand, starting with the player to your left. Discard any remainder."
 bottom_right = "2 Treasures"
-card_image_path = "door5_08_card.png"
-illustration_path = "door5_08_illustration.png"
+card_image_path = "images/raw/door5_08_card.png"
+illustration_path = "images/raw/door5_08_illustration.png"
+card_image_svg_path = "images/svg/door5_08_illustration.svg"
 
 [[card]]
 id = "door6_00"
@@ -672,8 +728,9 @@ below_title = [
 ]
 body = "Bad Stuff: He has the munchies. He eats you. You're dead."
 bottom_right = "4 Treasures"
-card_image_path = "door6_00_card.png"
-illustration_path = "door6_00_illustration.png"
+card_image_path = "images/raw/door6_00_card.png"
+illustration_path = "images/raw/door6_00_illustration.png"
+card_image_svg_path = "images/svg/door6_00_illustration.svg"
 
 [[card]]
 id = "door6_01"
@@ -684,8 +741,9 @@ above_title = "Level 10"
 below_title = ["He has no special powers, and he's really mad about it."]
 body = "Bad Stuff: Screws up the game balance by forcing you to let the player(s) of the highest level take any one item (each) from you."
 bottom_right = "3 Treasures"
-card_image_path = "door6_01_card.png"
-illustration_path = "door6_01_illustration.png"
+card_image_path = "images/raw/door6_01_card.png"
+illustration_path = "images/raw/door6_01_illustration.png"
+card_image_svg_path = "images/svg/door6_01_illustration.svg"
 
 [[card]]
 id = "door6_02"
@@ -696,8 +754,9 @@ above_title = ["Level 2", "Undead"]
 below_title = ["If you must flee, lose 1 Level even if you Escape."]
 body = "Bad Stuff: His bony touch costs you 2 Levels."
 bottom_right = "1 Treasure"
-card_image_path = "door6_02_card.png"
-illustration_path = "door6_02_illustration.png"
+card_image_path = "images/raw/door6_02_card.png"
+illustration_path = "images/raw/door6_02_illustration.png"
+card_image_svg_path = "images/svg/door6_02_illustration.svg"
 
 [[card]]
 id = "door6_03"
@@ -709,8 +768,9 @@ below_title = ["Will not pursue anyone of Level 3 or below."]
 body = "Bad Stuff: You are stomped and chomped. You drop things as you flee. Starting with the player on your right, each player may take one Treasure card from in front of you or (without looking) from your hand."
 bottom_left = "2 Levels"
 bottom_right = "4 Treasures"
-card_image_path = "door6_03_card.png"
-illustration_path = "door6_03_illustration.png"
+card_image_path = "images/raw/door6_03_card.png"
+illustration_path = "images/raw/door6_03_illustration.png"
+card_image_svg_path = "images/svg/door6_03_illustration.svg"
 
 [[card]]
 id = "door6_04"
@@ -718,8 +778,9 @@ source_image = "door6.jpg"
 card_type = "door"
 title = "Curse!"
 body = "Lose 1 Level."
-card_image_path = "door6_04_card.png"
-illustration_path = "door6_04_illustration.png"
+card_image_path = "images/raw/door6_04_card.png"
+illustration_path = "images/raw/door6_04_illustration.png"
+card_image_svg_path = "images/svg/door6_04_illustration.svg"
 
 [[card]]
 id = "door6_05"
@@ -730,8 +791,9 @@ above_title = "Level 1"
 below_title = ["Elves draw an extra Treasure after defeating it."]
 body = "Bad Stuff: None. Escape is automatic."
 bottom_right = "1 Treasure"
-card_image_path = "door6_05_card.png"
-illustration_path = "door6_05_illustration.png"
+card_image_path = "images/raw/door6_05_card.png"
+illustration_path = "images/raw/door6_05_illustration.png"
+card_image_svg_path = "images/svg/door6_05_illustration.svg"
 
 [[card]]
 id = "door6_06"
@@ -742,8 +804,9 @@ above_title = "Level 4"
 below_title = ["They resist magic. +5 against Wizards."]
 body = "Bad Stuff: Their music is really, really bad. Lose 2 Levels."
 bottom_right = "2 Treasures"
-card_image_path = "door6_06_card.png"
-illustration_path = "door6_06_illustration.png"
+card_image_path = "images/raw/door6_06_card.png"
+illustration_path = "images/raw/door6_06_illustration.png"
+card_image_svg_path = "images/svg/door6_06_illustration.svg"
 
 [[card]]
 id = "door6_07"
@@ -754,8 +817,9 @@ above_title = "Level 10"
 below_title = ["+6 against Dwarves, due to ancient grudges."]
 body = "Bad Stuff: Roll a die. On a 1 or 2, they stomp you to death. Otherwise, lose as many Levels as the dice shows."
 bottom_right = "3 Treasures"
-card_image_path = "door6_07_card.png"
-illustration_path = "door6_07_illustration.png"
+card_image_path = "images/raw/door6_07_card.png"
+illustration_path = "images/raw/door6_07_illustration.png"
+card_image_svg_path = "images/svg/door6_07_illustration.svg"
 
 [[card]]
 id = "door6_08"
@@ -766,8 +830,9 @@ above_title = "Level 6"
 below_title = ["Resists magic. +6 against Wizards."]
 body = "Bad Stuff: Either discard your whole hand, or lose 2 Levels."
 bottom_right = "2 Treasures"
-card_image_path = "door6_08_card.png"
-illustration_path = "door6_08_illustration.png"
+card_image_path = "images/raw/door6_08_card.png"
+illustration_path = "images/raw/door6_08_illustration.png"
+card_image_svg_path = "images/svg/door6_08_illustration.svg"
 
 [[card]]
 id = "door7_00"
@@ -775,8 +840,9 @@ source_image = "door7.jpg"
 card_type = "door"
 title = "Cheat!"
 body = "You may have and use any one item that would otherwise be against the rules. Put this card with that item. Discard it when you lose that item."
-card_image_path = "door7_00_card.png"
-illustration_path = "door7_00_illustration.png"
+card_image_path = "images/raw/door7_00_card.png"
+illustration_path = "images/raw/door7_00_illustration.png"
+card_image_svg_path = "images/svg/door7_00_illustration.svg"
 
 [[card]]
 id = "door7_01"
@@ -785,8 +851,9 @@ card_type = "door"
 title = "Curse! Change Race"
 below_title = ["CHANGE RACE"]
 body = "If you have no Race now, this curse has no effect. Otherwise, go back through the discard pile, starting with the top discard. The first Race card you come to replaces your current Race(s). If you go through the discards without finding a Race card, you just lose your own Race(s)."
-card_image_path = "door7_01_card.png"
-illustration_path = "door7_01_illustration.png"
+card_image_path = "images/raw/door7_01_card.png"
+illustration_path = "images/raw/door7_01_illustration.png"
+card_image_svg_path = "images/svg/door7_01_illustration.svg"
 
 [[card]]
 id = "door7_02"
@@ -795,8 +862,9 @@ card_type = "door"
 title = "Curse!"
 below_title = "Chicken on Your Head"
 body = "-1 to all your die rolls. Any Curse or Bad Stuff that removes your Headgear will take the chicken with it."
-card_image_path = "door7_02_card.png"
-illustration_path = "door7_02_illustration.png"
+card_image_path = "images/raw/door7_02_card.png"
+illustration_path = "images/raw/door7_02_illustration.png"
+card_image_svg_path = "images/svg/door7_02_illustration.svg"
 
 [[card]]
 id = "door7_03"
@@ -807,8 +875,9 @@ above_title = "Level 1"
 below_title = ["A creature from Hell. +3 against Clerics."]
 body = "Bad Stuff: She whacks you. Lose 1 Level."
 bottom_right = "1 Treasure"
-card_image_path = "door7_03_card.png"
-illustration_path = "door7_03_illustration.png"
+card_image_path = "images/raw/door7_03_card.png"
+illustration_path = "images/raw/door7_03_illustration.png"
+card_image_svg_path = "images/svg/door7_03_illustration.svg"
 
 [[card]]
 id = "door7_04"
@@ -819,8 +888,9 @@ body = [
     "Backstabbing: You may discard a card to backstab another player (-2 in combat). You may do this only once per victim per combat, but if two players are fighting a monster together, you may backstab each of them.",
     "Theft: You may discard a card to try to steal a small item carried by another player. Roll a die; 4 or more succeeds. Otherwise, you get whacked and lose 1 Level.",
 ]
-card_image_path = "door7_04_card.png"
-illustration_path = "door7_04_illustration.png"
+card_image_path = "images/raw/door7_04_card.png"
+illustration_path = "images/raw/door7_04_illustration.png"
+card_image_svg_path = "images/svg/door7_04_illustration.svg"
 
 [[card]]
 id = "door7_05"
@@ -831,8 +901,9 @@ above_title = "Level 6"
 below_title = ["+6 against Warriors."]
 body = "Bad Stuff: You become a normal, boring Human. Discard any Race or Class cards in play."
 bottom_right = "2 Treasures"
-card_image_path = "door7_05_card.png"
-illustration_path = "door7_05_illustration.png"
+card_image_path = "images/raw/door7_05_card.png"
+illustration_path = "images/raw/door7_05_illustration.png"
+card_image_svg_path = "images/svg/door7_05_illustration.svg"
 
 [[card]]
 id = "door7_06"
@@ -846,8 +917,9 @@ below_title = [
 body = "Bad Stuff: You are reduced to Level 1."
 bottom_left = "2 Levels"
 bottom_right = "4 Treasures"
-card_image_path = "door7_06_card.png"
-illustration_path = "door7_06_illustration.png"
+card_image_path = "images/raw/door7_06_card.png"
+illustration_path = "images/raw/door7_06_illustration.png"
+card_image_svg_path = "images/svg/door7_06_illustration.svg"
 
 [[card]]
 id = "door7_07"
@@ -858,8 +930,9 @@ below_title = [
     "-l to Run Away.",
     "You may sell one item each turn for double price (other items are at normal price).",
 ]
-card_image_path = "door7_07_card.png"
-illustration_path = "door7_07_illustration.png"
+card_image_path = "images/raw/door7_07_card.png"
+illustration_path = "images/raw/door7_07_illustration.png"
+card_image_svg_path = "images/svg/door7_07_illustration.svg"
 
 [[card]]
 id = "door7_08"
@@ -873,8 +946,9 @@ below_title = [
 body = "Bad Stuff: You are grabbed, slimed, crushed, and gobbled. You are dead, dead, dead. Any questions?"
 bottom_left = "2 Levels"
 bottom_right = "4 Treasures"
-card_image_path = "door7_08_card.png"
-illustration_path = "door7_08_illustration.png"
+card_image_path = "images/raw/door7_08_card.png"
+illustration_path = "images/raw/door7_08_illustration.png"
+card_image_svg_path = "images/svg/door7_08_illustration.svg"
 
 [[card]]
 id = "door8_00"
@@ -882,8 +956,9 @@ source_image = "door8.jpg"
 card_type = "door"
 title = "Half-Breed"
 body = "You may have two Race cards, and have all the advantages and disadvantages of each. Or you may have one Race card and have all of its advantages and none of its disadvantages (for example, monsters that hate Elves will have no bonus against a half-Elf). Lose this card if you lose your Race card(s)."
-card_image_path = "door8_00_card.png"
-illustration_path = "door8_00_illustration.png"
+card_image_path = "images/raw/door8_00_card.png"
+illustration_path = "images/raw/door8_00_illustration.png"
+card_image_svg_path = "images/svg/door8_00_illustration.svg"
 
 [[card]]
 id = "door8_01"
@@ -894,8 +969,9 @@ below_title = [
     "-1 to Run Away.",
     "You may sell one item each turn for double price (other items are at normal price).",
 ]
-card_image_path = "door8_01_card.png"
-illustration_path = "door8_01_illustration.png"
+card_image_path = "images/raw/door8_01_card.png"
+illustration_path = "images/raw/door8_01_illustration.png"
+card_image_svg_path = "images/svg/door8_01_illustration.svg"
 
 [[card]]
 id = "door8_02"
@@ -906,8 +982,9 @@ body = [
     "Resurrection: When it is time for you to draw a card face-up, you may instead take the top card from the appropriate discard pile. You must then discard one card from your hand.",
     "Turning: You may discard up to 3 cards in combat against an Undead creature Each discard gives you a +3 bonus",
 ]
-card_image_path = "door8_02_card.png"
-illustration_path = "door8_02_illustration.png"
+card_image_path = "images/raw/door8_02_card.png"
+illustration_path = "images/raw/door8_02_illustration.png"
+card_image_svg_path = "images/svg/door8_02_illustration.svg"
 
 [[card]]
 id = "door8_03"
@@ -918,8 +995,9 @@ above_title = "Level 8"
 below_title = ["No one can help you. You must face the Gazebo alone."]
 bottom_left = "Bad Stuff: Lose 3 Levels"
 bottom_right = "2 Treasures"
-card_image_path = "door8_03_card.png"
-illustration_path = "door8_03_illustration.png"
+card_image_path = "images/raw/door8_03_card.png"
+illustration_path = "images/raw/door8_03_illustration.png"
+card_image_svg_path = "images/svg/door8_03_illustration.svg"
 
 [[card]]
 id = "door8_04"
@@ -930,8 +1008,9 @@ below_title = [
     "+1 to Run Away.",
     "You go up 1 Level for every monster you help someone else kill.",
 ]
-card_image_path = "door8_04_card.png"
-illustration_path = "door8_04_illustration.png"
+card_image_path = "images/raw/door8_04_card.png"
+illustration_path = "images/raw/door8_04_illustration.png"
+card_image_svg_path = "images/svg/door8_04_illustration.svg"
 
 [[card]]
 id = "door8_05"
@@ -942,8 +1021,9 @@ body = [
     "Berserking: You may discard up to 3 cards in combat; each one gives you a +1 bonus.",
     "You win ties in combat.",
 ]
-card_image_path = "door8_05_card.png"
-illustration_path = "door8_05_illustration.png"
+card_image_path = "images/raw/door8_05_card.png"
+illustration_path = "images/raw/door8_05_illustration.png"
+card_image_svg_path = "images/svg/door8_05_illustration.svg"
 
 [[card]]
 id = "door8_06"
@@ -956,8 +1036,9 @@ below_title = [
 ]
 body = "Bad Stuff: Very painful pecking. Lose 1 Level."
 bottom_right = "1 Treasure"
-card_image_path = "door8_06_card.png"
-illustration_path = "door8_06_illustration.png"
+card_image_path = "images/raw/door8_06_card.png"
+illustration_path = "images/raw/door8_06_illustration.png"
+card_image_svg_path = "images/svg/door8_06_illustration.svg"
 
 [[card]]
 id = "door8_07"
@@ -968,8 +1049,9 @@ below_title = [
     "+5 to Level of Monster",
     "Play during combat. If the monster is defeated, draw 1 extra Treasure.",
 ]
-card_image_path = "door8_07_card.png"
-illustration_path = "door8_07_illustration.png"
+card_image_path = "images/raw/door8_07_card.png"
+illustration_path = "images/raw/door8_07_illustration.png"
+card_image_svg_path = "images/svg/door8_07_illustration.svg"
 
 [[card]]
 id = "door8_08"
@@ -978,8 +1060,9 @@ card_type = "door"
 title = "Curse!"
 below_title = ["Lose Your Race"]
 body = "Discard any Race card(s) you have in play and become a Human."
-card_image_path = "door8_08_card.png"
-illustration_path = "door8_08_illustration.png"
+card_image_path = "images/raw/door8_08_card.png"
+illustration_path = "images/raw/door8_08_illustration.png"
+card_image_svg_path = "images/svg/door8_08_illustration.svg"
 
 [[card]]
 id = "door9_00"
@@ -988,8 +1071,9 @@ card_type = "door"
 title = "Curse!"
 below_title = ["Malign Mirror"]
 body = "You are cursed! In your next fight (only) you may not get any bonuses from weapons. If you draw Remove Curse before your next fight, the curse is lifted."
-card_image_path = "door9_00_card.png"
-illustration_path = "door9_00_illustration.png"
+card_image_path = "images/raw/door9_00_card.png"
+illustration_path = "images/raw/door9_00_illustration.png"
+card_image_svg_path = "images/svg/door9_00_illustration.svg"
 
 [[card]]
 id = "door9_01"
@@ -1000,8 +1084,9 @@ below_title = [
     "+5 To Level Of Monster",
     "Play during combat. If the monster is defeated, draw 1 extra Treasure.",
 ]
-card_image_path = "door9_01_card.png"
-illustration_path = "door9_01_illustration.png"
+card_image_path = "images/raw/door9_01_card.png"
+illustration_path = "images/raw/door9_01_illustration.png"
+card_image_svg_path = "images/svg/door9_01_illustration.svg"
 
 [[card]]
 id = "door9_02"
@@ -1014,8 +1099,9 @@ below_title = [
 ]
 body = "Bad Stuff: It can sniff you out anywhere. If you lose, you cannot flee; nothing will help you. Lose 3 levels."
 bottom_right = "3 Treasures"
-card_image_path = "door9_02_card.png"
-illustration_path = "door9_02_illustration.png"
+card_image_path = "images/raw/door9_02_card.png"
+illustration_path = "images/raw/door9_02_illustration.png"
+card_image_svg_path = "images/svg/door9_02_illustration.svg"
 
 [[card]]
 id = "door9_03"
@@ -1026,8 +1112,9 @@ above_title = "Level 1"
 below_title = ["Cannot be Outrun!"]
 body = "Bad Stuff: Discard armor and all items worn below the waist."
 bottom_right = "1 Treasure"
-card_image_path = "door9_03_card.png"
-illustration_path = "door9_03_illustration.png"
+card_image_path = "images/raw/door9_03_card.png"
+illustration_path = "images/raw/door9_03_illustration.png"
+card_image_svg_path = "images/svg/door9_03_illustration.svg"
 
 [[card]]
 id = "door9_04"
@@ -1038,8 +1125,9 @@ below_title = [
     "+10 To Level Of Monster",
     "Play during combat. If the monster is defeated, draw 2 extra Treasures.",
 ]
-card_image_path = "door9_04_card.png"
-illustration_path = "door9_04_illustration.png"
+card_image_path = "images/raw/door9_04_card.png"
+illustration_path = "images/raw/door9_04_illustration.png"
+card_image_svg_path = "images/svg/door9_04_illustration.svg"
 
 [[card]]
 id = "door9_05"
@@ -1050,8 +1138,9 @@ below_title = [
     "You can carry any number of Big items,",
     "You can have 6 cards in your hand.",
 ]
-card_image_path = "door9_05_card.png"
-illustration_path = "door9_05_illustration.png"
+card_image_path = "images/raw/door9_05_card.png"
+illustration_path = "images/raw/door9_05_illustration.png"
+card_image_svg_path = "images/svg/door9_05_illustration.svg"
 
 [[card]]
 id = "door9_06"
@@ -1062,8 +1151,9 @@ below_title = [
     "+1 to Run Away.",
     "You go up 1 Level for every monster you help someone else kill.",
 ]
-card_image_path = "door9_06_card.png"
-illustration_path = "door9_06_illustration.png"
+card_image_path = "images/raw/door9_06_card.png"
+illustration_path = "images/raw/door9_06_illustration.png"
+card_image_svg_path = "images/svg/door9_06_illustration.svg"
 
 [[card]]
 id = "door9_07"
@@ -1074,8 +1164,9 @@ above_title = "Level 14"
 below_title = "+4 against Warriors."
 body = "Bad Stuff: Unspeakably awful death for anyone but a Wizard. A Wizard merely loses his powers - discard Wizard card."
 bottom_right = "4 Treasures"
-card_image_path = "door9_07_card.png"
-illustration_path = "door9_07_illustration.png"
+card_image_path = "images/raw/door9_07_card.png"
+illustration_path = "images/raw/door9_07_illustration.png"
+card_image_svg_path = "images/svg/door9_07_illustration.svg"
 
 [[card]]
 id = "door9_08"
@@ -1086,7 +1177,7 @@ above_title = "Level 2"
 below_title = "+1 to Run Away."
 body = "Bad Stuff: If you fail to Run Away, you must drop all your Big items."
 bottom_right = "1 Treasure"
-card_image_path = "door9_08_card.png"
+card_image_path = "images/raw/door9_08_card.png"
 
 [[card]]
 id = "loot1_00"
@@ -1095,8 +1186,9 @@ card_type = "loot"
 title = "Limburger and Anchovy Sandwich"
 above_title = ["+3 Bouns", "Usable by Halfling Only"]
 bottom_right = "400 Gold Pieces"
-card_image_path = "loot1_00_card.png"
-illustration_path = "loot1_00_illustration.png"
+card_image_path = "images/raw/loot1_00_card.png"
+illustration_path = "images/raw/loot1_00_illustration.png"
+card_image_svg_path = "images/svg/loot1_00_illustration.svg"
 
 [[card]]
 id = "loot1_01"
@@ -1107,8 +1199,9 @@ below_title = [
     "You can use this card only if the Hireling is in play (no matter who owns him). Discard the Hireling.",
 ]
 body = "Go Up A Level"
-card_image_path = "loot1_01_card.png"
-illustration_path = "loot1_01_illustration.png"
+card_image_path = "images/raw/loot1_01_card.png"
+illustration_path = "images/raw/loot1_01_illustration.png"
+card_image_svg_path = "images/svg/loot1_01_illustration.svg"
 
 [[card]]
 id = "loot1_02"
@@ -1117,8 +1210,9 @@ card_type = "loot"
 title = "Wishing Ring"
 body = "Cancels any Curse. Play at any time. Usable once only."
 bottom_right = "500 Gold Pieces"
-card_image_path = "loot1_02_card.png"
-illustration_path = "loot1_02_illustration.png"
+card_image_path = "images/raw/loot1_02_card.png"
+illustration_path = "images/raw/loot1_02_illustration.png"
+card_image_svg_path = "images/svg/loot1_02_illustration.svg"
 
 [[card]]
 id = "loot1_03"
@@ -1127,8 +1221,9 @@ card_type = "loot"
 title = "Instant Wall"
 body = "Allows automatic escape, for one or two characters, from any fight. Usable once only."
 bottom_right = "300 Gold Pieces"
-card_image_path = "loot1_03_card.png"
-illustration_path = "loot1_03_illustration.png"
+card_image_path = "images/raw/loot1_03_card.png"
+illustration_path = "images/raw/loot1_03_illustration.png"
+card_image_svg_path = "images/svg/loot1_03_illustration.svg"
 
 [[card]]
 id = "loot1_04"
@@ -1136,8 +1231,9 @@ source_image = "loot1.jpg"
 card_type = "loot"
 title = "Potion of General Studliness"
 body = "Go Up A Level"
-card_image_path = "loot1_04_card.png"
-illustration_path = "loot1_04_illustration.png"
+card_image_path = "images/raw/loot1_04_card.png"
+illustration_path = "images/raw/loot1_04_illustration.png"
+card_image_svg_path = "images/svg/loot1_04_illustration.svg"
 
 [[card]]
 id = "loot1_05"
@@ -1145,8 +1241,9 @@ source_image = "loot1.jpg"
 card_type = "loot"
 title = "1,000 Gold Pieces"
 body = "Go Up A Level"
-card_image_path = "loot1_05_card.png"
-illustration_path = "loot1_05_illustration.png"
+card_image_path = "images/raw/loot1_05_card.png"
+illustration_path = "images/raw/loot1_05_illustration.png"
+card_image_svg_path = "images/svg/loot1_05_illustration.svg"
 
 [[card]]
 id = "loot1_06"
@@ -1156,8 +1253,9 @@ title = "Dagger of Treachery"
 above_title = ["+3 Bonus", "Usable by Thief Only"]
 bottom_left = "1 Hand"
 bottom_right = "400 Gold Pieces"
-card_image_path = "loot1_06_card.png"
-illustration_path = "loot1_06_illustration.png"
+card_image_path = "images/raw/loot1_06_card.png"
+illustration_path = "images/raw/loot1_06_illustration.png"
+card_image_svg_path = "images/svg/loot1_06_illustration.svg"
 
 [[card]]
 id = "loot1_07"
@@ -1169,8 +1267,9 @@ below_title = [
 ]
 bottom_left = "Footgear"
 bottom_right = "700 Gold Pieces"
-card_image_path = "loot1_07_card.png"
-illustration_path = "loot1_07_illustration.png"
+card_image_path = "images/raw/loot1_07_card.png"
+illustration_path = "images/raw/loot1_07_illustration.png"
+card_image_svg_path = "images/svg/loot1_07_illustration.svg"
 
 [[card]]
 id = "loot1_08"
@@ -1180,8 +1279,9 @@ title = "Kneepads of Allure"
 below_title = ["Not usable by Clerics"]
 body = "If you ask someone for help against a monster, they may not refuse, or even ask for a reward."
 bottom_right = "600 Gold Pieces"
-card_image_path = "loot1_08_card.png"
-illustration_path = "loot1_08_illustration.png"
+card_image_path = "images/raw/loot1_08_card.png"
+illustration_path = "images/raw/loot1_08_illustration.png"
+card_image_svg_path = "images/svg/loot1_08_illustration.svg"
 
 [[card]]
 id = "loot2_00"
@@ -1191,8 +1291,9 @@ title = "Bad-Ass Bandanna"
 above_title = ["+3 Bonus", "Usable by Human Only"]
 bottom_left = "Headgear"
 bottom_right = "400 Gold Pieces"
-card_image_path = "loot2_00_card.png"
-illustration_path = "loot2_00_illustration.png"
+card_image_path = "images/raw/loot2_00_card.png"
+illustration_path = "images/raw/loot2_00_illustration.png"
+card_image_svg_path = "images/svg/loot2_00_illustration.svg"
 
 [[card]]
 id = "loot2_01"
@@ -1202,8 +1303,9 @@ title = "Horny Helmet"
 above_title = ["+1 Bonus", "(+3 For Elves)"]
 bottom_left = "Headgear"
 bottom_right = "600 Gold Pieces"
-card_image_path = "loot2_01_card.png"
-illustration_path = "loot2_01_illustration.png"
+card_image_path = "images/raw/loot2_01_card.png"
+illustration_path = "images/raw/loot2_01_illustration.png"
+card_image_svg_path = "images/svg/loot2_01_illustration.svg"
 
 [[card]]
 id = "loot2_02"
@@ -1216,8 +1318,9 @@ above_title = [
 ]
 bottom_left = "1 Hand"
 bottom_right = "400 Gold Pieces"
-card_image_path = "loot2_02_card.png"
-illustration_path = "loot2_02_illustration.png"
+card_image_path = "images/raw/loot2_02_card.png"
+illustration_path = "images/raw/loot2_02_illustration.png"
+card_image_svg_path = "images/svg/loot2_02_illustration.svg"
 
 [[card]]
 id = "loot2_03"
@@ -1228,8 +1331,9 @@ below_title = [
     "You can't use this if you are currently the highest-level player, or tied for highest.",
 ]
 body = "Go Up A Level"
-card_image_path = "loot2_03_card.png"
-illustration_path = "loot2_03_illustration.png"
+card_image_path = "images/raw/loot2_03_card.png"
+illustration_path = "images/raw/loot2_03_illustration.png"
+card_image_svg_path = "images/svg/loot2_03_illustration.svg"
 
 [[card]]
 id = "loot2_04"
@@ -1238,8 +1342,9 @@ card_type = "loot"
 title = "Flaming Poison Potion"
 body = "Use during any combat. +3 to either side. Usable once only."
 bottom_right = "100 Gold Pieces"
-card_image_path = "loot2_04_card.png"
-illustration_path = "loot2_04_illustration.png"
+card_image_path = "images/raw/loot2_04_card.png"
+illustration_path = "images/raw/loot2_04_illustration.png"
+card_image_svg_path = "images/svg/loot2_04_illustration.svg"
 
 [[card]]
 id = "loot2_05"
@@ -1248,8 +1353,9 @@ card_type = "loot"
 title = "Cotion of Ponfusion"
 body = "Use during any combat. +3 to either side. Usable once only."
 bottom_right = "100 Gold Picces"
-card_image_path = "loot2_05_card.png"
-illustration_path = "loot2_05_illustration.png"
+card_image_path = "images/raw/loot2_05_card.png"
+illustration_path = "images/raw/loot2_05_illustration.png"
+card_image_svg_path = "images/svg/loot2_05_illustration.svg"
 
 [[card]]
 id = "loot2_06"
@@ -1258,8 +1364,9 @@ card_type = "loot"
 title = "Flask of Glue"
 body = "Use when someone successfully escapes a combat for any reason. They must re-roll their escape (even if it was automatic the first time). Usable once only."
 bottom_left = "100 Gold Pieces"
-card_image_path = "loot2_06_card.png"
-illustration_path = "loot2_06_illustration.png"
+card_image_path = "images/raw/loot2_06_card.png"
+illustration_path = "images/raw/loot2_06_illustration.png"
+card_image_svg_path = "images/svg/loot2_06_illustration.svg"
 
 [[card]]
 id = "loot2_07"
@@ -1268,8 +1375,9 @@ card_type = "loot"
 title = "Friendship Potion"
 body = "Play during any combat. Discard all monsters in the combat. No treasure is gained. Usable once only."
 bottom_right = "200 Gold Pieces"
-card_image_path = "loot2_07_card.png"
-illustration_path = "loot2_07_illustration.png"
+card_image_path = "images/raw/loot2_07_card.png"
+illustration_path = "images/raw/loot2_07_illustration.png"
+card_image_svg_path = "images/svg/loot2_07_illustration.svg"
 
 [[card]]
 id = "loot2_08"
@@ -1277,8 +1385,9 @@ source_image = "loot2.jpg"
 card_type = "loot"
 title = "Boil an Anthill"
 body = "Go Up A Level"
-card_image_path = "loot2_08_card.png"
-illustration_path = "loot2_08_illustration.png"
+card_image_path = "images/raw/loot2_08_card.png"
+illustration_path = "images/raw/loot2_08_illustration.png"
+card_image_svg_path = "images/svg/loot2_08_illustration.svg"
 
 [[card]]
 id = "loot3_00"
@@ -1287,8 +1396,9 @@ card_type = "loot"
 title = "Loaded Die"
 body = "Play after you roll the die, for any reason. Change the roll to the number you want. Usable once only."
 bottom_right = "300 Gold Pieces"
-card_image_path = "loot3_00_card.png"
-illustration_path = "loot3_00_illustration.png"
+card_image_path = "images/raw/loot3_00_card.png"
+illustration_path = "images/raw/loot3_00_illustration.png"
+card_image_svg_path = "images/svg/loot3_00_illustration.svg"
 
 [[card]]
 id = "loot3_01"
@@ -1298,8 +1408,9 @@ title = "Sneaky Bastard Sword"
 above_title = "+2 Bonus"
 bottom_left = "1 Hand"
 bottom_right = "400 Gold Pieces"
-card_image_path = "loot3_01_card.png"
-illustration_path = "loot3_01_illustration.png"
+card_image_path = "images/raw/loot3_01_card.png"
+illustration_path = "images/raw/loot3_01_illustration.png"
+card_image_svg_path = "images/svg/loot3_01_illustration.svg"
 
 [[card]]
 id = "loot3_02"
@@ -1307,8 +1418,9 @@ source_image = "loot3.jpg"
 card_type = "loot"
 title = "Bribe GM With Food"
 body = "Go Up A Level"
-card_image_path = "loot3_02_card.png"
-illustration_path = "loot3_02_illustration.png"
+card_image_path = "images/raw/loot3_02_card.png"
+illustration_path = "images/raw/loot3_02_illustration.png"
+card_image_svg_path = "images/svg/loot3_02_illustration.svg"
 
 [[card]]
 id = "loot3_03"
@@ -1318,8 +1430,9 @@ title = "Hammer of Kneecapping"
 below_title = ["+4 Bonus", "Usable by Dwarf Only"]
 bottom_left = "1 Hand"
 bottom_right = "600 Gold Pieces"
-card_image_path = "loot3_03_card.png"
-illustration_path = "loot3_03_illustration.png"
+card_image_path = "images/raw/loot3_03_card.png"
+illustration_path = "images/raw/loot3_03_illustration.png"
+card_image_svg_path = "images/svg/loot3_03_illustration.svg"
 
 [[card]]
 id = "loot3_04"
@@ -1327,8 +1440,9 @@ source_image = "loot3.jpg"
 card_type = "loot"
 title = "Shield of Ubiquity"
 above_title = ["+3 Bonus", "Usable by Warrior Only"]
-card_image_path = "loot3_04_card.png"
-illustration_path = "loot3_04_illustration.png"
+card_image_path = "images/raw/loot3_04_card.png"
+illustration_path = "images/raw/loot3_04_illustration.png"
+card_image_svg_path = "images/svg/loot3_04_illustration.svg"
 
 [[card]]
 id = "loot3_05"
@@ -1337,8 +1451,9 @@ card_type = "loot"
 title = "Sleep Potion"
 body = "Play during any combat +2 to either side. Usable once only."
 bottom_right = "100 Gold Pieces"
-card_image_path = "loot3_05_card.png"
-illustration_path = "loot3_05_illustration.png"
+card_image_path = "images/raw/loot3_05_card.png"
+illustration_path = "images/raw/loot3_05_illustration.png"
+card_image_svg_path = "images/svg/loot3_05_illustration.svg"
 
 [[card]]
 id = "loot3_06"
@@ -1347,8 +1462,9 @@ card_type = "loot"
 title = "Pollymorph Potion"
 body = "Usable once, during combat. Turns any one monster into a parrot, which flies away, leaving its treasure behind. Usable once only."
 bottom_right = "1,300 Gold Pieces"
-card_image_path = "loot3_06_card.png"
-illustration_path = "loot3_06_illustration.png"
+card_image_path = "images/raw/loot3_06_card.png"
+illustration_path = "images/raw/loot3_06_illustration.png"
+card_image_svg_path = "images/svg/loot3_06_illustration.svg"
 
 [[card]]
 id = "loot3_07"
@@ -1356,8 +1472,9 @@ source_image = "loot3.jpg"
 card_type = "loot"
 title = "Invoke Obscure Rules"
 body = "Go Up A Level"
-card_image_path = "loot3_07_card.png"
-illustration_path = "loot3_07_illustration.png"
+card_image_path = "images/raw/loot3_07_card.png"
+illustration_path = "images/raw/loot3_07_illustration.png"
+card_image_svg_path = "images/svg/loot3_07_illustration.svg"
 
 [[card]]
 id = "loot3_08"
@@ -1367,8 +1484,9 @@ title = "Eleven-Foot Pole"
 above_title = ["+1 Bonus"]
 bottom_left = "2 Hands"
 bottom_right = "200 Gold Pieces"
-card_image_path = "loot3_08_card.png"
-illustration_path = "loot3_08_illustration.png"
+card_image_path = "images/raw/loot3_08_card.png"
+illustration_path = "images/raw/loot3_08_illustration.png"
+card_image_svg_path = "images/svg/loot3_08_illustration.svg"
 
 [[card]]
 id = "loot4_00"
@@ -1378,8 +1496,9 @@ title = "Staff of Napalm"
 above_title = ["+5 Bonus", "Usable by Wizard Only"]
 bottom_left = "1 Hand"
 bottom_right = "800 Gold Pieces"
-card_image_path = "loot4_00_card.png"
-illustration_path = "loot4_00_illustration.png"
+card_image_path = "images/raw/loot4_00_card.png"
+illustration_path = "images/raw/loot4_00_illustration.png"
+card_image_svg_path = "images/svg/loot4_00_illustration.svg"
 
 [[card]]
 id = "loot4_01"
@@ -1389,8 +1508,9 @@ title = "Steal a Level"
 below_title = [
     "Pick any player to steal a Level from. You go up one. He goes down one.",
 ]
-card_image_path = "loot4_01_card.png"
-illustration_path = "loot4_01_illustration.png"
+card_image_path = "images/raw/loot4_01_card.png"
+illustration_path = "images/raw/loot4_01_illustration.png"
+card_image_svg_path = "images/svg/loot4_01_illustration.svg"
 
 [[card]]
 id = "loot4_02"
@@ -1399,8 +1519,9 @@ card_type = "loot"
 title = "Cloak of Obscurity"
 above_title = ["+4 Bonus", "Usable by Thief Only"]
 bottom_right = "600 Gold Pieces"
-card_image_path = "loot4_02_card.png"
-illustration_path = "loot4_02_illustration.png"
+card_image_path = "images/raw/loot4_02_card.png"
+illustration_path = "images/raw/loot4_02_illustration.png"
+card_image_svg_path = "images/svg/loot4_02_illustration.svg"
 
 [[card]]
 id = "loot4_03"
@@ -1409,8 +1530,9 @@ card_type = "loot"
 title = "Singing & Dancing Sword"
 above_title = ["+2 Bonus", "Not Usable by Thief"]
 bottom_right = "400 Gold Pieces"
-card_image_path = "loot4_03_card.png"
-illustration_path = "loot4_03_illustration.png"
+card_image_path = "images/raw/loot4_03_card.png"
+illustration_path = "images/raw/loot4_03_illustration.png"
+card_image_svg_path = "images/svg/loot4_03_illustration.svg"
 
 [[card]]
 id = "loot4_04"
@@ -1420,8 +1542,9 @@ title = "Rapier of Unfairness"
 above_title = ["+3 Bonus", "Usable by Elf Only"]
 bottom_left = "1 Hand"
 bottom_right = "600 Gold Pieces"
-card_image_path = "loot4_04_card.png"
-illustration_path = "loot4_04_illustration.png"
+card_image_path = "images/raw/loot4_04_card.png"
+illustration_path = "images/raw/loot4_04_illustration.png"
+card_image_svg_path = "images/svg/loot4_04_illustration.svg"
 
 [[card]]
 id = "loot4_05"
@@ -1431,8 +1554,9 @@ title = "Tuba of Charm"
 body = "Gives you +1 to Run Away"
 bottom_left = ["1 Hand", "Big"]
 bottom_right = "300 Gold Pieces"
-card_image_path = "loot4_05_card.png"
-illustration_path = "loot4_05_illustration.png"
+card_image_path = "images/raw/loot4_05_card.png"
+illustration_path = "images/raw/loot4_05_illustration.png"
+card_image_svg_path = "images/svg/loot4_05_illustration.svg"
 
 [[card]]
 id = "loot4_06"
@@ -1442,8 +1566,9 @@ title = "Mithril Armor"
 above_title = ["+3 Bonus", "Not Usable by Wizard"]
 bottom_left = ["Armor", "Big"]
 bottom_right = "600 Gold Pieces"
-card_image_path = "loot4_06_card.png"
-illustration_path = "loot4_06_illustration.png"
+card_image_path = "images/raw/loot4_06_card.png"
+illustration_path = "images/raw/loot4_06_illustration.png"
+card_image_svg_path = "images/svg/loot4_06_illustration.svg"
 
 [[card]]
 id = "loot4_07"
@@ -1452,8 +1577,9 @@ card_type = "loot"
 title = "Spiky Knees"
 above_title = ["+1 Bonus"]
 bottom_right = "200 Gold Pieces"
-card_image_path = "loot4_07_card.png"
-illustration_path = "loot4_07_illustration.png"
+card_image_path = "images/raw/loot4_07_card.png"
+illustration_path = "images/raw/loot4_07_illustration.png"
+card_image_svg_path = "images/svg/loot4_07_illustration.svg"
 
 [[card]]
 id = "loot4_08"
@@ -1463,8 +1589,9 @@ title = "Leather Armor"
 above_title = ["+1 Bonus"]
 bottom_left = "Armor"
 bottom_right = "200 Gold Pieces"
-card_image_path = "loot4_08_card.png"
-illustration_path = "loot4_08_illustration.png"
+card_image_path = "images/raw/loot4_08_card.png"
+illustration_path = "images/raw/loot4_08_illustration.png"
+card_image_svg_path = "images/svg/loot4_08_illustration.svg"
 
 [[card]]
 id = "loot5_00"
@@ -1473,8 +1600,9 @@ card_type = "loot"
 title = "Electric Radioactive Acid Potion"
 body = "Use during any combat. +5 to either side. Usable once only."
 bottom_right = "200 Gold Pieces"
-card_image_path = "loot5_00_card.png"
-illustration_path = "loot5_00_illustration.png"
+card_image_path = "images/raw/loot5_00_card.png"
+illustration_path = "images/raw/loot5_00_illustration.png"
+card_image_svg_path = "images/svg/loot5_00_illustration.svg"
 
 [[card]]
 id = "loot5_01"
@@ -1484,8 +1612,9 @@ title = "Helm of Courage"
 above_title = ["+1 Bonus"]
 bottom_left = "Headgear"
 bottom_right = "200 Gold Pieces"
-card_image_path = "loot5_01_card.png"
-illustration_path = "loot5_01_illustration.png"
+card_image_path = "images/raw/loot5_01_card.png"
+illustration_path = "images/raw/loot5_01_illustration.png"
+card_image_svg_path = "images/svg/loot5_01_illustration.svg"
 
 [[card]]
 id = "loot5_02"
@@ -1495,8 +1624,9 @@ title = "Short Wide Armor"
 above_title = ["+3 Bonus", "Usable by Dwarf Only"]
 bottom_left = "Armor"
 bottom_right = "400 Gold Pieces"
-card_image_path = "loot5_02_card.png"
-illustration_path = "loot5_02_illustration.png"
+card_image_path = "images/raw/loot5_02_card.png"
+illustration_path = "images/raw/loot5_02_illustration.png"
+card_image_svg_path = "images/svg/loot5_02_illustration.svg"
 
 [[card]]
 id = "loot5_03"
@@ -1506,8 +1636,9 @@ title = "Boots of Running Really Fast"
 body = "Gives you +2 to Run Away."
 bottom_left = "Footgear"
 bottom_right = "400 Gold Pieces"
-card_image_path = "loot5_03_card.png"
-illustration_path = "loot5_03_illustration.png"
+card_image_path = "images/raw/loot5_03_card.png"
+illustration_path = "images/raw/loot5_03_illustration.png"
+card_image_svg_path = "images/svg/loot5_03_illustration.svg"
 
 [[card]]
 id = "loot5_04"
@@ -1516,8 +1647,9 @@ card_type = "loot"
 title = "Yuppie Water"
 body = "Use during any combat. Usable once only, and only to help Elves. +2 to each Elf in the battle."
 bottom_right = "100 Gold Pieces"
-card_image_path = "loot5_04_card.png"
-illustration_path = "loot5_04_illustration.png"
+card_image_path = "images/raw/loot5_04_card.png"
+illustration_path = "images/raw/loot5_04_illustration.png"
+card_image_svg_path = "images/svg/loot5_04_illustration.svg"
 
 [[card]]
 id = "loot5_05"
@@ -1526,8 +1658,9 @@ card_type = "loot"
 title = "Pantyhose of Giant Strength"
 above_title = ["+3 Bonus", "Not Usable by Warrior"]
 bottom_right = "600 Gold Pieces"
-card_image_path = "loot5_05_card.png"
-illustration_path = "loot5_05_illustration.png"
+card_image_path = "images/raw/loot5_05_card.png"
+illustration_path = "images/raw/loot5_05_illustration.png"
+card_image_svg_path = "images/svg/loot5_05_illustration.svg"
 
 [[card]]
 id = "loot5_06"
@@ -1535,8 +1668,9 @@ source_image = "loot5.jpg"
 card_type = "loot"
 title = "Hoard!"
 below_title = "Draw 3 more treasure cards immediately. They are face-down if you drew this card face-down; otherwise, they are face-up."
-card_image_path = "loot5_06_card.png"
-illustration_path = "loot5_06_illustration.png"
+card_image_path = "images/raw/loot5_06_card.png"
+illustration_path = "images/raw/loot5_06_illustration.png"
+card_image_svg_path = "images/svg/loot5_06_illustration.svg"
 
 [[card]]
 id = "loot5_07"
@@ -1545,8 +1679,9 @@ card_type = "loot"
 title = "Freezing Explosive Potion"
 body = "Use during any combat. +3 to either side. Usable once only,"
 bottom_right = "100 Gold Pieces"
-card_image_path = "loot5_07_card.png"
-illustration_path = "loot5_07_illustration.png"
+card_image_path = "images/raw/loot5_07_card.png"
+illustration_path = "images/raw/loot5_07_illustration.png"
+card_image_svg_path = "images/svg/loot5_07_illustration.svg"
 
 [[card]]
 id = "loot5_08"
@@ -1555,8 +1690,9 @@ card_type = "loot"
 title = "Magic Lamp"
 body = "You may use the Lamp only on your own turn. It summons a genie who makes a genie who makes a single monster vanish, even if you had already failed your Run Away roll and it was about to catch you. If it was the only monster you were facing, you may take its treasure, but you don't gain a level. Usable once only."
 bottom_right = "500 Gold Pieces"
-card_image_path = "loot5_08_card.png"
-illustration_path = "loot5_08_illustration.png"
+card_image_path = "images/raw/loot5_08_card.png"
+illustration_path = "images/raw/loot5_08_illustration.png"
+card_image_svg_path = "images/svg/loot5_08_illustration.svg"
 
 [[card]]
 id = "loot6_00"
@@ -1565,8 +1701,9 @@ card_type = "loot"
 title = "Invisibility Potion"
 body = "Discard when escape roll fails. You escape automatically. Usable once only."
 bottom_right = "200 Gold Pieces"
-card_image_path = "loot6_00_card.png"
-illustration_path = "loot6_00_illustration.png"
+card_image_path = "images/raw/loot6_00_card.png"
+illustration_path = "images/raw/loot6_00_illustration.png"
+card_image_svg_path = "images/svg/loot6_00_illustration.svg"
 
 [[card]]
 id = "loot6_01"
@@ -1576,8 +1713,9 @@ title = "Bow with Ribbons"
 above_title = ["+4 Bonus", "Usable by Elf Only"]
 bottom_left = "2 Hands"
 bottom_right = "800 Gold Pieces"
-card_image_path = "loot6_01_card.png"
-illustration_path = "loot6_01_illustration.png"
+card_image_path = "images/raw/loot6_01_card.png"
+illustration_path = "images/raw/loot6_01_illustration.png"
+card_image_svg_path = "images/svg/loot6_01_illustration.svg"
 
 [[card]]
 id = "loot6_02"
@@ -1586,8 +1724,9 @@ card_type = "loot"
 title = "Nasty-Tasting Sports Drink"
 body = "Use during any combat. +2 to either side. Usable once only."
 bottom_right = "200 Gold Pieces"
-card_image_path = "loot6_02_card.png"
-illustration_path = "loot6_02_illustration.png"
+card_image_path = "images/raw/loot6_02_card.png"
+illustration_path = "images/raw/loot6_02_illustration.png"
+card_image_svg_path = "images/svg/loot6_02_illustration.svg"
 
 [[card]]
 id = "loot6_03"
@@ -1596,8 +1735,9 @@ card_type = "loot"
 title = "Magic Lamp"
 body = "You may use the Lamp only on your own turn. It summons a genie who makes a single monster vanish, even if you had already failed your Run Away roll and it was about to catch you. If it was the only monster you were facing, you may take its treasure, but you don't gain a level. Usable once only."
 bottom_right = "500 Gold Pieces"
-card_image_path = "loot6_03_card.png"
-illustration_path = "loot6_03_illustration.png"
+card_image_path = "images/raw/loot6_03_card.png"
+illustration_path = "images/raw/loot6_03_illustration.png"
+card_image_svg_path = "images/svg/loot6_03_illustration.svg"
 
 [[card]]
 id = "loot6_04"
@@ -1608,8 +1748,9 @@ above_title = ["No Bonus"]
 body = "Discard for automatic escape from any monster of level 8 or below."
 bottom_left = "1 Hand"
 bottom_right = "No Value"
-card_image_path = "loot6_04_card.png"
-illustration_path = "loot6_04_illustration.png"
+card_image_path = "images/raw/loot6_04_card.png"
+illustration_path = "images/raw/loot6_04_illustration.png"
+card_image_svg_path = "images/svg/loot6_04_illustration.svg"
 
 [[card]]
 id = "loot6_05"
@@ -1619,8 +1760,9 @@ title = "Huge Rock"
 above_title = "+3 Bonus"
 bottom_left = ["2 Hands", "Big"]
 bottom_right = "No Value"
-card_image_path = "loot6_05_card.png"
-illustration_path = "loot6_05_illustration.png"
+card_image_path = "images/raw/loot6_05_card.png"
+illustration_path = "images/raw/loot6_05_illustration.png"
+card_image_svg_path = "images/svg/loot6_05_illustration.svg"
 
 [[card]]
 id = "loot6_06"
@@ -1630,8 +1772,9 @@ title = "Slimy Armor"
 above_title = "1 Bonus"
 bottom_left = "Armor"
 bottom_right = "200 Gold Pieces"
-card_image_path = "loot6_06_card.png"
-illustration_path = "loot6_06_illustration.png"
+card_image_path = "images/raw/loot6_06_card.png"
+illustration_path = "images/raw/loot6_06_illustration.png"
+card_image_svg_path = "images/svg/loot6_06_illustration.svg"
 
 [[card]]
 id = "loot6_07"
@@ -1644,8 +1787,9 @@ above_title = [
 ]
 bottom_left = "1 Hand"
 bottom_right = "400 Gold Pieces"
-card_image_path = "loot6_07_card.png"
-illustration_path = "loot6_07_illustration.png"
+card_image_path = "images/raw/loot6_07_card.png"
+illustration_path = "images/raw/loot6_07_illustration.png"
+card_image_svg_path = "images/svg/loot6_07_illustration.svg"
 
 [[card]]
 id = "loot6_08"
@@ -1655,8 +1799,9 @@ title = "Boots of Butt-Kicking"
 above_title = "+2 Bonus"
 bottom_left = "Footgear"
 bottom_right = "400 Gold Pieces"
-card_image_path = "loot6_08_card.png"
-illustration_path = "loot6_08_illustration.png"
+card_image_path = "images/raw/loot6_08_card.png"
+illustration_path = "images/raw/loot6_08_illustration.png"
+card_image_svg_path = "images/svg/loot6_08_illustration.svg"
 
 [[card]]
 id = "loot7_00"
@@ -1665,8 +1810,9 @@ card_type = "loot"
 title = "Doppleganger"
 body = "Summons your exact duplicate, who fights beside you, so you double your effective Level and all bonuses. You may only use the Doppleganger if you are the only player in the combat. Usable once only."
 bottom_right = "300 Gold Pieces"
-card_image_path = "loot7_00_card.png"
-illustration_path = "loot7_00_illustration.png"
+card_image_path = "images/raw/loot7_00_card.png"
+illustration_path = "images/raw/loot7_00_illustration.png"
+card_image_svg_path = "images/svg/loot7_00_illustration.svg"
 
 [[card]]
 id = "loot7_01"
@@ -1675,8 +1821,9 @@ card_type = "loot"
 title = "Wand of Dowsing"
 body = "Go through the discards to find any one card you want. Take that card and discard this one."
 bottom_right = "1,100 Gold Pieces"
-card_image_path = "loot7_01_card.png"
-illustration_path = "loot7_01_illustration.png"
+card_image_path = "images/raw/loot7_01_card.png"
+illustration_path = "images/raw/loot7_01_illustration.png"
+card_image_svg_path = "images/svg/loot7_01_illustration.svg"
 
 [[card]]
 id = "loot7_02"
@@ -1686,8 +1833,9 @@ title = "Mace of Sharpness"
 above_title = ["+4 Bouns", "Usable by CLeric Only"]
 bottom_left = "1 Hand"
 bottom_right = "600 Gold Pieces"
-card_image_path = "loot7_02_card.png"
-illustration_path = "loot7_02_illustration.png"
+card_image_path = "images/raw/loot7_02_card.png"
+illustration_path = "images/raw/loot7_02_illustration.png"
+card_image_svg_path = "images/svg/loot7_02_illustration.svg"
 
 [[card]]
 id = "loot7_03"
@@ -1697,8 +1845,9 @@ title = "Flaming Armor"
 above_title = ["+2 Bonus"]
 bottom_left = "Armor"
 bottom_right = "400 Gold Pieces"
-card_image_path = "loot7_03_card.png"
-illustration_path = "loot7_03_illustration.png"
+card_image_path = "images/raw/loot7_03_card.png"
+illustration_path = "images/raw/loot7_03_illustration.png"
+card_image_svg_path = "images/svg/loot7_03_illustration.svg"
 
 [[card]]
 id = "loot7_04"
@@ -1707,8 +1856,9 @@ card_type = "loot"
 title = "Potion of Halitosis"
 body = "Use during any combat. +2 to either side, or instantly kills Floating Nose. Usable once only."
 bottom_right = "100 Gold Pieces"
-card_image_path = "loot7_04_card.png"
-illustration_path = "loot7_04_illustration.png"
+card_image_path = "images/raw/loot7_04_card.png"
+illustration_path = "images/raw/loot7_04_illustration.png"
+card_image_svg_path = "images/svg/loot7_04_illustration.svg"
 
 [[card]]
 id = "loot7_05"
@@ -1717,8 +1867,9 @@ card_type = "loot"
 title = "Transferral Potion"
 body = "Play during any combat. Any other player (your choice) fights the monster(s), may ask for help normally, and gets the treasure and levels if he wins. The original player then resumes his turn, and may loot the room whether the combat was won or lost. Usable once only."
 bottom_right = "300 Gold Pisces"
-card_image_path = "loot7_05_card.png"
-illustration_path = "loot7_05_illustration.png"
+card_image_path = "images/raw/loot7_05_card.png"
+illustration_path = "images/raw/loot7_05_illustration.png"
+card_image_svg_path = "images/svg/loot7_05_illustration.svg"
 
 [[card]]
 id = "loot7_06"
@@ -1728,8 +1879,9 @@ title = "Chainsaw of Bloody Dismemberment"
 above_title = "+3 Bonus"
 bottom_left = ["2 Hands", "Big"]
 bottom_right = "600 Gold Pieces"
-card_image_path = "loot7_06_card.png"
-illustration_path = "loot7_06_illustration.png"
+card_image_path = "images/raw/loot7_06_card.png"
+illustration_path = "images/raw/loot7_06_illustration.png"
+card_image_svg_path = "images/svg/loot7_06_illustration.svg"
 
 [[card]]
 id = "loot7_07"
@@ -1738,8 +1890,9 @@ card_type = "loot"
 title = "Hireling"
 below_title = "Follows you around and carries things for you. Allows you to carry and use one extr Big item. Will not fight for you!"
 body = "Keep this card in front of you, with your treasures."
-card_image_path = "loot7_07_card.png"
-illustration_path = "loot7_07_illustration.png"
+card_image_path = "images/raw/loot7_07_card.png"
+illustration_path = "images/raw/loot7_07_illustration.png"
+card_image_svg_path = "images/svg/loot7_07_illustration.svg"
 
 [[card]]
 id = "loot7_08"
@@ -1748,8 +1901,9 @@ card_type = "loot"
 title = "Really Impressive Title"
 above_title = "+3 Bonus"
 bottom_right = "No Value"
-card_image_path = "loot7_08_card.png"
-illustration_path = "loot7_08_illustration.png"
+card_image_path = "images/raw/loot7_08_card.png"
+illustration_path = "images/raw/loot7_08_illustration.png"
+card_image_svg_path = "images/svg/loot7_08_illustration.svg"
 
 [[card]]
 id = "loot8_00"
@@ -1759,8 +1913,9 @@ title = "Pointy Hat of Power"
 above_title = ["+3 Bonus", "Usable by Wizard Only"]
 bottom_left = "Headgear"
 bottom_right = "400 Gold Pieces"
-card_image_path = "loot8_00_card.png"
-illustration_path = "loot8_00_illustration.png"
+card_image_path = "images/raw/loot8_00_card.png"
+illustration_path = "images/raw/loot8_00_illustration.png"
+card_image_svg_path = "images/svg/loot8_00_illustration.svg"
 
 [[card]]
 id = "loot8_01"
@@ -1769,8 +1924,9 @@ card_type = "loot"
 title = "Mutilate the Bodies"
 below_title = "This card may only be played after combat, but it does not have to be your combat."
 body = "Go Up A Level"
-card_image_path = "loot8_01_card.png"
-illustration_path = "loot8_01_illustration.png"
+card_image_path = "images/raw/loot8_01_card.png"
+illustration_path = "images/raw/loot8_01_illustration.png"
+card_image_svg_path = "images/svg/loot8_01_illustration.svg"
 
 [[card]]
 id = "loot8_02"
@@ -1779,8 +1935,9 @@ card_type = "loot"
 title = "Magic Missile"
 body = "Use during any combat. +5 to either side. Usable once only."
 bottom_right = "300 Gold Pieces"
-card_image_path = "loot8_02_card.png"
-illustration_path = "loot8_02_illustration.png"
+card_image_path = "images/raw/loot8_02_card.png"
+illustration_path = "images/raw/loot8_02_illustration.png"
+card_image_svg_path = "images/svg/loot8_02_illustration.svg"
 
 [[card]]
 id = "loot8_03"
@@ -1789,8 +1946,9 @@ card_type = "loot"
 title = "Potion of Idiotic Bravery"
 body = "Use during any combat. +2 to either side. Usable once only"
 bottom_right = "100 Gold Pieces"
-card_image_path = "loot8_03_card.png"
-illustration_path = "loot8_03_illustration.png"
+card_image_path = "images/raw/loot8_03_card.png"
+illustration_path = "images/raw/loot8_03_illustration.png"
+card_image_svg_path = "images/svg/loot8_03_illustration.svg"
 
 [[card]]
 id = "loot8_04"
@@ -1800,8 +1958,9 @@ title = "Stepladder"
 above_title = ["+3 Bonus", "Usable by Halfling Only"]
 bottom_left = "Big"
 bottom_right = "400 Gold Pieces"
-card_image_path = "loot8_04_card.png"
-illustration_path = "loot8_04_illustration.png"
+card_image_path = "images/raw/loot8_04_card.png"
+illustration_path = "images/raw/loot8_04_illustration.png"
+card_image_svg_path = "images/svg/loot8_04_illustration.svg"
 
 [[card]]
 id = "loot8_05"
@@ -1811,8 +1970,9 @@ title = "Swiss Army Polearm"
 above_title = ["+4 Bonus", "Usable by Human Only"]
 bottom_left = ["2 Hands", "Big"]
 bottom_right = "600 Gold Pieces"
-card_image_path = "loot8_05_card.png"
-illustration_path = "loot8_05_illustration.png"
+card_image_path = "images/raw/loot8_05_card.png"
+illustration_path = "images/raw/loot8_05_illustration.png"
+card_image_svg_path = "images/svg/loot8_05_illustration.svg"
 
 [[card]]
 id = "loot8_06"
@@ -1822,8 +1982,9 @@ title = "Cheese Grater of Peace"
 above_title = ["+3 Bonus", "Usable by Cleric Only"]
 bottom_left = "1 Hand"
 bottom_right = "400 Gold Pieces"
-card_image_path = "loot8_06_card.png"
-illustration_path = "loot8_06_illustration.png"
+card_image_path = "images/raw/loot8_06_card.png"
+illustration_path = "images/raw/loot8_06_illustration.png"
+card_image_svg_path = "images/svg/loot8_06_illustration.svg"
 
 [[card]]
 id = "loot8_07"
@@ -1832,8 +1993,9 @@ card_type = "loot"
 title = "Pretty Balloons"
 body = "Use during any combat, distraction. +5 to either side. Usable once only."
 bottom_right = "No Value"
-card_image_path = "loot8_07_card.png"
-illustration_path = "loot8_07_illustration.png"
+card_image_path = "images/raw/loot8_07_card.png"
+illustration_path = "images/raw/loot8_07_illustration.png"
+card_image_svg_path = "images/svg/loot8_07_illustration.svg"
 
 [[card]]
 id = "loot8_08"
@@ -1842,8 +2004,9 @@ card_type = "loot"
 title = "Wishing Ring"
 body = "Cancels any Curse. Play at any time. Usable once only."
 bottom_right = "500 Gold Pieces"
-card_image_path = "loot8_08_card.png"
-illustration_path = "loot8_08_illustration.png"
+card_image_path = "images/raw/loot8_08_card.png"
+illustration_path = "images/raw/loot8_08_illustration.png"
+card_image_svg_path = "images/svg/loot8_08_illustration.svg"
 
 [[card]]
 id = "loot9_00"
@@ -1853,5 +2016,6 @@ title = "Buckler of Swashing"
 above_title = ["+2 Bonus"]
 bottom_left = "1 Hand"
 bottom_right = "400 Gold Pieces"
-card_image_path = "loot9_00_card.png"
-illustration_path = "loot9_00_illustration.png"
+card_image_path = "images/raw/loot9_00_card.png"
+illustration_path = "images/raw/loot9_00_illustration.png"
+card_image_svg_path = "images/svg/loot9_00_illustration.svg"
