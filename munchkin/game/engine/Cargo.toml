@@ -10,4 +10,4 @@ clap.workspace = true
 tracing.workspace = true
 fs4.workspace = true
 turso.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync"] }

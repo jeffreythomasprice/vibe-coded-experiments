@@ -11,3 +11,6 @@ lock_file = "/tmp/munchkin-engine.lock"
 # Engine database file (turso/SQLite-compatible). Parent dir is created on open.
 # Real default when unset: ~/.config/munchkin/engine.db
 database_file = "/tmp/munchkin-engine.db"
+
+# Unix socket the engine listens on and clients (the tui) connect to.
+socket_file = "/tmp/munchkin-engine.sock"

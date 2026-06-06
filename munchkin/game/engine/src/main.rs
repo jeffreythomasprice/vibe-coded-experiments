@@ -2,14 +2,23 @@
 //!
 //! Startup order matters: we load the config first (it holds the log file
 //! path), then bring up logging, then log where the config came from, then take
-//! the single-instance lock, then run the engine.
+//! the single-instance lock, open the database, and finally serve the IPC
+//! socket.
+//!
+//! `main` stays synchronous: the database layer (`db`) owns its own
+//! current-thread tokio runtime and runs queries via `block_on`, so we can't
+//! wrap `main` in `#[tokio::main]` (that would panic with a nested runtime when
+//! `Db::open` blocks on its own). Instead we build a dedicated runtime here and
+//! `block_on` the long-running IPC server.
 
 mod cli;
 mod db;
 mod lock;
+mod registry;
 mod rules;
+mod server;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use shared::config::Config;
 use shared::logging::{self, AppMode};
@@ -42,6 +51,14 @@ fn main() -> Result<()> {
     let _db = Db::open(&loaded.config.database_file)?;
     tracing::info!(db = %loaded.config.database_file.display(), "database ready");
 
-    // 6. Run the (stubbed) game engine.
-    rules::run()
+    // 6. Run the (stubbed) game-rules init.
+    rules::run()?;
+
+    // 7. Serve the IPC socket. This runs until the process is killed; the lock,
+    //    log guard, and db handle above stay alive for its whole duration.
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("building IPC server runtime")?;
+    rt.block_on(server::run(&loaded.config))
 }

@@ -38,6 +38,11 @@ pub struct Config {
     /// directory is created on open. Default: `~/.config/munchkin/engine.db`.
     #[serde(default = "default_database_file")]
     pub database_file: PathBuf,
+
+    /// Unix-domain socket the engine listens on and clients (the tui) connect
+    /// to. Default: `/tmp/munchkin-engine.sock`.
+    #[serde(default = "default_socket_file")]
+    pub socket_file: PathBuf,
 }
 
 impl Default for Config {
@@ -46,6 +51,7 @@ impl Default for Config {
             log_file: default_log_file(),
             lock_file: default_lock_file(),
             database_file: default_database_file(),
+            socket_file: default_socket_file(),
         }
     }
 }
@@ -63,6 +69,10 @@ fn default_database_file() -> PathBuf {
         .map(|d| d.join("munchkin"))
         .unwrap_or_else(|| PathBuf::from("/tmp/munchkin"))
         .join("engine.db")
+}
+
+fn default_socket_file() -> PathBuf {
+    PathBuf::from("/tmp/munchkin-engine.sock")
 }
 
 /// A loaded [`Config`] plus where it came from, so the caller can log the

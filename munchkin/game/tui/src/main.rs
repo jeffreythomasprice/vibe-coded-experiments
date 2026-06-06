@@ -2,12 +2,15 @@
 //!
 //! Startup mirrors the engine (load config, then logging, then log provenance),
 //! but the tui takes no single-instance lock and does not mirror logs to stderr
-//! — it owns the terminal, so logs go to the shared file only.
+//! — it owns the terminal, so logs go to the shared file only. It then connects
+//! to the engine's IPC socket (exiting non-zero if the engine isn't running).
 //!
 //! The UI itself is a stub for now; a terminal-UI framework (e.g. ratatui +
-//! crossterm) will be added later.
+//! crossterm) will be added later. `main` is async (single-threaded runtime) so
+//! it can drive that one engine connection.
 
 mod cli;
+mod session;
 
 use anyhow::Result;
 use clap::Parser;
@@ -16,7 +19,8 @@ use shared::logging::{self, AppMode};
 
 use cli::Cli;
 
-fn main() -> Result<()> {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // 1. Load config (logging needs the log file path from it).
@@ -33,14 +37,6 @@ fn main() -> Result<()> {
         tracing::info!("config contents:\n{}", loaded.raw.trim_end());
     }
 
-    // 4. Run the (stubbed) terminal UI.
-    run()
-}
-
-/// Run the terminal UI. Stub: just logs that it started and returns.
-///
-/// TODO: build the actual UI (ratatui/crossterm) that talks to the engine.
-fn run() -> Result<()> {
-    tracing::info!("tui started (stub) — terminal UI not yet implemented");
-    Ok(())
+    // 4. Connect to the engine and run the (stubbed) session.
+    session::run(&loaded.config).await
 }

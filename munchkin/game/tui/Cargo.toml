@@ -8,3 +8,4 @@ shared.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 tracing.workspace = true
+tokio = { workspace = true, features = ["rt", "macros", "time", "net", "io-util"] }
