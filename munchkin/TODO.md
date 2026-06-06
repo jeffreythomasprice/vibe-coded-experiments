@@ -17,8 +17,7 @@ The exact protocol of the messages will get more involved as we implement real f
 Server can kick clicks that haven't pinged in a while (2 minutes).
 
 
-
-
+tui needs to be a real tui
 
 
 markdown in various text fields? at least bold and italics

@@ -5,6 +5,7 @@
 //! the single-instance lock, then run the engine.
 
 mod cli;
+mod db;
 mod lock;
 mod rules;
 
@@ -14,6 +15,7 @@ use shared::config::Config;
 use shared::logging::{self, AppMode};
 
 use cli::Cli;
+use db::Db;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -36,6 +38,10 @@ fn main() -> Result<()> {
     let _instance = lock::acquire(&loaded.config.lock_file)?;
     tracing::debug!(lock = %loaded.config.lock_file.display(), "acquired single-instance lock");
 
-    // 5. Run the (stubbed) game engine.
+    // 5. Open the database and apply any pending migrations.
+    let _db = Db::open(&loaded.config.database_file)?;
+    tracing::info!(db = %loaded.config.database_file.display(), "database ready");
+
+    // 6. Run the (stubbed) game engine.
     rules::run()
 }

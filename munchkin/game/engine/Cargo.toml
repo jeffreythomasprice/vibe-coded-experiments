@@ -9,3 +9,5 @@ anyhow.workspace = true
 clap.workspace = true
 tracing.workspace = true
 fs4.workspace = true
+turso.workspace = true
+tokio.workspace = true

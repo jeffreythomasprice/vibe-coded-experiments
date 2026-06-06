@@ -1,0 +1,10 @@
+-- 0001_initial.sql
+-- Placeholder initial migration.
+--
+-- Nothing is persisted yet. This migration exists only so the migration
+-- machinery has a first version to apply and the schema baseline is recorded in
+-- `_migrations`. Add real tables in later, higher-numbered files
+-- (0002_*.sql, ...). Never edit this file once it has shipped.
+--
+-- This file is intentionally comment-only: it runs no statements, but applying
+-- it still records version 1 in `_migrations`.

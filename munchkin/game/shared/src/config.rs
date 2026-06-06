@@ -33,6 +33,11 @@ pub struct Config {
     /// engine process runs at a time. Default: `/tmp/munchkin-engine.lock`.
     #[serde(default = "default_lock_file")]
     pub lock_file: PathBuf,
+
+    /// turso/SQLite-compatible database file used by the engine. Its parent
+    /// directory is created on open. Default: `~/.config/munchkin/engine.db`.
+    #[serde(default = "default_database_file")]
+    pub database_file: PathBuf,
 }
 
 impl Default for Config {
@@ -40,6 +45,7 @@ impl Default for Config {
         Config {
             log_file: default_log_file(),
             lock_file: default_lock_file(),
+            database_file: default_database_file(),
         }
     }
 }
@@ -50,6 +56,13 @@ fn default_log_file() -> PathBuf {
 
 fn default_lock_file() -> PathBuf {
     PathBuf::from("/tmp/munchkin-engine.lock")
+}
+
+fn default_database_file() -> PathBuf {
+    dirs::config_dir()
+        .map(|d| d.join("munchkin"))
+        .unwrap_or_else(|| PathBuf::from("/tmp/munchkin"))
+        .join("engine.db")
 }
 
 /// A loaded [`Config`] plus where it came from, so the caller can log the

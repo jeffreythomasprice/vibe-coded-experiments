@@ -7,3 +7,7 @@ log_file = "/tmp/munchkin.log"
 
 # Engine single-instance lock file.
 lock_file = "/tmp/munchkin-engine.lock"
+
+# Engine database file (turso/SQLite-compatible). Parent dir is created on open.
+# Real default when unset: ~/.config/munchkin/engine.db
+database_file = "/tmp/munchkin-engine.db"

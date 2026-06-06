@@ -11,6 +11,8 @@ Three crates:
     built-in defaults. `Config::load` returns a `LoadedConfig` carrying the
     `Source` and raw text so the caller can log provenance *after* logging is up
     (logging can't run during load — it needs the log path from the config).
+    Fields: `log_file`, `lock_file`, and `database_file` (engine DB, defaults to
+    `~/.config/munchkin/engine.db`).
   - `logging.rs` — `tracing` setup via `init(&Config, AppMode)`. One shared
     append-only log file (so multiple processes can write at once); every line
     is tagged `app{pid=… mode=…}` via a process-lifetime root span held in the
@@ -23,15 +25,26 @@ Three crates:
   `lock.rs` is the single-instance lock: an advisory `fs4` exclusive lock on the
   config's `lock_file`, released automatically when the process exits. A second
   engine that starts while one is running aborts immediately.
+  `db/` owns the database: a local `turso` (SQLite-compatible) file at the
+  config's `database_file`, opened via a current-thread tokio runtime that the
+  `Db` handle holds for the process lifetime (the rest of the engine stays
+  sync — DB work goes through `rt.block_on`). `db/migrations.rs` is a
+  hand-rolled, forward-only migration runner: embedded `db/migrations/*.sql`
+  files with increasing versions, applied at startup and tracked in a
+  `_migrations` table (idempotent). Nothing is persisted yet — `0001_initial.sql`
+  is a placeholder.
 - **`tui/`** — terminal UI (stub). No lock, no stderr logging. A UI framework
   (ratatui/crossterm) will be added later.
 
 ## Startup order (both binaries)
 
 `Cli::parse` → `Config::load` → `logging::init` → log config source + contents →
-(engine only) `lock::acquire` → run. The `LogGuard` from `init` must be held for
-the whole of `main` — dropping it early stops pid/mode tagging and may drop
-buffered log lines.
+(engine only) `lock::acquire` → (engine only) `Db::open` (creates the db's parent
+dir + runs migrations) → run. The `LogGuard` from `init` must be held for the
+whole of `main` — dropping it early stops pid/mode tagging and may drop buffered
+log lines; likewise the `Db` handle must outlive `main`. Note the engine now
+auto-creates `~/.config/munchkin/` on first run (for the default db path);
+previously nothing created that directory.
 
 ## Run
 
