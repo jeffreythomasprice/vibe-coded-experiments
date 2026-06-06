@@ -17,6 +17,10 @@ Connected clients will need to provide which player they represent, if any. A co
 The TUI will need updating to provide a game menu. We should be able to see all the ongoing games. Selecting one should let us join that game as an observer, or as a player. The engine should guarantee that only one client can be connected as a particular player at a time. If there are multiple human players, multiple instances of the tui client should be connected as different players. If a tui client is already connected as a particular player, a second shoudl be rejected. The TUI should be able to show error messages from the server for this kind of situation.
 
 
+go back through the rules and make sure we cover every possible card in at least basic details
+AI quorum voting on rules layering?
+
+
 markdown in various text fields? at least bold and italics
 
 
