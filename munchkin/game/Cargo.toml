@@ -1,0 +1,21 @@
+[workspace]
+resolver = "3"
+members = ["shared", "engine", "tui"]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+
+[workspace.dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-appender = "0.2"
+dirs = "6"
+fs4 = { version = "0.13", features = ["sync"] }
+
+# Internal crates
+shared = { path = "shared" }

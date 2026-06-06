@@ -4,18 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A pipeline + dataset for digitizing the base **Munchkin** card game. The end goal
-(see `TODO.md`) is a structured, hand-verified database of every card plus
-vector art, suitable for a future card renderer. The repo has two halves:
+A pipeline + dataset for digitizing the base **Munchkin** card game, plus the
+beginnings of a playable implementation. The end goal (see `TODO.md`) is a
+structured, hand-verified database of every card plus vector art, suitable for a
+future card renderer and game. The repo has three parts:
 
 - `assets/` — the **data**. Raw scans go in; cleaned, structured card data comes
   out. `assets/processed/cards.toml` is the curated source of truth.
 - `card-image-scanner/` — the **tool** (Rust CLI) that segments scanned card
   sheets, OCRs them, extracts illustrations, and emits the initial TOML + PNGs.
+- `game/` — the **playable side**: a separate Cargo workspace (`engine`, `tui`,
+  `shared`) that will implement and play the game. Mostly stubbed for now; see
+  `game/CLAUDE.md`.
 
-The flow is one-directional: `assets/raw/*` → scanner → `assets/processed/*`.
+The data flow is one-directional: `assets/raw/*` → scanner → `assets/processed/*`.
 Most ongoing work is hand-correcting the data in `assets/processed/cards.toml`,
-not re-running the scanner.
+not re-running the scanner. The `game/` workspace consumes the curated data.
 
 ## Two schemas — do not confuse them
 

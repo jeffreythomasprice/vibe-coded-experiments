@@ -1,0 +1,10 @@
+[package]
+name = "tui"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+shared.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+tracing.workspace = true

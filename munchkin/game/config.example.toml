@@ -1,0 +1,9 @@
+# Munchkin config. Copy to ./config.toml or ~/.config/munchkin/config.toml,
+# or pass with --config <PATH>. Search order (first wins):
+#   1. --config <PATH>   2. ./config.toml   3. ~/.config/munchkin/config.toml
+
+# Shared log file (all processes append here; each line is tagged with pid+mode).
+log_file = "/tmp/munchkin.log"
+
+# Engine single-instance lock file.
+lock_file = "/tmp/munchkin-engine.lock"
