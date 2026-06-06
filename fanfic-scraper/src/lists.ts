@@ -107,6 +107,6 @@ export function getListPrefix(status: ListKind | undefined): string {
         case "ignored":
             return "[IGNORE] ";
         default:
-            return "         ";
+            return "";
     }
 }

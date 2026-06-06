@@ -171,7 +171,7 @@ program
                     const prefix = getListPrefix(status);
                     const updated = t.lastUpdated?.toISOString() ?? "unknown";
                     const tagStr = t.tags.length > 0 ? `\t[${t.tags.join(", ")}]` : "";
-                    const urlStr = cmdOpts.showUrls ? `\t${t.url}` : "";
+                    const urlStr = cmdOpts.showUrls ? `\n    ${t.url}` : "";
                     console.log(
                         `${prefix}${t.threadId}\t${updated}\t${t.title}\t${t.author}${tagStr}${urlStr}`,
                     );
@@ -342,7 +342,7 @@ program
                     const updated = s.lastUpdated?.toISOString() ?? "unknown";
                     const words = s.wordCount ?? "?";
                     const tagStr = s.tags.length > 0 ? `\t[${s.tags.join(", ")}]` : "";
-                    const urlStr = cmdOpts.showUrls ? `\t${s.url}` : "";
+                    const urlStr = cmdOpts.showUrls ? `\n    ${s.url}` : "";
                     console.log(
                         `${prefix}${s.storyId}\t${words}\t${updated}\t${s.title}\t${s.author}${tagStr}${urlStr}`,
                     );

@@ -80,15 +80,17 @@ export function resolveSearchSources(
 function getItemTags(item: SearchResultItem): string[] {
     if (item.kind === "thread") {
         const t = item.data;
-        return [...t.tags, ...t.fandoms, ...t.genres, ...t.characters];
+        return [...new Set([...t.tags, ...t.fandoms, ...t.genres, ...t.characters])];
     } else {
         const s = item.data;
         return [
-            ...s.tags,
-            ...(s.fandoms ?? []),
-            ...(s.characters ?? []),
-            ...(s.relationships ?? []),
-            ...s.categories,
+            ...new Set([
+                ...s.tags,
+                ...(s.fandoms ?? []),
+                ...(s.characters ?? []),
+                ...(s.relationships ?? []),
+                ...s.categories,
+            ]),
         ];
     }
 }
@@ -409,9 +411,7 @@ export function formatSearchResult(result: ScoredSearchResult, showUrls?: boolea
     const allTags = getItemTags(item);
     const tagStr = allTags.length > 0 ? `[${allTags.join(", ")}]` : "";
 
-    const url = showUrls ? item.data.url : "";
-    const parts = [prefix + kind, site, id, updated, title, author, extra, tagStr, url].filter(
-        Boolean,
-    );
-    return parts.join("\t");
+    const parts = [prefix + kind, site, id, updated, title, author, extra, tagStr].filter(Boolean);
+    const line = parts.join("\t");
+    return showUrls ? `${line}\n    ${item.data.url}` : line;
 }
