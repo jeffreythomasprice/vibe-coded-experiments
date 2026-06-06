@@ -46,18 +46,25 @@ Three crates:
   `std::sync::Mutex`-guarded `Registry`, and a reaper task kicks (actively closes)
   any client idle > 2 min. Protocol stub: `Hello`/`Ping`/`Stats`. Bind failure →
   log + exit non-zero.
-- **`tui/`** — terminal UI (stub). No lock, no stderr logging. On startup it
-  connects to the engine's socket (`session.rs`), says hello, then pings every
-  ~30s and periodically asks for stats. Connect failure, or being dropped/kicked
-  by the engine, → log + exit non-zero. A UI framework (ratatui/crossterm) will
-  be added later.
+- **`tui/`** — terminal UI (ratatui + crossterm). No lock, no stderr logging
+  (it owns the terminal, so logs go to the shared file only — a stray stderr
+  write would corrupt the UI). `session.rs` connects + does the `Hello`
+  handshake (a missing engine still fails fast, non-zero — this happens *before*
+  the terminal is taken over). `app.rs` then takes over the terminal and runs
+  the render loop: a `tokio::select!` over a ~30s keepalive ping, a 1s redraw
+  tick, and crossterm's async key `EventStream`; **Esc quits.** `ui.rs` paints a
+  placeholder status dashboard (connection state, server identity, time since
+  last ping, the connected-client list). A mid-session drop/kick is *not* fatal:
+  it flips the view to "disconnected" and stops pinging, but stays up until Esc.
+  The terminal is restored on every exit path via a `Drop` guard in `main.rs`.
 
 ## Startup order (both binaries)
 
 `Cli::parse` → `Config::load` → `logging::init` → log config source + contents →
 **engine:** `lock::acquire` → `Db::open` (creates the db's parent dir + runs
 migrations) → `server::run` (bind socket, serve until killed); **tui:**
-`session::run` (connect to the engine, fail-fast non-zero if it isn't running).
+`session::connect` (connect + handshake, fail-fast non-zero if the engine isn't
+running) → take over the terminal → `app::run_ui` (render until Esc).
 The `LogGuard` from `init` must be held for the whole of `main` — dropping it
 early stops pid/mode tagging and may drop buffered log lines, so never move it
 into a spawned task; likewise the `Db` handle and single-instance lock must

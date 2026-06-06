@@ -9,3 +9,6 @@ anyhow.workspace = true
 clap.workspace = true
 tracing.workspace = true
 tokio = { workspace = true, features = ["rt", "macros", "time", "net", "io-util"] }
+ratatui.workspace = true
+crossterm.workspace = true
+futures-util.workspace = true
