@@ -12,8 +12,12 @@ Three crates:
     `Source` and raw text so the caller can log provenance *after* logging is up
     (logging can't run during load — it needs the log path from the config).
     Fields: `log_file`, `lock_file`, `database_file` (engine DB, defaults to
-    `~/.config/munchkin/engine.db`), and `socket_file` (engine IPC socket,
-    defaults to `/tmp/munchkin-engine.sock`).
+    `~/.config/munchkin/engine.db`), `socket_file` (engine IPC socket,
+    defaults to `/tmp/munchkin-engine.sock`), and an `[ollama]` table for the AI
+    backend (`host`=`localhost`, `port`=`11434`, and **per-role** model ids
+    `player_model`/`referee_model`, both defaulting to `qwen3.5`; a missing table
+    uses all defaults). Only the engine consumes `[ollama]`, but it lives here
+    because config parsing is centralised in `shared`.
   - `logging.rs` — `tracing` setup via `init(&Config, AppMode)`. One shared
     append-only log file (so multiple processes can write at once); every line
     is tagged `app{pid=… mode=…}` via a process-lifetime root span held in the
@@ -28,7 +32,22 @@ Three crates:
     `request`). One in-flight request at a time — a single stream correlates
     replies only by order.
 - **`engine/`** — the game-rules engine. `rules.rs` has stub submodules mirroring
-  `assets/processed/rules.md` (turn/combat/items/curses/level/death/win).
+  `assets/processed/rules.md` (turn/combat/items/curses/level/death/win);
+  `rules::run` also builds the (stub) referee agent from the `[ollama]` config.
+  `ai/` is the AI scaffolding (engine-only, so `reqwest` stays out of `tui`).
+  `ai/client.rs` is a **real** async Ollama client (`OllamaClient`, one per role,
+  `POST /api/generate`). The rest are **stubs** for the two kinds of LLM
+  consultation, split by *information*: **player agents** (`ai/player.rs`) decide
+  a seat's moves from a redacted `PlayerView` (own hand + others' *public* state
+  incl. hand *sizes*) — invoked for both mandatory decisions (kicked-open monster:
+  fight/run/play/concede) and out-of-turn opportunities (help/hinder/pass); the
+  **referee** / rules-lawyer (`ai/referee.rs`) rules legality of a `ProposedAction`
+  with the *full* `GameState` (all hands). `ai/view.rs::player_view` is the
+  redaction that enforces the player-side information boundary; `ai/decision.rs`
+  holds the request/decision vocabulary. The agent stubs build placeholder prompts,
+  call Ollama best-effort, log the raw reply, and fall back to safe defaults
+  (player → pass/concede, referee → "legal"), so the engine builds and runs with
+  or without a reachable Ollama.
   `lock.rs` is the single-instance lock: an advisory `fs4` exclusive lock on the
   config's `lock_file`, released automatically when the process exits. A second
   engine that starts while one is running aborts immediately.
@@ -89,8 +108,8 @@ RUST_LOG=engine=info cargo run -p engine  # override the default filter
 
 ## Keeping docs in sync
 
-- Change the config schema → update `config.rs`, `config.example.toml`, and this
-  file.
+- Change the config schema (incl. the `[ollama]` table) → update `config.rs`,
+  `config.example.toml`, and this file.
 - Change the logging scheme → update `logging.rs` and this file.
 - Implement a rules system → fill in the matching `engine/src/rules.rs`
   submodule; keep it traceable back to `assets/processed/rules.md`.

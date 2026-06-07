@@ -14,3 +14,12 @@ database_file = "/tmp/munchkin-engine.db"
 
 # Unix socket the engine listens on and clients (the tui) connect to.
 socket_file = "/tmp/munchkin-engine.sock"
+
+# Ollama connection + models for the AI agents (player agents and the referee).
+# A missing [ollama] table uses all of these defaults. The model id is set
+# per role so the referee can use a stronger model than the players if desired.
+[ollama]
+host = "localhost"          # Ollama server host
+port = 11434                # Ollama server port (Ollama's default)
+player_model = "qwen3.5"    # model used by AI player agents (limited info)
+referee_model = "qwen3.5"   # model used by the referee / rules-lawyer (full info)

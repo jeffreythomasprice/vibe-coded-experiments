@@ -43,6 +43,11 @@ pub struct Config {
     /// to. Default: `/tmp/munchkin-engine.sock`.
     #[serde(default = "default_socket_file")]
     pub socket_file: PathBuf,
+
+    /// Connection + model settings for the Ollama server that backs the AI
+    /// players and the referee. A missing `[ollama]` table uses all defaults.
+    #[serde(default)]
+    pub ollama: OllamaConfig,
 }
 
 impl Default for Config {
@@ -52,7 +57,53 @@ impl Default for Config {
             lock_file: default_lock_file(),
             database_file: default_database_file(),
             socket_file: default_socket_file(),
+            ollama: OllamaConfig::default(),
         }
+    }
+}
+
+/// Where to reach Ollama and which models the AI agents should use.
+///
+/// Player agents and the referee can use different models (the referee may
+/// warrant a stronger one), so the model id is configured per role; both default
+/// to the same model. Only the engine consumes these — the types live here
+/// because all config loading/parsing is centralised in this crate.
+#[derive(Debug, Deserialize)]
+pub struct OllamaConfig {
+    /// Host the Ollama server is reachable on. Default: `localhost`.
+    #[serde(default = "default_ollama_host")]
+    pub host: String,
+
+    /// Port the Ollama server listens on. Default: `11434` (Ollama's default).
+    #[serde(default = "default_ollama_port")]
+    pub port: u16,
+
+    /// Model id used by AI **player** agents (limited-information decisions).
+    /// Default: `qwen3.5`.
+    #[serde(default = "default_player_model")]
+    pub player_model: String,
+
+    /// Model id used by the **referee** / rules-lawyer agent (full-information
+    /// legality rulings). Default: `qwen3.5`.
+    #[serde(default = "default_referee_model")]
+    pub referee_model: String,
+}
+
+impl Default for OllamaConfig {
+    fn default() -> Self {
+        OllamaConfig {
+            host: default_ollama_host(),
+            port: default_ollama_port(),
+            player_model: default_player_model(),
+            referee_model: default_referee_model(),
+        }
+    }
+}
+
+impl OllamaConfig {
+    /// The base URL of the Ollama HTTP API, e.g. `http://localhost:11434`.
+    pub fn base_url(&self) -> String {
+        format!("http://{}:{}", self.host, self.port)
     }
 }
 
@@ -73,6 +124,22 @@ fn default_database_file() -> PathBuf {
 
 fn default_socket_file() -> PathBuf {
     PathBuf::from("/tmp/munchkin-engine.sock")
+}
+
+fn default_ollama_host() -> String {
+    "localhost".to_string()
+}
+
+fn default_ollama_port() -> u16 {
+    11434
+}
+
+fn default_player_model() -> String {
+    "qwen3.5".to_string()
+}
+
+fn default_referee_model() -> String {
+    "qwen3.5".to_string()
 }
 
 /// A loaded [`Config`] plus where it came from, so the caller can log the
@@ -145,4 +212,37 @@ fn candidate_paths(cli_path: Option<&Path>) -> Vec<PathBuf> {
     }
 
     paths
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_ollama_table_uses_defaults() {
+        // A config with no [ollama] table at all → all Ollama defaults.
+        let config: Config = toml::from_str("").expect("empty config parses");
+        assert_eq!(config.ollama.host, "localhost");
+        assert_eq!(config.ollama.port, 11434);
+        assert_eq!(config.ollama.player_model, "qwen3.5");
+        assert_eq!(config.ollama.referee_model, "qwen3.5");
+        assert_eq!(config.ollama.base_url(), "http://localhost:11434");
+    }
+
+    #[test]
+    fn partial_ollama_table_fills_remaining_defaults() {
+        let config: Config = toml::from_str(
+            r#"
+            [ollama]
+            host = "ollama.lan"
+            referee_model = "bigbrain"
+            "#,
+        )
+        .expect("partial ollama config parses");
+        assert_eq!(config.ollama.host, "ollama.lan");
+        assert_eq!(config.ollama.port, 11434); // default
+        assert_eq!(config.ollama.player_model, "qwen3.5"); // default
+        assert_eq!(config.ollama.referee_model, "bigbrain");
+        assert_eq!(config.ollama.base_url(), "http://ollama.lan:11434");
+    }
 }

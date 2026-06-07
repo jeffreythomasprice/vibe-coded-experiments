@@ -11,6 +11,7 @@
 //! `Db::open` blocks on its own). Instead we build a dedicated runtime here and
 //! `block_on` the long-running IPC server.
 
+mod ai;
 mod cli;
 mod db;
 mod lock;
@@ -51,8 +52,16 @@ fn main() -> Result<()> {
     let _db = Db::open(&loaded.config.database_file)?;
     tracing::info!(db = %loaded.config.database_file.display(), "database ready");
 
-    // 6. Run the (stubbed) game-rules init.
-    rules::run()?;
+    // 6. Log the resolved Ollama config (provenance of the AI agents) and run
+    //    the (stubbed) game-rules init, which wires up the referee agent.
+    let ollama = &loaded.config.ollama;
+    tracing::info!(
+        base_url = %ollama.base_url(),
+        player_model = %ollama.player_model,
+        referee_model = %ollama.referee_model,
+        "ollama configured for AI agents"
+    );
+    rules::run(ollama)?;
 
     // 7. Serve the IPC socket. This runs until the process is killed; the lock,
     //    log guard, and db handle above stay alive for its whole duration.

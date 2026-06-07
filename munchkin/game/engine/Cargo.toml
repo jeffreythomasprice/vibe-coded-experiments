@@ -11,3 +11,7 @@ tracing.workspace = true
 fs4.workspace = true
 turso.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync"] }
+# Used by the `ai` module: the Ollama HTTP client + (de)serialising prompts.
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
