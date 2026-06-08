@@ -30,7 +30,7 @@ pub use notes::Note;
 pub use spells::{SpellCircle, SpellRef};
 pub use state::{HealthDamage, MoteCommitment, MotePool, PoolState};
 pub use traits::{
-    AbilityKind, AttributeGroup, AttributeKind, AttributePriority, DotPurchase, DotSource,
+    AbilityKind, AttributeGroup, AttributeKind, AttributePriority, Craft, DotPurchase, DotSource,
     RatedTrait, Specialty, VirtueKind,
 };
 pub use xp::XpAward;
@@ -43,6 +43,12 @@ pub struct Character {
     pub attributes: BTreeMap<AttributeKind, RatedTrait>,
     pub attribute_priority: AttributePriority,
     pub abilities: BTreeMap<AbilityKind, RatedTrait>,
+    /// Craft abilities, kept out of `abilities` because Craft is a family of
+    /// separately-rated abilities (Craft: Water, Craft: Fire, …) that share a
+    /// single Caste/Favored slot. The first entry is the primary craft that
+    /// renders on the sheet's single Craft row. See [`Craft`].
+    #[serde(default)]
+    pub crafts: Vec<Craft>,
     pub virtues: BTreeMap<VirtueKind, RatedTrait>,
     pub primary_virtue: Option<VirtueKind>,
     pub virtue_flaw: Option<VirtueFlaw>,
@@ -84,6 +90,10 @@ impl Character {
         }
         let mut abilities = BTreeMap::new();
         for a in AbilityKind::ALL {
+            // Craft is never stored in the ability map — it lives in `crafts`.
+            if *a == AbilityKind::Craft {
+                continue;
+            }
             abilities.insert(*a, RatedTrait::with_base(0));
         }
         let mut virtues = BTreeMap::new();
@@ -100,6 +110,7 @@ impl Character {
             attributes,
             attribute_priority: AttributePriority::default(),
             abilities,
+            crafts: Vec::new(),
             virtues,
             primary_virtue: None,
             virtue_flaw: None,
@@ -127,7 +138,46 @@ impl Character {
     }
 
     pub fn ability(&self, kind: AbilityKind) -> u8 {
+        // Craft has no entry in the ability map; its "rating" for purposes of
+        // charm prerequisites and dice pools is the best of the character's
+        // crafts — a "Craft N" requirement is met by having *a* Craft at N.
+        if kind == AbilityKind::Craft {
+            return self.craft_rating_max();
+        }
         self.abilities.get(&kind).map(|t| t.dots()).unwrap_or(0)
+    }
+
+    /// The highest rating across all the character's crafts (0 if none).
+    pub fn craft_rating_max(&self) -> u8 {
+        self.crafts
+            .iter()
+            .map(|c| c.rating.dots())
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// The primary craft — the one that renders on the sheet's single Craft
+    /// row. Conventionally the first craft the character took.
+    pub fn primary_craft(&self) -> Option<&Craft> {
+        self.crafts.first()
+    }
+
+    /// Migrate a legacy character that stored Craft as an entry in the ability
+    /// map into the `crafts` collection. Older TOML (and the GUI/CLI before
+    /// multi-craft support) put a single `[abilities.Craft]` entry on the
+    /// sheet; move any such entry with real content into `crafts`. A blank
+    /// Craft entry is simply dropped. Idempotent and a no-op once migrated.
+    pub fn migrate_legacy_craft(&mut self) {
+        if let Some(rating) = self.abilities.remove(&AbilityKind::Craft) {
+            let has_content =
+                rating.dots() > 0 || !rating.purchases.is_empty() || !rating.specialties.is_empty();
+            if has_content && self.crafts.is_empty() {
+                self.crafts.push(Craft {
+                    focus: String::new(),
+                    rating,
+                });
+            }
+        }
     }
 
     pub fn virtue(&self, kind: VirtueKind) -> u8 {

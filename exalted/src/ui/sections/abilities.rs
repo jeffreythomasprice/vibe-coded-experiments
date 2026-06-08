@@ -2,17 +2,35 @@
 //! inline specialties. Top row: Dawn / Zenith / Twilight. Bottom row:
 //! Night / Eclipse / (empty).
 
-use crate::character::{AbilityKind, Caste, DotSource, RatedTrait};
+use crate::character::{AbilityKind, Caste, Craft, DotSource, RatedTrait};
 use crate::render::names::{ability_name, caste_name};
 use crate::ui::search::{self, MatchTarget, SectionId};
 use crate::ui::state::AppState;
 use crate::ui::widgets::dot_source::DotSourceKind;
-use crate::ui::widgets::rated_trait::{RatedTraitOpts, Selectable, rated_trait_editor_with_prefix};
+use crate::ui::widgets::icon_button::trash_button;
+use crate::ui::widgets::rated_trait::{
+    RatedTraitOpts, Selectable, rated_trait_editor, rated_trait_editor_with_prefix,
+};
 
 const ABILITY_SOURCES: &[DotSourceKind] = &[
     DotSourceKind::ChargenPriority,
     DotSourceKind::BonusPoints,
     DotSourceKind::Xp,
+];
+
+/// Canonical Craft focuses offered as autocomplete suggestions. Free text is
+/// still allowed for homebrew crafts.
+const CRAFT_SUGGESTIONS: &[&str] = &[
+    "Air",
+    "Earth",
+    "Fire",
+    "Water",
+    "Wood",
+    "Magitech",
+    "Genesis",
+    "Fate",
+    "Glamour",
+    "Moliation",
 ];
 
 const TOP_ROW: [Caste; 3] = [Caste::Dawn, Caste::Zenith, Caste::Twilight];
@@ -56,15 +74,19 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             for c in TOP_ROW {
                 ui.vertical(|ui| {
                     for ab in c.caste_abilities() {
-                        render_ability(
-                            ui,
-                            state,
-                            *ab,
-                            default_source,
-                            selected_ability,
-                            &mut clicked_ability,
-                            &mut any_changed,
-                        );
+                        if *ab == AbilityKind::Craft {
+                            render_crafts(ui, state, default_source, &mut any_changed);
+                        } else {
+                            render_ability(
+                                ui,
+                                state,
+                                *ab,
+                                default_source,
+                                selected_ability,
+                                &mut clicked_ability,
+                                &mut any_changed,
+                            );
+                        }
                     }
                 });
             }
@@ -79,15 +101,19 @@ pub fn render(ui: &mut egui::Ui, state: &mut AppState) {
             for c in BOTTOM_ROW {
                 ui.vertical(|ui| {
                     for ab in c.caste_abilities() {
-                        render_ability(
-                            ui,
-                            state,
-                            *ab,
-                            default_source,
-                            selected_ability,
-                            &mut clicked_ability,
-                            &mut any_changed,
-                        );
+                        if *ab == AbilityKind::Craft {
+                            render_crafts(ui, state, default_source, &mut any_changed);
+                        } else {
+                            render_ability(
+                                ui,
+                                state,
+                                *ab,
+                                default_source,
+                                selected_ability,
+                                &mut clicked_ability,
+                                &mut any_changed,
+                            );
+                        }
                     }
                 });
             }
@@ -191,6 +217,131 @@ fn render_ability(
         }
     }
     if row_changed {
+        *any_changed = true;
+    }
+}
+
+/// Render the Craft "ability" — which is really a family of separately-rated
+/// crafts (Craft: Water, Craft: Fire, …) sharing one Caste/Favored slot. The
+/// first craft is the primary one that lands on the sheet's single Craft row;
+/// the rest ride the specialty rows. Shows a shared favored checkbox, then one
+/// editor per craft (focus name + rating + specialties), plus add/remove and a
+/// "make primary" control.
+fn render_crafts(
+    ui: &mut egui::Ui,
+    state: &mut AppState,
+    default_source: DotSource,
+    any_changed: &mut bool,
+) {
+    let is_caste = state.character.is_caste_ability(AbilityKind::Craft);
+    let is_favored = state.character.is_favored_ability(AbilityKind::Craft);
+
+    // Shared Caste/Favored checkbox + group label.
+    ui.horizontal(|ui| {
+        let mut checked = is_caste || is_favored;
+        let resp = ui.add_enabled(!is_caste, egui::Checkbox::new(&mut checked, ""));
+        let resp = if is_caste {
+            resp.on_disabled_hover_text(
+                "Checked when Craft is a favored ability. Locked on because caste abilities are always favored.",
+            )
+        } else {
+            resp.on_hover_text("Checked when Craft is a favored ability. Applies to every craft.")
+        };
+        if !is_caste && resp.changed() {
+            if checked && !is_favored {
+                state.character.favored_abilities.push(AbilityKind::Craft);
+            } else if !checked && is_favored {
+                state
+                    .character
+                    .favored_abilities
+                    .retain(|x| *x != AbilityKind::Craft);
+            }
+            *any_changed = true;
+        }
+        let label_hl = state
+            .search
+            .highlight_for(MatchTarget::AbilityLabel(AbilityKind::Craft));
+        if label_hl.is_some() {
+            search::highlight_label(ui, "Craft", label_hl, state.search.scroll_pending);
+        } else {
+            ui.add_sized([140.0, 0.0], egui::Label::new(egui::RichText::new("Craft").strong()));
+        }
+    });
+
+    let mut remove_idx: Option<usize> = None;
+    let mut make_primary_idx: Option<usize> = None;
+    let n = state.character.crafts.len();
+    for i in 0..n {
+        ui.horizontal(|ui| {
+            // Focus name + canonical-craft suggestions.
+            let focus = &mut state.character.crafts[i].focus;
+            let resp = ui.add(
+                egui::TextEdit::singleline(focus)
+                    .hint_text("focus (e.g. Water)")
+                    .desired_width(150.0),
+            );
+            if resp.changed() {
+                *any_changed = true;
+            }
+            ui.menu_button("▾", |ui| {
+                for s in CRAFT_SUGGESTIONS {
+                    if ui.button(*s).clicked() {
+                        *focus = (*s).to_string();
+                        *any_changed = true;
+                        ui.close();
+                    }
+                }
+            });
+            if i == 0 {
+                ui.small("primary");
+            } else if ui
+                .small_button("★")
+                .on_hover_text("Make this the primary craft (the one on the Craft row)")
+                .clicked()
+            {
+                make_primary_idx = Some(i);
+            }
+            if trash_button(ui).clicked() {
+                remove_idx = Some(i);
+            }
+        });
+
+        // Rating + specialties for this craft. Empty label keeps the dot row
+        // aligned with the other ability rows in the column.
+        let mut opts = RatedTraitOpts {
+            label: "",
+            max_dots: 5,
+            allowed_sources: ABILITY_SOURCES,
+            default_add_source: default_source,
+            show_specialties: true,
+            selectable: None,
+            search: Some(&state.search),
+            label_target: None,
+            // Craft specialties aren't individually search-addressable yet.
+            specialty_ability: None,
+        };
+        if rated_trait_editor(
+            ui,
+            ("craft", i),
+            &mut state.character.crafts[i].rating,
+            &mut opts,
+        ) {
+            *any_changed = true;
+        }
+    }
+
+    if let Some(i) = make_primary_idx {
+        let craft = state.character.crafts.remove(i);
+        state.character.crafts.insert(0, craft);
+        *any_changed = true;
+    }
+    if let Some(i) = remove_idx {
+        state.character.crafts.remove(i);
+        *any_changed = true;
+    }
+
+    if ui.button("+ Add Craft").clicked() {
+        state.character.crafts.push(Craft::new(String::new(), 0));
         *any_changed = true;
     }
 }

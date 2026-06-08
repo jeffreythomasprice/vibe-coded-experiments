@@ -3,6 +3,11 @@ use crate::character::{AbilityKind, AttributeKind, Character};
 /// Base dice pool for an Attribute + Ability action, plus an optional
 /// specialty (capped at +3 per rulebook). Does not include external
 /// modifiers (stunt dice, charms, etc.).
+///
+/// For `AbilityKind::Craft` the rating is the character's *best* craft (see
+/// [`Character::ability`]); this signature can't address a specific craft
+/// focus, so per-focus craft specialties don't apply here. A dedicated
+/// per-focus helper can be added if precise craft pools are ever needed.
 pub fn dice_pool(
     character: &Character,
     attribute: AttributeKind,

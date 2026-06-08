@@ -186,7 +186,7 @@ Final dots = `base_dots + len(purchases)`.
 
 #### All attributes / abilities / virtues must appear
 
-The TOML must have a section for **every** attribute (9), **every** ability (25), and **every** virtue (4). For ones that get no dots beyond base, use:
+The TOML must have a section for **every** attribute (9), **every** non-Craft ability (24), and **every** virtue (4). For ones that get no dots beyond base, use:
 
 ```toml
 [abilities.Larceny]
@@ -196,8 +196,30 @@ specialties = []
 ```
 
 Attribute names use PascalCase: `Strength Dexterity Stamina Charisma Manipulation Appearance Perception Intelligence Wits`.
-Ability names use PascalCase, with `MartialArts` (one word, no space). Full list: `Archery MartialArts Melee Thrown War Integrity Performance Presence Resistance Survival Craft Investigation Lore Medicine Occult Athletics Awareness Dodge Larceny Stealth Bureaucracy Linguistics Ride Sail Socialize`.
+Ability names use PascalCase, with `MartialArts` (one word, no space). Full list: `Archery MartialArts Melee Thrown War Integrity Performance Presence Resistance Survival Investigation Lore Medicine Occult Athletics Awareness Dodge Larceny Stealth Bureaucracy Linguistics Ride Sail Socialize`.
 Virtue names: `Compassion Conviction Temperance Valor`.
+
+**Craft is the exception — it does NOT go in the `abilities` map.** Craft is a *family* of separately-rated abilities (Craft: Water, Craft: Fire, Craft: Magitech, …) that share a single Caste/Favored slot, so it lives in a top-level `[[crafts]]` array instead (see below). Don't add an `[abilities.Craft]` section; if a character has no crafts, just omit the array entirely.
+
+#### Craft
+
+Each elemental/material craft is its own top-level skill — a `[[crafts]]` entry with a `focus` string and a nested `[crafts.rating]` that reuses the normal `base_dots` / `purchases` / `specialties` shape. The first entry is the "primary" craft rendered on the sheet's single Craft row; any others render as extra rows. To mark Craft as Caste/Favored, put `"Craft"` in `favored_abilities` (the one slot covers every craft).
+
+```toml
+[[crafts]]
+focus = "Water"          # the craft's focus; rendered as "Craft (Water)"
+
+[crafts.rating]
+base_dots = 0
+specialties = []         # ordinary specialties still allowed, e.g. a sub-technique
+
+[[crafts.rating.purchases]]
+
+[crafts.rating.purchases.source]
+kind = "ChargenPriority"
+```
+
+A craft's dots count toward the 28-dot ability pool and the ≥10-in-Caste/Favored minimum exactly like any other ability. **Elements/materials are the `focus`, never a specialty** — older sheets that encoded the element as a specialty on a single `[abilities.Craft]` entry are the legacy form; the binary auto-migrates them but with a blank focus, so write the `[[crafts]]` form directly.
 
 ### Attribute priority
 

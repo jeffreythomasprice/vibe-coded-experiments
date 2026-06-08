@@ -92,8 +92,10 @@ fn emit_error(msg: &str, fmt: OutputFormat) {
 fn load_character(path: &PathBuf) -> Result<Character, String> {
     let text = fs::read_to_string(path)
         .map_err(|e| format!("could not read {}: {}", path.display(), e))?;
-    toml::from_str(&text)
-        .map_err(|e| format!("could not parse {} as a Character: {}", path.display(), e))
+    let mut character: Character = toml::from_str(&text)
+        .map_err(|e| format!("could not parse {} as a Character: {}", path.display(), e))?;
+    character.migrate_legacy_craft();
+    Ok(character)
 }
 
 fn run_render(

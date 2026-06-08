@@ -6,8 +6,8 @@ use exalted::Character;
 use exalted::character::identity::VirtueFlaw;
 use exalted::character::{
     AbilityKind, AttributeGroup, AttributeKind, AttributePriority, BackgroundKind, BackgroundRef,
-    Caste, CharmRef, Combo, DotSource, Intimacy, IntimacyKind, KnownLanguage, LanguageFamily, Note,
-    RatedTrait, SpellRef, VirtueKind, XpAward,
+    Caste, CharmRef, Combo, Craft, DotSource, Intimacy, IntimacyKind, KnownLanguage,
+    LanguageFamily, Note, RatedTrait, SpellRef, VirtueKind, XpAward,
 };
 
 /// A canonical valid Solar Dawn character used as the baseline for chargen
@@ -177,6 +177,37 @@ pub fn valid_dawn() -> Character {
 pub fn valid_dawn_with_notes_demo() -> Character {
     exalted::rules::database::init_database().ok();
     let mut c = valid_dawn();
+
+    // Showcase multiple crafts by reallocating chargen ability dots into the
+    // `crafts` collection. Free 3 dots from non-caste/favored abilities
+    // (Investigation 2→0, Lore 3→2) and spend them as Craft (Water) 2 — the
+    // primary craft on the sheet's Craft row — plus Craft (Stone) 1, which
+    // rides a specialty row. Pool/C-F/BP/XP totals are unchanged, so the
+    // character stays exactly valid.
+    c.abilities
+        .get_mut(&AbilityKind::Investigation)
+        .unwrap()
+        .purchases
+        .clear();
+    c.abilities
+        .get_mut(&AbilityKind::Lore)
+        .unwrap()
+        .purchases
+        .truncate(2);
+    let mut water = RatedTrait::with_base(0);
+    add_chargen(&mut water, 2);
+    let mut stone = RatedTrait::with_base(0);
+    add_chargen(&mut stone, 1);
+    c.crafts = vec![
+        Craft {
+            focus: "Water".to_string(),
+            rating: water,
+        },
+        Craft {
+            focus: "Stone".to_string(),
+            rating: stone,
+        },
+    ];
 
     // Attach a note to one Charm in place. Pulled out as a helper so the
     // `if let` to reach inside the variant stays compact.

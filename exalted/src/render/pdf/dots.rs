@@ -55,7 +55,14 @@ fn fill_ability_dots(
     c: &Character,
 ) -> Result<(), PdfRenderError> {
     for kind in AbilityKind::ALL {
-        let rating = c.ability(*kind) as usize;
+        // The single Craft row shows the *primary* craft's rating, not the
+        // best (`c.ability(Craft)` returns the max); secondary crafts ride the
+        // specialty rows instead.
+        let rating = if *kind == AbilityKind::Craft {
+            c.primary_craft().map(|cr| cr.rating.dots()).unwrap_or(0) as usize
+        } else {
+            c.ability(*kind) as usize
+        };
         for i in 0..5 {
             if let Some(field) = field_map::ability_dot(*kind, i) {
                 if index.has(field) {

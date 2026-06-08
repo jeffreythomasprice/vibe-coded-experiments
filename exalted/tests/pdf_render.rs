@@ -398,6 +398,66 @@ fn specialty_caste_mark_tracks_parent_ability() {
 }
 
 // ---------------------------------------------------------------------------
+// Crafts. The primary craft writes its focus name into `skills21` and its dots
+// into the single Craft dot row (dot146..150); secondary crafts ride the
+// specialty rows (text "Craft: <focus>" + dots).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn primary_craft_on_craft_row_secondary_on_specialty_row() {
+    use exalted::character::{Craft, RatedTrait};
+
+    let doc = render_with(|c| {
+        let mut water = RatedTrait::with_base(0);
+        for _ in 0..3 {
+            water.add_chargen();
+        }
+        let mut fire = RatedTrait::with_base(0);
+        for _ in 0..2 {
+            fire.add_chargen();
+        }
+        c.crafts = vec![
+            Craft {
+                focus: "Water".to_string(),
+                rating: water,
+            },
+            Craft {
+                focus: "Fire".to_string(),
+                rating: fire,
+            },
+        ];
+    });
+
+    // Primary focus name in the Craft write-in box.
+    assert_eq!(read_text_field(&doc, "skills21").as_deref(), Some("Water"));
+
+    // Primary craft dots = the Craft row (dot146..150), 3 filled.
+    for (i, field) in ["dot146", "dot147", "dot148", "dot149", "dot150"]
+        .iter()
+        .enumerate()
+    {
+        let v = read_checkbox(&doc, field).expect("craft dot has value");
+        let expected = if i < 3 { "Yes" } else { "Off" };
+        assert_eq!(v, expected, "{}: expected {}, got {}", field, expected, v);
+    }
+
+    // Secondary craft on the first specialty row (valid_dawn has no real
+    // specialties): text "Craft: Fire" + 2 dots (dot171..175).
+    assert_eq!(
+        read_text_field(&doc, "specialties1").as_deref(),
+        Some("Craft: Fire")
+    );
+    for (i, field) in ["dot171", "dot172", "dot173", "dot174", "dot175"]
+        .iter()
+        .enumerate()
+    {
+        let v = read_checkbox(&doc, field).expect("craft specialty dot has value");
+        let expected = if i < 2 { "Yes" } else { "Off" };
+        assert_eq!(v, expected, "{}: expected {}, got {}", field, expected, v);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Health track. Slots are grouped by penalty: -0 is `healthcheck1..5`,
 // -1 is `healthcheck6..10`, -2 is `healthcheck11..20`, -4 is `healthcheck21`,
 // Incap is `healthcheck22`. Each bucket holds the default level(s) at the

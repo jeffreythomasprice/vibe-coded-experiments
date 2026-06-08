@@ -225,6 +225,40 @@ fn section_abilities(c: &Character, out: &mut String) {
         )
         .unwrap();
     }
+    // Crafts are separately-rated abilities outside the ability map; render one
+    // row per craft (e.g. "Craft (Water)"), sharing Craft's Caste/Favored mark.
+    let craft_cf = if c.is_caste_ability(AbilityKind::Craft) {
+        "C"
+    } else if c.is_favored_ability(AbilityKind::Craft) {
+        "F"
+    } else {
+        ""
+    };
+    for craft in &c.crafts {
+        let dots_n = craft.rating.dots();
+        let label = if craft.focus.is_empty() {
+            "Craft".to_string()
+        } else {
+            format!("Craft ({})", craft.focus)
+        };
+        let specs = craft
+            .rating
+            .aggregated_specialties()
+            .into_iter()
+            .map(|(name, n)| format!("{} {}", name, n))
+            .collect::<Vec<_>>()
+            .join(", ");
+        writeln!(
+            out,
+            "| {} | {} ({}) | {} | {} |",
+            label,
+            dots(dots_n, 5),
+            dots_n,
+            craft_cf,
+            specs
+        )
+        .unwrap();
+    }
     writeln!(out).unwrap();
 }
 
@@ -800,6 +834,15 @@ fn collect_xp_purchases(c: &Character) -> Vec<(String, u32)> {
     for (kind, t) in &c.abilities {
         push_xp_dot_rows(&mut rows, ability_name(*kind), t);
         push_xp_spec_rows(&mut rows, ability_name(*kind), t);
+    }
+    for craft in &c.crafts {
+        let label = if craft.focus.is_empty() {
+            "Craft".to_string()
+        } else {
+            format!("Craft ({})", craft.focus)
+        };
+        push_xp_dot_rows(&mut rows, &label, &craft.rating);
+        push_xp_spec_rows(&mut rows, &label, &craft.rating);
     }
     for (kind, t) in &c.virtues {
         push_xp_dot_rows(&mut rows, virtue_name(*kind), t);

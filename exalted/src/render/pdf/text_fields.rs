@@ -30,6 +30,7 @@ pub(super) fn fill(
     c: &Character,
 ) -> Result<(), PdfRenderError> {
     fill_identity(doc, index, c)?;
+    fill_craft(doc, index, c)?;
     fill_specialties(doc, index, c)?;
     fill_backgrounds(doc, index, c)?;
     fill_intimacies(doc, index, c)?;
@@ -77,8 +78,26 @@ fn fill_specialties(
         let Some(field) = field_map::specialty_text_field(i) else {
             break;
         };
-        let text = format!("{}: {}", ability_name(row.ability), row.name);
+        let text = match &row.label_override {
+            Some(label) => label.clone(),
+            None => format!("{}: {}", ability_name(row.ability), row.name),
+        };
         write(doc, index, &field, &text)?;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Craft — the primary craft's focus name goes in the write-in box next to the
+// single Craft ability row (`skills21`). This is the one `skillsN` notes
+// column we populate; the rest stay blank (see the module header). The primary
+// craft's dots are filled by `dots.rs`; secondary crafts ride the specialty
+// rows (see `fill_specialties`).
+// ---------------------------------------------------------------------------
+
+fn fill_craft(doc: &mut Document, index: &FieldIndex, c: &Character) -> Result<(), PdfRenderError> {
+    if let Some(craft) = c.primary_craft() {
+        write(doc, index, "skills21", &craft.focus)?;
     }
     Ok(())
 }

@@ -53,6 +53,10 @@ pub fn total_xp_spent(c: &Character) -> u32 {
         total += t.xp_spent_on_dots();
         total += t.xp_spent_on_specialties();
     }
+    for craft in &c.crafts {
+        total += craft.rating.xp_spent_on_dots();
+        total += craft.rating.xp_spent_on_specialties();
+    }
     for t in c.virtues.values() {
         total += t.xp_spent_on_dots();
     }
@@ -91,6 +95,26 @@ pub fn total_bp_spent(c: &Character) -> u32 {
             .filter(|s| matches!(s.source, DotSource::BonusPoints { .. }))
             .fold((0usize, 0usize), |(cf_count, oc_count), _| {
                 if cf {
+                    (cf_count + 1, oc_count)
+                } else {
+                    (cf_count, oc_count + 1)
+                }
+            });
+        total += specialty_bp_cost_for_ability(n_cf, n_oc);
+    }
+    // Crafts are separate abilities; Craft's Caste/Favored status applies to
+    // each focus, and the "1 BP per 2 specialties" discount aggregates per
+    // craft focus (matching the per-ability loop above).
+    let craft_cf = c.is_caste_or_favored_ability(crate::character::AbilityKind::Craft);
+    for craft in &c.crafts {
+        total += craft.rating.bp_spent_on_dots();
+        let (n_cf, n_oc) = craft
+            .rating
+            .specialties
+            .iter()
+            .filter(|s| matches!(s.source, DotSource::BonusPoints { .. }))
+            .fold((0usize, 0usize), |(cf_count, oc_count), _| {
+                if craft_cf {
                     (cf_count + 1, oc_count)
                 } else {
                     (cf_count, oc_count + 1)

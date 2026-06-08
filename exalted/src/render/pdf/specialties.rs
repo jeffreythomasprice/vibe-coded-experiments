@@ -13,6 +13,10 @@ pub(super) struct SpecialtyRow {
     pub ability: AbilityKind,
     pub name: String,
     pub dots: u8,
+    /// When set, the text field is written verbatim instead of the usual
+    /// `"{ability}: {name}"` formatting. Used for the secondary crafts that
+    /// borrow the specialty rows — their label is already `"Craft: Fire"`.
+    pub label_override: Option<String>,
 }
 
 pub(super) fn rows(c: &Character) -> Vec<SpecialtyRow> {
@@ -27,12 +31,32 @@ pub(super) fn rows(c: &Character) -> Vec<SpecialtyRow> {
                     ability: *kind,
                     name,
                     dots,
+                    label_override: None,
                 });
                 if out.len() >= SPECIALTY_ROWS {
                     break;
                 }
             }
         }
+    }
+    // The sheet has a single Craft row, so secondary crafts (everything past
+    // the primary) borrow the specialty rows: the focus name + its dots. They
+    // are not true specialties, just a convenient place to record the rating.
+    for craft in c.crafts.iter().skip(1) {
+        if out.len() >= SPECIALTY_ROWS {
+            break;
+        }
+        let label = if craft.focus.is_empty() {
+            "Craft".to_string()
+        } else {
+            format!("Craft: {}", craft.focus)
+        };
+        out.push(SpecialtyRow {
+            ability: AbilityKind::Craft,
+            name: craft.focus.clone(),
+            dots: craft.rating.dots(),
+            label_override: Some(label),
+        });
     }
     out
 }

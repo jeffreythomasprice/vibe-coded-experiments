@@ -40,13 +40,14 @@ pub fn load_character_from_path(path: &Path) -> Result<Character, IoError> {
         }
     })?;
     let bytes = text.len();
-    let character = toml::from_str(&text).map_err(|source| {
+    let mut character: Character = toml::from_str(&text).map_err(|source| {
         tracing::error!(path = %path.display(), error = %source, "could not parse character file");
         IoError::Parse {
             path: path.display().to_string(),
             source,
         }
     })?;
+    character.migrate_legacy_craft();
     tracing::info!(path = %path.display(), bytes, "loaded character");
     Ok(character)
 }

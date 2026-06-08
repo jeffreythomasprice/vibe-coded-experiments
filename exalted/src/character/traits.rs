@@ -153,6 +153,31 @@ impl RatedTrait {
     }
 }
 
+/// A single Craft ability (e.g. Craft: Water, Craft: Magitek).
+///
+/// In Exalted 2e "Craft" is not one ability but a family — each craft is rated
+/// 0–5 and bought separately, though they share a single Caste/Favored slot
+/// ([`AbilityKind::Craft`]). A [`Character`](super::Character) therefore holds a
+/// `Vec<Craft>` rather than a single Craft entry in its ability map; the first
+/// element is the "primary" craft that renders on the sheet's single Craft row.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Craft {
+    /// The craft's focus, e.g. "Water", "Fire", "Magitek". May be empty.
+    #[serde(default)]
+    pub focus: String,
+    /// Dots, purchases, and specialties — reuses every [`RatedTrait`] helper.
+    pub rating: RatedTrait,
+}
+
+impl Craft {
+    pub fn new(focus: impl Into<String>, base_dots: u8) -> Self {
+        Self {
+            focus: focus.into(),
+            rating: RatedTrait::with_base(base_dots),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Attributes
 // ---------------------------------------------------------------------------

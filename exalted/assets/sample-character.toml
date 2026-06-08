@@ -258,33 +258,14 @@ kind = "ChargenPriority"
 [abilities.Survival.purchases.source]
 kind = "ChargenPriority"
 
-[abilities.Craft]
+[abilities.Investigation]
 base_dots = 0
 purchases = []
 specialties = []
 
-[abilities.Investigation]
-base_dots = 0
-specialties = []
-
-[[abilities.Investigation.purchases]]
-
-[abilities.Investigation.purchases.source]
-kind = "ChargenPriority"
-
-[[abilities.Investigation.purchases]]
-
-[abilities.Investigation.purchases.source]
-kind = "ChargenPriority"
-
 [abilities.Lore]
 base_dots = 0
 specialties = []
-
-[[abilities.Lore.purchases]]
-
-[abilities.Lore.purchases.source]
-kind = "ChargenPriority"
 
 [[abilities.Lore.purchases]]
 
@@ -437,6 +418,35 @@ specialties = []
 base_dots = 0
 purchases = []
 specialties = []
+
+[[crafts]]
+focus = "Water"
+
+[crafts.rating]
+base_dots = 0
+specialties = []
+
+[[crafts.rating.purchases]]
+
+[crafts.rating.purchases.source]
+kind = "ChargenPriority"
+
+[[crafts.rating.purchases]]
+
+[crafts.rating.purchases.source]
+kind = "ChargenPriority"
+
+[[crafts]]
+focus = "Stone"
+
+[crafts.rating]
+base_dots = 0
+specialties = []
+
+[[crafts.rating.purchases]]
+
+[crafts.rating.purchases.source]
+kind = "ChargenPriority"
 
 [virtues.Compassion]
 base_dots = 1

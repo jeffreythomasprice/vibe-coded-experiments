@@ -174,32 +174,48 @@ fn check_attribute_priority(c: &Character, report: &mut ValidationReport) {
 }
 
 fn check_abilities(c: &Character, report: &mut ValidationReport) {
+    // Crafts live outside the ability map but spend from the same 28-dot pool;
+    // each craft focus is its own ability for dot-counting purposes.
+    let craft_chargen: u32 = c
+        .crafts
+        .iter()
+        .map(|cr| cr.rating.chargen_priority_dots() as u32)
+        .sum();
     let chargen_total: u32 = c
         .abilities
         .values()
         .map(|t| t.chargen_priority_dots() as u32)
-        .sum();
+        .sum::<u32>()
+        + craft_chargen;
     if chargen_total != ABILITY_CHARGEN_POOL {
         report.push(ValidationError::AbilityChargenDotsWrong { got: chargen_total });
     }
 
+    // Craft is a single Caste/Favored slot whose dots may be spread across
+    // foci; all craft chargen dots count toward the minimum when Craft is C/F.
+    let craft_is_cf = c.is_caste_or_favored_ability(AbilityKind::Craft);
     let cf_total: u32 = c
         .abilities
         .iter()
         .filter(|(a, _)| c.is_caste_or_favored_ability(**a))
         .map(|(_, t)| t.chargen_priority_dots() as u32)
-        .sum();
+        .sum::<u32>()
+        + if craft_is_cf { craft_chargen } else { 0 };
     if cf_total < MIN_CASTE_FAVORED_ABILITY_DOTS {
         report.push(ValidationError::CasteFavoredDotsTooLow { got: cf_total });
     }
 
-    // Each Favored Ability needs at least 1 chargen-priority dot.
+    // Each Favored Ability needs at least 1 chargen-priority dot. For Craft,
+    // at least one focus must carry a chargen dot.
     for fav in &c.favored_abilities {
-        let dots = c
-            .abilities
-            .get(fav)
-            .map(|t| t.chargen_priority_dots())
-            .unwrap_or(0);
+        let dots = if *fav == AbilityKind::Craft {
+            craft_chargen
+        } else {
+            c.abilities
+                .get(fav)
+                .map(|t| t.chargen_priority_dots() as u32)
+                .unwrap_or(0)
+        };
         if dots == 0 {
             report.push(ValidationError::FavoredAbilityZeroDots {
                 ability: format!("{fav:?}"),
@@ -213,6 +229,14 @@ fn check_abilities(c: &Character, report: &mut ValidationReport) {
             report.push(ValidationError::AbilityChargenOverThree {
                 ability: format!("{a:?}"),
                 got: t.chargen_priority_dots(),
+            });
+        }
+    }
+    for cr in &c.crafts {
+        if cr.rating.chargen_priority_dots() > 3 {
+            report.push(ValidationError::AbilityChargenOverThree {
+                ability: craft_label(cr),
+                got: cr.rating.chargen_priority_dots(),
             });
         }
     }
@@ -241,6 +265,35 @@ fn check_abilities(c: &Character, report: &mut ValidationReport) {
                 });
             }
         }
+    }
+    // Crafts get the same specialty caps (Craft is not Linguistics).
+    for cr in &c.crafts {
+        let aggregated = cr.rating.aggregated_specialties();
+        if aggregated.len() > 3 {
+            report.push(ValidationError::SpecialtiesOverMax {
+                ability: craft_label(cr),
+                got: aggregated.len(),
+            });
+        }
+        for (name, dots) in aggregated {
+            if dots > 3 {
+                report.push(ValidationError::SpecialtyOverMaxDots {
+                    ability: craft_label(cr),
+                    specialty: name,
+                    got: dots,
+                });
+            }
+        }
+    }
+}
+
+/// Human-readable label for a craft in validation messages, e.g. `Craft(Water)`
+/// or `Craft(?)` when the focus is unset.
+fn craft_label(cr: &crate::character::Craft) -> String {
+    if cr.focus.is_empty() {
+        "Craft(?)".to_string()
+    } else {
+        format!("Craft({})", cr.focus)
     }
 }
 
@@ -740,6 +793,26 @@ pub fn validate_bp(c: &Character, report: &mut ValidationReport) {
         }
     }
 
+    // Abilities (dots) — crafts. Each craft focus is its own ability and
+    // shares Craft's Caste/Favored status.
+    let craft_cf = c.is_caste_or_favored_ability(AbilityKind::Craft);
+    for cr in &c.crafts {
+        let mut rating = cr.rating.base_dots;
+        for p in &cr.rating.purchases {
+            rating += 1;
+            if let crate::character::DotSource::BonusPoints { spent } = p.source {
+                let expected = ability_dot_bp_cost(rating, craft_cf);
+                if spent as u32 != expected {
+                    report.push(ValidationError::BpCostWrong {
+                        trait_name: format!("Ability::{}", craft_label(cr)),
+                        paid: spent as u32,
+                        expected,
+                    });
+                }
+            }
+        }
+    }
+
     // Specialties: aggregate per ability. C/F abilities cost 1 BP per 2
     // specialties (so two BP-spec entries at 1+0 BP each is correct); out-of
     // C/F abilities cost 1 BP per specialty.
@@ -764,6 +837,34 @@ pub fn validate_bp(c: &Character, report: &mut ValidationReport) {
         if bp_specs_spent != expected {
             report.push(ValidationError::BpCostWrong {
                 trait_name: format!("Specialties::{ab:?} ({} entries)", bp_specs_n),
+                paid: bp_specs_spent,
+                expected,
+            });
+        }
+    }
+
+    // Specialties — crafts. Aggregate per craft focus (each is its own
+    // ability for the "1 BP per 2 specialties" C/F discount).
+    for cr in &c.crafts {
+        let mut bp_specs_n = 0usize;
+        let mut bp_specs_spent = 0u32;
+        for s in &cr.rating.specialties {
+            if let crate::character::DotSource::BonusPoints { spent } = s.source {
+                bp_specs_n += 1;
+                bp_specs_spent += spent as u32;
+            }
+        }
+        if bp_specs_n == 0 {
+            continue;
+        }
+        let expected = if craft_cf {
+            specialty_bp_cost_for_ability(bp_specs_n, 0)
+        } else {
+            specialty_bp_cost_for_ability(0, bp_specs_n)
+        };
+        if bp_specs_spent != expected {
+            report.push(ValidationError::BpCostWrong {
+                trait_name: format!("Specialties::{} ({} entries)", craft_label(cr), bp_specs_n),
                 paid: bp_specs_spent,
                 expected,
             });
@@ -964,6 +1065,30 @@ pub fn validate_xp(c: &Character) -> ValidationReport {
         }
     }
 
+    // Abilities — crafts. New craft (rating 1) costs new-ability XP; further
+    // dots use the ability-increase table with Craft's Caste/Favored status.
+    let craft_favored_or_caste = c.is_caste_or_favored_ability(AbilityKind::Craft);
+    for cr in &c.crafts {
+        let mut rating = cr.rating.base_dots;
+        for p in &cr.rating.purchases {
+            rating += 1;
+            if let crate::character::DotSource::Xp { spent } = p.source {
+                let canonical = if rating == 1 {
+                    xp_costs::xp_cost_new_ability()
+                } else {
+                    xp_costs::xp_cost_ability_increase(rating, craft_favored_or_caste)
+                };
+                if spent != canonical {
+                    report.push(ValidationError::XpCostWrong {
+                        trait_name: format!("Ability::{}", craft_label(cr)),
+                        paid: spent,
+                        expected: canonical,
+                    });
+                }
+            }
+        }
+    }
+
     // Specialties (each = flat 3 XP)
     for (ab, t) in &c.abilities {
         for s in &t.specialties {
@@ -972,6 +1097,20 @@ pub fn validate_xp(c: &Character) -> ValidationReport {
                 if spent != canonical {
                     report.push(ValidationError::XpCostWrong {
                         trait_name: format!("Specialty::{ab:?}::{}", s.name),
+                        paid: spent,
+                        expected: canonical,
+                    });
+                }
+            }
+        }
+    }
+    for cr in &c.crafts {
+        for s in &cr.rating.specialties {
+            if let crate::character::DotSource::Xp { spent } = s.source {
+                let canonical = xp_costs::xp_cost_specialty();
+                if spent != canonical {
+                    report.push(ValidationError::XpCostWrong {
+                        trait_name: format!("Specialty::{}::{}", craft_label(cr), s.name),
                         paid: spent,
                         expected: canonical,
                     });
