@@ -13,4 +13,9 @@ futures-util = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.8", features = ["ws"] }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
-dotenvy = "0.15"
+anyhow = "1"
+toml = "1"
+dirs = "6"
+fs2 = "0.4"
+tracing-appender = "0.2"
+turso = "0.6"

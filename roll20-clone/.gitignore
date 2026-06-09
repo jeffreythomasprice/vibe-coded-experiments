@@ -3,3 +3,6 @@
 
 # Trunk build output
 /client/dist
+
+# Local server config (copy from server/config.example.toml)
+/config.toml

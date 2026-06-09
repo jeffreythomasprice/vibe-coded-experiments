@@ -1,0 +1,19 @@
+# Example roll20-clone server configuration.
+#
+# Copy this file to one of the locations the server searches (first wins):
+#   1. a path passed as the first CLI argument
+#   2. ./config.toml          (the current working directory)
+#   3. ~/.config/roll20-clone/config.toml
+#
+# When running `cargo run -p server`, the working directory is the workspace
+# root, so `cp server/config.example.toml ./config.toml` is the usual choice.
+
+# Address and port the server binds to.
+host = "127.0.0.1"
+port = 8001
+
+# Directory that holds the rotating log files (server.log, server.log.<ts>, ...).
+log = "/tmp/roll20-clone/log"
+
+# SQLite database file (a leading ~ is expanded to your home directory).
+db = "~/.config/roll20-clone/db"

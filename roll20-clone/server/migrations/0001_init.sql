@@ -1,0 +1,5 @@
+-- 0001_init: initial schema (stub).
+--
+-- The real schema (rooms, tokens, chat history, …) lands in later migrations.
+-- For now this is intentionally near-empty; its only job is to prove the
+-- migration runner works end-to-end and to reserve version 0001.

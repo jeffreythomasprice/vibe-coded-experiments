@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use shared::{ClientId, ServerMessage};
 use tokio::sync::broadcast;
+use turso::Database;
 
 /// Shared application state.
 ///
@@ -13,15 +14,23 @@ use tokio::sync::broadcast;
 pub struct AppState {
     tx: broadcast::Sender<ServerMessage>,
     next_client_id: Arc<AtomicU64>,
+    db: Arc<Database>,
 }
 
 impl AppState {
-    pub fn new() -> Self {
+    pub fn new(db: Arc<Database>) -> Self {
         let (tx, _rx) = broadcast::channel(256);
         Self {
             tx,
             next_client_id: Arc::new(AtomicU64::new(1)),
+            db,
         }
+    }
+
+    /// The shared database. Call `.connect()` to obtain a connection for a query.
+    #[allow(dead_code)]
+    pub fn db(&self) -> &Database {
+        &self.db
     }
 
     /// Subscribe a new connection to the broadcast stream.
@@ -39,11 +48,5 @@ impl AppState {
     pub fn next_client_id(&self) -> ClientId {
         let n = self.next_client_id.fetch_add(1, Ordering::Relaxed);
         format!("client-{n}")
-    }
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self::new()
     }
 }
