@@ -11,10 +11,20 @@ struct Migration {
 
 /// All migrations, in apply order. Append new entries; never edit or reorder
 /// past ones.
-const MIGRATIONS: &[Migration] = &[Migration {
-    version: "0001_init",
-    sql: include_str!("../../migrations/0001_init.sql"),
-}];
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: "0001_init",
+        sql: include_str!("../../migrations/0001_init.sql"),
+    },
+    Migration {
+        version: "0002_maps",
+        sql: include_str!("../../migrations/0002_maps.sql"),
+    },
+    Migration {
+        version: "0003_seed",
+        sql: include_str!("../../migrations/0003_seed.sql"),
+    },
+];
 
 /// Ensure the bookkeeping table exists, then apply every migration that hasn't
 /// been recorded yet.

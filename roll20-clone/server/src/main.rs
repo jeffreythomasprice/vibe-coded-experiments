@@ -1,8 +1,10 @@
 mod config;
 mod db;
+mod error;
 mod http;
 mod lockfile;
 mod logging;
+mod maps_api;
 mod state;
 mod ws;
 

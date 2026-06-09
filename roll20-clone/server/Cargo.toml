@@ -19,3 +19,4 @@ dirs = "6"
 fs2 = "0.4"
 tracing-appender = "0.2"
 turso = "0.6"
+uuid = { version = "1.23.3", features = ["v4"] }

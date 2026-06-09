@@ -1,5 +1,9 @@
+mod api;
 mod app;
+mod camera;
 mod logging;
+mod render;
+mod views;
 mod ws;
 
 use app::App;
