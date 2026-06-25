@@ -31,7 +31,7 @@ export async function summarize(
   // Construct lazily so loadEnv() has already populated ANTHROPIC_API_KEY.
   const client = new Anthropic();
   const message = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-6",
     max_tokens: 4096,
     system: prompt,
     messages: [
