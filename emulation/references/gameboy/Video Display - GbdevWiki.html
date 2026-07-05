@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html dir="ltr" class="client-js" lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="UTF-8">
+<title>Video Display - GbdevWiki</title>
+<meta name="generator" content="MediaWiki 1.25.1">
+<link rel="shortcut icon" href="https://gbdev.gg8.se/favicon.ico">
+<link rel="search" type="application/opensearchdescription+xml" href="https://gbdev.gg8.se/wiki/opensearch_desc.php" title="GbdevWiki (en)">
+<link rel="EditURI" type="application/rsd+xml" href="https://gbdev.gg8.se/wiki/api.php?action=rsd">
+<link rel="alternate" hreflang="x-default" href="https://gbdev.gg8.se/wiki/articles/Video_Display">
+<link rel="alternate" type="application/atom+xml" title="GbdevWiki Atom feed" href="https://gbdev.gg8.se/wiki/index.php?title=Special:RecentChanges&amp;feed=atom">
+<link rel="canonical" href="https://gbdev.gg8.se/wiki/articles/Video_Display">
+<link rel="stylesheet" href="Video%20Display%20-%20GbdevWiki_files/load.css">
+<!--[if IE 6]><link rel="stylesheet" href="/wiki/skins/MonoBook/IE60Fixes.css?303" media="screen" /><![endif]-->
+<!--[if IE 7]><link rel="stylesheet" href="/wiki/skins/MonoBook/IE70Fixes.css?303" media="screen" /><![endif]--><style>
+.mw-collapsible-toggle{float:right;-moz-user-select:none;-webkit-user-select:none;-ms-user-select:none;user-select:none}  .mw-content-ltr .mw-collapsible-toggle,.mw-content-rtl .mw-content-ltr .mw-collapsible-toggle{float:right} .mw-content-rtl .mw-collapsible-toggle,.mw-content-ltr .mw-content-rtl .mw-collapsible-toggle{float:left}.mw-customtoggle,.mw-collapsible-toggle{cursor:pointer} caption .mw-collapsible-toggle,.mw-content-ltr caption .mw-collapsible-toggle,.mw-content-rtl caption .mw-collapsible-toggle,.mw-content-rtl .mw-content-ltr caption .mw-collapsible-toggle,.mw-content-ltr .mw-content-rtl caption .mw-collapsible-toggle{float:none} li .mw-collapsible-toggle,.mw-content-ltr li .mw-collapsible-toggle,.mw-content-rtl li .mw-collapsible-toggle,.mw-content-rtl .mw-content-ltr li .mw-collapsible-toggle,.mw-content-ltr .mw-content-rtl li .mw-collapsible-toggle{float:none} .mw-collapsible-toggle-li{list-style:none}
+/* cache key: gbdevwiki-gbdevwiki_:resourceloader:filter:minify-css:7:e1ffd603cbaaa5f1a36e0d13fe843535 */
+.suggestions{overflow:hidden;position:absolute;top:0;left:0;width:0;border:none;z-index:1099;padding:0;margin:-1px 0 0 0}.suggestions-special{position:relative;background-color:white;cursor:pointer;border:solid 1px #aaaaaa;padding:0;margin:0;margin-top:-2px;display:none;padding:0.25em 0.25em;line-height:1.25em}.suggestions-results{background-color:white;cursor:pointer;border:solid 1px #aaaaaa;padding:0;margin:0}.suggestions-result{color:black;margin:0;line-height:1.5em;padding:0.01em 0.25em;text-align:left; overflow:hidden;-o-text-overflow:ellipsis; text-overflow:ellipsis;white-space:nowrap}.suggestions-result-current{background-color:#4C59A6;color:white}.suggestions-special .special-label{color:gray;text-align:left}.suggestions-special .special-query{color:black;font-style:italic;text-align:left}.suggestions-special .special-hover{background-color:silver}.suggestions-result-current .special-label,.suggestions-result-current .special-query{color:white}.highlight{font-weight:bold}
+/* cache key: gbdevwiki-gbdevwiki_:resourceloader:filter:minify-css:7:f8d0c6895ce3ae14434c16b8fca59432 */
+.postedit-container{margin:0 auto;position:fixed;top:0;height:0;left:50%;z-index:1000;font-size:13px}.postedit-container:hover{cursor:pointer}.postedit{position:relative;top:0.6em;left:-50%;padding:.6em 3.6em .6em 1.1em;line-height:1.5625em;color:#626465;background-color:#f4f4f4;border:1px solid #dcd9d9;text-shadow:0 0.0625em 0 rgba(255,255,255,0.5);border-radius:5px;box-shadow:0 2px 5px 0 #ccc;-webkit-transition:all 0.25s ease-in-out;-moz-transition:all 0.25s ease-in-out;-ms-transition:all 0.25s ease-in-out;-o-transition:all 0.25s ease-in-out;transition:all 0.25s ease-in-out}.skin-monobook .postedit{top:6em !important}.postedit-faded{opacity:0}.postedit-icon{padding-left:41px;  line-height:25px;background-repeat:no-repeat;background-position:8px 50%}.postedit-icon-checkmark{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAABblBMVEUAAAD///////9PfTf///80aRdTgjn///9Feij///////////9Rfzf///////////9PfjZRgDh1o1xOfTb///////+bwYqLtnj///////9PfTa82K////9WhT6YxIL///9QgDdTgzr////////j7uDl7eLq8efi693k7OH///////9UhjuBr2rp9uRUhjr///9YljVKgir///9WiTlYjT3////9/v57vFlbkT5PjC9dlD/5/fhuq09stUTs9uhxuElctCpfnT1huDFloEZloUZmpENmvDZpvDxpvTxqvjxrvT5rvT9rwTxsqktswD5uwkBvuUdxw0NztFBztU9ztVBzwkp0tlJ1xkd2t1R3uVR4w1F4xk54x014yE15uVZ5v1R5xVB6v1R7yFJ8wVh9xVl9yFR9yVd9ylN+xVh+yFd/x1l/yFeAylmEx1+Ny2uY0Hqe04Wj1Ymv3Ze33qLD47TJ5L3O6cPU7Mrq9eb2+/Q4j37OAAAAQHRSTlMAAQIEBAUFBQwPFB4fJCUoKiosQEhJS01RUlZZXmdydXaChYuSlJSWmJmoq6uur8LExcvM19fg5ejt8fX2+Pr7SljgewAAAKpJREFUGBkFwQNCAwAAAMDLtl3LtrG4rWXbtvX77gAgZ6grFwC0bhwNVgKgdPZx8b0dgLi+s7Wn0VoAqpfOI9+BNADZI7fLrz2pSEwGHZuH+78lSK8ZLkLezF3ooyUG3VPXq2USei9WngeyoG195yBYWDF3E/2pAhl1e9Gr8bGT+bfOFCC2fnvh4X7rcqIAQNNu+HT6sxkAjceTL/2ZAIhv+PorBwBJxfkA//dFHSCBy/UTAAAAAElFTkSuQmCC);background-image:url(https://gbdev.gg8.se/wiki/resources/src/mediawiki.action/images/green-checkmark.png?2015-05-25T21:00:00Z)!ie;background-position:left}.postedit-close{position:absolute;padding:0 .8em;right:0;top:0;font-size:1.25em;font-weight:bold;line-height:2.3em;color:black;text-shadow:0 0.0625em 0 white;text-decoration:none;opacity:0.2;filter:alpha(opacity=20)}.postedit-close:hover{color:black;text-decoration:none;opacity:0.4;filter:alpha(opacity=40)}
+/* cache key: gbdevwiki-gbdevwiki_:resourceloader:filter:minify-css:7:e55383996e76d9336e65c46bbdd35ee7 */</style><style>
+.suggestions a.mw-searchSuggest-link,.suggestions a.mw-searchSuggest-link:hover,.suggestions a.mw-searchSuggest-link:active,.suggestions a.mw-searchSuggest-link:focus{color:black;text-decoration:none}.suggestions-result-current a.mw-searchSuggest-link,.suggestions-result-current a.mw-searchSuggest-link:hover,.suggestions-result-current a.mw-searchSuggest-link:active,.suggestions-result-current a.mw-searchSuggest-link:focus{color:white}.suggestions a.mw-searchSuggest-link .special-query{ overflow:hidden;-o-text-overflow:ellipsis; text-overflow:ellipsis;white-space:nowrap}
+/* cache key: gbdevwiki-gbdevwiki_:resourceloader:filter:minify-css:7:ae3fa4570b5ac0c6cf7b3776c8ae4d6f */</style><meta name="ResourceLoaderDynamicStyles" content="">
+<link rel="stylesheet" href="Video%20Display%20-%20GbdevWiki_files/load_002.css">
+<style>a:lang(ar),a:lang(kk-arab),a:lang(mzn),a:lang(ps),a:lang(ur){text-decoration:none}
+/* cache key: gbdevwiki-gbdevwiki_:resourceloader:filter:minify-css:7:6e7fe7968357bf072d7ae91837483523 */</style>
+<script src="Video%20Display%20-%20GbdevWiki_files/load_003.es"></script><script src="Video%20Display%20-%20GbdevWiki_files/load.es"></script>
+<script>if(window.mw){
+mw.config.set({"wgCanonicalNamespace":"","wgCanonicalSpecialPageName":false,"wgNamespaceNumber":0,"wgPageName":"Video_Display","wgTitle":"Video Display","wgCurRevisionId":945,"wgRevisionId":945,"wgArticleId":18,"wgIsArticle":true,"wgIsRedirect":false,"wgAction":"view","wgUserName":null,"wgUserGroups":["*"],"wgCategories":["Pandocs Article"],"wgBreakFrames":false,"wgPageContentLanguage":"en","wgPageContentModel":"wikitext","wgSeparatorTransformTable":["",""],"wgDigitTransformTable":["",""],"wgDefaultDateFormat":"dmy","wgMonthNames":["","January","February","March","April","May","June","July","August","September","October","November","December"],"wgMonthNamesShort":["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],"wgRelevantPageName":"Video_Display","wgRelevantArticleId":18,"wgIsProbablyEditable":false,"wgRestrictionEdit":[],"wgRestrictionMove":[]});
+}</script><script>if(window.mw){
+mw.loader.implement("user.options",function($,jQuery){mw.user.options.set({"variant":"en"});});mw.loader.implement("user.tokens",function($,jQuery){mw.user.tokens.set({"editToken":"+\\","patrolToken":"+\\","watchToken":"+\\"});});
+/* cache key: gbdevwiki-gbdevwiki_:resourceloader:filter:minify-js:7:a5c52c063dc436c1ca7c9f456936a5e9 */
+}</script>
+<script>if(window.mw){
+mw.loader.load(["mediawiki.page.startup","mediawiki.legacy.wikibits","mediawiki.legacy.ajax"]);
+}</script><script src="Video%20Display%20-%20GbdevWiki_files/load_004.es"></script>
+</head>
+<body class="mediawiki ltr sitedir-ltr ns-0 ns-subject page-Video_Display skin-monobook action-view">
+<div id="globalWrapper">
+		<div id="column-content">
+			<div id="content" class="mw-body" role="main">
+				<a id="top"></a>
+				
+				<div class="mw-indicators">
+</div>
+				<h1 id="firstHeading" class="firstHeading" lang="en">Video Display</h1>
+
+				<div id="bodyContent" class="mw-body-content">
+					<div id="siteSub">From GbdevWiki</div>
+					<div id="contentSub"></div>
+										<div id="jump-to-nav" class="mw-jump">Jump to: <a href="#column-one">navigation</a>, <a href="#searchInput">search</a></div>
+
+					<!-- start content -->
+					<div id="mw-content-text" dir="ltr" class="mw-content-ltr" lang="en"><div class="wikitable" style="border: 1px solid #ccc; margin:0.5em auto; background-color: #fcc; font-size:95%; text-align: center;">
+<p><b>The copy of Pan Docs hosted on this wiki is considered deprecated.</b>
+</p><p>Pan Docs is now officially hosted on gbdev.io as a living document. Please go to <a rel="nofollow" class="external free" href="https://gbdev.io/pandocs/">https://gbdev.io/pandocs/</a> to read Pan Docs or to <a rel="nofollow" class="external free" href="https://github.com/gbdev/pandocs">https://github.com/gbdev/pandocs</a> to contribute.
+</p><p>Click here to go to this section of Pan Docs in the new location: <a rel="nofollow" class="external free" href="https://gbdev.io/pandocs/#video-display">https://gbdev.io/pandocs/#video-display</a>
+</p>
+</div>
+<div id="toc" class="toc"><div id="toctitle"><h2>Contents</h2><span class="toctoggle">&nbsp;[<a href="#" id="togglelink">hide</a>]&nbsp;</span></div>
+<ul>
+<li class="toclevel-1 tocsection-1"><a href="#LCD_Control_Register"><span class="tocnumber">1</span> <span class="toctext">LCD Control Register</span></a>
+<ul>
+<li class="toclevel-2 tocsection-2"><a href="#FF40_-_LCDC_-_LCD_Control_.28R.2FW.29"><span class="tocnumber">1.1</span> <span class="toctext">FF40 - LCDC - LCD Control (R/W)</span></a></li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-3"><a href="#LCD_Status_Register"><span class="tocnumber">2</span> <span class="toctext">LCD Status Register</span></a>
+<ul>
+<li class="toclevel-2 tocsection-4"><a href="#FF41_-_STAT_-_LCDC_Status_.28R.2FW.29"><span class="tocnumber">2.1</span> <span class="toctext">FF41 - STAT - LCDC Status (R/W)</span></a></li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-5"><a href="#LCD_Interrupts"><span class="tocnumber">3</span> <span class="toctext">LCD Interrupts</span></a>
+<ul>
+<li class="toclevel-2 tocsection-6"><a href="#INT_40_-_V-Blank_Interrupt"><span class="tocnumber">3.1</span> <span class="toctext">INT 40 - V-Blank Interrupt</span></a></li>
+<li class="toclevel-2 tocsection-7"><a href="#INT_48_-_LCDC_Status_Interrupt"><span class="tocnumber">3.2</span> <span class="toctext">INT 48 - LCDC Status Interrupt</span></a></li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-8"><a href="#LCD_Position_and_Scrolling"><span class="tocnumber">4</span> <span class="toctext">LCD Position and Scrolling</span></a>
+<ul>
+<li class="toclevel-2 tocsection-9"><a href="#FF42_-_SCY_-_Scroll_Y_.28R.2FW.29.2C_FF43_-_SCX_-_Scroll_X_.28R.2FW.29"><span class="tocnumber">4.1</span> <span class="toctext">FF42 - SCY - Scroll Y (R/W), FF43 - SCX - Scroll X (R/W)</span></a></li>
+<li class="toclevel-2 tocsection-10"><a href="#FF44_-_LY_-_LCDC_Y-Coordinate_.28R.29"><span class="tocnumber">4.2</span> <span class="toctext">FF44 - LY - LCDC Y-Coordinate (R)</span></a></li>
+<li class="toclevel-2 tocsection-11"><a href="#FF45_-_LYC_-_LY_Compare_.28R.2FW.29"><span class="tocnumber">4.3</span> <span class="toctext">FF45 - LYC - LY Compare (R/W)</span></a></li>
+<li class="toclevel-2 tocsection-12"><a href="#FF4A_-_WY_-_Window_Y_Position_.28R.2FW.29.2C_FF4B_-_WX_-_Window_X_Position_minus_7_.28R.2FW.29"><span class="tocnumber">4.4</span> <span class="toctext">FF4A - WY - Window Y Position (R/W), FF4B - WX - Window X Position minus 7 (R/W)</span></a></li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-13"><a href="#LCD_Monochrome_Palettes"><span class="tocnumber">5</span> <span class="toctext">LCD Monochrome Palettes</span></a>
+<ul>
+<li class="toclevel-2 tocsection-14"><a href="#FF47_-_BGP_-_BG_Palette_Data_.28R.2FW.29_-_Non_CGB_Mode_Only"><span class="tocnumber">5.1</span> <span class="toctext">FF47 - BGP - BG Palette Data (R/W) - Non CGB Mode Only</span></a></li>
+<li class="toclevel-2 tocsection-15"><a href="#FF48_-_OBP0_-_Object_Palette_0_Data_.28R.2FW.29_-_Non_CGB_Mode_Only"><span class="tocnumber">5.2</span> <span class="toctext">FF48 - OBP0 - Object Palette 0 Data (R/W) - Non CGB Mode Only</span></a></li>
+<li class="toclevel-2 tocsection-16"><a href="#FF49_-_OBP1_-_Object_Palette_1_Data_.28R.2FW.29_-_Non_CGB_Mode_Only"><span class="tocnumber">5.3</span> <span class="toctext">FF49 - OBP1 - Object Palette 1 Data (R/W) - Non CGB Mode Only</span></a></li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-17"><a href="#LCD_Color_Palettes_.28CGB_only.29"><span class="tocnumber">6</span> <span class="toctext">LCD Color Palettes (CGB only)</span></a>
+<ul>
+<li class="toclevel-2 tocsection-18"><a href="#FF68_-_BCPS.2FBGPI_-_CGB_Mode_Only_-_Background_Palette_Index"><span class="tocnumber">6.1</span> <span class="toctext">FF68 - BCPS/BGPI - CGB Mode Only - Background Palette Index</span></a></li>
+<li class="toclevel-2 tocsection-19"><a href="#FF69_-_BCPD.2FBGPD_-_CGB_Mode_Only_-_Background_Palette_Data"><span class="tocnumber">6.2</span> <span class="toctext">FF69 - BCPD/BGPD - CGB Mode Only - Background Palette Data</span></a></li>
+<li class="toclevel-2 tocsection-20"><a href="#FF6A_-_OCPS.2FOBPI_-_CGB_Mode_Only_-_Sprite_Palette_Index.2C_FF6B_-_OCPD.2FOBPD_-_CGB_Mode_Only_-_Sprite_Palette_Data"><span class="tocnumber">6.3</span> <span class="toctext">FF6A - OCPS/OBPI - CGB Mode Only - Sprite Palette Index, FF6B - OCPD/OBPD - CGB Mode Only - Sprite Palette Data</span></a></li>
+<li class="toclevel-2 tocsection-21"><a href="#RGB_Translation_by_CGBs"><span class="tocnumber">6.4</span> <span class="toctext">RGB Translation by CGBs</span></a></li>
+<li class="toclevel-2 tocsection-22"><a href="#RGB_Translation_by_GBAs"><span class="tocnumber">6.5</span> <span class="toctext">RGB Translation by GBAs</span></a></li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-23"><a href="#LCD_OAM_DMA_Transfers"><span class="tocnumber">7</span> <span class="toctext">LCD OAM DMA Transfers</span></a>
+<ul>
+<li class="toclevel-2 tocsection-24"><a href="#FF46_-_DMA_-_DMA_Transfer_and_Start_Address_.28R.2FW.29"><span class="tocnumber">7.1</span> <span class="toctext">FF46 - DMA - DMA Transfer and Start Address (R/W)</span></a></li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-25"><a href="#LCD_VRAM_DMA_Transfers_.28CGB_only.29"><span class="tocnumber">8</span> <span class="toctext">LCD VRAM DMA Transfers (CGB only)</span></a>
+<ul>
+<li class="toclevel-2 tocsection-26"><a href="#FF51_-_HDMA1_-_CGB_Mode_Only_-_New_DMA_Source.2C_High"><span class="tocnumber">8.1</span> <span class="toctext">FF51 - HDMA1 - CGB Mode Only - New DMA Source, High</span></a></li>
+<li class="toclevel-2 tocsection-27"><a href="#FF52_-_HDMA2_-_CGB_Mode_Only_-_New_DMA_Source.2C_Low"><span class="tocnumber">8.2</span> <span class="toctext">FF52 - HDMA2 - CGB Mode Only - New DMA Source, Low</span></a></li>
+<li class="toclevel-2 tocsection-28"><a href="#FF53_-_HDMA3_-_CGB_Mode_Only_-_New_DMA_Destination.2C_High"><span class="tocnumber">8.3</span> <span class="toctext">FF53 - HDMA3 - CGB Mode Only - New DMA Destination, High</span></a></li>
+<li class="toclevel-2 tocsection-29"><a href="#FF54_-_HDMA4_-_CGB_Mode_Only_-_New_DMA_Destination.2C_Low"><span class="tocnumber">8.4</span> <span class="toctext">FF54 - HDMA4 - CGB Mode Only - New DMA Destination, Low</span></a></li>
+<li class="toclevel-2 tocsection-30"><a href="#FF55_-_HDMA5_-_CGB_Mode_Only_-_New_DMA_Length.2FMode.2FStart"><span class="tocnumber">8.5</span> <span class="toctext">FF55 - HDMA5 - CGB Mode Only - New DMA Length/Mode/Start</span></a>
+<ul>
+<li class="toclevel-3 tocsection-31"><a href="#Bit7.3D0_-_General_Purpose_DMA"><span class="tocnumber">8.5.1</span> <span class="toctext">Bit7=0 - General Purpose DMA</span></a></li>
+<li class="toclevel-3 tocsection-32"><a href="#Bit7.3D1_-_H-Blank_DMA"><span class="tocnumber">8.5.2</span> <span class="toctext">Bit7=1 - H-Blank DMA</span></a></li>
+</ul>
+</li>
+<li class="toclevel-2 tocsection-33"><a href="#Precautions"><span class="tocnumber">8.6</span> <span class="toctext">Precautions</span></a></li>
+<li class="toclevel-2 tocsection-34"><a href="#Confirming_if_the_DMA_Transfer_is_Active"><span class="tocnumber">8.7</span> <span class="toctext">Confirming if the DMA Transfer is Active</span></a></li>
+<li class="toclevel-2 tocsection-35"><a href="#Transfer_Timings"><span class="tocnumber">8.8</span> <span class="toctext">Transfer Timings</span></a></li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-36"><a href="#VRAM_Tile_Data"><span class="tocnumber">9</span> <span class="toctext">VRAM Tile Data</span></a></li>
+<li class="toclevel-1 tocsection-37"><a href="#VRAM_Background_Maps"><span class="tocnumber">10</span> <span class="toctext">VRAM Background Maps</span></a>
+<ul>
+<li class="toclevel-2 tocsection-38"><a href="#BG_Map_Tile_Numbers"><span class="tocnumber">10.1</span> <span class="toctext">BG Map Tile Numbers</span></a></li>
+<li class="toclevel-2 tocsection-39"><a href="#BG_Map_Attributes_.28CGB_Mode_only.29"><span class="tocnumber">10.2</span> <span class="toctext">BG Map Attributes (CGB Mode only)</span></a></li>
+<li class="toclevel-2 tocsection-40"><a href="#Normal_Background_.28BG.29"><span class="tocnumber">10.3</span> <span class="toctext">Normal Background (BG)</span></a></li>
+<li class="toclevel-2 tocsection-41"><a href="#The_Window"><span class="tocnumber">10.4</span> <span class="toctext">The Window</span></a></li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-42"><a href="#VRAM_Banks_.28CGB_only.29"><span class="tocnumber">11</span> <span class="toctext">VRAM Banks (CGB only)</span></a>
+<ul>
+<li class="toclevel-2 tocsection-43"><a href="#FF4F_-_VBK_-_CGB_Mode_Only_-_VRAM_Bank_.28R.2FW.29"><span class="tocnumber">11.1</span> <span class="toctext">FF4F - VBK - CGB Mode Only - VRAM Bank (R/W)</span></a></li>
+<li class="toclevel-2 tocsection-44"><a href="#VRAM_bank_1"><span class="tocnumber">11.2</span> <span class="toctext">VRAM bank 1</span></a></li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-45"><a href="#VRAM_Sprite_Attribute_Table_.28OAM.29"><span class="tocnumber">12</span> <span class="toctext">VRAM Sprite Attribute Table (OAM)</span></a>
+<ul>
+<li class="toclevel-2 tocsection-46"><a href="#Byte0_-_Y_Position"><span class="tocnumber">12.1</span> <span class="toctext">Byte0 - Y Position</span></a></li>
+<li class="toclevel-2 tocsection-47"><a href="#Byte1_-_X_Position"><span class="tocnumber">12.2</span> <span class="toctext">Byte1 - X Position</span></a></li>
+<li class="toclevel-2 tocsection-48"><a href="#Byte2_-_Tile.2FPattern_Number"><span class="tocnumber">12.3</span> <span class="toctext">Byte2 - Tile/Pattern Number</span></a></li>
+<li class="toclevel-2 tocsection-49"><a href="#Byte3_-_Attributes.2FFlags:"><span class="tocnumber">12.4</span> <span class="toctext">Byte3 - Attributes/Flags:</span></a></li>
+<li class="toclevel-2 tocsection-50"><a href="#Sprite_Priorities_and_Conflicts"><span class="tocnumber">12.5</span> <span class="toctext">Sprite Priorities and Conflicts</span></a></li>
+<li class="toclevel-2 tocsection-51"><a href="#Writing_Data_to_OAM_Memory"><span class="tocnumber">12.6</span> <span class="toctext">Writing Data to OAM Memory</span></a></li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-52"><a href="#Accessing_VRAM_and_OAM"><span class="tocnumber">13</span> <span class="toctext">Accessing VRAM and OAM</span></a>
+<ul>
+<li class="toclevel-2 tocsection-53"><a href="#CAUTION"><span class="tocnumber">13.1</span> <span class="toctext">CAUTION</span></a></li>
+<li class="toclevel-2 tocsection-54"><a href="#VRAM_.28memory_at_8000h-9FFFh.29_is_accessible_during_Mode_0-2"><span class="tocnumber">13.2</span> <span class="toctext">VRAM (memory at 8000h-9FFFh) is accessible during Mode 0-2</span></a></li>
+<li class="toclevel-2 tocsection-55"><a href="#OAM_.28memory_at_FE00h-FE9Fh.29_is_accessible_during_Mode_0-1"><span class="tocnumber">13.3</span> <span class="toctext">OAM (memory at FE00h-FE9Fh) is accessible during Mode 0-1</span></a></li>
+<li class="toclevel-2 tocsection-56"><a href="#Note"><span class="tocnumber">13.4</span> <span class="toctext">Note</span></a></li>
+</ul>
+</li>
+</ul>
+</div>
+
+<h2><span class="mw-headline" id="LCD_Control_Register">LCD Control Register</span></h2>
+<p>Detailed article: <a href="https://gbdev.gg8.se/wiki/articles/LCDC" title="LCDC">LCDC</a>
+</p>
+<h3><span class="mw-headline" id="FF40_-_LCDC_-_LCD_Control_.28R.2FW.29">FF40 - LCDC - LCD Control (R/W)</span></h3>
+<pre> Bit 7 - LCD Display Enable             (0=Off, 1=On)
+ Bit 6 - Window Tile Map Display Select (0=9800-9BFF, 1=9C00-9FFF)
+ Bit 5 - Window Display Enable          (0=Off, 1=On)
+ Bit 4 - BG &amp; Window Tile Data Select   (0=8800-97FF, 1=8000-8FFF)
+ Bit 3 - BG Tile Map Display Select     (0=9800-9BFF, 1=9C00-9FFF)
+ Bit 2 - OBJ (Sprite) Size              (0=8x8, 1=8x16)
+ Bit 1 - OBJ (Sprite) Display Enable    (0=Off, 1=On)
+ Bit 0 - BG/Window Display/Priority     (0=Off, 1=On)
+</pre>
+<h2><span class="mw-headline" id="LCD_Status_Register">LCD Status Register</span></h2>
+<h3><span class="mw-headline" id="FF41_-_STAT_-_LCDC_Status_.28R.2FW.29">FF41 - STAT - LCDC Status (R/W)</span></h3>
+<pre> Bit 6 - LYC=LY Coincidence Interrupt (1=Enable) (Read/Write)
+ Bit 5 - Mode 2 OAM Interrupt         (1=Enable) (Read/Write)
+ Bit 4 - Mode 1 V-Blank Interrupt     (1=Enable) (Read/Write)
+ Bit 3 - Mode 0 H-Blank Interrupt     (1=Enable) (Read/Write)
+ Bit 2 - Coincidence Flag  (0:LYC&lt;&gt;LY, 1:LYC=LY) (Read Only)
+ Bit 1-0 - Mode Flag       (Mode 0-3, see below) (Read Only)
+           0: During H-Blank
+           1: During V-Blank
+           2: During Searching OAM
+           3: During Transferring Data to LCD Driver
+</pre>
+<p>The two lower STAT bits show the current status of the LCD controller.
+</p><p>The LCD controller operates on a 2<sup>22</sup> Hz = 4.194 MHz 
+dot clock. An entire frame is 154 scanlines, 70224 dots, or 16.74 ms. On
+ scanlines 0 through 143, the LCD controller cycles through modes 2, 3, 
+and 0 once every 456 dots. Scanlines 144 through 153 are mode 1.
+</p><p>The following are typical when the display is enabled:
+</p>
+<pre> Mode 2  2_____2_____2_____2_____2_____2___________________2____
+ Mode 3  _33____33____33____33____33____33__________________3___
+ Mode 0  ___000___000___000___000___000___000________________000
+ Mode 1  ____________________________________11111111111111_____
+</pre>
+<p>When the LCD controller is reading a particular part of video memory, that memory is inaccessible to the CPU.
+</p>
+<ul><li> During modes 2 and 3, the CPU cannot access OAM (FE00h-FE9Fh).</li>
+<li> During mode 3, the CPU cannot access VRAM or CGB Palette Data (FF69,FF6B).</li></ul>
+<table class="wikitable">
+<caption> Properties of STAT modes
+</caption>
+<tbody><tr>
+<th> Mode </th>
+<th> Action </th>
+<th> Duration </th>
+<th> Accessible video memory
+</th></tr>
+<tr>
+<td> Mode 2
+</td>
+<td> Scanning OAM for (X, Y) coordinates of sprites that overlap this line
+</td>
+<td> 80 dots (19 us)
+</td>
+<td> VRAM, CGB palettes
+</td></tr>
+<tr>
+<td> Mode 3
+</td>
+<td> Reading OAM and VRAM to generate the picture
+</td>
+<td> 168 to 291 cycles (40 to 60 us) depending on sprite count
+</td>
+<td> None
+</td></tr>
+<tr>
+<td> Mode 0
+</td>
+<td> Horizontal blanking
+</td>
+<td> 85 to 208 dots (20 to 49 us) depending on previous mode 3 duration
+</td>
+<td> VRAM, OAM, CGB palettes
+</td></tr>
+<tr>
+<td> Mode 1
+</td>
+<td> Vertical blanking
+</td>
+<td> 4560 dots (1087 us, 10 scanlines)
+</td>
+<td> VRAM, OAM, CGB palettes
+</td></tr></tbody></table>
+<p>Unlike most game consoles, the Game Boy can pause the dot clock 
+briefly, adding dots to mode 3's duration. It routinely takes a 6 to 11 
+dot break to fetch sprite patterns between background tile pattern 
+fetches. On DMG and GBC in DMG mode, mid-scanline writes to <code>BGP</code> allow observing this behavior, as a sprite delay shifts the effect of a write to the left by that many dots.
+</p><p>Three things are known to pause the dot clock:
+</p>
+<dl><dt>Background scrolling</dt>
+<dd>If <code>SCX mod 8</code> is not zero at the start of the scanline, 
+rendering is paused for that many dots while the shifter discards that 
+many pixels from the leftmost tile.</dd>
+<dt>Window</dt>
+<dd>An active window pauses for at least 6 dots, as the background fetching mechanism starts over at the left side of the window.</dd>
+<dt>Sprites</dt>
+<dd>Each sprite usually pauses for <code>11 - min(5, (x + SCX) mod 8)</code>
+ dots. Because sprite fetch waits for background fetch to finish, a 
+sprite's cost depends on its position relative to the left side of the 
+background tile under it. It's greater if a sprite is directly aligned 
+over the background tile, less if the sprite is to the right. If the 
+sprite's left side is over the window, use <code>255 - WX</code> for <code>SCX</code> in this formula. </dd></dl>
+<p><b>Not fully understood:</b> The exact pause duration for window 
+start is not confirmed; it may have the same background fetch finish 
+delay as a sprite. If two sprites' left sides are over the same 
+background or window tile, the second may pause for fewer dots.
+</p><p>A hardware quirk in the monochrome Game Boy makes the LCD 
+interrupt sometimes trigger when writing to STAT (including writing $00)
+ during OAM scan, H-Blank, V-Blank, or LY=LYC. It behaves as if $FF were
+ written for one cycle, and then the written value were written the next
+ cycle. Because the GBC in DMG mode does not have this quirk, two games 
+that depend on this quirk (Ocean's <i>Road Rash</i> and Vic Tokai's <i>Xerd no Densetsu</i>) will not run on a GBC.
+</p>
+<h2><span class="mw-headline" id="LCD_Interrupts">LCD Interrupts</span></h2>
+<h3><span class="mw-headline" id="INT_40_-_V-Blank_Interrupt">INT 40 - V-Blank Interrupt</span></h3>
+<p>The V-Blank interrupt occurs ca. 59.7 times a second on a handheld 
+Game Boy (DMG or CGB) or Game Boy Player and ca. 61.1 times a second on a
+ Super Game Boy (SGB). This interrupt occurs at the beginning of the 
+V-Blank period (LY=144).
+During this period video hardware is not using VRAM so it may be freely 
+accessed. This period lasts approximately 1.1 milliseconds.
+</p>
+<h3><span class="mw-headline" id="INT_48_-_LCDC_Status_Interrupt">INT 48 - LCDC Status Interrupt</span></h3>
+<p>There are various reasons for this interrupt to occur as described by
+ the STAT register ($FF41). One very popular reason is to indicate to 
+the user when the video hardware is about to redraw a given LCD line. 
+This can be useful for dynamically controlling the SCX/SCY registers 
+($FF43/$FF42) to perform special video effects.
+</p><p>Example application&nbsp;: set LYC to WY, enable LY=LYC 
+interrupt, and have the handler disable sprites. This can be used if you
+ use the window for a text box (at the bottom of the screen), and you 
+want sprites to be hidden by the text box.
+</p><p>The interrupt is triggered when transitioning from "No conditions
+ met" to "Any condition met", which can cause the interrupt to not fire.
+ Example&nbsp;: the Mode 0 and LY=LYC interrupts are enabled&nbsp;; 
+since the latter triggers during Mode 2 (right after Mode 0), the 
+interrupt will trigger for Mode 0 but fail to for LY=LYC.
+</p>
+<h2><span class="mw-headline" id="LCD_Position_and_Scrolling">LCD Position and Scrolling</span></h2>
+<p>These registers can be accessed even during Mode 3, but they have no effect until the end of the current scanline.
+</p>
+<h3><span class="mw-headline" id="FF42_-_SCY_-_Scroll_Y_.28R.2FW.29.2C_FF43_-_SCX_-_Scroll_X_.28R.2FW.29">FF42 - SCY - Scroll Y (R/W), FF43 - SCX - Scroll X (R/W)</span></h3>
+<p>Specifies the position in the 256x256 pixels BG map (32x32 tiles) 
+which is to be displayed at the upper/left LCD display position.
+Values in range from 0-255 may be used for X/Y each, the video 
+controller automatically wraps back to the upper (left) position in BG 
+map when drawing exceeds the lower (right) border of the BG map area.
+</p>
+<h3><span class="mw-headline" id="FF44_-_LY_-_LCDC_Y-Coordinate_.28R.29">FF44 - LY - LCDC Y-Coordinate (R)</span></h3>
+<p>The LY indicates the vertical line to which the present data is 
+transferred to the LCD Driver. The LY can take on any value between 0 
+through 153. The values between 144 and 153 indicate the V-Blank period.
+</p>
+<h3><span class="mw-headline" id="FF45_-_LYC_-_LY_Compare_.28R.2FW.29">FF45 - LYC - LY Compare (R/W)</span></h3>
+<p>The Gameboy permanently compares the value of the LYC and LY 
+registers. When both values are identical, the coincident bit in the 
+STAT register becomes set, and (if enabled) a STAT interrupt is 
+requested.
+</p>
+<h3><span class="mw-headline" id="FF4A_-_WY_-_Window_Y_Position_.28R.2FW.29.2C_FF4B_-_WX_-_Window_X_Position_minus_7_.28R.2FW.29">FF4A - WY - Window Y Position (R/W), FF4B - WX - Window X Position minus 7 (R/W)</span></h3>
+<p>Specifies the upper/left positions of the Window area. (The window is
+ an alternate background area which can be displayed above of the normal
+ background. OBJs (sprites) may be still displayed above or behind the 
+window, just as for normal BG.)
+</p><p>The window becomes visible (if enabled) when positions are set in
+ range WX=0..166, WY=0..143. A position of WX=7, WY=0 locates the window
+ at upper left, it is then completely covering normal background.
+</p><p>WX values 0-6 and 166 are unreliable due to hardware bugs. If WX 
+is set to 0, the window will "stutter" horizontally when SCX changes. 
+(Depending on SCX modulo 8, behavior is a little complicated so you 
+should try it yourself.)
+</p>
+<h2><span class="mw-headline" id="LCD_Monochrome_Palettes">LCD Monochrome Palettes</span></h2>
+<h3><span class="mw-headline" id="FF47_-_BGP_-_BG_Palette_Data_.28R.2FW.29_-_Non_CGB_Mode_Only">FF47 - BGP - BG Palette Data (R/W) - Non CGB Mode Only</span></h3>
+<p>This register assigns gray shades to the color numbers of the BG and Window tiles.
+</p>
+<pre> Bit 7-6 - Shade for Color Number 3
+ Bit 5-4 - Shade for Color Number 2
+ Bit 3-2 - Shade for Color Number 1
+ Bit 1-0 - Shade for Color Number 0
+</pre>
+<p>The four possible gray shades are:
+</p>
+<pre> 0  White
+ 1  Light gray
+ 2  Dark gray
+ 3  Black
+</pre>
+<p>In CGB Mode the Color Palettes are taken from CGB Palette Memory instead.
+</p>
+<h3><span class="mw-headline" id="FF48_-_OBP0_-_Object_Palette_0_Data_.28R.2FW.29_-_Non_CGB_Mode_Only">FF48 - OBP0 - Object Palette 0 Data (R/W) - Non CGB Mode Only</span></h3>
+<p>This register assigns gray shades for sprite palette 0. It works 
+exactly as BGP (FF47), except that the lower two bits aren't used 
+because sprite data 00 is transparent.
+</p>
+<h3><span class="mw-headline" id="FF49_-_OBP1_-_Object_Palette_1_Data_.28R.2FW.29_-_Non_CGB_Mode_Only">FF49 - OBP1 - Object Palette 1 Data (R/W) - Non CGB Mode Only</span></h3>
+<p>This register assigns gray shades for sprite palette 1. It works 
+exactly as BGP (FF47), except that the lower two bits aren't used 
+because sprite data 00 is transparent.
+</p>
+<h2><span class="mw-headline" id="LCD_Color_Palettes_.28CGB_only.29">LCD Color Palettes (CGB only)</span></h2>
+<h3><span class="mw-headline" id="FF68_-_BCPS.2FBGPI_-_CGB_Mode_Only_-_Background_Palette_Index">FF68 - BCPS/BGPI - CGB Mode Only - Background Palette Index</span></h3>
+<p>This register is used to address a byte in the CGBs Background 
+Palette Memory. Each two byte in that memory define a color value. The 
+first 8 bytes define Color 0-3 of Palette 0 (BGP0), and so on for 
+BGP1-7.
+</p>
+<pre> Bit 0-5   Index (00-3F)
+ Bit 7     Auto Increment  (0=Disabled, 1=Increment after Writing)
+</pre>
+<p>Data can be read/written to/from the specified index address through 
+Register FF69. When the Auto Increment bit is set then the index is 
+automatically incremented after each &lt;write&gt; to FF69. Auto 
+Increment has no effect when &lt;reading&gt; from FF69, so the index 
+must be manually incremented in that case. Writing to FF69 during 
+rendering still causes auto-increment to occur.
+</p><p>Unlike the following, this register can be accessed outside V-Blank and H-Blank.
+</p>
+<h3><span class="mw-headline" id="FF69_-_BCPD.2FBGPD_-_CGB_Mode_Only_-_Background_Palette_Data">FF69 - BCPD/BGPD - CGB Mode Only - Background Palette Data</span></h3>
+<p>This register allows to read/write data to the CGBs Background Palette Memory, addressed through Register FF68.
+Each color is defined by two bytes (Bit 0-7 in first byte).
+</p>
+<pre> Bit 0-4   Red Intensity   (00-1F)
+ Bit 5-9   Green Intensity (00-1F)
+ Bit 10-14 Blue Intensity  (00-1F)
+</pre>
+<p>Much like VRAM, data in Palette Memory cannot be read/written during 
+the time when the LCD Controller is reading from it. (That is when the 
+STAT register indicates Mode 3).
+Note: All background colors are initialized as white by the boot ROM, 
+but it's a good idea to initialize at least one color yourself (for 
+example if you include a soft-reset mechanic).
+</p>
+<h3><span class="mw-headline" id="FF6A_-_OCPS.2FOBPI_-_CGB_Mode_Only_-_Sprite_Palette_Index.2C_FF6B_-_OCPD.2FOBPD_-_CGB_Mode_Only_-_Sprite_Palette_Data">FF6A - OCPS/OBPI - CGB Mode Only - Sprite Palette Index, FF6B - OCPD/OBPD - CGB Mode Only - Sprite Palette Data</span></h3>
+<p>These registers are used to initialize the Sprite Palettes OBP0-7, 
+identically as described above for Background Palettes. Note that four 
+colors may be defined for each OBP Palettes - but only Color 1-3 of each
+ Sprite Palette can be displayed, Color 0 is always transparent, and can
+ be initialized to a don't care value or plain never initialized.
+</p><p>Note: All sprite colors are left uninitialized by the boot ROM, and are somewhat random.
+</p>
+<h3><span class="mw-headline" id="RGB_Translation_by_CGBs">RGB Translation by CGBs</span></h3>
+<div class="thumb tright"><div class="thumbinner" style="width:152px;"><a href="https://gbdev.gg8.se/wiki/articles/File:VGA_versus_CGB.png" class="image"><img alt="" src="Video%20Display%20-%20GbdevWiki_files/150px-VGA_versus_CGB.png" class="thumbimage" srcset="Video%20Display%20-%20GbdevWiki_files/VGA_versus_CGB.png 1.5x, Video%20Display%20-%20GbdevWiki_files/VGA_versus_CGB.png 2x" width="150" height="68"></a>  <div class="thumbcaption"><div class="magnify"><a href="https://gbdev.gg8.se/wiki/articles/File:VGA_versus_CGB.png" class="internal" title="Enlarge"></a></div>sRGB versus CGB color mixing</div></div></div>
+<p>When developing graphics on PCs, note that the RGB values will have 
+different appearance on CGB displays as on VGA/HDMI monitors calibrated 
+to sRGB color.
+Because the GBC is not lit, the highest intensity will produce Light 
+Gray color rather than White. The intensities are not linear; the values
+ 10h-1Fh will all appear very bright, while medium and darker colors are
+ ranged at 00h-0Fh.
+</p><p>The CGB display's pigments aren't perfectly saturated. This means
+ the colors mix quite oddly; increasing intensity of only one R,G,B 
+color will also influence the other two R,G,B colors.
+For example, a color setting of 03EFh (Blue=0, Green=1Fh, Red=0Fh) will 
+appear as Neon Green on VGA displays, but on the CGB it'll produce a 
+decently washed out Yellow. See image on the right.
+</p>
+<h3><span class="mw-headline" id="RGB_Translation_by_GBAs">RGB Translation by GBAs</span></h3>
+<p>Even though GBA is described to be compatible to CGB games, most CGB 
+games are completely unplayable on older GBAs because most colors are 
+invisible (black). Of course, colors such like Black and White will 
+appear the same on both CGB and GBA, but medium intensities are arranged
+ completely different.
+Intensities in range 00h..07h are invisible/black (unless eventually 
+under best sunlight circumstances, and when gazing at the screen under 
+obscure viewing angles), unfortunately, these intensities are regularly 
+used by most existing CGB games for medium and darker colors.
+</p><p>Newer CGB games may avoid this effect by changing palette data when detecting GBA hardware (<a href="https://gbdev.gg8.se/wiki/articles/CGB_Registers#Detecting_CGB_.28and_GBA.29_functions" title="CGB Registers">see how</a>).
+ Based on measurement of GBC and GBA palettes using the "144p Test 
+Suite" ROM, a fairly close approximation is GBA = GBC * 3/4 + 8h for 
+each R,G,B intensity. The result isn't quite perfect, and it may turn 
+out that the color mixing is different also; anyways, it'd be still ways
+ better than no conversion.
+Asides, this translation method should have been VERY easy to implement 
+in GBA hardware directly, even though Nintendo obviously failed to do 
+so. How did they say, "This seal is your assurance for excellence in 
+workmanship" and so on?
+</p><p>This problem with low brightness levels does not affect later GBA
+ SP units and Game Boy Player. Thus ideally, the player should have 
+control of this brightness correction.
+</p>
+<h2><span class="mw-headline" id="LCD_OAM_DMA_Transfers">LCD OAM DMA Transfers</span></h2>
+<h3><span class="mw-headline" id="FF46_-_DMA_-_DMA_Transfer_and_Start_Address_.28R.2FW.29">FF46 - DMA - DMA Transfer and Start Address (R/W)</span></h3>
+<p>Writing to this register launches a DMA transfer from ROM or RAM to 
+OAM memory (sprite attribute table). The written value specifies the 
+transfer source address divided by 100h, ie. source &amp; destination 
+are:
+</p>
+<pre> Source:      XX00-XX9F  &nbsp;;XX in range from 00-F1h
+ Destination: FE00-FE9F
+</pre>
+<p>The transfer takes 160 machine cycles: 152 microseconds in normal 
+speed or 76 microseconds in CGB Double Speed Mode. On DMG, during this 
+time, the CPU can access only HRAM (memory at FF80-FFFE); on CGB, the 
+bus used by the source area cannot be used (this isn't understood well 
+at the moment, it's recommended to assume same behavior as DMG). For 
+this reason, the programmer must copy a short procedure into HRAM, and 
+use this procedure to start the transfer from inside HRAM, and wait 
+until the transfer has finished:
+</p>
+<pre> run_dma:
+  ld a, start address / 100h
+  ldh  (FF46h),a&nbsp;;start DMA transfer (starts right after instruction)
+  ld  a,28h     &nbsp;;delay...
+ wait:          &nbsp;;total 4x40 cycles, approx 160 μs
+  dec a         &nbsp;;1 cycle
+  jr  nz,wait   &nbsp;;3 cycles
+  ret
+</pre>
+<p>Because sprites are not displayed while OAM DMA is in progress, most 
+programs are executing this procedure from inside of their VBlank 
+procedure. But it is also possible to execute it during display redraw 
+also, allowing to display more than 40 sprites on the screen (ie. for 
+example 40 sprites in upper half, and other 40 sprites in lower half of 
+the screen), at the cost of a couple lines that lack sprites.
+</p><p>A more compact procedure is
+</p>
+<pre> run_dma: &nbsp;; This part is in ROM
+  ld a, start address / 100h
+  ld bc, 2946h &nbsp;; B: wait time; C: OAM trigger
+  jp run_dma_hrampart
+</pre>
+<pre> run_dma_hrampart:
+  ldh ($FF00+c), a
+ wait:
+  dec b
+  jr nz,wait
+  ret
+</pre>
+<p>which should be called with a = start address / 100h, bc = 2946h. 
+This saves 5 bytes of HRAM, but is slightly slower in most cases because
+ of the jump into the HRAM part.
+</p>
+<h2><span class="mw-headline" id="LCD_VRAM_DMA_Transfers_.28CGB_only.29">LCD VRAM DMA Transfers (CGB only)</span></h2>
+<h3><span class="mw-headline" id="FF51_-_HDMA1_-_CGB_Mode_Only_-_New_DMA_Source.2C_High">FF51 - HDMA1 - CGB Mode Only - New DMA Source, High</span></h3>
+<h3><span class="mw-headline" id="FF52_-_HDMA2_-_CGB_Mode_Only_-_New_DMA_Source.2C_Low">FF52 - HDMA2 - CGB Mode Only - New DMA Source, Low</span></h3>
+<p>These two registers specify the address at which the transfer will 
+read data from. Normally, this should be either in ROM, SRAM or WRAM, 
+thus either in range 0000-7FF0 or A000-DFF0. [Note&nbsp;: this has yet 
+to be tested on Echo RAM, OAM, FEXX, IO and HRAM]. Trying to specify a 
+source address in VRAM will cause garbage to be copied.
+</p><p>The four lower bits of this address will be ignored and treated as 0.
+</p>
+<h3><span class="mw-headline" id="FF53_-_HDMA3_-_CGB_Mode_Only_-_New_DMA_Destination.2C_High">FF53 - HDMA3 - CGB Mode Only - New DMA Destination, High</span></h3>
+<h3><span class="mw-headline" id="FF54_-_HDMA4_-_CGB_Mode_Only_-_New_DMA_Destination.2C_Low">FF54 - HDMA4 - CGB Mode Only - New DMA Destination, Low</span></h3>
+<p>These two registers specify the address within 8000-9FF0 to which the data will be copied.
+Only bits 12-4 are respected; others are ignored.
+The four lower bits of this address will be ignored and treated as 0.
+</p>
+<h3><span class="mw-headline" id="FF55_-_HDMA5_-_CGB_Mode_Only_-_New_DMA_Length.2FMode.2FStart">FF55 - HDMA5 - CGB Mode Only - New DMA Length/Mode/Start</span></h3>
+<p>These registers are used to initiate a DMA transfer from ROM or RAM 
+to VRAM. The Source Start Address may be located at 0000-7FF0 or 
+A000-DFF0, the lower four bits of the address are ignored (treated as 
+zero). The Destination Start Address may be located at 8000-9FF0, the 
+lower four bits of the address are ignored (treated as zero), the upper 3
+ bits are ignored either (destination is always in VRAM).
+</p><p>Writing to this register starts the transfer, the lower 7 bits of
+ which specify the Transfer Length (divided by 10h, minus 1), ie. 
+lengths of 10h-800h bytes can be defined by the values 00h-7Fh. The 
+upper bit indicates the Transfer Mode:
+</p>
+<h4><span class="mw-headline" id="Bit7.3D0_-_General_Purpose_DMA">Bit7=0 - General Purpose DMA</span></h4>
+<p>When using this transfer method, all data is transferred at once. The
+ execution of the program is halted until the transfer has completed. 
+Note that the General Purpose DMA blindly attempts to copy the data, 
+even if the LCD controller is currently accessing VRAM. So General 
+Purpose DMA should be used only if the Display is disabled, or during 
+V-Blank, or (for rather short blocks) during H-Blank.
+The execution of the program continues when the transfer has been 
+completed, and FF55 then contains a value of FFh.
+</p>
+<h4><span class="mw-headline" id="Bit7.3D1_-_H-Blank_DMA">Bit7=1 - H-Blank DMA</span></h4>
+<p>The H-Blank DMA transfers 10h bytes of data during each H-Blank, ie. 
+at LY=0-143, no data is transferred during V-Blank (LY=144-153), but the
+ transfer will then continue at LY=00. The execution of the program is 
+halted during the separate transfers, but the program execution 
+continues during the 'spaces' between each data block.
+Note that the program should not change the Destination VRAM bank 
+(FF4F), or the Source ROM/RAM bank (in case data is transferred from 
+bankable memory) until the transfer has completed! (The transfer should 
+be paused as described below while the banks are switched)
+</p><p>Reading from Register FF55 returns the remaining length (divided 
+by 10h, minus 1), a value of 0FFh indicates that the transfer has 
+completed. It is also possible to terminate an active H-Blank transfer 
+by writing zero to Bit 7 of FF55. In that case reading from FF55 will 
+return how many $10 "blocks" remained (minus 1) in the lower 7 bits, but
+ Bit 7 will be read as "1". Stopping the transfer doesn't set HDMA1-4 to
+ $FF.
+</p>
+<h3><span class="mw-headline" id="Precautions">Precautions</span></h3>
+<p>H-Blank DMA should not be started (write to FF55) during a H-Blank period (STAT mode 0).
+</p><p>If the transfer's destination address overflows, the transfer 
+stops prematurely. [Note&nbsp;: what's the state of the registers if 
+this happens&nbsp;?]
+</p>
+<h3><span class="mw-headline" id="Confirming_if_the_DMA_Transfer_is_Active">Confirming if the DMA Transfer is Active</span></h3>
+<p>Reading Bit 7 of FF55 can be used to confirm if the DMA transfer is 
+active (1=Not Active, 0=Active). This works under any circumstances - 
+after completion of General Purpose, or H-Blank Transfer, and after 
+manually terminating a H-Blank Transfer.
+</p>
+<h3><span class="mw-headline" id="Transfer_Timings">Transfer Timings</span></h3>
+<p>In both Normal Speed and Double Speed Mode it takes about 8 μs to 
+transfer a block of 10h bytes. That are 8 tstates in Normal Speed Mode, 
+and 16 'fast' tstates in Double Speed Mode.
+Older MBC controllers (like MBC1-4) and slower ROMs are not guaranteed 
+to support General Purpose or H-Blank DMA, that's because there are 
+always 2 bytes transferred per microsecond (even if the itself program 
+runs it Normal Speed Mode).
+</p>
+<h2><span class="mw-headline" id="VRAM_Tile_Data">VRAM Tile Data</span></h2>
+<p>Tile Data is stored in VRAM at addresses $8000-97FF; with one tile 
+being 16 bytes large, this area defines data for 384 Tiles. In CGB Mode,
+ this is doubled (768 tiles) because of the two VRAM banks.
+</p><p>Each tile is sized 8x8 pixels and has a color depth of 4 
+colors/gray shades. Tiles can be displayed as part of the 
+Background/Window map, and/or as OAM tiles (foreground sprites). Note 
+that foreground sprites don't use color 0 - it's transparent instead.
+</p><p>There are three "blocks" of 128 tiles each:
+</p>
+<ul><li> Block 0 is $8000-87FF</li>
+<li> Block 1 is $8800-8FFF</li>
+<li> Block 2 is $9000-97FF</li></ul>
+<p>Tiles are always indexed using a 8-bit integer, but the addressing 
+method may differ. The "8000 method" uses $8000 as its base pointer and 
+uses an unsigned addressing, meaning that tiles 0-127 are in block 0, 
+and tiles 128-255 are in block 1. The "8800 method" uses $9000 as its 
+base pointer and uses a signed addressing. To put it differently, "8000 
+addressing" takes tiles 0-127 from block 0 and tiles 128-255 from block 
+1, whereas "8800 addressing" takes tiles 0-127 from block 2 and tiles 
+128-255 from block 1. (You can notice that block 1 is shared by both 
+addressing methods)
+</p><p>Sprites always use 8000 addressing, but the BG and Window can use either mode, controlled by <a href="#LCDC.4_-_BG_.26_Window_Tile_Data_Select">LCDC bit 4</a>. 
+</p><p>Each Tile occupies 16 bytes, where each 2 bytes represent a line:
+</p>
+<pre> Byte 0-1  First Line (Upper 8 pixels)
+ Byte 2-3  Next Line
+ etc.
+</pre>
+<p>For each line, the first byte defines the least significant bits of 
+the color numbers for each pixel, and the second byte defines the upper 
+bits of the color numbers. In either case, Bit 7 is the leftmost pixel, 
+and Bit 0 the rightmost. For example&nbsp;: let's say you have $57 $36 
+(in this order in memory). To obtain the color index for the leftmost 
+pixel, you take bit 7 of both bytes&nbsp;: 0, and 0. Thus the index is 
+00b = 0. For the second pixel, repeat with bit 6&nbsp;: 1, and 0. Thus 
+the index is 01b = 1 (remember to flip the order of the bits&nbsp;!). If
+ you repeat the operation you'll find that the indexes for the 8 pixels 
+are 0 1 2 3 0 3 3 1.
+</p><p>A more visual explanation can be found <a rel="nofollow" class="external text" href="https://www.huderlem.com/demos/gameboy2bpp.html">here</a>.
+</p><p>So, each pixel is having a color number in range from 0-3. The 
+color numbers are translated into real colors (or gray shades) depending
+ on the current palettes. The palettes are defined through registers <a href="#FF47_-_BGP_-_BG_Palette_Data_.28R.2FW.29_-_Non_CGB_Mode_Only">BGP</a>, <a href="#FF48_-_OBP0_-_Object_Palette_0_Data_.28R.2FW.29_-_Non_CGB_Mode_Only">OBP0</a> and <a href="#FF49_-_OBP1_-_Object_Palette_1_Data_.28R.2FW.29_-_Non_CGB_Mode_Only">OBP1</a> (Non CGB Mode), and <a href="#FF68_-_BCPS.2FBGPI_-_CGB_Mode_Only_-_Background_Palette_Index">BCPS/BGPI</a>, <a href="#FF69_-_BCPD.2FBGPD_-_CGB_Mode_Only_-_Background_Palette_Data">BCPD/BGPD</a>, <a href="#FF6A_-_OCPS.2FOBPI_-_CGB_Mode_Only_-_Sprite_Palette_Index.2C_FF6B_-_OCPD.2FOBPD_-_CGB_Mode_Only_-_Sprite_Palette_Data">OCPS/OBPI and OCPD/OBPD</a> (CGB Mode).
+</p>
+<h2><span class="mw-headline" id="VRAM_Background_Maps">VRAM Background Maps</span></h2>
+<p>The Game Boy contains two 32x32 tile background maps in VRAM at 
+addresses 9800h-9BFFh and 9C00h-9FFFh. Each can be used either to 
+display "normal" background, or "window" background.
+</p>
+<h3><span class="mw-headline" id="BG_Map_Tile_Numbers">BG Map Tile Numbers</span></h3>
+<p>An area of VRAM known as Background Tile Map contains the numbers of 
+tiles to be displayed. It is organized as 32 rows of 32 bytes each. Each
+ byte contains a number of a tile to be displayed.
+</p><p>Tile patterns are taken from the Tile Data Table using either of the two addressing modes (described <a href="#VRAM_Tile_Data">above</a>), which can be selected via LCDC register.
+</p><p>As one background tile has a size of 8x8 pixels, the BG maps may 
+hold a picture of 256x256 pixels, and an area of 160x144 pixels of this 
+picture can be displayed on the LCD screen.
+</p>
+<h3><span class="mw-headline" id="BG_Map_Attributes_.28CGB_Mode_only.29">BG Map Attributes (CGB Mode only)</span></h3>
+<p>In CGB Mode, an additional map of 32x32 bytes is stored in VRAM Bank 1
+ (each byte defines attributes for the corresponding tile-number map 
+entry in VRAM Bank 0, ie. 1:9800 defines the attributes for the tile at 
+0:9800):
+</p>
+<pre> Bit 0-2  Background Palette number  (BGP0-7)
+ Bit 3    Tile VRAM Bank number      (0=Bank 0, 1=Bank 1)
+ Bit 4    Not used
+ Bit 5    Horizontal Flip            (0=Normal, 1=Mirror horizontally)
+ Bit 6    Vertical Flip              (0=Normal, 1=Mirror vertically)
+ Bit 7    BG-to-OAM Priority         (0=Use OAM priority bit, 1=BG Priority)
+</pre>
+<p>When Bit 7 is set, the corresponding BG tile will have priority above
+ all OBJs (regardless of the priority bits in OAM memory). There's also a
+ Master Priority flag in LCDC register Bit 0 which overrides all other 
+priority bits when cleared.
+</p><p>Note that, if the map entry at 0:9800 is tile $2A, the attribute 
+at 1:9800 doesn't define properties for ALL tiles $2A on-screen, but 
+only the one at 0:9800&nbsp;!
+</p>
+<h3><span class="mw-headline" id="Normal_Background_.28BG.29">Normal Background (BG)</span></h3>
+<p>The SCY and SCX registers can be used to scroll the background, 
+allowing to select the origin of the visible 160x144 pixel area within 
+the total 256x256 pixel background map. Background wraps around the 
+screen (i.e. when part of it goes off the screen, it appears on the 
+opposite side.)
+</p>
+<h3><span class="mw-headline" id="The_Window">The Window</span></h3>
+<p>Besides background, there is also a "window" overlaying the 
+background. The window is not scrollable, that is, it is always 
+displayed starting from its left upper corner. The location of a window 
+on the screen can be adjusted via WX and WY registers. Screen 
+coordinates of the top left corner of a window are WX-7,WY. The tiles 
+for the window are stored in the Tile Data Table. Both the Background 
+and the window share the same Tile Data Table.
+</p><p>Both background and window can be disabled or enabled separately via bits in the LCDC register.
+</p>
+<h2><span class="mw-headline" id="VRAM_Banks_.28CGB_only.29">VRAM Banks (CGB only)</span></h2>
+<p>The CGB has twice the VRAM of the DMG, but it is banked and either bank has a different purpose.
+</p>
+<h3><span class="mw-headline" id="FF4F_-_VBK_-_CGB_Mode_Only_-_VRAM_Bank_.28R.2FW.29">FF4F - VBK - CGB Mode Only - VRAM Bank (R/W)</span></h3>
+<p>This register can be written to to change VRAM banks. Only bit 0 matters, all other bits are ignored.
+</p>
+<h3><span class="mw-headline" id="VRAM_bank_1">VRAM bank 1</span></h3>
+<p>VRAM bank 1 is split like VRAM bank 0&nbsp;; 8000-97FF also stores 
+tiles (just like in bank 0), which can be accessed the same way as (and 
+at the same time as) bank 0 tiles. 9800-9FFF contains the attributes for
+ the corresponding Tile Maps.
+</p><p>Reading from this register will return the number of the 
+currently loaded VRAM bank in bit 0, and all other bits will be set to 
+1.
+</p>
+<h2><span class="mw-headline" id="VRAM_Sprite_Attribute_Table_.28OAM.29">VRAM Sprite Attribute Table (OAM)</span></h2>
+<p>Gameboy video controller can display up to 40 sprites either in 8x8 
+or in 8x16 pixels. Because of a limitation of hardware, only ten sprites
+ can be displayed per scan line. Sprite patterns have the same format as
+ BG tiles, but they are taken from the Sprite Pattern Table located at 
+$8000-8FFF and have unsigned numbering.
+</p><p>Sprite attributes reside in the Sprite Attribute Table (OAM - 
+Object Attribute Memory) at $FE00-FE9F. Each of the 40 entries consists 
+of four bytes with the following meanings:
+</p>
+<h3><span class="mw-headline" id="Byte0_-_Y_Position">Byte0 - Y Position</span></h3>
+<p>Specifies the sprites vertical position on the screen (minus 16).
+An off-screen value (for example, Y=0 or Y&gt;=160) hides the sprite.
+</p>
+<h3><span class="mw-headline" id="Byte1_-_X_Position">Byte1 - X Position</span></h3>
+<p>Specifies the sprites horizontal position on the screen (minus 8).
+An off-screen value (X=0 or X&gt;=168) hides the sprite, but the sprite
+still affects the priority ordering - a better way to hide a sprite is to set its Y-coordinate off-screen.
+</p>
+<h3><span class="mw-headline" id="Byte2_-_Tile.2FPattern_Number">Byte2 - Tile/Pattern Number</span></h3>
+<p>Specifies the sprites Tile Number (00-FF). This (unsigned) value 
+selects a tile from memory at 8000h-8FFFh. In CGB Mode this could be 
+either in VRAM Bank 0 or 1, depending on Bit 3 of the following byte.
+In 8x16 mode, the lower bit of the tile number is ignored. IE: the upper
+ 8x8 tile is "NN AND FEh", and the lower 8x8 tile is "NN OR 01h".
+</p>
+<h3><span class="mw-headline" id="Byte3_-_Attributes.2FFlags:">Byte3 - Attributes/Flags:</span></h3>
+<pre> Bit7   OBJ-to-BG Priority (0=OBJ Above BG, 1=OBJ Behind BG color 1-3)
+        (Used for both BG and Window. BG color 0 is always behind OBJ)
+ Bit6   Y flip          (0=Normal, 1=Vertically mirrored)
+ Bit5   X flip          (0=Normal, 1=Horizontally mirrored)
+ Bit4   Palette number  **Non CGB Mode Only** (0=OBP0, 1=OBP1)
+ Bit3   Tile VRAM-Bank  **CGB Mode Only**     (0=Bank 0, 1=Bank 1)
+ Bit2-0 Palette number  **CGB Mode Only**     (OBP0-7)
+</pre>
+<p><br>
+</p>
+<h3><span class="mw-headline" id="Sprite_Priorities_and_Conflicts">Sprite Priorities and Conflicts</span></h3>
+<p>During each scanline's OAM scan, the LCD controller compares LY to 
+each sprite's Y position to find the 10 sprites on that line that appear
+ first in OAM ($FE00-$FE03 being the first). It discards the rest, 
+allowing only 10 sprites to be displayed on any one line. When this 
+limit is exceeded, sprites appearing later in OAM won't be displayed. To
+ keep unused sprites from affecting onscreen sprites, set their Y 
+coordinate to Y = 0 or Y &gt;= 160 (144 + 16) (Note&nbsp;: Y &lt;= 8 
+also works if sprite size is set to 8x8). Just setting the X coordinate 
+to X = 0 or X &gt;= 168 (160 + 8) on a sprite will hide it, but it will 
+still affect other sprites sharing the same lines.
+</p><p>If using <a href="https://gbdev.gg8.se/wiki/articles/BGB" title="BGB">BGB</a>,
+ in the VRAM viewer - OAM tab, hover your mouse over the small screen to
+ highlight the sprites on a line. Sprites hidden due to the limitation 
+will be highlighted in red.
+</p><p>When these 10 sprites overlap, the highest priority one will 
+appear above all others, etc. (Thus, no Z-fighting.) In CGB mode, the 
+first sprite in OAM ($FE00-$FE03) has the highest priority, and so on. 
+In Non-CGB mode, the smaller the X coordinate, the higher the priority. 
+The tie breaker (same X coordinates) is the same priority as in CGB 
+mode.
+</p><p>The priority calculation between sprites disregards OBJ-to-BG 
+Priority (attribute bit 7). Only the highest-priority nonzero sprite 
+pixel at any given point is compared against the background. Thus if a 
+sprite with a higher priority (based on OAM index) but with OBJ-to-BG 
+Priority turned on overlaps a sprite with a lower priority and a nonzero
+ background pixel, the background pixel is displayed regardless of the 
+lower-priority sprite's OBJ-to-BG Priority.
+</p>
+<h3><span class="mw-headline" id="Writing_Data_to_OAM_Memory">Writing Data to OAM Memory</span></h3>
+<p>The recommended method is to write the data to normal RAM first, and 
+to copy that RAM to OAM by using the DMA transfer function, initiated 
+through DMA register (FF46).
+Beside for that, it is also possible to write data directly to the OAM 
+area by using normal LD commands, this works only during the H-Blank and
+ V-Blank periods. The current state of the LCD controller can be read 
+out from the STAT register (FF41).
+</p>
+<h2><span class="mw-headline" id="Accessing_VRAM_and_OAM">Accessing VRAM and OAM</span></h2>
+<h3><span class="mw-headline" id="CAUTION">CAUTION</span></h3>
+<p>When the LCD Controller is drawing the screen it is directly reading 
+from Video Memory (VRAM) and from the Sprite Attribute Table (OAM). 
+During these periods the Gameboy CPU may not access the VRAM and OAM. 
+That means, any attempts to write to VRAM/OAM are ignored (the data 
+remains unchanged). And any attempts to read from VRAM/OAM will return 
+undefined data (typically a value of FFh).
+</p><p>For this reason the program should verify if VRAM/OAM is 
+accessible before actually reading or writing to it. This is usually 
+done by reading the Mode Bits from the STAT Register (FF41). When doing 
+this (as described in the examples below) you should take care that no 
+interrupts occur between the wait loops and the following memory access -
+ the memory is guaranteed to be accessible only for a few cycles 
+directly after the wait loops have completed.
+</p>
+<h3><span class="mw-headline" id="VRAM_.28memory_at_8000h-9FFFh.29_is_accessible_during_Mode_0-2">VRAM (memory at 8000h-9FFFh) is accessible during Mode 0-2</span></h3>
+<pre> Mode 0 - H-Blank Period,
+ Mode 1 - V-Blank Period, and
+ Mode 2 - Searching OAM Period
+</pre>
+<p>A typical procedure that waits for accessibility of VRAM would be:
+</p>
+<pre> ld   hl,0FF41h   &nbsp;;-STAT Register
+@@wait:           &nbsp;;\
+ bit  1,(hl)      &nbsp;; Wait until Mode is 0 or 1
+ jr   nz,@@wait   &nbsp;;/
+</pre>
+<p>Even if the procedure gets executed at the <i>end</i> of Mode 0 or 1,
+ it is still proof to assume that VRAM can be accessed for a few more 
+cycles because in either case the following period is Mode 2 which 
+allows access to VRAM either. However, be careful about STAT LCD 
+interrupts or other interrupts that could cause the LCD to be back in 
+mode 3 by the time it returns. In CGB Mode an alternate method to write 
+data to VRAM is to use the HDMA Function (FF51-FF55).
+</p><p>If you're not using LCD interrupts, another way to synchronize to the start of mode 0 is to use <code>halt</code> with IME turned off (<code>di</code>).
+ This allows use of the entire mode 0 on one line and mode 2 on the 
+following line, which sum to 165 to 288 dots. For comparison, at single 
+speed (4 dots per machine cycle), a <a href="https://gbdev.gg8.se/wiki/index.php?title=Popslide&amp;action=edit&amp;redlink=1" class="new" title="Popslide (page does not exist)">copy from stack</a>
+ that takes 9 cycles per 2 bytes can push 8 bytes (half a tile) in 144 
+dots, which fits within the worst case timing for mode 0+2.
+</p>
+<h3><span class="mw-headline" id="OAM_.28memory_at_FE00h-FE9Fh.29_is_accessible_during_Mode_0-1">OAM (memory at FE00h-FE9Fh) is accessible during Mode 0-1</span></h3>
+<pre> Mode 0 - H-Blank Period
+ Mode 1 - V-Blank Period
+</pre>
+<p>Aside from that, OAM can be accessed at any time by using the DMA 
+Function (FF46). When directly reading or writing to OAM, a typical 
+procedure that waits for accessibility of OAM Memory would be:
+</p>
+<pre> ld   hl,0FF41h   &nbsp;;-STAT Register
+@@wait1:          &nbsp;;\
+ bit  1,(hl)      &nbsp;; Wait until Mode is -NOT- 0 or 1
+ jr   z,@@wait1   &nbsp;;/
+@@wait2:          &nbsp;;\
+ bit  1,(hl)      &nbsp;; Wait until Mode 0 or 1 -BEGINS-
+ jr   nz,@@wait2  &nbsp;;/
+</pre>
+<p>The two wait loops ensure that Mode 0 or 1 will last for a few clock 
+cycles after completion of the procedure. In V-Blank period it might be 
+recommended to skip the whole procedure - and in most cases using the 
+above mentioned DMA function would be more recommended anyways.
+</p>
+<h3><span class="mw-headline" id="Note">Note</span></h3>
+<p>When the display is disabled, both VRAM and OAM are accessible at any
+ time. The downside is that the screen is blank (white) during this 
+period, so that disabling the display would be recommended only during 
+initialization.
+</p>
+<!-- 
+NewPP limit report
+CPU time usage: 0.082 seconds
+Real time usage: 0.087 seconds
+Preprocessor visited node count: 234/1000000
+Preprocessor generated node count: 276/1000000
+Post‐expand include size: 634/2097152 bytes
+Template argument size: 26/2097152 bytes
+Highest expansion depth: 3/40
+Expensive parser function count: 0/100
+-->
+
+<!-- 
+Transclusion expansion time report (%,ms,calls,template)
+100.00%    2.569      1 - -total
+100.00%    2.569      1 - Template:Pandocs
+-->
+
+<!-- Saved in parser cache with key gbdevwiki-gbdevwiki_:pcache:idhash:18-0!*!0!!en!5!* and timestamp 20221126014950 and revision id 945
+ -->
+</div><div class="printfooter">
+Retrieved from "<a dir="ltr" href="https://gbdev.gg8.se/wiki/index.php?title=Video_Display&amp;oldid=945">https://gbdev.gg8.se/wiki/index.php?title=Video_Display&amp;oldid=945</a>"</div>
+					<div id="catlinks" class="catlinks"><div id="mw-normal-catlinks" class="mw-normal-catlinks"><a href="https://gbdev.gg8.se/wiki/articles/Special:Categories" title="Special:Categories">Category</a>: <ul><li><a href="https://gbdev.gg8.se/wiki/articles/Category:Pandocs_Article" title="Category:Pandocs Article">Pandocs Article</a></li></ul></div></div>					<!-- end content -->
+										<div class="visualClear"></div>
+				</div>
+			</div>
+		</div>
+		<div id="column-one">
+			<h2>Navigation menu</h2>
+					<div id="p-cactions" class="portlet" role="navigation">
+			<h3>Views</h3>
+
+			<div class="pBody">
+				<ul>
+				<li id="ca-nstab-main" class="selected"><a href="https://gbdev.gg8.se/wiki/articles/Video_Display" title="View the content page [Alt+Shift+c]" accesskey="c">Page</a></li>
+				<li id="ca-talk" class="new"><a href="https://gbdev.gg8.se/wiki/index.php?title=Talk:Video_Display&amp;action=edit&amp;redlink=1" title="Discussion about the content page [Alt+Shift+t]" accesskey="t">Discussion</a></li>
+				<li id="ca-viewsource"><a href="https://gbdev.gg8.se/wiki/index.php?title=Video_Display&amp;action=edit" title="This page is protected.
+You can view its source [Alt+Shift+e]" accesskey="e">View source</a></li>
+				<li id="ca-history"><a href="https://gbdev.gg8.se/wiki/index.php?title=Video_Display&amp;action=history" title="Past revisions of this page [Alt+Shift+h]" accesskey="h">History</a></li>
+				</ul>
+							</div>
+		</div>
+				<div class="portlet" id="p-personal" role="navigation">
+				<h3>Personal tools</h3>
+
+				<div class="pBody">
+					<ul>
+													<li id="pt-login"><a href="https://gbdev.gg8.se/wiki/index.php?title=Special:UserLogin&amp;returnto=Video+Display" title="You are encouraged to log in; however, it is not mandatory [Alt+Shift+o]" accesskey="o">Log in</a></li>
+											</ul>
+				</div>
+			</div>
+			<div class="portlet" id="p-logo" role="banner">
+				<a href="https://gbdev.gg8.se/wiki/articles/Main_Page" class="mw-wiki-logo" title="Visit the main page"></a>
+			</div>
+				<div class="generated-sidebar portlet" id="p-site_navigation" role="navigation">
+		<h3>site navigation</h3>
+		<div class="pBody">
+							<ul>
+											<li id="n-GB-dev-forum"><a href="https://gbdev.gg8.se/forums/" rel="nofollow">GB dev forum</a></li>
+											<li id="n-GB-dev-file-hub"><a href="https://gbdev.gg8.se/files/" rel="nofollow">GB dev file hub</a></li>
+											<li id="n-Front-page"><a href="https://gbdev.gg8.se/" rel="nofollow">Front page</a></li>
+									</ul>
+					</div>
+		</div>
+		<div class="generated-sidebar portlet" id="p-wiki_navigation" role="navigation">
+		<h3>wiki navigation</h3>
+		<div class="pBody">
+							<ul>
+											<li id="n-mainpage-description"><a href="https://gbdev.gg8.se/wiki/articles/Main_Page" title="Visit the main page [Alt+Shift+z]" accesskey="z">Main page</a></li>
+											<li id="n-recentchanges"><a href="https://gbdev.gg8.se/wiki/articles/Special:RecentChanges" title="A list of recent changes in the wiki [Alt+Shift+r]" accesskey="r">Recent changes</a></li>
+											<li id="n-randompage"><a href="https://gbdev.gg8.se/wiki/articles/Special:Random" title="Load a random page [Alt+Shift+x]" accesskey="x">Random page</a></li>
+											<li id="n-help"><a href="https://www.mediawiki.org/wiki/Special:MyLanguage/Help:Contents" title="The place to find out">Help</a></li>
+									</ul>
+					</div>
+		</div>
+			<div id="p-search" class="portlet" role="search">
+			<h3><label for="searchInput">Search</label></h3>
+
+			<div id="searchBody" class="pBody">
+				<form action="/wiki/index.php" id="searchform">
+					<input type="hidden" name="title" value="Special:Search">
+					<input type="search" name="search" placeholder="Search" title="Search GbdevWiki [Alt+Shift+f]" accesskey="f" id="searchInput" autocomplete="off">
+					<input type="submit" name="go" value="Go" title="Go to a page with this exact name if exists" id="searchGoButton" class="searchButton">&nbsp;
+						<input type="submit" name="fulltext" value="Search" title="Search the pages for this text" id="mw-searchButton" class="searchButton">
+				</form>
+
+							</div>
+		</div>
+			<div class="portlet" id="p-tb" role="navigation">
+			<h3>Tools</h3>
+
+			<div class="pBody">
+				<ul>
+											<li id="t-whatlinkshere"><a href="https://gbdev.gg8.se/wiki/articles/Special:WhatLinksHere/Video_Display" title="A list of all wiki pages that link here [Alt+Shift+j]" accesskey="j">What links here</a></li>
+											<li id="t-recentchangeslinked"><a href="https://gbdev.gg8.se/wiki/articles/Special:RecentChangesLinked/Video_Display" title="Recent changes in pages linked from this page [Alt+Shift+k]" accesskey="k">Related changes</a></li>
+											<li id="t-specialpages"><a href="https://gbdev.gg8.se/wiki/articles/Special:SpecialPages" title="A list of all special pages [Alt+Shift+q]" accesskey="q">Special pages</a></li>
+											<li id="t-print"><a href="https://gbdev.gg8.se/wiki/index.php?title=Video_Display&amp;printable=yes" rel="alternate" title="Printable version of this page [Alt+Shift+p]" accesskey="p">Printable version</a></li>
+											<li id="t-permalink"><a href="https://gbdev.gg8.se/wiki/index.php?title=Video_Display&amp;oldid=945" title="Permanent link to this revision of the page">Permanent link</a></li>
+											<li id="t-info"><a href="https://gbdev.gg8.se/wiki/index.php?title=Video_Display&amp;action=info" title="More information about this page">Page information</a></li>
+									</ul>
+							</div>
+		</div>
+			</div><!-- end of the left (by default at least) column -->
+		<div class="visualClear"></div>
+					<div id="footer" role="contentinfo">
+						<div id="f-poweredbyico">
+									<a href="https://www.mediawiki.org/"><img src="Video%20Display%20-%20GbdevWiki_files/poweredby_mediawiki_88x31.png" alt="Powered by MediaWiki" srcset="Video%20Display%20-%20GbdevWiki_files/poweredby_mediawiki_132x47.png 1.5x, Video%20Display%20-%20GbdevWiki_files/poweredby_mediawiki_176x62.png 2x" width="88" height="31"></a>
+							</div>
+					<ul id="f-list">
+									<li id="lastmod"> This page was last modified on 4 April 2020, at 21:12.</li>
+									<li id="privacy"><a href="https://gbdev.gg8.se/wiki/articles/GbdevWiki:Privacy_policy" title="GbdevWiki:Privacy policy">Privacy policy</a></li>
+									<li id="about"><a href="https://gbdev.gg8.se/wiki/articles/GbdevWiki:About" title="GbdevWiki:About">About GbdevWiki</a></li>
+									<li id="disclaimer"><a href="https://gbdev.gg8.se/wiki/articles/GbdevWiki:General_disclaimer" title="GbdevWiki:General disclaimer">Disclaimers</a></li>
+							</ul>
+		</div>
+		</div>
+		<script>if(window.jQuery)jQuery.ready();</script><script>if(window.mw){
+mw.loader.state({"site":"loading","user":"ready","user.groups":"ready"});
+}</script>
+<script>if(window.mw){
+mw.loader.load(["mediawiki.toc","mediawiki.action.view.postEdit","mediawiki.user","mediawiki.hidpi","mediawiki.page.ready","mediawiki.searchSuggest"],null,true);
+}</script>
+<script>if(window.mw){
+document.write("\u003Cscript src=\"https://gbdev.gg8.se/wiki/load.php?debug=false\u0026amp;lang=en\u0026amp;modules=site\u0026amp;only=scripts\u0026amp;skin=monobook\u0026amp;*\"\u003E\u003C/script\u003E");
+}</script><script src="Video%20Display%20-%20GbdevWiki_files/load_002.es"></script>
+<script>if(window.mw){
+mw.config.set({"wgBackendResponseTime":199});
+}</script>
+<div style="display: none; font-size: 11.4617px;" class="suggestions"><div class="suggestions-results"></div><div class="suggestions-special"></div></div></body></html>

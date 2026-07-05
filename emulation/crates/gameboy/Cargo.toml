@@ -1,0 +1,24 @@
+[package]
+name = "gameboy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Game Boy (SM83) emulator core"
+
+[dependencies]
+common.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+
+# Dev-only: the test-ROM example (`examples/run_rom.rs`) shows live video in a
+# window and encodes screenshots. Keeping these out of [dependencies] preserves
+# the core's "no windowing/image deps" rule — they reach examples and #[cfg(test)]
+# tests only.
+[dev-dependencies]
+video.workspace = true
+winit.workspace = true
+wgpu.workspace = true
+pollster.workspace = true
+tracing-subscriber.workspace = true
+png.workspace = true

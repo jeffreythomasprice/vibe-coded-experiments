@@ -1,0 +1,13216 @@
+<!DOCTYPE html>
+<html><head class="">
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+	
+	<title>Game Boy CPU (SM83) instruction set</title>
+	<meta charset="utf-8">
+
+	<meta name="description" content="Instruction set of the Nintendo Game Boy, Game Boy Pocket, Game Boy Color and Super Game Boy systems.">
+	<meta name="keywords" content="Game Boy, GameBoy, DMG, CGB, GBC, SGB, Nintendo, SM83, CPU, Opcodes, Instructions, LR35902">
+
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+	<link rel="canonical" href="https://gbdev.github.io/gb-opcodes/optables/">
+
+	<link rel="stylesheet" href="Game%20Boy%20CPU%20(SM83)%20instruction%20set_files/style.css">
+	<link rel="icon" type="image/png" href="https://gbdev.io/gb-opcodes/favicon.png" sizes="16x16">
+	<link rel="icon" type="image/png" href="Game%20Boy%20CPU%20(SM83)%20instruction%20set_files/favicon-x128.png" sizes="128x128">
+	<link rel="apple-touch-icon" sizes="128x128" href="Game%20Boy%20CPU%20(SM83)%20instruction%20set_files/favicon-x128.png">
+
+	<meta property="og:image" content="/gb-opcodes/assets/opengraph-image.png">
+
+	<script src="Game%20Boy%20CPU%20(SM83)%20instruction%20set_files/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+	<script src="Game%20Boy%20CPU%20(SM83)%20instruction%20set_files/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+	<script src="Game%20Boy%20CPU%20(SM83)%20instruction%20set_files/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+	<script>document.head.classList.remove('nojs')</script>
+
+	<meta name="google-site-verification" content="EoI79Ar6lCYY8kCtwd17i7PwcSF6lE6hHQ4AaKXHuQc">
+</head>
+<body class="theme-default">
+	
+<header>
+	
+	
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+	<a class="navbar-brand" href="https://gbdev.io/gb-opcodes/">
+		<img src="Game%20Boy%20CPU%20(SM83)%20instruction%20set_files/favicon-x128.png" class="d-inline-block align-top" alt="" width="30" height="30">
+		GBDocs
+	</a>
+
+	<button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+		<span class="navbar-toggler-icon"></span>
+	</button>
+
+	<div class="collapse navbar-collapse" id="navbarSupportedContent">
+		<ul class="navbar-nav mr-auto">
+			
+		<li class="nav-item dropdown">
+			<a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+				Theme
+			</a>
+			<div class="dropdown-menu" aria-labelledby="navbarDropdown">
+				<a class="dropdown-item" href="https://gbdev.io/gb-opcodes//optables/">Light</a>
+				<a class="dropdown-item" href="https://gbdev.io/gb-opcodes//optables/dark">Dark</a>
+				<a class="dropdown-item" href="https://gbdev.io/gb-opcodes//optables/classic">Classic</a>
+			</div>
+		</li>
+
+		<li class="nav-item">
+			
+				<a class="nav-link" href="https://gbdev.io/gb-opcodes//optables/octal">Octal Display</a>
+			
+		</li>
+
+		<li class="nav-item">
+	<a class="nav-link" href="https://github.com/gbdev/awesome-gbdev">Awesome GBDev List</a>
+</li>
+	
+		</ul>
+
+		
+			<ul class="navbar-nav">
+				<li class="nav-item">
+					<a class="nav-link" href="https://github.com/gbdev/gb-opcodes">GitHub</a>
+				</li>
+			</ul>
+		
+	</div>
+</nav>
+
+</header>
+
+<section id="content" class="container-fluid">
+	<h1><small><a href="#standard">🔗</a></small> Game Boy CPU (SM83) instruction set (<a href="https://gbdev.io/gb-opcodes/Opcodes.json">JSON</a>)</h1>
+
+<div class="row">
+	<div class="col">
+		
+			<div class="table-responsive">
+	<table id="standard" class="table opcode-table table-bordered table-sm">
+		<thead>
+			<tr>
+				
+					<th></th>
+				
+					<th>x0</th>
+				
+					<th>x1</th>
+				
+					<th>x2</th>
+				
+					<th>x3</th>
+				
+					<th>x4</th>
+				
+					<th>x5</th>
+				
+					<th>x6</th>
+				
+					<th>x7</th>
+				
+					<th>x8</th>
+				
+					<th>x9</th>
+				
+					<th>xA</th>
+				
+					<th>xB</th>
+				
+					<th>xC</th>
+				
+					<th>xD</th>
+				
+					<th>xE</th>
+				
+					<th>xF</th>
+				
+			</tr>
+		</thead>
+		<tbody>
+			
+				<tr>
+					<td>0x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-00" class="opcode-info op-nop is8bit">
+	
+		<span class="mnemonic">
+	NOP
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-01" class="opcode-info op-ld is16bit">
+	
+		<span class="mnemonic">
+	LD BC, d16
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-02" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD (BC), A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-03" class="opcode-info op-inc is16bit">
+	
+		<span class="mnemonic">
+	INC BC
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-04" class="opcode-info op-inc is8bit">
+	
+		<span class="mnemonic">
+	INC B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-05" class="opcode-info op-dec is8bit">
+	
+		<span class="mnemonic">
+	DEC B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-06" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD B, d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-07" class="opcode-info op-rlca is8bit">
+	
+		<span class="mnemonic">
+	RLCA
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">0 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-08" class="opcode-info op-ld is16bit">
+	
+		<span class="mnemonic">
+	LD (a16), SP
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">20</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-09" class="opcode-info op-add is16bit">
+	
+		<span class="mnemonic">
+	ADD HL, BC
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-0a" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD A, (BC)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-0b" class="opcode-info op-dec is16bit">
+	
+		<span class="mnemonic">
+	DEC BC
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-0c" class="opcode-info op-inc is8bit">
+	
+		<span class="mnemonic">
+	INC C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-0d" class="opcode-info op-dec is8bit">
+	
+		<span class="mnemonic">
+	DEC C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-0e" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD C, d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-0f" class="opcode-info op-rrca is8bit">
+	
+		<span class="mnemonic">
+	RRCA
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">0 0 0 C</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>1x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-10" class="opcode-info op-stop is8bit">
+	
+		<span class="mnemonic">
+	STOP d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-11" class="opcode-info op-ld is16bit">
+	
+		<span class="mnemonic">
+	LD DE, d16
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-12" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD (DE), A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-13" class="opcode-info op-inc is16bit">
+	
+		<span class="mnemonic">
+	INC DE
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-14" class="opcode-info op-inc is8bit">
+	
+		<span class="mnemonic">
+	INC D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-15" class="opcode-info op-dec is8bit">
+	
+		<span class="mnemonic">
+	DEC D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-16" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD D, d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-17" class="opcode-info op-rla is8bit">
+	
+		<span class="mnemonic">
+	RLA
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">0 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-18" class="opcode-info op-jr is8bit">
+	
+		<span class="mnemonic">
+	JR r8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-19" class="opcode-info op-add is16bit">
+	
+		<span class="mnemonic">
+	ADD HL, DE
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-1a" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD A, (DE)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-1b" class="opcode-info op-dec is16bit">
+	
+		<span class="mnemonic">
+	DEC DE
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-1c" class="opcode-info op-inc is8bit">
+	
+		<span class="mnemonic">
+	INC E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-1d" class="opcode-info op-dec is8bit">
+	
+		<span class="mnemonic">
+	DEC E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-1e" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD E, d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-1f" class="opcode-info op-rra is8bit">
+	
+		<span class="mnemonic">
+	RRA
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">0 0 0 C</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>2x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-20" class="opcode-info op-jr is8bit">
+	
+		<span class="mnemonic">
+	JR NZ, r8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12/8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-21" class="opcode-info op-ld is16bit">
+	
+		<span class="mnemonic">
+	LD HL, d16
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-22" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD (HL+), A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-23" class="opcode-info op-inc is16bit">
+	
+		<span class="mnemonic">
+	INC HL
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-24" class="opcode-info op-inc is8bit">
+	
+		<span class="mnemonic">
+	INC H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-25" class="opcode-info op-dec is8bit">
+	
+		<span class="mnemonic">
+	DEC H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-26" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD H, d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-27" class="opcode-info op-daa is8bit">
+	
+		<span class="mnemonic">
+	DAA
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z - 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-28" class="opcode-info op-jr is8bit">
+	
+		<span class="mnemonic">
+	JR Z, r8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12/8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-29" class="opcode-info op-add is16bit">
+	
+		<span class="mnemonic">
+	ADD HL, HL
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-2a" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD A, (HL+)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-2b" class="opcode-info op-dec is16bit">
+	
+		<span class="mnemonic">
+	DEC HL
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-2c" class="opcode-info op-inc is8bit">
+	
+		<span class="mnemonic">
+	INC L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-2d" class="opcode-info op-dec is8bit">
+	
+		<span class="mnemonic">
+	DEC L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-2e" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD L, d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-2f" class="opcode-info op-cpl is8bit">
+	
+		<span class="mnemonic">
+	CPL
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- 1 1 -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>3x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-30" class="opcode-info op-jr is8bit">
+	
+		<span class="mnemonic">
+	JR NC, r8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12/8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-31" class="opcode-info op-ld is16bit">
+	
+		<span class="mnemonic">
+	LD SP, d16
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-32" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD (HL-), A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-33" class="opcode-info op-inc is16bit">
+	
+		<span class="mnemonic">
+	INC SP
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-34" class="opcode-info op-inc is8bit">
+	
+		<span class="mnemonic">
+	INC (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">Z 0 H -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-35" class="opcode-info op-dec is8bit">
+	
+		<span class="mnemonic">
+	DEC (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">Z 1 H -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-36" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD (HL), d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-37" class="opcode-info op-scf is8bit">
+	
+		<span class="mnemonic">
+	SCF
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- 0 0 1</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-38" class="opcode-info op-jr is8bit">
+	
+		<span class="mnemonic">
+	JR C, r8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12/8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-39" class="opcode-info op-add is16bit">
+	
+		<span class="mnemonic">
+	ADD HL, SP
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-3a" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD A, (HL-)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-3b" class="opcode-info op-dec is16bit">
+	
+		<span class="mnemonic">
+	DEC SP
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-3c" class="opcode-info op-inc is8bit">
+	
+		<span class="mnemonic">
+	INC A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-3d" class="opcode-info op-dec is8bit">
+	
+		<span class="mnemonic">
+	DEC A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-3e" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD A, d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-3f" class="opcode-info op-ccf is8bit">
+	
+		<span class="mnemonic">
+	CCF
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- 0 0 C</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>4x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-40" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD B, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-41" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD B, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-42" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD B, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-43" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD B, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-44" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD B, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-45" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD B, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-46" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD B, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-47" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD B, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-48" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD C, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-49" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD C, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-4a" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD C, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-4b" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD C, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-4c" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD C, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-4d" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD C, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-4e" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD C, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-4f" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD C, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>5x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-50" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD D, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-51" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD D, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-52" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD D, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-53" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD D, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-54" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD D, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-55" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD D, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-56" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD D, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-57" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD D, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-58" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD E, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-59" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD E, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-5a" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD E, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-5b" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD E, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-5c" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD E, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-5d" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD E, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-5e" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD E, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-5f" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD E, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>6x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-60" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD H, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-61" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD H, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-62" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD H, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-63" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD H, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-64" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD H, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-65" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD H, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-66" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD H, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-67" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD H, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-68" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD L, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-69" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD L, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-6a" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD L, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-6b" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD L, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-6c" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD L, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-6d" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD L, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-6e" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD L, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-6f" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD L, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>7x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-70" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD (HL), B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-71" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD (HL), C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-72" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD (HL), D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-73" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD (HL), E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-74" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD (HL), H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-75" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD (HL), L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-76" class="opcode-info op-halt is8bit">
+	
+		<span class="mnemonic">
+	HALT
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-77" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD (HL), A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-78" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD A, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-79" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD A, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-7a" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD A, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-7b" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD A, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-7c" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD A, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-7d" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD A, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-7e" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD A, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-7f" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD A, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>8x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-80" class="opcode-info op-add is8bit">
+	
+		<span class="mnemonic">
+	ADD A, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-81" class="opcode-info op-add is8bit">
+	
+		<span class="mnemonic">
+	ADD A, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-82" class="opcode-info op-add is8bit">
+	
+		<span class="mnemonic">
+	ADD A, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-83" class="opcode-info op-add is8bit">
+	
+		<span class="mnemonic">
+	ADD A, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-84" class="opcode-info op-add is8bit">
+	
+		<span class="mnemonic">
+	ADD A, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-85" class="opcode-info op-add is8bit">
+	
+		<span class="mnemonic">
+	ADD A, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-86" class="opcode-info op-add is8bit">
+	
+		<span class="mnemonic">
+	ADD A, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-87" class="opcode-info op-add is8bit">
+	
+		<span class="mnemonic">
+	ADD A, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-88" class="opcode-info op-adc is8bit">
+	
+		<span class="mnemonic">
+	ADC A, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-89" class="opcode-info op-adc is8bit">
+	
+		<span class="mnemonic">
+	ADC A, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-8a" class="opcode-info op-adc is8bit">
+	
+		<span class="mnemonic">
+	ADC A, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-8b" class="opcode-info op-adc is8bit">
+	
+		<span class="mnemonic">
+	ADC A, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-8c" class="opcode-info op-adc is8bit">
+	
+		<span class="mnemonic">
+	ADC A, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-8d" class="opcode-info op-adc is8bit">
+	
+		<span class="mnemonic">
+	ADC A, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-8e" class="opcode-info op-adc is8bit">
+	
+		<span class="mnemonic">
+	ADC A, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-8f" class="opcode-info op-adc is8bit">
+	
+		<span class="mnemonic">
+	ADC A, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>9x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-90" class="opcode-info op-sub is8bit">
+	
+		<span class="mnemonic">
+	SUB B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-91" class="opcode-info op-sub is8bit">
+	
+		<span class="mnemonic">
+	SUB C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-92" class="opcode-info op-sub is8bit">
+	
+		<span class="mnemonic">
+	SUB D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-93" class="opcode-info op-sub is8bit">
+	
+		<span class="mnemonic">
+	SUB E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-94" class="opcode-info op-sub is8bit">
+	
+		<span class="mnemonic">
+	SUB H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-95" class="opcode-info op-sub is8bit">
+	
+		<span class="mnemonic">
+	SUB L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-96" class="opcode-info op-sub is8bit">
+	
+		<span class="mnemonic">
+	SUB (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-97" class="opcode-info op-sub is8bit">
+	
+		<span class="mnemonic">
+	SUB A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">1 1 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-98" class="opcode-info op-sbc is8bit">
+	
+		<span class="mnemonic">
+	SBC A, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-99" class="opcode-info op-sbc is8bit">
+	
+		<span class="mnemonic">
+	SBC A, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-9a" class="opcode-info op-sbc is8bit">
+	
+		<span class="mnemonic">
+	SBC A, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-9b" class="opcode-info op-sbc is8bit">
+	
+		<span class="mnemonic">
+	SBC A, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-9c" class="opcode-info op-sbc is8bit">
+	
+		<span class="mnemonic">
+	SBC A, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-9d" class="opcode-info op-sbc is8bit">
+	
+		<span class="mnemonic">
+	SBC A, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-9e" class="opcode-info op-sbc is8bit">
+	
+		<span class="mnemonic">
+	SBC A, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-9f" class="opcode-info op-sbc is8bit">
+	
+		<span class="mnemonic">
+	SBC A, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>Ax</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-a0" class="opcode-info op-and is8bit">
+	
+		<span class="mnemonic">
+	AND B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 1 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-a1" class="opcode-info op-and is8bit">
+	
+		<span class="mnemonic">
+	AND C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 1 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-a2" class="opcode-info op-and is8bit">
+	
+		<span class="mnemonic">
+	AND D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 1 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-a3" class="opcode-info op-and is8bit">
+	
+		<span class="mnemonic">
+	AND E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 1 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-a4" class="opcode-info op-and is8bit">
+	
+		<span class="mnemonic">
+	AND H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 1 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-a5" class="opcode-info op-and is8bit">
+	
+		<span class="mnemonic">
+	AND L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 1 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-a6" class="opcode-info op-and is8bit">
+	
+		<span class="mnemonic">
+	AND (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-a7" class="opcode-info op-and is8bit">
+	
+		<span class="mnemonic">
+	AND A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 1 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-a8" class="opcode-info op-xor is8bit">
+	
+		<span class="mnemonic">
+	XOR B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-a9" class="opcode-info op-xor is8bit">
+	
+		<span class="mnemonic">
+	XOR C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-aa" class="opcode-info op-xor is8bit">
+	
+		<span class="mnemonic">
+	XOR D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-ab" class="opcode-info op-xor is8bit">
+	
+		<span class="mnemonic">
+	XOR E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-ac" class="opcode-info op-xor is8bit">
+	
+		<span class="mnemonic">
+	XOR H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-ad" class="opcode-info op-xor is8bit">
+	
+		<span class="mnemonic">
+	XOR L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-ae" class="opcode-info op-xor is8bit">
+	
+		<span class="mnemonic">
+	XOR (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-af" class="opcode-info op-xor is8bit">
+	
+		<span class="mnemonic">
+	XOR A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">1 0 0 0</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>Bx</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-b0" class="opcode-info op-or is8bit">
+	
+		<span class="mnemonic">
+	OR B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-b1" class="opcode-info op-or is8bit">
+	
+		<span class="mnemonic">
+	OR C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-b2" class="opcode-info op-or is8bit">
+	
+		<span class="mnemonic">
+	OR D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-b3" class="opcode-info op-or is8bit">
+	
+		<span class="mnemonic">
+	OR E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-b4" class="opcode-info op-or is8bit">
+	
+		<span class="mnemonic">
+	OR H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-b5" class="opcode-info op-or is8bit">
+	
+		<span class="mnemonic">
+	OR L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-b6" class="opcode-info op-or is8bit">
+	
+		<span class="mnemonic">
+	OR (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-b7" class="opcode-info op-or is8bit">
+	
+		<span class="mnemonic">
+	OR A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-b8" class="opcode-info op-cp is8bit">
+	
+		<span class="mnemonic">
+	CP B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-b9" class="opcode-info op-cp is8bit">
+	
+		<span class="mnemonic">
+	CP C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-ba" class="opcode-info op-cp is8bit">
+	
+		<span class="mnemonic">
+	CP D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-bb" class="opcode-info op-cp is8bit">
+	
+		<span class="mnemonic">
+	CP E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-bc" class="opcode-info op-cp is8bit">
+	
+		<span class="mnemonic">
+	CP H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-bd" class="opcode-info op-cp is8bit">
+	
+		<span class="mnemonic">
+	CP L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-be" class="opcode-info op-cp is8bit">
+	
+		<span class="mnemonic">
+	CP (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-bf" class="opcode-info op-cp is8bit">
+	
+		<span class="mnemonic">
+	CP A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">1 1 0 0</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>Cx</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-c0" class="opcode-info op-ret is8bit">
+	
+		<span class="mnemonic">
+	RET NZ
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">20/8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-c1" class="opcode-info op-pop is16bit">
+	
+		<span class="mnemonic">
+	POP BC
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-c2" class="opcode-info op-jp is16bit">
+	
+		<span class="mnemonic">
+	JP NZ, a16
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">16/12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-c3" class="opcode-info op-jp is16bit">
+	
+		<span class="mnemonic">
+	JP a16
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-c4" class="opcode-info op-call is16bit">
+	
+		<span class="mnemonic">
+	CALL NZ, a16
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">24/12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-c5" class="opcode-info op-push is16bit">
+	
+		<span class="mnemonic">
+	PUSH BC
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-c6" class="opcode-info op-add is8bit">
+	
+		<span class="mnemonic">
+	ADD A, d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-c7" class="opcode-info op-rst is8bit">
+	
+		<span class="mnemonic">
+	RST 00H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-c8" class="opcode-info op-ret is8bit">
+	
+		<span class="mnemonic">
+	RET Z
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">20/8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-c9" class="opcode-info op-ret is8bit">
+	
+		<span class="mnemonic">
+	RET
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-ca" class="opcode-info op-jp is16bit">
+	
+		<span class="mnemonic">
+	JP Z, a16
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">16/12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb" class="opcode-info op-prefix is8bit">
+	
+		<span class="mnemonic">
+	PREFIX
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cc" class="opcode-info op-call is16bit">
+	
+		<span class="mnemonic">
+	CALL Z, a16
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">24/12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cd" class="opcode-info op-call is16bit">
+	
+		<span class="mnemonic">
+	CALL a16
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">24</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-ce" class="opcode-info op-adc is8bit">
+	
+		<span class="mnemonic">
+	ADC A, d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cf" class="opcode-info op-rst is8bit">
+	
+		<span class="mnemonic">
+	RST 08H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>Dx</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-d0" class="opcode-info op-ret is8bit">
+	
+		<span class="mnemonic">
+	RET NC
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">20/8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-d1" class="opcode-info op-pop is16bit">
+	
+		<span class="mnemonic">
+	POP DE
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-d2" class="opcode-info op-jp is16bit">
+	
+		<span class="mnemonic">
+	JP NC, a16
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">16/12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-d3" class="opcode-info op-illegal is8bit">
+	
+		—
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-d4" class="opcode-info op-call is16bit">
+	
+		<span class="mnemonic">
+	CALL NC, a16
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">24/12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-d5" class="opcode-info op-push is16bit">
+	
+		<span class="mnemonic">
+	PUSH DE
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-d6" class="opcode-info op-sub is8bit">
+	
+		<span class="mnemonic">
+	SUB d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-d7" class="opcode-info op-rst is8bit">
+	
+		<span class="mnemonic">
+	RST 10H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-d8" class="opcode-info op-ret is8bit">
+	
+		<span class="mnemonic">
+	RET C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">20/8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-d9" class="opcode-info op-reti is8bit">
+	
+		<span class="mnemonic">
+	RETI
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-da" class="opcode-info op-jp is16bit">
+	
+		<span class="mnemonic">
+	JP C, a16
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">16/12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-db" class="opcode-info op-illegal is8bit">
+	
+		—
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-dc" class="opcode-info op-call is16bit">
+	
+		<span class="mnemonic">
+	CALL C, a16
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">24/12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-dd" class="opcode-info op-illegal is8bit">
+	
+		—
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-de" class="opcode-info op-sbc is8bit">
+	
+		<span class="mnemonic">
+	SBC A, d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-df" class="opcode-info op-rst is8bit">
+	
+		<span class="mnemonic">
+	RST 18H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>Ex</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-e0" class="opcode-info op-ldh is8bit">
+	
+		<span class="mnemonic">
+	LDH (a8), A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-e1" class="opcode-info op-pop is16bit">
+	
+		<span class="mnemonic">
+	POP HL
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-e2" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD (C), A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-e3" class="opcode-info op-illegal is8bit">
+	
+		—
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-e4" class="opcode-info op-illegal is8bit">
+	
+		—
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-e5" class="opcode-info op-push is16bit">
+	
+		<span class="mnemonic">
+	PUSH HL
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-e6" class="opcode-info op-and is8bit">
+	
+		<span class="mnemonic">
+	AND d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-e7" class="opcode-info op-rst is8bit">
+	
+		<span class="mnemonic">
+	RST 20H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-e8" class="opcode-info op-add is16bit">
+	
+		<span class="mnemonic">
+	ADD SP, r8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">0 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-e9" class="opcode-info op-jp is16bit">
+	
+		<span class="mnemonic">
+	JP HL
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-ea" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD (a16), A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-eb" class="opcode-info op-illegal is8bit">
+	
+		—
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-ec" class="opcode-info op-illegal is8bit">
+	
+		—
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-ed" class="opcode-info op-illegal is8bit">
+	
+		—
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-ee" class="opcode-info op-xor is8bit">
+	
+		<span class="mnemonic">
+	XOR d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-ef" class="opcode-info op-rst is8bit">
+	
+		<span class="mnemonic">
+	RST 28H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>Fx</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-f0" class="opcode-info op-ldh is8bit">
+	
+		<span class="mnemonic">
+	LDH A, (a8)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-f1" class="opcode-info op-pop is16bit">
+	
+		<span class="mnemonic">
+	POP AF
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">Z N H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-f2" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD A, (C)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-f3" class="opcode-info op-di is8bit">
+	
+		<span class="mnemonic">
+	DI
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-f4" class="opcode-info op-illegal is8bit">
+	
+		—
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-f5" class="opcode-info op-push is16bit">
+	
+		<span class="mnemonic">
+	PUSH AF
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-f6" class="opcode-info op-or is8bit">
+	
+		<span class="mnemonic">
+	OR d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-f7" class="opcode-info op-rst is8bit">
+	
+		<span class="mnemonic">
+	RST 30H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-f8" class="opcode-info op-ld is16bit">
+	
+		<span class="mnemonic">
+	LD HL, SP + r8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">0 0 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-f9" class="opcode-info op-ld is16bit">
+	
+		<span class="mnemonic">
+	LD SP, HL
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-fa" class="opcode-info op-ld is8bit">
+	
+		<span class="mnemonic">
+	LD A, (a16)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">3</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-fb" class="opcode-info op-ei is8bit">
+	
+		<span class="mnemonic">
+	EI
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">4</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-fc" class="opcode-info op-illegal is8bit">
+	
+		—
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-fd" class="opcode-info op-illegal is8bit">
+	
+		—
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-fe" class="opcode-info op-cp is8bit">
+	
+		<span class="mnemonic">
+	CP d8
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 1 H C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-ff" class="opcode-info op-rst is8bit">
+	
+		<span class="mnemonic">
+	RST 38H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">1</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+				</tr>
+			
+		</tbody>
+	</table>
+</div>
+
+		
+	</div>
+</div>
+
+<h2><small><a href="#prefixed">🔗</a></small> Prefixed ($CB $xx)</h2>
+
+<div class="row">
+	<div class="col">
+		
+			<div class="table-responsive">
+	<table id="prefixed" class="table opcode-table table-bordered table-sm">
+		<thead>
+			<tr>
+				
+					<th></th>
+				
+					<th>x0</th>
+				
+					<th>x1</th>
+				
+					<th>x2</th>
+				
+					<th>x3</th>
+				
+					<th>x4</th>
+				
+					<th>x5</th>
+				
+					<th>x6</th>
+				
+					<th>x7</th>
+				
+					<th>x8</th>
+				
+					<th>x9</th>
+				
+					<th>xA</th>
+				
+					<th>xB</th>
+				
+					<th>xC</th>
+				
+					<th>xD</th>
+				
+					<th>xE</th>
+				
+					<th>xF</th>
+				
+			</tr>
+		</thead>
+		<tbody>
+			
+				<tr>
+					<td>0x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb00" class="opcode-info op-rlc is8bit">
+	
+		<span class="mnemonic">
+	RLC B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb01" class="opcode-info op-rlc is8bit">
+	
+		<span class="mnemonic">
+	RLC C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb02" class="opcode-info op-rlc is8bit">
+	
+		<span class="mnemonic">
+	RLC D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb03" class="opcode-info op-rlc is8bit">
+	
+		<span class="mnemonic">
+	RLC E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb04" class="opcode-info op-rlc is8bit">
+	
+		<span class="mnemonic">
+	RLC H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb05" class="opcode-info op-rlc is8bit">
+	
+		<span class="mnemonic">
+	RLC L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb06" class="opcode-info op-rlc is8bit">
+	
+		<span class="mnemonic">
+	RLC (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb07" class="opcode-info op-rlc is8bit">
+	
+		<span class="mnemonic">
+	RLC A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb08" class="opcode-info op-rrc is8bit">
+	
+		<span class="mnemonic">
+	RRC B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb09" class="opcode-info op-rrc is8bit">
+	
+		<span class="mnemonic">
+	RRC C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb0a" class="opcode-info op-rrc is8bit">
+	
+		<span class="mnemonic">
+	RRC D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb0b" class="opcode-info op-rrc is8bit">
+	
+		<span class="mnemonic">
+	RRC E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb0c" class="opcode-info op-rrc is8bit">
+	
+		<span class="mnemonic">
+	RRC H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb0d" class="opcode-info op-rrc is8bit">
+	
+		<span class="mnemonic">
+	RRC L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb0e" class="opcode-info op-rrc is8bit">
+	
+		<span class="mnemonic">
+	RRC (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb0f" class="opcode-info op-rrc is8bit">
+	
+		<span class="mnemonic">
+	RRC A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>1x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb10" class="opcode-info op-rl is8bit">
+	
+		<span class="mnemonic">
+	RL B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb11" class="opcode-info op-rl is8bit">
+	
+		<span class="mnemonic">
+	RL C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb12" class="opcode-info op-rl is8bit">
+	
+		<span class="mnemonic">
+	RL D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb13" class="opcode-info op-rl is8bit">
+	
+		<span class="mnemonic">
+	RL E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb14" class="opcode-info op-rl is8bit">
+	
+		<span class="mnemonic">
+	RL H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb15" class="opcode-info op-rl is8bit">
+	
+		<span class="mnemonic">
+	RL L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb16" class="opcode-info op-rl is8bit">
+	
+		<span class="mnemonic">
+	RL (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb17" class="opcode-info op-rl is8bit">
+	
+		<span class="mnemonic">
+	RL A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb18" class="opcode-info op-rr is8bit">
+	
+		<span class="mnemonic">
+	RR B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb19" class="opcode-info op-rr is8bit">
+	
+		<span class="mnemonic">
+	RR C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb1a" class="opcode-info op-rr is8bit">
+	
+		<span class="mnemonic">
+	RR D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb1b" class="opcode-info op-rr is8bit">
+	
+		<span class="mnemonic">
+	RR E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb1c" class="opcode-info op-rr is8bit">
+	
+		<span class="mnemonic">
+	RR H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb1d" class="opcode-info op-rr is8bit">
+	
+		<span class="mnemonic">
+	RR L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb1e" class="opcode-info op-rr is8bit">
+	
+		<span class="mnemonic">
+	RR (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb1f" class="opcode-info op-rr is8bit">
+	
+		<span class="mnemonic">
+	RR A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>2x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb20" class="opcode-info op-sla is8bit">
+	
+		<span class="mnemonic">
+	SLA B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb21" class="opcode-info op-sla is8bit">
+	
+		<span class="mnemonic">
+	SLA C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb22" class="opcode-info op-sla is8bit">
+	
+		<span class="mnemonic">
+	SLA D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb23" class="opcode-info op-sla is8bit">
+	
+		<span class="mnemonic">
+	SLA E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb24" class="opcode-info op-sla is8bit">
+	
+		<span class="mnemonic">
+	SLA H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb25" class="opcode-info op-sla is8bit">
+	
+		<span class="mnemonic">
+	SLA L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb26" class="opcode-info op-sla is8bit">
+	
+		<span class="mnemonic">
+	SLA (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb27" class="opcode-info op-sla is8bit">
+	
+		<span class="mnemonic">
+	SLA A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb28" class="opcode-info op-sra is8bit">
+	
+		<span class="mnemonic">
+	SRA B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb29" class="opcode-info op-sra is8bit">
+	
+		<span class="mnemonic">
+	SRA C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb2a" class="opcode-info op-sra is8bit">
+	
+		<span class="mnemonic">
+	SRA D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb2b" class="opcode-info op-sra is8bit">
+	
+		<span class="mnemonic">
+	SRA E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb2c" class="opcode-info op-sra is8bit">
+	
+		<span class="mnemonic">
+	SRA H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb2d" class="opcode-info op-sra is8bit">
+	
+		<span class="mnemonic">
+	SRA L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb2e" class="opcode-info op-sra is8bit">
+	
+		<span class="mnemonic">
+	SRA (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb2f" class="opcode-info op-sra is8bit">
+	
+		<span class="mnemonic">
+	SRA A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>3x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb30" class="opcode-info op-swap is8bit">
+	
+		<span class="mnemonic">
+	SWAP B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb31" class="opcode-info op-swap is8bit">
+	
+		<span class="mnemonic">
+	SWAP C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb32" class="opcode-info op-swap is8bit">
+	
+		<span class="mnemonic">
+	SWAP D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb33" class="opcode-info op-swap is8bit">
+	
+		<span class="mnemonic">
+	SWAP E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb34" class="opcode-info op-swap is8bit">
+	
+		<span class="mnemonic">
+	SWAP H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb35" class="opcode-info op-swap is8bit">
+	
+		<span class="mnemonic">
+	SWAP L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb36" class="opcode-info op-swap is8bit">
+	
+		<span class="mnemonic">
+	SWAP (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb37" class="opcode-info op-swap is8bit">
+	
+		<span class="mnemonic">
+	SWAP A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 0</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb38" class="opcode-info op-srl is8bit">
+	
+		<span class="mnemonic">
+	SRL B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb39" class="opcode-info op-srl is8bit">
+	
+		<span class="mnemonic">
+	SRL C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb3a" class="opcode-info op-srl is8bit">
+	
+		<span class="mnemonic">
+	SRL D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb3b" class="opcode-info op-srl is8bit">
+	
+		<span class="mnemonic">
+	SRL E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb3c" class="opcode-info op-srl is8bit">
+	
+		<span class="mnemonic">
+	SRL H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb3d" class="opcode-info op-srl is8bit">
+	
+		<span class="mnemonic">
+	SRL L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb3e" class="opcode-info op-srl is8bit">
+	
+		<span class="mnemonic">
+	SRL (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb3f" class="opcode-info op-srl is8bit">
+	
+		<span class="mnemonic">
+	SRL A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 0 C</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>4x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb40" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 0, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb41" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 0, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb42" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 0, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb43" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 0, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb44" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 0, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb45" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 0, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb46" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 0, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb47" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 0, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb48" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 1, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb49" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 1, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb4a" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 1, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb4b" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 1, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb4c" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 1, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb4d" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 1, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb4e" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 1, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb4f" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 1, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>5x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb50" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 2, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb51" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 2, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb52" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 2, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb53" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 2, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb54" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 2, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb55" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 2, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb56" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 2, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb57" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 2, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb58" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 3, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb59" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 3, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb5a" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 3, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb5b" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 3, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb5c" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 3, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb5d" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 3, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb5e" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 3, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb5f" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 3, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>6x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb60" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 4, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb61" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 4, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb62" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 4, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb63" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 4, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb64" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 4, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb65" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 4, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb66" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 4, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb67" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 4, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb68" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 5, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb69" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 5, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb6a" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 5, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb6b" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 5, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb6c" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 5, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb6d" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 5, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb6e" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 5, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb6f" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 5, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>7x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb70" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 6, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb71" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 6, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb72" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 6, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb73" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 6, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb74" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 6, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb75" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 6, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb76" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 6, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb77" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 6, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb78" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 7, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb79" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 7, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb7a" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 7, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb7b" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 7, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb7c" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 7, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb7d" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 7, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb7e" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 7, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">12</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb7f" class="opcode-info op-bit is8bit">
+	
+		<span class="mnemonic">
+	BIT 7, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">Z 0 1 -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>8x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb80" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 0, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb81" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 0, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb82" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 0, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb83" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 0, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb84" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 0, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb85" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 0, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb86" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 0, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb87" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 0, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb88" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 1, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb89" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 1, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb8a" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 1, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb8b" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 1, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb8c" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 1, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb8d" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 1, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb8e" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 1, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb8f" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 1, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>9x</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb90" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 2, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb91" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 2, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb92" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 2, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb93" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 2, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb94" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 2, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb95" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 2, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb96" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 2, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb97" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 2, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb98" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 3, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb99" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 3, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb9a" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 3, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb9b" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 3, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb9c" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 3, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb9d" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 3, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb9e" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 3, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cb9f" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 3, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>Ax</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cba0" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 4, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cba1" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 4, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cba2" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 4, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cba3" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 4, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cba4" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 4, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cba5" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 4, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cba6" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 4, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cba7" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 4, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cba8" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 5, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cba9" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 5, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbaa" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 5, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbab" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 5, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbac" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 5, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbad" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 5, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbae" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 5, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbaf" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 5, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>Bx</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbb0" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 6, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbb1" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 6, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbb2" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 6, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbb3" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 6, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbb4" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 6, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbb5" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 6, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbb6" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 6, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbb7" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 6, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbb8" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 7, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbb9" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 7, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbba" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 7, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbbb" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 7, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbbc" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 7, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbbd" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 7, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbbe" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 7, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbbf" class="opcode-info op-res is8bit">
+	
+		<span class="mnemonic">
+	RES 7, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>Cx</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbc0" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 0, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbc1" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 0, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbc2" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 0, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbc3" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 0, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbc4" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 0, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbc5" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 0, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbc6" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 0, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbc7" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 0, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbc8" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 1, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbc9" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 1, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbca" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 1, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbcb" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 1, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbcc" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 1, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbcd" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 1, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbce" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 1, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbcf" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 1, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>Dx</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbd0" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 2, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbd1" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 2, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbd2" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 2, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbd3" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 2, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbd4" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 2, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbd5" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 2, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbd6" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 2, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbd7" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 2, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbd8" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 3, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbd9" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 3, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbda" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 3, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbdb" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 3, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbdc" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 3, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbdd" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 3, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbde" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 3, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbdf" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 3, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>Ex</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbe0" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 4, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbe1" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 4, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbe2" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 4, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbe3" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 4, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbe4" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 4, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbe5" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 4, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbe6" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 4, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbe7" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 4, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbe8" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 5, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbe9" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 5, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbea" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 5, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbeb" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 5, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbec" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 5, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbed" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 5, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbee" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 5, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbef" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 5, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+				</tr>
+			
+				<tr>
+					<td>Fx</td>
+
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbf0" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 6, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbf1" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 6, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbf2" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 6, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbf3" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 6, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbf4" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 6, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbf5" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 6, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbf6" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 6, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbf7" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 6, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbf8" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 7, B
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbf9" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 7, C
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbfa" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 7, D
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbfb" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 7, E
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbfc" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 7, H
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbfd" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 7, L
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbfe" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 7, (HL)
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">16</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+						
+
+
+
+
+
+
+
+
+
+
+
+<td id="op-cbff" class="opcode-info op-set is8bit">
+	
+		<span class="mnemonic">
+	SET 7, A
+
+</span>
+		<span class="bytes-cycles">
+			<span class="bytes">2</span>&nbsp;&nbsp;<span class="cycles">8</span>
+		</span>
+		<span class="flags">- - - -</span>
+	
+</td>
+					
+				</tr>
+			
+		</tbody>
+	</table>
+</div>
+
+		
+	</div>
+</div>
+<div class="row">
+	<div id="legend" class="col-md-12 col-lg-6 mb-3">
+		<span class="legend"><span class="legend-color legend-control"></span> Misc / control instructions</span>
+		<span class="legend"><span class="legend-color legend-jump"></span> Jumps / calls</span>
+		<span class="legend"><span class="legend-color legend-load"></span> 8-bit load instructions</span>
+		<span class="legend"><span class="legend-color legend-load16"></span> 16-bit load instructions</span>
+		<span class="legend"><span class="legend-color legend-arithmetic"></span> 8-bit arithmetic / logical instructions</span>
+		<span class="legend"><span class="legend-color legend-arithmetic16"></span> 16-bit arithmetic / logical instructions</span>
+		<span class="legend"><span class="legend-color legend-bit"></span> 8-bit shift, rotate and bit instructions</span>
+	</div>
+
+	<div id="how-to-read" class="col-md-12 col-lg-6 mb-3">
+		<table id="demo-table" class="mb-3">
+			<tbody>
+				<tr><td></td> <td></td> <td><span>INS reg</span><br></td> <td>←</td> <td>Instruction mnemonic</td></tr>
+				<tr><td>Length in bytes</td> <td>→</td> <td><span>2&nbsp;&nbsp;8</span><br></td> <td>←</td> <td>Duration in T-states<sup>*</sup></td></tr>
+				<tr><td></td> <td></td><td><span>Z N H C</span></td> <td>←</td> <td>Flags affected</td></tr>
+			</tbody>
+		</table>
+
+		<p><sup>*)</sup> Often instruction durations are given in “M-cycles” 
+(machine cycles) instead of “T-states” (system clock ticks) because each
+ instruction takes a multiple of four T-states to complete, thus a <kbd>NOP</kbd> takes one M-cycle or four T-states to complete.</p>
+	</div>
+</div>
+
+<div class="row">
+	<div class="col-md-12 col-lg-6">
+		<div id="flags" class="card mb-3">
+			<div class="card-body">
+				<p>
+					<kbd>Z</kbd> - Zero Flag<br>
+					<kbd>N</kbd> - Subtract Flag<br>
+					<kbd>H</kbd> - Half Carry Flag<br>
+					<kbd>C</kbd> - Carry Flag<br>
+					<kbd>0</kbd> - The flag is reset<br>
+					<kbd>1</kbd> - The flag is set<br>
+					<kbd>-</kbd> - The flag is left untouched
+				</p>
+
+				<p>If an operation has the flags defined as <kbd>Z</kbd>, <kbd>N</kbd>, <kbd>H</kbd>, or <kbd>C</kbd>, the corresponding flags are set as the operation performed dictates.</p>
+			</div>
+		</div>
+	</div>
+
+	<div class="col-md-12 col-lg-6">
+		<div id="conditional-durations" class="card mb-3">
+			<div class="card-body">
+				The duration of conditional calls and returns is different when 
+action is taken or not. This is indicated by two numbers separated by 
+“/”. The higher number (on the left side of “/”) is the duration of the 
+instruction when action is taken, the lower number (on the right side of
+ “/”) is the duration of the instruction when action is not taken.
+			</div>
+		</div>
+	</div>
+
+	<div class="col-md-12 col-lg-6">
+		<div id="stop-note" class="card mb-3">
+			<div class="card-body">
+				<b>STOP</b>: The opcode of this instruction is $10, but it has to be
+ followed by an additional byte that is ignored by the CPU (any value 
+works, but normally $00 is used).
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="row">
+	<div class="col">
+		<div id="datatypes" class="card mb-3">
+			<div class="card-body">
+				<p><kbd>d8</kbd> means immediate 8-bit data</p>
+				<p><kbd>d16</kbd> means immediate little-endian 16-bit data</p>
+				<p><kbd>a8</kbd> means 8-bit unsigned data, which is added to $FF00 in certain instructions (replacement for missing IN and OUT instructions)</p>
+				<p><kbd>a16</kbd> means little-endian 16-bit address</p>
+				<p><kbd>r8</kbd> means 8-bit signed data</p>
+			</div>
+		</div>
+
+		<div id="alternatives" class="card mb-3">
+			<div class="card-body">
+				<p><kbd>LD A, (C)</kbd> has the alternative mnemonic <kbd>LD A, ($FF00+C)</kbd></p>
+				<p><kbd>LD (C), A</kbd> has the alternative mnemonic <kbd>LD ($FF00+C), A</kbd></p>
+				<p><kbd>LDH A, (a8)</kbd> has the alternative mnemonic <kbd>LD A, ($FF00+a8)</kbd></p>
+				<p><kbd>LDH (a8), A</kbd> has the alternative mnemonic <kbd>LD ($FF00+a8), A</kbd></p>
+				<p><kbd>LD A, (HL+)</kbd> has the alternative mnemonic <kbd>LD A, (HLI)</kbd> or <kbd>LDI A, (HL)</kbd></p>
+				<p><kbd>LD (HL+), A</kbd> has the alternative mnemonic <kbd>LD (HLI), A</kbd> or <kbd>LDI (HL), A</kbd></p>
+				<p><kbd>LD A, (HL-)</kbd> has the alternative mnemonic <kbd>LD A, (HLD)</kbd> or <kbd>LDD A, (HL)</kbd></p>
+				<p><kbd>LD (HL-), A</kbd> has the alternative mnemonic <kbd>LD (HLD), A</kbd> or <kbd>LDD (HL), A</kbd></p>
+				<kbd>LD HL, SP+r8</kbd> has the alternative mnemonic <kbd>LDHL SP, r8</kbd>
+			</div>
+		</div>
+	</div>
+</div>
+
+
+</section>
+
+
+	<footer class="text-center">
+	<p>This page is based on the opcodes list of <a href="http://www.pastraiser.com/cpu/gameboy/gameboy_opcodes.html">PASTRAISER</a>. <small><a href="https://gbdev.io/gb-opcodes/optables/errata">Errata</a></small></p>
+
+	
+</footer>
+
+
+
+</body></html>

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html dir="ltr" class="client-js" lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="UTF-8">
+<title>Timer Obscure Behaviour - GbdevWiki</title>
+<meta name="generator" content="MediaWiki 1.25.1">
+<link rel="shortcut icon" href="https://gbdev.gg8.se/favicon.ico">
+<link rel="search" type="application/opensearchdescription+xml" href="https://gbdev.gg8.se/wiki/opensearch_desc.php" title="GbdevWiki (en)">
+<link rel="EditURI" type="application/rsd+xml" href="https://gbdev.gg8.se/wiki/api.php?action=rsd">
+<link rel="alternate" hreflang="x-default" href="https://gbdev.gg8.se/wiki/articles/Timer_Obscure_Behaviour">
+<link rel="alternate" type="application/atom+xml" title="GbdevWiki Atom feed" href="https://gbdev.gg8.se/wiki/index.php?title=Special:RecentChanges&amp;feed=atom">
+<link rel="canonical" href="https://gbdev.gg8.se/wiki/articles/Timer_Obscure_Behaviour">
+<link rel="stylesheet" href="Timer%20Obscure%20Behaviour%20-%20GbdevWiki_files/load.css">
+<!--[if IE 6]><link rel="stylesheet" href="/wiki/skins/MonoBook/IE60Fixes.css?303" media="screen" /><![endif]-->
+<!--[if IE 7]><link rel="stylesheet" href="/wiki/skins/MonoBook/IE70Fixes.css?303" media="screen" /><![endif]--><style>
+.mw-collapsible-toggle{float:right;-moz-user-select:none;-webkit-user-select:none;-ms-user-select:none;user-select:none}  .mw-content-ltr .mw-collapsible-toggle,.mw-content-rtl .mw-content-ltr .mw-collapsible-toggle{float:right} .mw-content-rtl .mw-collapsible-toggle,.mw-content-ltr .mw-content-rtl .mw-collapsible-toggle{float:left}.mw-customtoggle,.mw-collapsible-toggle{cursor:pointer} caption .mw-collapsible-toggle,.mw-content-ltr caption .mw-collapsible-toggle,.mw-content-rtl caption .mw-collapsible-toggle,.mw-content-rtl .mw-content-ltr caption .mw-collapsible-toggle,.mw-content-ltr .mw-content-rtl caption .mw-collapsible-toggle{float:none} li .mw-collapsible-toggle,.mw-content-ltr li .mw-collapsible-toggle,.mw-content-rtl li .mw-collapsible-toggle,.mw-content-rtl .mw-content-ltr li .mw-collapsible-toggle,.mw-content-ltr .mw-content-rtl li .mw-collapsible-toggle{float:none} .mw-collapsible-toggle-li{list-style:none}
+/* cache key: gbdevwiki-gbdevwiki_:resourceloader:filter:minify-css:7:e1ffd603cbaaa5f1a36e0d13fe843535 */
+.suggestions{overflow:hidden;position:absolute;top:0;left:0;width:0;border:none;z-index:1099;padding:0;margin:-1px 0 0 0}.suggestions-special{position:relative;background-color:white;cursor:pointer;border:solid 1px #aaaaaa;padding:0;margin:0;margin-top:-2px;display:none;padding:0.25em 0.25em;line-height:1.25em}.suggestions-results{background-color:white;cursor:pointer;border:solid 1px #aaaaaa;padding:0;margin:0}.suggestions-result{color:black;margin:0;line-height:1.5em;padding:0.01em 0.25em;text-align:left; overflow:hidden;-o-text-overflow:ellipsis; text-overflow:ellipsis;white-space:nowrap}.suggestions-result-current{background-color:#4C59A6;color:white}.suggestions-special .special-label{color:gray;text-align:left}.suggestions-special .special-query{color:black;font-style:italic;text-align:left}.suggestions-special .special-hover{background-color:silver}.suggestions-result-current .special-label,.suggestions-result-current .special-query{color:white}.highlight{font-weight:bold}
+/* cache key: gbdevwiki-gbdevwiki_:resourceloader:filter:minify-css:7:f8d0c6895ce3ae14434c16b8fca59432 */
+.postedit-container{margin:0 auto;position:fixed;top:0;height:0;left:50%;z-index:1000;font-size:13px}.postedit-container:hover{cursor:pointer}.postedit{position:relative;top:0.6em;left:-50%;padding:.6em 3.6em .6em 1.1em;line-height:1.5625em;color:#626465;background-color:#f4f4f4;border:1px solid #dcd9d9;text-shadow:0 0.0625em 0 rgba(255,255,255,0.5);border-radius:5px;box-shadow:0 2px 5px 0 #ccc;-webkit-transition:all 0.25s ease-in-out;-moz-transition:all 0.25s ease-in-out;-ms-transition:all 0.25s ease-in-out;-o-transition:all 0.25s ease-in-out;transition:all 0.25s ease-in-out}.skin-monobook .postedit{top:6em !important}.postedit-faded{opacity:0}.postedit-icon{padding-left:41px;  line-height:25px;background-repeat:no-repeat;background-position:8px 50%}.postedit-icon-checkmark{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAABblBMVEUAAAD///////9PfTf///80aRdTgjn///9Feij///////////9Rfzf///////////9PfjZRgDh1o1xOfTb///////+bwYqLtnj///////9PfTa82K////9WhT6YxIL///9QgDdTgzr////////j7uDl7eLq8efi693k7OH///////9UhjuBr2rp9uRUhjr///9YljVKgir///9WiTlYjT3////9/v57vFlbkT5PjC9dlD/5/fhuq09stUTs9uhxuElctCpfnT1huDFloEZloUZmpENmvDZpvDxpvTxqvjxrvT5rvT9rwTxsqktswD5uwkBvuUdxw0NztFBztU9ztVBzwkp0tlJ1xkd2t1R3uVR4w1F4xk54x014yE15uVZ5v1R5xVB6v1R7yFJ8wVh9xVl9yFR9yVd9ylN+xVh+yFd/x1l/yFeAylmEx1+Ny2uY0Hqe04Wj1Ymv3Ze33qLD47TJ5L3O6cPU7Mrq9eb2+/Q4j37OAAAAQHRSTlMAAQIEBAUFBQwPFB4fJCUoKiosQEhJS01RUlZZXmdydXaChYuSlJSWmJmoq6uur8LExcvM19fg5ejt8fX2+Pr7SljgewAAAKpJREFUGBkFwQNCAwAAAMDLtl3LtrG4rWXbtvX77gAgZ6grFwC0bhwNVgKgdPZx8b0dgLi+s7Wn0VoAqpfOI9+BNADZI7fLrz2pSEwGHZuH+78lSK8ZLkLezF3ooyUG3VPXq2USei9WngeyoG195yBYWDF3E/2pAhl1e9Gr8bGT+bfOFCC2fnvh4X7rcqIAQNNu+HT6sxkAjceTL/2ZAIhv+PorBwBJxfkA//dFHSCBy/UTAAAAAElFTkSuQmCC);background-image:url(https://gbdev.gg8.se/wiki/resources/src/mediawiki.action/images/green-checkmark.png?2015-05-25T21:00:00Z)!ie;background-position:left}.postedit-close{position:absolute;padding:0 .8em;right:0;top:0;font-size:1.25em;font-weight:bold;line-height:2.3em;color:black;text-shadow:0 0.0625em 0 white;text-decoration:none;opacity:0.2;filter:alpha(opacity=20)}.postedit-close:hover{color:black;text-decoration:none;opacity:0.4;filter:alpha(opacity=40)}
+/* cache key: gbdevwiki-gbdevwiki_:resourceloader:filter:minify-css:7:e55383996e76d9336e65c46bbdd35ee7 */</style><style>
+.suggestions a.mw-searchSuggest-link,.suggestions a.mw-searchSuggest-link:hover,.suggestions a.mw-searchSuggest-link:active,.suggestions a.mw-searchSuggest-link:focus{color:black;text-decoration:none}.suggestions-result-current a.mw-searchSuggest-link,.suggestions-result-current a.mw-searchSuggest-link:hover,.suggestions-result-current a.mw-searchSuggest-link:active,.suggestions-result-current a.mw-searchSuggest-link:focus{color:white}.suggestions a.mw-searchSuggest-link .special-query{ overflow:hidden;-o-text-overflow:ellipsis; text-overflow:ellipsis;white-space:nowrap}
+/* cache key: gbdevwiki-gbdevwiki_:resourceloader:filter:minify-css:7:ae3fa4570b5ac0c6cf7b3776c8ae4d6f */</style><meta name="ResourceLoaderDynamicStyles" content="">
+<link rel="stylesheet" href="Timer%20Obscure%20Behaviour%20-%20GbdevWiki_files/load_002.css">
+<style>a:lang(ar),a:lang(kk-arab),a:lang(mzn),a:lang(ps),a:lang(ur){text-decoration:none}
+/* cache key: gbdevwiki-gbdevwiki_:resourceloader:filter:minify-css:7:6e7fe7968357bf072d7ae91837483523 */</style>
+<script src="Timer%20Obscure%20Behaviour%20-%20GbdevWiki_files/load_003.es"></script><script src="Timer%20Obscure%20Behaviour%20-%20GbdevWiki_files/load.es"></script>
+<script>if(window.mw){
+mw.config.set({"wgCanonicalNamespace":"","wgCanonicalSpecialPageName":false,"wgNamespaceNumber":0,"wgPageName":"Timer_Obscure_Behaviour","wgTitle":"Timer Obscure Behaviour","wgCurRevisionId":569,"wgRevisionId":569,"wgArticleId":168,"wgIsArticle":true,"wgIsRedirect":false,"wgAction":"view","wgUserName":null,"wgUserGroups":["*"],"wgCategories":[],"wgBreakFrames":false,"wgPageContentLanguage":"en","wgPageContentModel":"wikitext","wgSeparatorTransformTable":["",""],"wgDigitTransformTable":["",""],"wgDefaultDateFormat":"dmy","wgMonthNames":["","January","February","March","April","May","June","July","August","September","October","November","December"],"wgMonthNamesShort":["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],"wgRelevantPageName":"Timer_Obscure_Behaviour","wgRelevantArticleId":168,"wgIsProbablyEditable":false,"wgRestrictionEdit":[],"wgRestrictionMove":[]});
+}</script><script>if(window.mw){
+mw.loader.implement("user.options",function($,jQuery){mw.user.options.set({"variant":"en"});});mw.loader.implement("user.tokens",function($,jQuery){mw.user.tokens.set({"editToken":"+\\","patrolToken":"+\\","watchToken":"+\\"});});
+/* cache key: gbdevwiki-gbdevwiki_:resourceloader:filter:minify-js:7:a5c52c063dc436c1ca7c9f456936a5e9 */
+}</script>
+<script>if(window.mw){
+mw.loader.load(["mediawiki.page.startup","mediawiki.legacy.wikibits","mediawiki.legacy.ajax"]);
+}</script><script src="Timer%20Obscure%20Behaviour%20-%20GbdevWiki_files/load_004.es"></script>
+</head>
+<body class="mediawiki ltr sitedir-ltr ns-0 ns-subject page-Timer_Obscure_Behaviour skin-monobook action-view">
+<div id="globalWrapper">
+		<div id="column-content">
+			<div id="content" class="mw-body" role="main">
+				<a id="top"></a>
+				
+				<div class="mw-indicators">
+</div>
+				<h1 id="firstHeading" class="firstHeading" lang="en">Timer Obscure Behaviour</h1>
+
+				<div id="bodyContent" class="mw-body-content">
+					<div id="siteSub">From GbdevWiki</div>
+					<div id="contentSub"></div>
+										<div id="jump-to-nav" class="mw-jump">Jump to: <a href="#column-one">navigation</a>, <a href="#searchInput">search</a></div>
+
+					<!-- start content -->
+					<div id="mw-content-text" dir="ltr" class="mw-content-ltr" lang="en"><h2><span class="mw-headline" id="Timer_Global_Circuit">Timer Global Circuit</span></h2>
+<p><a href="https://gbdev.gg8.se/wiki/articles/File:Timer_simplified.png" class="image"><img alt="Timer simplified.png" src="Timer%20Obscure%20Behaviour%20-%20GbdevWiki_files/Timer_simplified.png" width="773" height="570"></a>
+</p>
+<h2><span class="mw-headline" id="Relation_between_Timer_and_Divider_register">Relation between Timer and Divider register</span></h2>
+<p>This is a schematic of the circuit involving TAC and DIV:
+</p><p><a href="https://gbdev.gg8.se/wiki/articles/File:Timer_tac_bug_dmg.png" class="image"><img alt="Timer tac bug dmg.png" src="Timer%20Obscure%20Behaviour%20-%20GbdevWiki_files/Timer_tac_bug_dmg.png" width="645" height="449"></a>
+</p><p>Notice how the values that are connected to the inputs of the 
+multiplexer are the values of those bits, not the carry of those bits. 
+This is the reason of a few things:
+</p><p>- When writing to DIV, the whole counter is reseted, so the timer is also affected.
+</p><p>- When writing to DIV, if the current output is '1' and timer is 
+enabled, as the new value after reseting DIV will be '0', the falling 
+edge detector will detect a falling edge and TIMA will increase.
+</p><p>- When writing to TAC, if the previously selected multiplexer 
+input was '1' and the new input is '0', TIMA will increase too. This 
+doesn't happen when the timer is disabled, but it also happens when 
+disabling the timer (the same effect as writing to DIV). The following 
+code explains the behaviour in DMG and MGB.
+</p>
+<pre>clocks_array[4] = {1024, 16, 64, 256}
+
+old_clocks = clocks_array[old_TAC&amp;3]
+new_clocks = clocks_array[new_TAC&amp;3]
+
+old_enable = old_TAC &amp; BIT(2)
+new_enable = new_TAC &amp; BIT(2)
+
+sys_clocks = 16 bit system counter
+
+IF old_enable == 0 THEN
+    glitch = 0 (*)
+ELSE
+    IF new_enable == 0 THEN
+        glitch = (sys_clocks &amp; (old_clocks/2))&nbsp;!= 0
+    ELSE
+        glitch = ((sys_clocks &amp; (old_clocks/2))&nbsp;!= 0) &amp;&amp; ((sys_clocks &amp; (new_clocks/2)) == 0)
+    END IF
+END IF
+</pre>
+<p>The sentence marked with a (*) has a different behaviour in GBC (AGB 
+and AGS seem to have strange behaviour even in the other statements). 
+When enabling the timer and maintaining the same frequency it doesn't 
+glitch. When disabling the timer it doesn't glitch either. When another 
+change of value happens (so timer is enabled after the write), the 
+behaviour depends on a race condition, so it cannot be predicted for 
+every device.
+</p>
+<h2><span class="mw-headline" id="Timer_Overflow_Behaviour">Timer Overflow Behaviour</span></h2>
+<p>When TIMA overflows, the value from TMA is loaded and IF timer flag 
+is set to 1, but this doesn't happen immediately. Timer interrupt is 
+delayed 1 cycle (4 clocks) from the TIMA overflow. The TMA reload to 
+TIMA is also delayed. For one cycle, after overflowing TIMA, the value 
+in TIMA is 00h, not TMA. This happens only when an overflow happens, not
+ when the upper bit goes from 1 to 0, it can't be done manually writing 
+to TIMA, the timer has to increment itself.
+</p><p>For example (SYS is the system internal counter divided by 4 for 
+easier understanding, each increment of the graph is 1 cycle, not 1 
+clock):
+</p>
+<pre>Timer overflows:
+
+              [A] [B]
+SYS  FD FE FF |00| 01 02 03
+TIMA FF FF FF |00| 23 23 23
+TMA  23 23 23 |23| 23 23 23
+IF   E0 E0 E0 |E0| E4 E4 E4
+
+Timer doesn't overflow:
+
+              [C]
+SYS  FD FE FF 00 01 02 03
+TIMA 45 45 45 46 46 46 46
+TMA  23 23 23 23 23 23 23
+IF   E0 E0 E0 E0 E0 E0 E0
+</pre>
+<p>- During the strange cycle [A] you can prevent the IF flag from being
+ set and prevent the TIMA from being reloaded from TMA by writing a 
+value to TIMA. That new value will be the one that stays in the TIMA 
+register after the instruction. Writing to DIV, TAC or other registers 
+won't prevent the IF flag from being set or TIMA from being reloaded.
+</p><p>- If you write to TIMA during the cycle that TMA is being loaded 
+to it [B], the write will be ignored and TMA value will be written to 
+TIMA instead.
+</p><p>- If TMA is written the same cycle it is loaded to TIMA [B], TIMA is also loaded with that value.
+</p><p>- This is a guessed schematic to explain the priorities with registers TIMA and TMA:
+</p><p><a href="https://gbdev.gg8.se/wiki/articles/File:Timer_tima_tma_detailed.png" class="image"><img alt="Timer tima tma detailed.png" src="Timer%20Obscure%20Behaviour%20-%20GbdevWiki_files/Timer_tima_tma_detailed.png" width="615" height="525"></a>
+</p><p>TMA is a latch. As soon as it is written, the output shows that 
+value. That explains that when TMA is written and TIMA is being 
+incremented, the value written to TMA is also written to TIMA. It 
+doesn't affect the IF flag, though.
+</p>
+<!-- 
+NewPP limit report
+CPU time usage: 0.023 seconds
+Real time usage: 0.026 seconds
+Preprocessor visited node count: 22/1000000
+Preprocessor generated node count: 56/1000000
+Post‐expand include size: 0/2097152 bytes
+Template argument size: 0/2097152 bytes
+Highest expansion depth: 2/40
+Expensive parser function count: 0/100
+-->
+
+<!-- 
+Transclusion expansion time report (%,ms,calls,template)
+100.00%    0.000      1 - -total
+-->
+
+<!-- Saved in parser cache with key gbdevwiki-gbdevwiki_:pcache:idhash:168-0!*!*!!*!5!* and timestamp 20221124154630 and revision id 569
+ -->
+</div><div class="printfooter">
+Retrieved from "<a dir="ltr" href="https://gbdev.gg8.se/wiki/index.php?title=Timer_Obscure_Behaviour&amp;oldid=569">https://gbdev.gg8.se/wiki/index.php?title=Timer_Obscure_Behaviour&amp;oldid=569</a>"</div>
+					<div id="catlinks" class="catlinks catlinks-allhidden"></div>					<!-- end content -->
+										<div class="visualClear"></div>
+				</div>
+			</div>
+		</div>
+		<div id="column-one">
+			<h2>Navigation menu</h2>
+					<div id="p-cactions" class="portlet" role="navigation">
+			<h3>Views</h3>
+
+			<div class="pBody">
+				<ul>
+				<li id="ca-nstab-main" class="selected"><a href="https://gbdev.gg8.se/wiki/articles/Timer_Obscure_Behaviour" title="View the content page [Alt+Shift+c]" accesskey="c">Page</a></li>
+				<li id="ca-talk" class="new"><a href="https://gbdev.gg8.se/wiki/index.php?title=Talk:Timer_Obscure_Behaviour&amp;action=edit&amp;redlink=1" title="Discussion about the content page [Alt+Shift+t]" accesskey="t">Discussion</a></li>
+				<li id="ca-viewsource"><a href="https://gbdev.gg8.se/wiki/index.php?title=Timer_Obscure_Behaviour&amp;action=edit" title="This page is protected.
+You can view its source [Alt+Shift+e]" accesskey="e">View source</a></li>
+				<li id="ca-history"><a href="https://gbdev.gg8.se/wiki/index.php?title=Timer_Obscure_Behaviour&amp;action=history" title="Past revisions of this page [Alt+Shift+h]" accesskey="h">History</a></li>
+				</ul>
+							</div>
+		</div>
+				<div class="portlet" id="p-personal" role="navigation">
+				<h3>Personal tools</h3>
+
+				<div class="pBody">
+					<ul>
+													<li id="pt-login"><a href="https://gbdev.gg8.se/wiki/index.php?title=Special:UserLogin&amp;returnto=Timer+Obscure+Behaviour" title="You are encouraged to log in; however, it is not mandatory [Alt+Shift+o]" accesskey="o">Log in</a></li>
+											</ul>
+				</div>
+			</div>
+			<div class="portlet" id="p-logo" role="banner">
+				<a href="https://gbdev.gg8.se/wiki/articles/Main_Page" class="mw-wiki-logo" title="Visit the main page"></a>
+			</div>
+				<div class="generated-sidebar portlet" id="p-site_navigation" role="navigation">
+		<h3>site navigation</h3>
+		<div class="pBody">
+							<ul>
+											<li id="n-GB-dev-forum"><a href="https://gbdev.gg8.se/forums/" rel="nofollow">GB dev forum</a></li>
+											<li id="n-GB-dev-file-hub"><a href="https://gbdev.gg8.se/files/" rel="nofollow">GB dev file hub</a></li>
+											<li id="n-Front-page"><a href="https://gbdev.gg8.se/" rel="nofollow">Front page</a></li>
+									</ul>
+					</div>
+		</div>
+		<div class="generated-sidebar portlet" id="p-wiki_navigation" role="navigation">
+		<h3>wiki navigation</h3>
+		<div class="pBody">
+							<ul>
+											<li id="n-mainpage-description"><a href="https://gbdev.gg8.se/wiki/articles/Main_Page" title="Visit the main page [Alt+Shift+z]" accesskey="z">Main page</a></li>
+											<li id="n-recentchanges"><a href="https://gbdev.gg8.se/wiki/articles/Special:RecentChanges" title="A list of recent changes in the wiki [Alt+Shift+r]" accesskey="r">Recent changes</a></li>
+											<li id="n-randompage"><a href="https://gbdev.gg8.se/wiki/articles/Special:Random" title="Load a random page [Alt+Shift+x]" accesskey="x">Random page</a></li>
+											<li id="n-help"><a href="https://www.mediawiki.org/wiki/Special:MyLanguage/Help:Contents" title="The place to find out">Help</a></li>
+									</ul>
+					</div>
+		</div>
+			<div id="p-search" class="portlet" role="search">
+			<h3><label for="searchInput">Search</label></h3>
+
+			<div id="searchBody" class="pBody">
+				<form action="/wiki/index.php" id="searchform">
+					<input type="hidden" name="title" value="Special:Search">
+					<input type="search" name="search" placeholder="Search" title="Search GbdevWiki [Alt+Shift+f]" accesskey="f" id="searchInput" autocomplete="off">
+					<input type="submit" name="go" value="Go" title="Go to a page with this exact name if exists" id="searchGoButton" class="searchButton">&nbsp;
+						<input type="submit" name="fulltext" value="Search" title="Search the pages for this text" id="mw-searchButton" class="searchButton">
+				</form>
+
+							</div>
+		</div>
+			<div class="portlet" id="p-tb" role="navigation">
+			<h3>Tools</h3>
+
+			<div class="pBody">
+				<ul>
+											<li id="t-whatlinkshere"><a href="https://gbdev.gg8.se/wiki/articles/Special:WhatLinksHere/Timer_Obscure_Behaviour" title="A list of all wiki pages that link here [Alt+Shift+j]" accesskey="j">What links here</a></li>
+											<li id="t-recentchangeslinked"><a href="https://gbdev.gg8.se/wiki/articles/Special:RecentChangesLinked/Timer_Obscure_Behaviour" title="Recent changes in pages linked from this page [Alt+Shift+k]" accesskey="k">Related changes</a></li>
+											<li id="t-specialpages"><a href="https://gbdev.gg8.se/wiki/articles/Special:SpecialPages" title="A list of all special pages [Alt+Shift+q]" accesskey="q">Special pages</a></li>
+											<li id="t-print"><a href="https://gbdev.gg8.se/wiki/index.php?title=Timer_Obscure_Behaviour&amp;printable=yes" rel="alternate" title="Printable version of this page [Alt+Shift+p]" accesskey="p">Printable version</a></li>
+											<li id="t-permalink"><a href="https://gbdev.gg8.se/wiki/index.php?title=Timer_Obscure_Behaviour&amp;oldid=569" title="Permanent link to this revision of the page">Permanent link</a></li>
+											<li id="t-info"><a href="https://gbdev.gg8.se/wiki/index.php?title=Timer_Obscure_Behaviour&amp;action=info" title="More information about this page">Page information</a></li>
+									</ul>
+							</div>
+		</div>
+			</div><!-- end of the left (by default at least) column -->
+		<div class="visualClear"></div>
+					<div id="footer" role="contentinfo">
+						<div id="f-poweredbyico">
+									<a href="https://www.mediawiki.org/"><img src="Timer%20Obscure%20Behaviour%20-%20GbdevWiki_files/poweredby_mediawiki_88x31.png" alt="Powered by MediaWiki" srcset="Timer%20Obscure%20Behaviour%20-%20GbdevWiki_files/poweredby_mediawiki_132x47.png 1.5x, Timer%20Obscure%20Behaviour%20-%20GbdevWiki_files/poweredby_mediawiki_176x62.png 2x" width="88" height="31"></a>
+							</div>
+					<ul id="f-list">
+									<li id="lastmod"> This page was last modified on 23 November 2014, at 05:50.</li>
+									<li id="privacy"><a href="https://gbdev.gg8.se/wiki/articles/GbdevWiki:Privacy_policy" title="GbdevWiki:Privacy policy">Privacy policy</a></li>
+									<li id="about"><a href="https://gbdev.gg8.se/wiki/articles/GbdevWiki:About" title="GbdevWiki:About">About GbdevWiki</a></li>
+									<li id="disclaimer"><a href="https://gbdev.gg8.se/wiki/articles/GbdevWiki:General_disclaimer" title="GbdevWiki:General disclaimer">Disclaimers</a></li>
+							</ul>
+		</div>
+		</div>
+		<script>if(window.jQuery)jQuery.ready();</script><script>if(window.mw){
+mw.loader.state({"site":"loading","user":"ready","user.groups":"ready"});
+}</script>
+<script>if(window.mw){
+mw.loader.load(["mediawiki.action.view.postEdit","mediawiki.user","mediawiki.hidpi","mediawiki.page.ready","mediawiki.searchSuggest"],null,true);
+}</script>
+<script>if(window.mw){
+document.write("\u003Cscript src=\"https://gbdev.gg8.se/wiki/load.php?debug=false\u0026amp;lang=en\u0026amp;modules=site\u0026amp;only=scripts\u0026amp;skin=monobook\u0026amp;*\"\u003E\u003C/script\u003E");
+}</script><script src="Timer%20Obscure%20Behaviour%20-%20GbdevWiki_files/load_002.es"></script>
+<script>if(window.mw){
+mw.config.set({"wgBackendResponseTime":69});
+}</script>
+<div style="display: none; font-size: 11.4617px;" class="suggestions"><div class="suggestions-results"></div><div class="suggestions-special"></div></div></body></html>

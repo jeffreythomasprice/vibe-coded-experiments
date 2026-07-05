@@ -1,0 +1,66 @@
+# Example emulator settings.
+#
+# Copy this to your config directory as `settings.toml`:
+#
+#   Linux:   ~/.config/emulator/settings.toml
+#   macOS:   ~/Library/Application Support/emulator/settings.toml
+#
+# The emulator writes this file with defaults on first run if it does not exist,
+# so copying is optional — you can also just edit the generated file. Override the
+# location entirely with `--config <path>`.
+#
+# Every field is optional; anything omitted falls back to its default.
+
+[graphics]
+# How the emulated 160x144 frame is scaled into the window:
+#   "original"           one source pixel per physical pixel, centered
+#   "fit"                largest size that preserves aspect ratio (default)
+#   "stretch"            fill the window, ignoring aspect ratio
+#   { scaled = 4.0 }     a fixed factor, preserving aspect ratio
+scale_mode = "fit"
+
+[audio]
+# Sound output. `enabled` opens (or skips) the system audio device; `volume` is
+# the master gain from 0.0 (silent) to 1.0 (full). Both are optional.
+enabled = true
+volume = 0.5
+
+[paths]
+# Where the file-system backend keeps ROMs and saves. Absolute paths only (no `~`
+# expansion). Omit either key to use the default, which sits next to this file:
+#   saves_dir = "<config_dir>/saves"   e.g. ~/.config/emulator/saves
+#   roms_dir  = "<config_dir>/roms"    e.g. ~/.config/emulator/roms
+# saves_dir = "/home/you/games/gb/saves"
+# roms_dir  = "/home/you/games/gb/roms"
+
+[input]
+# Input bindings map host inputs (keyboard, mouse, gamepad) to actions. Each action
+# takes an array of triggers, so several inputs can drive the same action. A trigger
+# is one of:
+#   { key = "arrow_up" }          a keyboard key (names mirror physical key codes)
+#   { mouse_button = "left" }     a mouse button
+#   { gamepad_button = "south" }  a gamepad button (south/east/north/west = face buttons)
+#
+# Omit an action to use its default; give it an empty array `[]` to leave it unbound
+# (it can never fire). This whole section — and [gameboy.input] below — is optional;
+# with nothing here, every action uses its built-in default.
+#
+# To extract every action with its default binding filled in, dump the complete
+# configuration to a file (this prints to stdout and exits without opening a window):
+#
+#   cargo run -p emulator -- print-config > ~/.config/emulator/settings.toml
+#
+# Generic actions, shared by every emulator core:
+# menu = [{ key = "escape" }]   # open the menu (no menu UI yet)
+
+[gameboy.input]
+# Game Boy buttons. Defaults: the d-pad is the arrow keys; X = A, Z = B,
+# Enter = Start, Right Shift = Select.
+# up     = [{ key = "arrow_up" }]
+# down   = [{ key = "arrow_down" }]
+# left   = [{ key = "arrow_left" }]
+# right  = [{ key = "arrow_right" }]
+# a      = [{ key = "key_x" }]
+# b      = [{ key = "key_z" }]
+# start  = [{ key = "enter" }]
+# select = [{ key = "shift_right" }]

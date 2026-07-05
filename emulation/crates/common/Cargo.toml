@@ -1,0 +1,21 @@
+[package]
+name = "common"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Shared workspace utilities (logging init, etc.)"
+
+[dependencies]
+tracing.workspace = true
+tracing-subscriber.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+bytemuck.workspace = true
+
+[build-dependencies]
+toml.workspace = true
+glob.workspace = true
+
+[dev-dependencies]
+toml.workspace = true

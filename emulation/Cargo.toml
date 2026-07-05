@@ -1,0 +1,44 @@
+[workspace]
+resolver = "2"
+members = ["crates/common", "crates/gameboy", "crates/emulator", "crates/video", "crates/audio"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Jeff Price <jeffrey.thomas.price@gmail.com>"]
+
+[workspace.dependencies]
+common = { path = "crates/common" }
+gameboy = { path = "crates/gameboy" }
+video = { path = "crates/video" }
+audio = { path = "crates/audio" }
+
+# Rendering / windowing
+wgpu = "22.1"
+winit = "0.30"
+pollster = "0.3"
+bytemuck = { version = "1.16", features = ["derive"] }
+
+# Audio
+cpal = "0.15"
+
+# Input
+gilrs = "0.11"
+
+# Diagnostics
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Serialization / config
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+directories = "6"
+
+# Image encoding (test-ROM harness screenshots; dev-only)
+png = "0.17"
+
+# Build-time workspace introspection (used by the `common` crate's build.rs)
+glob = "0.3"
