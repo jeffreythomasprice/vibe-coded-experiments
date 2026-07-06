@@ -119,7 +119,9 @@ mod tests {
 
     fn info(file_name: &str, title: &str) -> RomInfo {
         let header = CartridgeHeader::parse(&rom_with_title(title)).expect("valid header");
-        let stem = file_name.rsplit_once('.').map_or(file_name, |(stem, _)| stem);
+        let stem = file_name
+            .rsplit_once('.')
+            .map_or(file_name, |(stem, _)| stem);
         RomInfo {
             id: RomId(file_name.to_string()),
             file_stem: stem.to_string(),

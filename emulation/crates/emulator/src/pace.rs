@@ -32,6 +32,14 @@ const LAG_HYSTERESIS: Duration = Duration::from_millis(750);
 /// While lagging, re-log at most this often.
 const LAG_REPEAT: Duration = Duration::from_secs(60);
 
+/// Wall-clock span each actual-speed sample is averaged over. Long enough to be
+/// steady, short enough to react to the host bogging down.
+const MEASURE_WINDOW: Duration = Duration::from_millis(500);
+
+/// If no frame ran for this long (paused, or the menu is open), discard the
+/// in-progress sample so the idle gap isn't averaged into the next reading.
+const MEASURE_GAP_RESET: Duration = Duration::from_millis(250);
+
 /// The base frame period at native speed, derived from the master clock and the
 /// T-cycles in one PPU frame (≈ 16_742_706 ns).
 fn native_period() -> Duration {
@@ -53,6 +61,15 @@ fn frame_period(mode: SpeedMode) -> Option<Duration> {
     }
 }
 
+/// Log the chosen speed mode once (shared by construction and runtime changes).
+fn log_mode(mode: SpeedMode) {
+    match mode {
+        SpeedMode::Native => tracing::info!("emulation speed: native (~59.7 Hz)"),
+        SpeedMode::Relative(factor) => tracing::info!(factor, "emulation speed: {factor}x native"),
+        SpeedMode::Unbounded => tracing::info!("emulation speed: unbounded (as fast as possible)"),
+    }
+}
+
 /// Paces emulated frames against the wall clock per a [`SpeedMode`].
 pub struct Pacer {
     mode: SpeedMode,
@@ -69,18 +86,20 @@ pub struct Pacer {
     lagging: bool,
     /// When we last emitted a lag warning (to rate-limit the repeats).
     last_lag_log: Option<Instant>,
+    /// Wall-clock start of the current actual-speed sampling window.
+    measure_start: Option<Instant>,
+    /// Frames run since the sampling window started.
+    measure_frames: u32,
+    /// When `tick` last ran, to detect idle gaps (pause/menu) and discard a window.
+    last_tick: Option<Instant>,
+    /// The most recent measured actual speed (× real time), for the HUD.
+    measured_speed: Option<f32>,
 }
 
 impl Pacer {
     /// Build a pacer for `mode`, logging the chosen mode once.
     pub fn new(mode: SpeedMode) -> Pacer {
-        match mode {
-            SpeedMode::Native => tracing::info!("emulation speed: native (~59.7 Hz)"),
-            SpeedMode::Relative(factor) => {
-                tracing::info!(factor, "emulation speed: {factor}x native")
-            }
-            SpeedMode::Unbounded => tracing::info!("emulation speed: unbounded (as fast as possible)"),
-        }
+        log_mode(mode);
         Pacer {
             mode,
             period: frame_period(mode),
@@ -89,7 +108,54 @@ impl Pacer {
             ontime_since: None,
             lagging: false,
             last_lag_log: None,
+            measure_start: None,
+            measure_frames: 0,
+            last_tick: None,
+            measured_speed: None,
         }
+    }
+
+    /// The speed mode the pacer is currently running at (for the speed HUD).
+    pub fn mode(&self) -> SpeedMode {
+        self.mode
+    }
+
+    /// The most recently measured actual emulation speed as a multiple of real
+    /// time (e.g. `2.77` when the machine is running at 2.77× native), or `None`
+    /// until the first sampling window completes. Diverging below the target
+    /// speed means the host can't keep up.
+    pub fn actual_speed(&self) -> Option<f32> {
+        self.measured_speed
+    }
+
+    /// Switch to a new speed mode at runtime: recompute the target period, re-arm
+    /// the schedule fresh, and reset the lag tracking so a mode change doesn't
+    /// carry over stale behind/caught-up state.
+    pub fn set_mode(&mut self, mode: SpeedMode) {
+        log_mode(mode);
+        self.mode = mode;
+        self.period = frame_period(mode);
+        self.next_deadline = None;
+        self.behind_since = None;
+        self.ontime_since = None;
+        self.lagging = false;
+        self.last_lag_log = None;
+        // The old actual-speed reading is meaningless at the new speed.
+        self.measure_start = None;
+        self.measure_frames = 0;
+        self.last_tick = None;
+        self.measured_speed = None;
+    }
+
+    /// Drop any armed deadline so the next paced tick re-arms from `now`. Called
+    /// when resuming from a pause so the idle interval isn't treated as owed
+    /// frames (which would trigger a catch-up burst). Also discards the
+    /// in-progress actual-speed window (but keeps the last reading for display).
+    pub fn resync(&mut self) {
+        self.next_deadline = None;
+        self.measure_start = None;
+        self.measure_frames = 0;
+        self.last_tick = None;
     }
 
     /// Whether audio samples should be sent to the device in this mode. Only near
@@ -120,13 +186,15 @@ impl Pacer {
         let Some(period) = self.period else {
             // Unbounded: one frame per iteration, no deadline bookkeeping.
             run_frame();
+            self.account(1, Instant::now());
             return;
         };
 
         let now = Instant::now();
         let deadline = *self.next_deadline.get_or_insert(now + period);
         if now < deadline {
-            return; // not time for the next frame yet
+            self.account(0, now); // no frame due, but keep the measurement clock moving
+            return;
         }
 
         // Run owed frames, capped so a slow host can't spiral. Re-sample the
@@ -147,10 +215,39 @@ impl Pacer {
             self.next_deadline = Some(after + period);
         }
         self.update_lag(behind, after);
+        self.account(frames, after);
+    }
+
+    /// Fold `frames_ran` (as of wall-clock `now`) into the actual-speed
+    /// measurement, publishing a fresh sample each time the window fills. The
+    /// speed is `frames × native_period / elapsed` — the emulated frame rate
+    /// expressed as a multiple of native (real-time) speed.
+    fn account(&mut self, frames_ran: u32, now: Instant) {
+        if let Some(last) = self.last_tick {
+            if now.duration_since(last) >= MEASURE_GAP_RESET {
+                // Idle since the last tick (paused / menu open) — start fresh so
+                // the gap isn't counted as slow emulation.
+                self.measure_start = None;
+                self.measure_frames = 0;
+            }
+        }
+        self.last_tick = Some(now);
+
+        let start = *self.measure_start.get_or_insert(now);
+        self.measure_frames += frames_ran;
+        let elapsed = now.duration_since(start);
+        if elapsed >= MEASURE_WINDOW {
+            let speed =
+                self.measure_frames as f64 * native_period().as_secs_f64() / elapsed.as_secs_f64();
+            self.measured_speed = Some(speed as f32);
+            self.measure_start = Some(now);
+            self.measure_frames = 0;
+        }
     }
 
     fn deadline(&self) -> Instant {
-        self.next_deadline.expect("deadline armed before catch-up loop")
+        self.next_deadline
+            .expect("deadline armed before catch-up loop")
     }
 
     /// Fold this wake's keeping-up verdict into the lag state, logging on the
@@ -203,14 +300,63 @@ mod tests {
     #[test]
     fn relative_halves_or_doubles_the_period() {
         let base = native_period();
-        assert_eq!(frame_period(SpeedMode::Relative(2.0)), Some(base.div_f32(2.0)));
+        assert_eq!(
+            frame_period(SpeedMode::Relative(2.0)),
+            Some(base.div_f32(2.0))
+        );
         assert_eq!(frame_period(SpeedMode::Unbounded), None);
     }
 
     #[test]
     fn non_positive_factor_falls_back_to_native() {
-        assert_eq!(frame_period(SpeedMode::Relative(0.0)), Some(native_period()));
-        assert_eq!(frame_period(SpeedMode::Relative(-1.0)), Some(native_period()));
+        assert_eq!(
+            frame_period(SpeedMode::Relative(0.0)),
+            Some(native_period())
+        );
+        assert_eq!(
+            frame_period(SpeedMode::Relative(-1.0)),
+            Some(native_period())
+        );
+    }
+
+    #[test]
+    fn set_mode_updates_period_and_rearms() {
+        let mut pacer = Pacer::new(SpeedMode::Native);
+        // Arm a deadline, then a mode change must recompute the period and clear it.
+        pacer.tick(|| {});
+        assert!(pacer.next_deadline.is_some());
+        pacer.set_mode(SpeedMode::Relative(2.0));
+        assert_eq!(pacer.mode(), SpeedMode::Relative(2.0));
+        assert_eq!(pacer.period, frame_period(SpeedMode::Relative(2.0)));
+        assert!(pacer.next_deadline.is_none());
+        pacer.set_mode(SpeedMode::Unbounded);
+        assert_eq!(pacer.period, None);
+    }
+
+    #[test]
+    fn actual_speed_is_measured_then_cleared_on_mode_change() {
+        let mut pacer = Pacer::new(SpeedMode::Unbounded);
+        assert!(pacer.actual_speed().is_none());
+        // Unbounded runs one frame per tick; loop past the sampling window.
+        let start = Instant::now();
+        while start.elapsed() < Duration::from_millis(800) && pacer.actual_speed().is_none() {
+            pacer.tick(|| {});
+        }
+        let speed = pacer.actual_speed();
+        assert!(speed.is_some(), "a sample should land within the window");
+        assert!(speed.unwrap() > 0.0);
+        // Switching speed invalidates the old reading.
+        pacer.set_mode(SpeedMode::Native);
+        assert!(pacer.actual_speed().is_none());
+    }
+
+    #[test]
+    fn resync_clears_the_deadline() {
+        let mut pacer = Pacer::new(SpeedMode::Native);
+        pacer.tick(|| {});
+        assert!(pacer.next_deadline.is_some());
+        pacer.resync();
+        assert!(pacer.next_deadline.is_none());
     }
 
     #[test]
@@ -243,7 +389,10 @@ mod tests {
         while start.elapsed() < Duration::from_millis(1000) && !pacer.lagging {
             pacer.tick(|| std::thread::sleep(Duration::from_millis(3)));
         }
-        assert!(pacer.lagging, "a host slower than the target should be flagged");
+        assert!(
+            pacer.lagging,
+            "a host slower than the target should be flagged"
+        );
     }
 
     #[test]
@@ -255,7 +404,10 @@ mod tests {
         assert!(pacer.lagging);
         // Recovery also needs to be sustained past the hysteresis window.
         pacer.update_lag(false, t0 + Duration::from_secs(2));
-        assert!(pacer.lagging, "one on-time wake shouldn't clear the lag flag");
+        assert!(
+            pacer.lagging,
+            "one on-time wake shouldn't clear the lag flag"
+        );
         pacer.update_lag(false, t0 + Duration::from_secs(3));
         assert!(!pacer.lagging, "sustained on-time wakes clear it");
     }

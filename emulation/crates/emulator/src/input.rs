@@ -127,9 +127,7 @@ impl InputRouter {
     /// state the router does not own.
     pub fn handle(&mut self, trigger: InputTrigger, pressed: bool) {
         if pressed {
-            if let Some(actions) = self.generic.get(&trigger) {
-                self.pending_generic.extend_from_slice(actions);
-            }
+            self.handle_generic(trigger);
         }
 
         if let Some(buttons) = self.gameboy.get(&trigger) {
@@ -143,6 +141,17 @@ impl InputRouter {
                     tracing::debug!(?button, pressed, "gameboy button");
                 }
             }
+        }
+    }
+
+    /// Queue only the *generic* actions bound to `trigger` (a press), ignoring the
+    /// Game Boy button side. The menu overlay uses this so a global hotkey — most
+    /// importantly the menu key itself — still fires while the menu is open (and
+    /// the machine is paused), without a menu click leaking into the game as a
+    /// held button.
+    pub fn handle_generic(&mut self, trigger: InputTrigger) {
+        if let Some(actions) = self.generic.get(&trigger) {
+            self.pending_generic.extend_from_slice(actions);
         }
     }
 

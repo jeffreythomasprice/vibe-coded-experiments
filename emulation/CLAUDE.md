@@ -18,15 +18,22 @@ This is a Cargo workspace. Crates live under `crates/`:
 - `gameboy` — Game Boy (SM83) emulator core. System-agnostic emulation logic,
   no UI/windowing dependencies.
 - `video` — generic wgpu video output (`PixelBufferRenderer`, pixel-format
-  conversion, letterboxing). Consumes `common::ScaleMode`; owns only the
-  wgpu-bound `Background` fill color.
+  conversion, letterboxing) plus the wgpu **egui overlay backend**
+  (`EguiRenderer`). Consumes `common::ScaleMode`; owns only the wgpu-bound
+  `Background` fill color. The only crate that touches `egui-wgpu`.
 - `audio` — generic cpal audio output (`AudioOutput` trait + `CpalAudioOutput`
   impl, streaming rate conversion). The audio analog of `video`: it is the only
   crate that touches the real-device audio library (cpal), so a headless build
   can swap in a different sink. Keep 3rd-party audio deps isolated here.
+- `ui` — the backend-agnostic menu overlay, built on **`egui` core only** (no
+  `wgpu`, `winit`, or `gameboy`). Owns the menu screens, the navigation/capture
+  state machine, the input-bindings editor, and the embedded pixel font. It is the
+  reuse boundary: a second frontend supplies its own input/render backends and
+  calls the same `ui::draw`. See "UI overlay" below.
 - `emulator` — desktop UI shell (winit + wgpu) that hosts emulator cores. Binary
   entry point; calls `common::init()` at startup. Owns the file-system
-  implementation of the storage traits (`FileStore`).
+  implementation of the storage traits (`FileStore`) and the winit/wgpu wiring
+  that drives the `ui`/`video`/`audio` crates.
 
 New crates go under `crates/` and get added to `[workspace] members` in the root
 `Cargo.toml`; they are then picked up by the logging filter automatically.
@@ -40,8 +47,8 @@ The persistent-state system splits an **abstract interface** from its **backend*
   (`RomId`, `SaveId`, `SaveSlot`) and a `StorageError`. It is deliberately
   **path-free**: nothing here names a file or directory, so a future non-file
   backend (database, cloud) can implement the same traits. `common::settings`
-  holds only backend-agnostic settings (graphics scale mode; input bindings are a
-  stub). Where ROMs/saves live is *not* here — that is backend config.
+  holds only backend-agnostic settings (graphics scale mode; the generic input
+  bindings). Where ROMs/saves live is *not* here — that is backend config.
 - `emulator/src/storage.rs`'s `FileStore` is the only implementation today. It
   owns **all** filesystem concerns: resolving the config dir via the `directories`
   crate (`~/.config/emulator`), the on-disk `settings.toml` schema (which adds a
@@ -475,6 +482,52 @@ runs:
   is the seam a future run loop feeds with `SystemBus::take_audio_samples`;
   like `Gfx::update_frame` it is `#[allow(dead_code)]` until the top-level
   CPU+PPU+APU run loop lands, so the stream currently plays silence.
+
+# UI overlay
+
+The runtime menu overlays egui on top of the emulator video. It follows the same
+agnostic-interface / concrete-backend split as video and audio, choosing the crate
+for each piece by its coupling so a future frontend (e.g. a web app) reuses as much
+as possible — egui splits cleanly along exactly this seam:
+
+- **`ui` crate (`egui` core + `common` only):** the reusable UI. It owns
+  `MenuState` (the `Screen` navigation + rebind-`Capture` state machine),
+  `ui::draw(ctx, &mut state, &MenuData) -> Vec<MenuCommand>` (the screens: Root,
+  Select ROM, Options, Input Bindings), the embedded `assets/Early GameBoy.ttf`
+  font (`install_fonts`), and `trigger_label`. It is deliberately free of `wgpu`,
+  `winit`, and `gameboy`: every system-specific value crosses the boundary as a
+  plain `common`/`String` type (`RomChoice`, `BindingRow`, `BindingSet`), and every
+  effect the UI can't perform leaves as a `MenuCommand` (`LoadRom`, `Exit`,
+  `CloseMenu`, `SetBinding`). `cargo tree -p ui` shows neither wgpu nor winit — that
+  is the reuse boundary, and it should stay that way.
+- **`video::EguiRenderer` (`egui-wgpu`):** the GPU backend. It renders the
+  host-tessellated `EguiPaint` (primitives + textures delta + pixels-per-point)
+  into a `RenderTarget`, mirroring `PixelBufferRenderer`/`VideoOutput` so a wgpu
+  host drives it the same way. It uses `LoadOp::Load` so the menu composits over
+  the game rather than clearing it.
+- **`emulator` (`egui-winit`):** the winit glue that can't be shared.
+  `EguiPlatform` (`egui_platform.rs`) owns the `egui::Context` and
+  `egui_winit::State`, translating winit events to egui input and tessellating
+  `ui::draw`'s output each frame. `App` orchestrates: it forwards events to egui
+  first and gates the game `InputRouter` on egui's `consumed` flag; the already-
+  wired `GenericAction::Menu` (default Escape) now toggles the menu
+  (`apply_generic_actions`); while the menu is open `drive_emulation` early-returns
+  (the machine pauses) and `about_to_wait` pumps redraws itself (the run loop no
+  longer does); menu `MenuCommand`s are applied in the redraw path
+  (`load_rom` hot-swaps the cartridge; `apply_binding_edit` rebuilds the router and
+  persists). Rebind capture routes the next raw key/mouse/gamepad input into
+  `MenuState::capture` instead of the game.
+
+Rendering detail: the game wants the sRGB surface for correct colors but egui wants
+a linear target (it gamma-corrects itself), so `Gfx` adds the non-sRGB view format
+to the surface `view_formats` and draws the egui pass through a linear *view* of the
+same surface texture (`egui_format`).
+
+Editable bindings persist through a `FileStore`-specific `save_input_bindings`
+(writing both `[input]` and `[gameboy.input]`) rather than the `SettingsStore`
+trait's `save_settings`, because the Game Boy bindings live outside
+`common::Settings` (the same reason `[paths]` does). `ActionBindings::set` (in
+`common`) is the by-name write path the editor uses.
 
 # Style
 

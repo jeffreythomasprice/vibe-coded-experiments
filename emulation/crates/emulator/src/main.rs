@@ -1,5 +1,6 @@
 mod app;
 mod catalog;
+mod egui_platform;
 mod gfx;
 mod input;
 mod pace;
@@ -10,7 +11,7 @@ mod storage;
 use std::path::PathBuf;
 
 use anyhow::{bail, Context};
-use common::RomLibrary;
+use common::{RomLibrary, SpeedMode};
 use gameboy::Cartridge;
 use winit::event_loop::{ControlFlow, EventLoop};
 
@@ -23,14 +24,17 @@ const HELP: &str = "\
 emulator — a Game Boy emulator shell
 
 Usage:
-  emulator [--config <path>]              Launch the ROM menu UI (not yet implemented)
-  emulator run <name> [--config <path>]   Boot the ROM matching <name> (file name or header title)
-  emulator list-roms [--config <path>]    List every ROM found in the roms dir (scanned recursively)
-  emulator print-config                   Print the default settings.toml and exit
-  emulator --help                         Show this help and exit
+  emulator [--config <path>] [--speed <s>]           Launch the shell in menu mode (pick a ROM in-app)
+  emulator run <name> [--config <path>] [--speed <s>] Boot the ROM matching <name> (file name or header title)
+  emulator list-roms [--config <path>]               List every ROM found in the roms dir (scanned recursively)
+  emulator print-config                              Print the default settings.toml and exit
+  emulator --help                                    Show this help and exit
 
 Options:
   -c, --config <path>   Use an alternate settings file instead of the default location.
+  -s, --speed <s>       Emulation speed for this run: a positive factor (e.g. 1, 2, 3.75)
+                        or \"max\" for as-fast-as-possible. Overrides the saved setting;
+                        not persisted. Defaults to the saved setting (1x).
   -h, --help            Show this help and exit.
 ";
 
@@ -39,17 +43,27 @@ Options:
 enum Cli {
     Help,
     PrintConfig,
-    ListRoms { config: Option<PathBuf> },
-    Run { config: Option<PathBuf>, name: String },
-    Menu { config: Option<PathBuf> },
+    ListRoms {
+        config: Option<PathBuf>,
+    },
+    Run {
+        config: Option<PathBuf>,
+        name: String,
+        speed: Option<SpeedMode>,
+    },
+    Menu {
+        config: Option<PathBuf>,
+        speed: Option<SpeedMode>,
+    },
 }
 
 /// Minimal hand-rolled parser (no clap): `--help`/`-h` prints help and exits;
 /// `print-config` prints the default settings; `run <name>` boots a ROM by name;
-/// no subcommand launches the (stubbed) menu UI. `--config`/`-c`/`--config=`
+/// no subcommand launches the shell in menu mode. `--config`/`-c`/`--config=`
 /// selects the settings file for the run/menu commands.
 fn parse_args() -> anyhow::Result<Cli> {
     let mut config = None;
+    let mut speed = None;
     let mut subcommand: Option<String> = None;
     let mut name: Option<String> = None;
 
@@ -62,6 +76,11 @@ fn parse_args() -> anyhow::Result<Cli> {
             config = Some(PathBuf::from(value));
         } else if let Some(value) = arg.strip_prefix("--config=") {
             config = Some(PathBuf::from(value));
+        } else if arg == "--speed" || arg == "-s" {
+            let value = args.next().context("--speed requires a value argument")?;
+            speed = Some(SpeedMode::parse_cli(&value).map_err(|err| anyhow::anyhow!(err))?);
+        } else if let Some(value) = arg.strip_prefix("--speed=") {
+            speed = Some(SpeedMode::parse_cli(value).map_err(|err| anyhow::anyhow!(err))?);
         } else if arg.starts_with('-') && arg != "-" {
             bail!("unknown argument: {arg}");
         } else if subcommand.is_none() {
@@ -74,12 +93,16 @@ fn parse_args() -> anyhow::Result<Cli> {
     }
 
     match subcommand.as_deref() {
-        None => Ok(Cli::Menu { config }),
+        None => Ok(Cli::Menu { config, speed }),
         Some("print-config") => Ok(Cli::PrintConfig),
         Some("list-roms") => Ok(Cli::ListRoms { config }),
         Some("run") => {
             let name = name.context("`run` requires a rom name argument")?;
-            Ok(Cli::Run { config, name })
+            Ok(Cli::Run {
+                config,
+                name,
+                speed,
+            })
         }
         Some(other) => bail!("unknown subcommand: {other}"),
     }
@@ -100,8 +123,12 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Cli::ListRoms { config } => list_roms(config),
-        Cli::Menu { config } => run_menu(config),
-        Cli::Run { config, name } => run_rom(config, &name),
+        Cli::Menu { config, speed } => run_menu(config, speed),
+        Cli::Run {
+            config,
+            name,
+            speed,
+        } => run_rom(config, &name, speed),
     }
 }
 
@@ -125,21 +152,17 @@ fn list_roms(config: Option<PathBuf>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// The default command: launch the ROM menu UI. That UI does not exist yet, so
-/// scan the library into a catalog (exercising the path the menu will use) and
-/// exit with a warning instead of opening a window.
-fn run_menu(config: Option<PathBuf>) -> anyhow::Result<()> {
+/// The default command: launch the emulator window with no ROM loaded, showing
+/// the menu overlay. `App` scans the ROM library itself, so a ROM can be picked
+/// from the in-app list.
+fn run_menu(config: Option<PathBuf>, speed: Option<SpeedMode>) -> anyhow::Result<()> {
     let store = FileStore::open(config).context("failed to open persistent-state store")?;
-    let catalog = RomCatalog::load(&store);
-    tracing::warn!(
-        roms = catalog.roms().len(),
-        "menu UI not implemented yet; exiting"
-    );
-    Ok(())
+    tracing::info!("starting emulator shell in menu mode");
+    run_app(store, None, None, speed)
 }
 
 /// Boot a ROM found by name (file name or header title) in the emulator window.
-fn run_rom(config: Option<PathBuf>, name: &str) -> anyhow::Result<()> {
+fn run_rom(config: Option<PathBuf>, name: &str, speed: Option<SpeedMode>) -> anyhow::Result<()> {
     let store = FileStore::open(config).context("failed to open persistent-state store")?;
     let catalog = RomCatalog::load(&store);
 
@@ -161,21 +184,23 @@ fn run_rom(config: Option<PathBuf>, name: &str) -> anyhow::Result<()> {
     rom::restore_battery(&mut cart, &save_id, &store)?;
 
     tracing::info!(rom = %info.id.0, "starting emulator shell");
-    run_app(store, Some(cart), Some(save_id))
+    run_app(store, Some(cart), Some(save_id), speed)
 }
 
-/// Build the winit event loop and run the `App`, optionally with a loaded cartridge.
+/// Build the winit event loop and run the `App`, optionally with a loaded cartridge
+/// and a speed override (which wins over the persisted setting for this run).
 fn run_app(
     store: FileStore,
     cartridge: Option<Cartridge>,
     save_id: Option<common::SaveId>,
+    speed: Option<SpeedMode>,
 ) -> anyhow::Result<()> {
     let scale_mode = store.settings().graphics.scale_mode;
 
     let event_loop = EventLoop::new().context("failed to create event loop")?;
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut app = App::new(store, cartridge, save_id, scale_mode);
+    let mut app = App::new(store, cartridge, save_id, scale_mode, speed);
     event_loop.run_app(&mut app).context("event loop error")?;
 
     Ok(())

@@ -131,6 +131,14 @@ impl ActionBindings {
         }
     }
 
+    /// Overwrite the explicit triggers stored for `name` (an [`Action::name`]).
+    /// The array is used verbatim by [`Self::triggers`] — including an empty one,
+    /// which reads back as a deliberate "unbound" rather than the code default.
+    /// This is the write path a rebinding UI uses.
+    pub fn set(&mut self, name: &str, triggers: Vec<InputTrigger>) {
+        self.0.insert(name.to_string(), triggers);
+    }
+
     /// A binding set with every action written out explicitly at its default —
     /// the fully-populated form used by the config-dump subcommand.
     pub fn with_all_defaults<A: Action>() -> ActionBindings {
@@ -179,17 +187,32 @@ pub enum GenericAction {
     /// Persist the loaded cartridge's battery-backed RAM (and RTC) to its save
     /// file immediately, rather than waiting for the on-exit flush.
     SaveBattery,
+    /// Step the emulation speed up one ladder rung.
+    IncreaseSpeed,
+    /// Step the emulation speed down one ladder rung.
+    DecreaseSpeed,
+    /// Pause or resume the emulated machine.
+    TogglePause,
 }
 
 impl Action for GenericAction {
     fn all() -> &'static [Self] {
-        &[GenericAction::Menu, GenericAction::SaveBattery]
+        &[
+            GenericAction::Menu,
+            GenericAction::SaveBattery,
+            GenericAction::IncreaseSpeed,
+            GenericAction::DecreaseSpeed,
+            GenericAction::TogglePause,
+        ]
     }
 
     fn name(&self) -> &'static str {
         match self {
             GenericAction::Menu => "menu",
             GenericAction::SaveBattery => "save_battery",
+            GenericAction::IncreaseSpeed => "increase_speed",
+            GenericAction::DecreaseSpeed => "decrease_speed",
+            GenericAction::TogglePause => "toggle_pause",
         }
     }
 
@@ -197,6 +220,9 @@ impl Action for GenericAction {
         match self {
             GenericAction::Menu => vec![InputTrigger::Key(Key::Escape)],
             GenericAction::SaveBattery => vec![InputTrigger::Key(Key::F5)],
+            GenericAction::IncreaseSpeed => vec![InputTrigger::Key(Key::Equal)],
+            GenericAction::DecreaseSpeed => vec![InputTrigger::Key(Key::Minus)],
+            GenericAction::TogglePause => vec![InputTrigger::Key(Key::Space)],
         }
     }
 }

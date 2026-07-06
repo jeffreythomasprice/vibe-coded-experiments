@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/common", "crates/gameboy", "crates/emulator", "crates/video", "crates/audio"]
+members = ["crates/common", "crates/gameboy", "crates/emulator", "crates/video", "crates/audio", "crates/ui"]
 
 [workspace.package]
 version = "0.1.0"
@@ -13,12 +13,18 @@ common = { path = "crates/common" }
 gameboy = { path = "crates/gameboy" }
 video = { path = "crates/video" }
 audio = { path = "crates/audio" }
+ui = { path = "crates/ui" }
 
 # Rendering / windowing
 wgpu = "22.1"
 winit = "0.30"
 pollster = "0.3"
 bytemuck = { version = "1.16", features = ["derive"] }
+
+# UI (egui 0.29 tracks wgpu 22.1 / winit 0.30)
+egui = "0.29"
+egui-wgpu = "0.29"
+egui-winit = "0.29"
 
 # Audio
 cpal = "0.15"

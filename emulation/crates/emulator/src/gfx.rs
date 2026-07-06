@@ -3,8 +3,8 @@ use std::sync::Arc;
 use common::ScaleMode;
 use thiserror::Error;
 use video::{
-    Background, BitOrder, Color, PixelBuffer, PixelBufferRenderer, PixelFormat, RenderTarget,
-    SurfaceLayout, VideoOutput,
+    Background, BitOrder, Color, EguiPaint, EguiRenderer, PixelBuffer, PixelBufferRenderer,
+    PixelFormat, RenderTarget, SurfaceLayout, VideoOutput,
 };
 use winit::window::Window;
 
@@ -44,6 +44,9 @@ pub struct Gfx {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     renderer: PixelBufferRenderer,
+    egui: EguiRenderer,
+    /// Linear (non-sRGB) view format for the egui overlay pass.
+    egui_format: wgpu::TextureFormat,
 }
 
 impl Gfx {
@@ -89,6 +92,17 @@ impl Gfx {
             .or_else(|| caps.formats.first().copied())
             .ok_or(GfxError::IncompatibleSurface)?;
 
+        // egui renders best into a non-sRGB target (it applies gamma itself); the
+        // game wants the sRGB surface for correct colors. So the egui pass draws
+        // through a linear (non-sRGB) *view* of the same surface texture, which
+        // requires that view format to be allowed on the surface.
+        let egui_format = format.remove_srgb_suffix();
+        let view_formats = if egui_format != format {
+            vec![egui_format]
+        } else {
+            vec![]
+        };
+
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
@@ -96,7 +110,7 @@ impl Gfx {
             height: size.height.max(1),
             present_mode: caps.present_modes[0],
             alpha_mode: caps.alpha_modes[0],
-            view_formats: vec![],
+            view_formats,
             desired_maximum_frame_latency: 2,
         };
         surface.configure(&device, &config);
@@ -108,12 +122,16 @@ impl Gfx {
 
         blit_shades(&mut renderer, &device, &queue, &placeholder_shades())?;
 
+        let egui = EguiRenderer::new(&device, egui_format);
+
         Ok(Self {
             surface,
             device,
             queue,
             config,
             renderer,
+            egui,
+            egui_format,
         })
     }
 
@@ -135,7 +153,10 @@ impl Gfx {
         tracing::trace!(?new_size, "reconfigured surface");
     }
 
-    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+    /// Present the last-uploaded emulator frame, optionally with an egui overlay
+    /// (the menu) drawn on top. The overlay is loaded onto the game image, so it
+    /// composits over it rather than clearing it.
+    pub fn render(&mut self, egui: Option<&EguiPaint>) -> Result<(), wgpu::SurfaceError> {
         let frame = self.surface.get_current_texture()?;
         let view = frame
             .texture
@@ -155,6 +176,23 @@ impl Gfx {
             tracing::error!(%err, "frame render failed");
         }
 
+        if let Some(paint) = egui {
+            // Draw egui through a linear view of the same texture (see `egui_format`).
+            let egui_view = frame.texture.create_view(&wgpu::TextureViewDescriptor {
+                format: Some(self.egui_format),
+                ..Default::default()
+            });
+            self.egui.render(
+                RenderTarget {
+                    device: &self.device,
+                    queue: &self.queue,
+                    view: &egui_view,
+                    surface: layout,
+                },
+                paint,
+            );
+        }
+
         frame.present();
         Ok(())
     }
@@ -170,7 +208,11 @@ impl Gfx {
 fn pack_grey2(shades: &[u8]) -> Vec<u8> {
     let w = SCREEN_WIDTH as usize;
     let h = SCREEN_HEIGHT as usize;
-    debug_assert_eq!(shades.len(), w * h, "shade buffer must be one byte per pixel");
+    debug_assert_eq!(
+        shades.len(),
+        w * h,
+        "shade buffer must be one byte per pixel"
+    );
     let stride = w / 4;
     let mut data = vec![0u8; stride * h];
     for y in 0..h {

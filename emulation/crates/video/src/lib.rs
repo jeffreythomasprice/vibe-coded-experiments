@@ -6,11 +6,13 @@
 //! [`PixelBuffer`] in any supported [`PixelFormat`], converts it to RGBA8, and blits it
 //! to the surface scaled per a [`ScaleMode`] with a configurable letterbox [`Background`].
 
+mod egui_renderer;
 mod format;
 mod pixel_buffer;
 mod scale;
 
 pub use common::{ScaleMode, Transform};
+pub use egui_renderer::{EguiPaint, EguiRenderer};
 pub use format::{BitOrder, Color, FormatError, PixelBuffer, PixelFormat};
 pub use pixel_buffer::PixelBufferRenderer;
 pub use scale::Background;

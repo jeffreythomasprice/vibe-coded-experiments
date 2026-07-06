@@ -4,13 +4,20 @@ A Rust workspace for building system emulators, starting with the original DMG
 Game Boy. Crates live under `crates/`:
 
 - `common` — shared utilities: logging init, the abstract persistent-state
-  interface, and the shared video `ScaleMode`.
+  interface, the backend-agnostic settings/input model, and the shared video
+  `ScaleMode`.
 - `gameboy` — the Game Boy (SM83) emulator core. System-agnostic; no UI or
   filesystem dependencies.
 - `video` — generic wgpu video output (scaling, letterboxing, pixel-format
-  conversion) that UI shells drive to present a frame.
-- `emulator` — the desktop UI shell (winit + wgpu) that hosts a core. Binary entry
-  point.
+  conversion) plus the wgpu egui overlay backend that UI shells drive to present a
+  frame.
+- `audio` — generic cpal audio output (streaming rate conversion) — the audio
+  analog of `video`.
+- `ui` — the backend-agnostic menu overlay (built on `egui` core): the menu
+  screens, navigation, and input-bindings editor, depending on no windowing or GPU
+  library so a second frontend (e.g. a web app) can reuse it.
+- `emulator` — the desktop UI shell (winit + wgpu) that hosts a core and wires
+  `ui`/`video`/`audio` to real devices. Binary entry point.
 
 ## Building and running
 
@@ -22,8 +29,31 @@ cargo run -p emulator -- [--config <path>] [rom]
 - `rom` (optional) is a path to a Game Boy ROM to load and run.
 - `--config <path>` (optional, also `-c`) overrides the settings file location.
 
-With no ROM, the shell opens an empty window. `RUST_LOG` overrides the default log
-filter (our crates at `trace`, everything else at `warn`).
+With no ROM, the shell opens in **menu mode** (see [In-app menu](#in-app-menu)).
+`RUST_LOG` overrides the default log filter (our crates at `trace`, everything
+else at `warn`).
+
+## In-app menu
+
+An overlay menu, rendered on top of the video output in the embedded
+`Early GameBoy` pixel font, is available at runtime. It opens automatically when
+the shell starts with no ROM, and can be toggled any time with the **menu key**
+(**Escape** by default, rebindable). While it is open the emulated machine pauses.
+
+- **Root** — `Select ROM` (or `Select A Different ROM` when a game is running),
+  `Options`, `Exit`.
+- **Select ROM** — a scrollable list of the ROMs found in the configured roms dir
+  (the same catalog `list-roms` prints). Picking one hot-loads it, flushing the
+  current game's battery first.
+- **Options → Input Bindings** — a scrollable table of every bindable action
+  (generic actions, then the Game Boy buttons) showing its first two bound
+  triggers. **Click a cell** and press a key / mouse button / gamepad button to
+  rebind it; **right-click** a cell to clear it. Edits persist to `settings.toml`
+  immediately.
+
+The menu overlay lives in the reusable `ui` crate; the desktop shell only supplies
+the winit event translation and the wgpu render backend, so a future frontend can
+present the same menu against its own backends.
 
 ## Listing ROMs
 
@@ -52,7 +82,7 @@ Three kinds of state live there:
 | --- | --- | --- |
 | Settings | `settings.toml` | Graphics scale mode; input bindings. |
 | Saves | `saves/` | Battery RAM (and, later, save states). Configurable. |
-| ROMs | `roms/` | Where a future in-app ROM browser looks. Configurable. |
+| ROMs | `roms/` | Where the in-app ROM browser and `list-roms` look. Configurable. |
 
 ### Creating `settings.toml`
 
@@ -85,7 +115,9 @@ it. Defaults: d-pad = arrow keys, `X` = A, `Z` = B, `Enter` = Start, `Right Shif
 
 An action **omitted** from the file uses its default; an action set to an **empty
 array** (`up = []`) is deliberately unbound. Because the defaults live in code, the
-file can be empty and everything still works.
+file can be empty and everything still works. Bindings can also be edited live from
+[the in-app menu](#in-app-menu) (Options → Input Bindings), which writes the same
+`settings.toml`.
 
 To extract the full set of defaults — every action written out explicitly — run the
 `print-config` subcommand, which prints a complete `settings.toml` to stdout and

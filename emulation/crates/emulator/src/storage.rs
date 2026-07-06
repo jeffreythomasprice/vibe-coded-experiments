@@ -78,7 +78,8 @@ impl FileStore {
             .unwrap_or_else(|| PathBuf::from("."));
 
         let file = if config_path.exists() {
-            let text = fs::read_to_string(&config_path).map_err(|err| io_error(&config_path, err))?;
+            let text =
+                fs::read_to_string(&config_path).map_err(|err| io_error(&config_path, err))?;
             let file: FileConfig = toml::from_str(&text).map_err(|err| {
                 StorageError::Serialization(format!("{}: {err}", config_path.display()))
             })?;
@@ -149,6 +150,28 @@ impl FileStore {
             paths: PathsConfig::default(),
         };
         toml::to_string_pretty(&config).map_err(|err| StorageError::Serialization(err.to_string()))
+    }
+
+    /// Persist both the generic and Game Boy input bindings to `settings.toml`.
+    /// Mirrors [`SettingsStore::save_settings`]' read-modify-write so the other
+    /// sections (notably a hand-edited `[paths]`) survive the rewrite. Game Boy
+    /// bindings live outside [`common::Settings`], so this is a `FileStore`
+    /// method rather than part of the `SettingsStore` trait — it is the write
+    /// path for the in-app bindings editor.
+    pub fn save_input_bindings(
+        &self,
+        generic: &InputBindings,
+        gameboy: &ActionBindings,
+    ) -> Result<(), StorageError> {
+        let mut file: FileConfig = match fs::read_to_string(&self.config_path) {
+            Ok(text) => toml::from_str(&text).unwrap_or_else(|_| self.file.clone()),
+            Err(_) => self.file.clone(),
+        };
+        file.input = generic.clone();
+        file.gameboy.input = gameboy.clone();
+        write_config(&self.config_path, &file)?;
+        tracing::info!(path = %self.config_path.display(), "saved input bindings");
+        Ok(())
     }
 
     /// Path a `(SaveId, SaveSlot)` maps to under the saves directory.
@@ -451,6 +474,43 @@ mod tests {
             bindings.triggers(&GameboyButton::A),
             vec![InputTrigger::Key(Key::KeyX)]
         );
+
+        let _ = fs::remove_dir_all(config.parent().unwrap());
+    }
+
+    #[test]
+    fn save_input_bindings_round_trips_both_sections_and_preserves_paths() {
+        use common::input::{InputTrigger, Key};
+
+        let config = scratch_config();
+        let custom_roms = config.parent().unwrap().join("custom-roms");
+        create_dir(config.parent().unwrap()).unwrap();
+        fs::write(
+            &config,
+            format!("[paths]\nroms_dir = \"{}\"\n", custom_roms.display()),
+        )
+        .unwrap();
+
+        let store = FileStore::open(Some(config.clone())).unwrap();
+
+        // Rebind a generic action and a Game Boy button, then persist.
+        let mut generic = store.settings().input;
+        generic.0.set("menu", vec![InputTrigger::Key(Key::Tab)]);
+        let mut gameboy = store.gameboy_bindings();
+        gameboy.set("a", vec![InputTrigger::Key(Key::KeyQ)]);
+        store.save_input_bindings(&generic, &gameboy).unwrap();
+
+        // Reopen: both edits load and the hand-edited [paths] survives.
+        let reopened = FileStore::open(Some(config.clone())).unwrap();
+        assert_eq!(
+            reopened.settings().input.0.triggers(&GenericAction::Menu),
+            vec![InputTrigger::Key(Key::Tab)]
+        );
+        assert_eq!(
+            reopened.gameboy_bindings().triggers(&GameboyButton::A),
+            vec![InputTrigger::Key(Key::KeyQ)]
+        );
+        assert_eq!(reopened.roms_dir, custom_roms);
 
         let _ = fs::remove_dir_all(config.parent().unwrap());
     }

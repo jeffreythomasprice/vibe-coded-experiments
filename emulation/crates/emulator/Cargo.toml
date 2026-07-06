@@ -11,12 +11,16 @@ common.workspace = true
 gameboy.workspace = true
 video.workspace = true
 audio.workspace = true
+ui.workspace = true
 
 wgpu.workspace = true
 winit.workspace = true
 pollster.workspace = true
 bytemuck.workspace = true
 gilrs.workspace = true
+
+egui.workspace = true
+egui-winit.workspace = true
 
 serde.workspace = true
 toml.workspace = true

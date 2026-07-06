@@ -1,0 +1,11 @@
+[package]
+name = "ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Backend-agnostic emulator UI (egui) reused across frontends"
+
+[dependencies]
+common.workspace = true
+egui.workspace = true
