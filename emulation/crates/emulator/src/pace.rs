@@ -8,7 +8,9 @@
 //!   ~59.7275 Hz refresh.
 //! - [`SpeedMode::Relative`] — that period divided by the factor (2.0× → half the
 //!   period). If the host can't keep up it simply runs as fast as it can.
-//! - [`SpeedMode::Unbounded`] — no pacing; run a frame every loop iteration.
+//! - [`SpeedMode::Unbounded`] — no pacing; run a wall-clock-boxed *burst* of
+//!   frames each loop iteration (the event loop yields only ~display-rate
+//!   iterations, so one frame per iteration would cap us at the refresh rate).
 //!
 //! The pacer also owns the lag reporting: it logs the mode once at construction,
 //! warns when it starts consistently falling behind its target (with hysteresis
@@ -24,6 +26,21 @@ use winit::event_loop::ControlFlow;
 /// Absorbs a stalled scheduler slice without letting a slow host accumulate an
 /// unbounded backlog of owed frames.
 const MAX_CATCHUP: u32 = 8;
+
+/// Wall-clock budget for one unbounded ("as fast as possible") burst before
+/// returning to the event loop to service input and presentation. The loop
+/// yields only ~display-rate iterations (the compositor paces `about_to_wait`),
+/// so emulating a single frame per iteration would pin unbounded mode to the
+/// refresh rate — the very reason it measured *slower* than a fixed multiplier.
+/// Running a boxed burst instead lets each iteration do as much emulation as the
+/// host can while keeping input latency to roughly one frame. Sized to about one
+/// native frame so each compositor wakeup is nearly fully utilized.
+const UNBOUNDED_BURST_BUDGET: Duration = Duration::from_micros(16_000);
+
+/// Hard cap on frames per unbounded burst — a safety valve so a host that can
+/// emulate a frame in near-zero wall-clock time can't spin the budget check
+/// indefinitely (nor overflow the sample counter). Never binds at real speeds.
+const UNBOUNDED_BURST_MAX: u32 = 4096;
 
 /// How long the machine must be continuously behind (or continuously caught up)
 /// before the lag state flips — hysteresis against single-frame jitter.
@@ -184,9 +201,22 @@ impl Pacer {
     /// when a paced frame isn't due yet.
     pub fn tick(&mut self, mut run_frame: impl FnMut()) {
         let Some(period) = self.period else {
-            // Unbounded: one frame per iteration, no deadline bookkeeping.
-            run_frame();
-            self.account(1, Instant::now());
+            // Unbounded: run a wall-clock-boxed burst rather than a single frame,
+            // so throughput isn't capped at the event loop's ~display-rate
+            // iteration rate. No deadline bookkeeping — just run until the budget
+            // (or the safety cap) is spent, then let the loop present/poll input.
+            let start = Instant::now();
+            let mut frames = 0;
+            loop {
+                run_frame();
+                frames += 1;
+                if frames >= UNBOUNDED_BURST_MAX
+                    || Instant::now().duration_since(start) >= UNBOUNDED_BURST_BUDGET
+                {
+                    break;
+                }
+            }
+            self.account(frames, Instant::now());
             return;
         };
 
@@ -348,6 +378,21 @@ mod tests {
         // Switching speed invalidates the old reading.
         pacer.set_mode(SpeedMode::Native);
         assert!(pacer.actual_speed().is_none());
+    }
+
+    #[test]
+    fn unbounded_runs_a_burst_per_tick() {
+        // The whole point of the unbounded fix: a single tick must batch many
+        // frames, not run exactly one (which would cap throughput at the event
+        // loop's iteration rate).
+        let mut pacer = Pacer::new(SpeedMode::Unbounded);
+        let mut frames = 0u32;
+        pacer.tick(|| frames += 1);
+        assert!(
+            frames > 1,
+            "unbounded should batch frames per tick, ran {frames}"
+        );
+        assert!(frames <= UNBOUNDED_BURST_MAX, "burst must honor the cap");
     }
 
     #[test]

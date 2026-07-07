@@ -22,3 +22,6 @@ wgpu.workspace = true
 pollster.workspace = true
 tracing-subscriber.workspace = true
 png.workspace = true
+# Dev-only: signal-based sampling profiler for the headless `frame_loop` example
+# (writes a flamegraph SVG). No perf privileges required.
+pprof = { version = "0.15", features = ["flamegraph"] }

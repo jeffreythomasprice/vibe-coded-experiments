@@ -1,7 +1,4 @@
-running pokemon at 5x I get an actual speed of about 3.7
-running at full speed I get an actual speed of about 0.84
-what gives?
-logging at trace maybe?
+"If the core ever does need optimizing, the flamegraph says start with Ppu::tick_one_dot (per-dot loop, ~half the time) and the WaveChannel tick."
 
 
 the Pacer in crates/emulator/src/pace.rs, should this be in common?

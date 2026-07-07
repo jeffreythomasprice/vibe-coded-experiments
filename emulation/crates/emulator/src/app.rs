@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use anyhow::Context as _;
 use common::input::{Action, GenericAction};
@@ -24,6 +25,18 @@ use crate::input::{self, InputRouter};
 use crate::pace::Pacer;
 use crate::snd::Snd;
 use crate::storage::FileStore;
+
+/// Minimum wall-clock spacing between presents. The renderer's swapchain is
+/// vsync-locked (Fifo), so calling `request_redraw` faster than the display can
+/// refresh fills the swapchain queue and then blocks every present on the next
+/// vblank — which would serialize emulation behind the ~60 Hz display and cap
+/// even the "as fast as possible" mode at the refresh rate. Presenting at most
+/// this often decouples emulation speed from the display. Chosen just under the
+/// ~16.74 ms native frame period so native-rate frames are never dropped, yet at
+/// or above a 60 Hz panel's ~16.67 ms period so we don't request presents faster
+/// than the display can retire them (which would refill the swapchain queue and
+/// reintroduce the vsync stall this is meant to avoid).
+const MIN_REDRAW_INTERVAL: Duration = Duration::from_micros(16_700);
 
 /// The winit application: owns the window and its renderer once resumed, the
 /// persistent-state store, the loaded cartridge, and the menu overlay.
@@ -57,6 +70,9 @@ pub struct App {
     /// Whether the user has paused the machine (independent of the menu, which
     /// also pauses emulation while open).
     paused: bool,
+    /// When the last present was requested, to throttle redraws to the display
+    /// rate (see [`MIN_REDRAW_INTERVAL`]). `None` until the first present.
+    last_redraw: Option<Instant>,
 }
 
 impl App {
@@ -107,6 +123,22 @@ impl App {
             pacer,
             faulted: false,
             paused: false,
+            last_redraw: None,
+        }
+    }
+
+    /// Request a present, but at most once per [`MIN_REDRAW_INTERVAL`], so we
+    /// don't outrun the vsync-locked swapchain and stall emulation behind the
+    /// display's vblank. `force` bypasses the throttle for one-shot redraws
+    /// (initial paint, resize) that must land regardless of timing.
+    fn request_present(&mut self, force: bool) {
+        let Some(window) = self.window.as_ref() else {
+            return;
+        };
+        let now = Instant::now();
+        if force || self.last_redraw.is_none_or(|t| now - t >= MIN_REDRAW_INTERVAL) {
+            self.last_redraw = Some(now);
+            window.request_redraw();
         }
     }
 
@@ -561,10 +593,14 @@ impl ApplicationHandler for App {
         // and poll for a responsive UI.
         self.drive_emulation();
         if self.menu.is_open() || self.paused {
-            if let Some(window) = self.window.as_ref() {
-                window.request_redraw();
+            // Nothing to emulate; keep the overlay/HUD live at the display rate
+            // and sleep until the next redraw is due rather than busy-spinning
+            // on `Poll` (the vsync block used to throttle this implicitly).
+            self.request_present(false);
+            match self.last_redraw.map(|t| t + MIN_REDRAW_INTERVAL) {
+                Some(deadline) => event_loop.set_control_flow(ControlFlow::WaitUntil(deadline)),
+                None => event_loop.set_control_flow(ControlFlow::Poll),
             }
-            event_loop.set_control_flow(ControlFlow::Poll);
         } else {
             event_loop.set_control_flow(self.pacer.control_flow());
         }
@@ -587,57 +623,63 @@ impl App {
         }
 
         // Disjoint field borrows so the per-frame closure can hold `emu`/`snd`
-        // mutably while the pacer (also `&mut`) drives it, and `gfx`/`window`
-        // stay free for the post-catch-up upload.
-        let App {
-            emu,
-            gfx,
-            snd,
-            window,
-            input,
-            pacer,
-            faulted,
-            ..
-        } = self;
-        let (Some(emu), Some(gfx)) = (emu.as_mut(), gfx.as_mut()) else {
-            return;
-        };
-
-        emu.set_buttons(input.gameboy_pressed());
-
-        let submit_audio = pacer.submit_audio();
+        // mutably while the pacer (also `&mut`) drives it, and `gfx` stays free
+        // for the post-catch-up upload. Scoped in a block so the borrows drop
+        // before the `&mut self` `request_present` below.
         let mut produced = false;
         let mut fault = None;
-        pacer.tick(|| {
-            let result = emu.run_frame();
-            // Always drain the APU so its buffer can't grow unbounded, even when
-            // we're not submitting (fast-forward / unbounded mute audio).
-            let samples = emu.take_audio_samples();
-            if submit_audio {
-                if let Some(snd) = snd.as_mut() {
-                    if let Err(err) = snd.submit_frame(&samples) {
-                        tracing::warn!(%err, "failed to submit audio frame");
+        {
+            let App {
+                emu,
+                gfx,
+                snd,
+                input,
+                pacer,
+                faulted,
+                ..
+            } = self;
+            let (Some(emu), Some(gfx)) = (emu.as_mut(), gfx.as_mut()) else {
+                return;
+            };
+
+            emu.set_buttons(input.gameboy_pressed());
+
+            let submit_audio = pacer.submit_audio();
+            pacer.tick(|| {
+                let result = emu.run_frame();
+                // Always drain the APU so its buffer can't grow unbounded, even
+                // when we're not submitting (fast-forward / unbounded mute audio).
+                let samples = emu.take_audio_samples();
+                if submit_audio {
+                    if let Some(snd) = snd.as_mut() {
+                        if let Err(err) = snd.submit_frame(&samples) {
+                            tracing::warn!(%err, "failed to submit audio frame");
+                        }
                     }
                 }
-            }
-            if let Some(f) = result.fault {
-                fault = Some(f);
-            }
-            produced = true;
-        });
+                if let Some(f) = result.fault {
+                    fault = Some(f);
+                }
+                produced = true;
+            });
 
-        if produced {
-            if let Err(err) = gfx.update_frame(emu.framebuffer()) {
-                tracing::warn!(%err, "failed to upload frame to the renderer");
+            if produced {
+                if let Err(err) = gfx.update_frame(emu.framebuffer()) {
+                    tracing::warn!(%err, "failed to upload frame to the renderer");
+                }
             }
-            if let Some(window) = window.as_ref() {
-                window.request_redraw();
+
+            if let Some(fault) = fault {
+                *faulted = true;
+                tracing::error!(%fault, "CPU faulted on an illegal opcode; halting emulation");
             }
         }
 
-        if let Some(fault) = fault {
-            *faulted = true;
-            tracing::error!(%fault, "CPU faulted on an illegal opcode; halting emulation");
+        // Presentation is throttled to the display rate (not to how many frames
+        // we just emulated) so a fast/unbounded run isn't serialized behind
+        // vsync — see `request_present`.
+        if produced {
+            self.request_present(false);
         }
     }
 }
