@@ -13,7 +13,7 @@ use std::fmt::Write;
 
 use crate::character::BackgroundKind;
 use crate::render::names::{attr_name, spell_circle_label};
-use crate::rules::database::{BackgroundEntry, CharmEntry, SpellEntry};
+use crate::rules::database::{ArtEntry, ArtRequirement, BackgroundEntry, CharmEntry, SpellEntry};
 
 // --------------------------------------------------------------------------
 // Single-entry renderers
@@ -112,6 +112,52 @@ pub fn spell_to_markdown(s: &SpellEntry) -> String {
     out
 }
 
+pub fn art_to_markdown(a: &ArtEntry) -> String {
+    let mut out = String::new();
+    writeln!(out, "## {} (`{}`)", a.name, a.id).unwrap();
+    writeln!(out).unwrap();
+    writeln!(out, "- **Source:** {} p.{}", a.source, a.pages).unwrap();
+    writeln!(
+        out,
+        "- **Degrees:** Initiate (Occult 1, +1 die), Adept (Occult 3, +2), Master (Occult 5, +3)"
+    )
+    .unwrap();
+    let reqs = if a.requirements.is_empty() {
+        "— (universal Occult ladder only)".to_string()
+    } else {
+        a.requirements
+            .iter()
+            .map(art_requirement_label)
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    writeln!(out, "- **Extra requirements:** {}", reqs).unwrap();
+    writeln!(out).unwrap();
+    write_description(&a.description, &mut out);
+    out
+}
+
+/// One-line label for an `ArtRequirement`, e.g. "Lore 4 from Adept" or
+/// "Craft(Water) 1 from Initiate".
+fn art_requirement_label(req: &ArtRequirement) -> String {
+    let ability = if req.ability == crate::character::AbilityKind::Craft && !req.focus.is_empty() {
+        format!("Craft({})", req.focus)
+    } else {
+        attr_or_ability_name(req.ability)
+    };
+    let degree = match req.degree {
+        1 => "Initiate",
+        2 => "Adept",
+        3 => "Master",
+        _ => "Apprentice",
+    };
+    format!("{} {} from {}", ability, req.min, degree)
+}
+
+fn attr_or_ability_name(a: crate::character::AbilityKind) -> String {
+    crate::rules::database::ability_display_name(a).to_string()
+}
+
 // --------------------------------------------------------------------------
 // List renderers
 // --------------------------------------------------------------------------
@@ -126,6 +172,10 @@ pub fn charms_to_markdown(entries: &[&CharmEntry]) -> String {
 
 pub fn spells_to_markdown(entries: &[&SpellEntry]) -> String {
     join_sections(entries.iter().map(|s| spell_to_markdown(s)))
+}
+
+pub fn arts_to_markdown(entries: &[&ArtEntry]) -> String {
+    join_sections(entries.iter().map(|a| art_to_markdown(a)))
 }
 
 // --------------------------------------------------------------------------

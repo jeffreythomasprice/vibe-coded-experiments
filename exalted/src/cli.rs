@@ -120,4 +120,12 @@ pub enum Cmd {
         /// Optional spell id.
         id: Option<String>,
     },
+    /// List all Thaumaturgy arts, or show one by id.
+    ///
+    /// With no id, every art is emitted (sorted by id). With an id, only that
+    /// entry is emitted; an unknown id exits with status 2.
+    Arts {
+        /// Optional art id (e.g. `alchemy`, `astrology`).
+        id: Option<String>,
+    },
 }

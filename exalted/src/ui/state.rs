@@ -4,6 +4,7 @@ use crate::character::{AbilityKind, AttributeKind, Caste, Character};
 use crate::error::ValidationReport;
 use crate::rules::database::{BackgroundEntry, CharmEntry, SpellEntry};
 use crate::ui::persisted::UiState;
+use crate::ui::pickers::arts_picker::ArtsPickerState;
 use crate::ui::pickers::background_picker::BackgroundPickerState;
 use crate::ui::pickers::charm_picker::CharmPickerState;
 use crate::ui::pickers::spell_picker::SpellPickerState;
@@ -78,6 +79,7 @@ pub struct AppState {
     pub charm_picker: Option<CharmPickerState>,
     pub spell_picker: Option<SpellPickerState>,
     pub background_picker: Option<BackgroundPickerState>,
+    pub arts_picker: Option<ArtsPickerState>,
 
     /// "Edit details…" modal state for a `BackgroundRef::Custom` entry on
     /// the character. Holds the index into `character.backgrounds` and a
@@ -112,6 +114,7 @@ impl AppState {
             charm_picker: None,
             spell_picker: None,
             background_picker: None,
+            arts_picker: None,
             editing_custom_background: None,
             editing_custom_charm: None,
             editing_custom_spell: None,

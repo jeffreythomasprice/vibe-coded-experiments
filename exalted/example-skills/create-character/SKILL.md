@@ -58,6 +58,16 @@ ecs spells abjuration-of-the-maidens
 ecs --output-format json spells \
   | jq '.[] | select(.circle=="terrestrial") | .id'
 
+# ── Occult Arts (Thaumaturgy) ───────────────────────────────────────────────
+# All 11 Arts (markdown: Degrees, Occult ladder, extra requirements)
+ecs arts
+
+# One Art
+ecs arts alchemy
+
+# All Arts as JSON (id/name/requirements/source/description)
+ecs --output-format json arts
+
 # ── Validate ──────────────────────────────────────────────────────────────
 # Human-readable
 ecs validate /path/to/char.toml
@@ -128,6 +138,7 @@ favored_abilities = ["Awareness", "Dodge", "Stealth", "Survival", "Athletics"]
 primary_virtue = "Compassion"           # Compassion|Conviction|Temperance|Valor
 virtue_flaw = "CompassionateMartyrdom"  # PascalCase id from the primary virtue's flaw list
 spells = []                             # array of charm-style refs (see below); usually [] at chargen
+occult_arts = []                        # array of Thaumaturgy Arts (see "Occult Arts"); usually [] unless the concept is an occultist
 xp_earned = 0                           # total XP earned across the campaign
 xp_banked = 0                           # = xp_earned - sum of all Xp-source purchases
 hearthstones = []
@@ -211,7 +222,8 @@ focus = "Water"          # the craft's focus; rendered as "Craft (Water)"
 
 [crafts.rating]
 base_dots = 0
-specialties = []         # ordinary specialties still allowed, e.g. a sub-technique
+specialties = ["Plagues"]  # a specialty is a NARROWER sub-topic within the focus,
+                           # NOT the element/material — see below
 
 [[crafts.rating.purchases]]
 
@@ -219,7 +231,15 @@ specialties = []         # ordinary specialties still allowed, e.g. a sub-techni
 kind = "ChargenPriority"
 ```
 
-A craft's dots count toward the 28-dot ability pool and the ≥10-in-Caste/Favored minimum exactly like any other ability. **Elements/materials are the `focus`, never a specialty** — older sheets that encoded the element as a specialty on a single `[abilities.Craft]` entry are the legacy form; the binary auto-migrates them but with a blank focus, so write the `[[crafts]]` form directly.
+**Canonical foci — `validate` does NOT check this string, so it's on you to get it right.** A bad/invented/wrong-Exalt focus validates clean; the only guardrail is picking from the real set:
+- **Five elemental Crafts:** `Air`, `Earth`, `Fire`, `Water`, `Wood` — each a separately-rated ability (`Exalted 2E.pdf:p213`, "Craft Minimums").
+- **Esoteric Crafts:** `Magitech`, `Genesis`, `Moliation`, `Glamour` (`Books of Sorcery Vol. 3 - Oadenol's Codex.pdf:p92` — "esoteric Crafts such as Magitech, Moliation or Glamour"; Genesis is the bio-artifice craft from the same book).
+
+Anything else — a magical-material name, a made-up domain — is almost certainly wrong; confirm with `document-search --tags exalted` before writing it.
+
+**Focus vs. specialty.** The `focus` is the whole ability (the element/material); a `specialty` is a *narrower technique inside that focus* — e.g. `focus = "Water"` with a `"Plagues"` specialty, or `focus = "Fire"` with a `"Blacksmithing"` specialty. Never encode the element/material as a specialty. Older sheets that put the element on a specialty of a single `[abilities.Craft]` entry are the legacy form; the binary auto-migrates them but with a blank focus, so write the `[[crafts]]` form directly.
+
+A craft's dots count toward the 28-dot ability pool and the ≥10-in-Caste/Favored minimum exactly like any other ability.
 
 ### Attribute priority
 
@@ -301,6 +321,50 @@ spent = 10
 body = "Learnt from a Nexus binder during the Festival of Waters."
 created_at = "2026-04-30T22:10:00Z"
 updated_at = "2026-04-30T22:10:00Z"
+```
+
+### Occult Arts (Thaumaturgy)
+
+Thaumaturgy is neither a Charm nor a Merit — just Occult ≥ 1 plus purchased
+Degrees. Each Art's `degree` is a `RatedTrait` whose dot count (0–3) is the
+Degree: Initiate (1), Adept (2), Master (3). One purchase per Degree. Occult
+gates the Degrees (Initiate 1 / Adept 3 / Master 5) and each Degree costs **5
+BP or 10 XP** (4 BP / 8 XP if Occult is Caste/Favored). A few Arts add extra
+Ability minimums (e.g. Alchemy needs Lore 2/4) — check with `ecs arts <id>`.
+`procedures` are optional single rituals at **1 XP each** (3 per BP at
+creation), each tagged with the Degree-rank it emulates (Master-rank needs
+Occult 3; lower ranks Occult 1). Don't keep a Procedure whose rank ≤ an owned
+Degree — buying that Degree refunds and removes it.
+
+```toml
+[[occult_arts]]
+id = "astrology"                    # canonical slug; verify with `ecs arts <id>`
+
+[occult_arts.degree]                # RatedTrait; dots() == Degree (0–3)
+base_dots = 0
+specialties = []
+
+[[occult_arts.degree.purchases]]    # one purchase per Degree bought
+[occult_arts.degree.purchases.source]
+kind = "Xp"                         # or BonusPoints / ChargenPriority
+spent = 10                          # 10 XP (or 8 if Occult Caste/Favored)
+
+[[occult_arts.degree.purchases]]    # a second Degree → Adept
+[occult_arts.degree.purchases.source]
+kind = "Xp"
+spent = 10
+
+[[occult_arts.procedures]]          # optional single rituals
+name = "Reading the Loom's Master Thread"
+degree = 3                          # Degree-rank the ritual emulates
+[occult_arts.procedures.source]
+kind = "Xp"                         # 1 XP each (or BonusPoints: 3 per 1 BP)
+spent = 1
+
+[[occult_arts.notes]]               # optional, same shape as everywhere
+body = "Casts natal charts for Nexus notables."
+created_at = "2026-05-16T21:00:00Z"
+updated_at = "2026-05-16T21:00:00Z"
 ```
 
 ### Combos

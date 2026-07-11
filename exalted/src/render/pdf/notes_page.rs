@@ -120,6 +120,18 @@ fn collect_sections(c: &Character) -> Vec<Section> {
             notes: combo.notes.iter().map(note_view).collect(),
         });
     }
+    // The MrGone Solar sheet has no thaumaturgy fields, so the Arts themselves
+    // (Degrees/Procedures) live only in the markdown render; but any per-Art
+    // notes surface here alongside the other entities' notes.
+    for art in &c.occult_arts {
+        if art.notes().is_empty() {
+            continue;
+        }
+        out.push(Section {
+            heading: format!("Art: {}", art.display_name(db)),
+            notes: art.notes().iter().map(note_view).collect(),
+        });
+    }
     out
 }
 

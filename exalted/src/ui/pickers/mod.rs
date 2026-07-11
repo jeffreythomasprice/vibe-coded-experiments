@@ -3,6 +3,7 @@
 //! and returns a `PickerOutcome` so the calling section can decide whether
 //! to close it.
 
+pub mod arts_picker;
 pub mod background_picker;
 pub mod charm_picker;
 pub mod spell_picker;

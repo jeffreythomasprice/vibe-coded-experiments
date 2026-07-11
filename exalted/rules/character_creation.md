@@ -489,6 +489,27 @@ Exalted types.*"
 > play, **read the table from a clean copy of the book** rather than
 > trusting either number here.
 
+### 6.5 Thaumaturgy — the Occult Arts (core p.139–142; Oadenol's Codex p.129–160)
+Thaumaturgy is the lesser magic open to mortals and Exalts alike. It is
+**neither a Charm nor a Merit** — the only universal requirement is **Occult
+1** (contrast Sorcery, which is gated behind the Terrestrial Circle Sorcery
+Charm). There are **11 Arts**: Alchemy, Astrology, the Dead, Demon Summoning,
+Elemental Summoning, Enchantment, Geomancy, Husbandry, Spirit Beckoning,
+Warding and Exorcism, and Weather Working.
+
+- Each Art has **three Degrees** — Initiate (+1 die), Adept (+2), Master (+3) —
+  gated by Occult: **Initiate 1, Adept 3, Master 5**. The Degree is a
+  specialty-dice bonus on thaumaturgy rolls, capped at **+3** total.
+- **Cost per Degree:** 5 BP or 10 XP (4 BP / 8 XP if Occult is Caste/Favored).
+  Each Degree is bought separately — a Master-level Art is three purchases.
+- Some Arts impose extra Ability minimums (e.g. **Alchemy** needs Lore 2 for a
+  Degree and Lore 4 for Adept); most add nothing beyond the Occult ladder.
+- **Procedures** are single memorized rituals: **1 XP each** (3 per bonus point
+  at creation), granting **no** bonus dice. A Master-rank Procedure needs Occult
+  3; lower ranks need only Occult 1. Buying a Degree refunds any Procedures it
+  subsumes (drop them from the sheet).
+- Reference data: `ecs arts` (list) / `ecs arts <id>` (one Art).
+
 ---
 
 ## 7. Virtues, Channelling, Suppression — see §4.3

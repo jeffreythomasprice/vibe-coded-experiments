@@ -8,7 +8,9 @@ use crate::ui::dialogs::file_picker;
 use crate::ui::io::{load_character_from_path, save_character_to_path};
 use crate::ui::menu::{self, MenuAction};
 use crate::ui::persisted::{PanelLocation, UiState};
-use crate::ui::pickers::{PickerOutcome, background_picker, charm_picker, spell_picker};
+use crate::ui::pickers::{
+    PickerOutcome, arts_picker, background_picker, charm_picker, spell_picker,
+};
 use crate::ui::search::{self, SearchBarOutcome};
 use crate::ui::sections;
 use crate::ui::sidebar;
@@ -561,6 +563,22 @@ impl App {
                     tracing::debug!(target: "exalted::ui::picker", picker = "background", outcome = "picked", "closed picker");
                     self.state.character.backgrounds.push(b);
                     self.state.mark_dirty_with("picker.background.confirm");
+                }
+            }
+        }
+        if let Some(mut picker) = self.state.arts_picker.take() {
+            let outcome = arts_picker::show(ctx, &mut picker, &self.state.character);
+            match outcome {
+                PickerOutcome::Stay => {
+                    self.state.arts_picker = Some(picker);
+                }
+                PickerOutcome::Cancelled => {
+                    tracing::debug!(target: "exalted::ui::picker", picker = "arts", outcome = "cancelled", "closed picker");
+                }
+                PickerOutcome::Picked(a) => {
+                    tracing::debug!(target: "exalted::ui::picker", picker = "arts", outcome = "picked", "closed picker");
+                    self.state.character.occult_arts.push(a);
+                    self.state.mark_dirty_with("picker.arts.confirm");
                 }
             }
         }

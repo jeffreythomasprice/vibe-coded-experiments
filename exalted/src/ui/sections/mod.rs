@@ -6,6 +6,7 @@
 use crate::ui::state::AppState;
 
 pub mod abilities;
+pub mod arts;
 pub mod attributes;
 pub mod backgrounds;
 pub mod charms;
@@ -39,6 +40,8 @@ pub fn render_all(ui: &mut egui::Ui, state: &mut AppState) {
     combos::render(ui, state);
     section_break(ui);
     spells::render(ui, state);
+    section_break(ui);
+    arts::render(ui, state);
     section_break(ui);
     backgrounds::render(ui, state);
     section_break(ui);

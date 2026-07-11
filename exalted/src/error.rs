@@ -285,6 +285,54 @@ pub enum ValidationError {
     #[error("{item} references artifact {artifact_name} that does not exist")]
     MissingLinkedArtifact { item: String, artifact_name: String },
 
+    #[error("occult art references unknown id '{id}'")]
+    UnknownArtId { id: String },
+
+    #[error("occult art {art} is at Degree {got}, above the maximum of 3")]
+    ArtDegreeOverMax { art: String, got: u8 },
+
+    #[error(
+        "occult art {art} Degree {degree} requires Occult {required}, but character has Occult {got}"
+    )]
+    ArtOccultTooLow {
+        art: String,
+        degree: u8,
+        required: u8,
+        got: u8,
+    },
+
+    #[error(
+        "occult art {art} Degree {degree} requires {ability} {required}, but character has {got}"
+    )]
+    ArtRequirementUnmet {
+        art: String,
+        degree: u8,
+        ability: String,
+        required: u8,
+        got: u8,
+    },
+
+    #[error(
+        "procedure '{procedure}' ({art}, Degree {degree}) requires Occult {required}, but character has Occult {got}"
+    )]
+    ProcedureOccultTooLow {
+        art: String,
+        procedure: String,
+        degree: u8,
+        required: u8,
+        got: u8,
+    },
+
+    #[error(
+        "procedure '{procedure}' ({art}, Degree {degree}) is subsumed by the owned Degree {art_degree} and should have been refunded"
+    )]
+    ProcedureCoveredByDegree {
+        art: String,
+        procedure: String,
+        degree: u8,
+        art_degree: u8,
+    },
+
     #[error("note: {message}")]
     Note { message: String },
 }

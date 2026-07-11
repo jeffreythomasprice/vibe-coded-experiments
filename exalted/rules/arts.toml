@@ -1,0 +1,134 @@
+# The 11 Arts of Thaumaturgy (Exalted 2e core pp.139-142; Books of Sorcery
+# Vol. 3 - Oadenol's Codex, Ch. 3, pp.129-160).
+#
+# Thaumaturgy is neither a Charm nor a Merit: the only universal entry
+# requirement is Occult >= 1. Each Art advances through three Degrees --
+# Initiate (+1), Adept (+2), Master (+3) -- gated by the universal Occult
+# ladder (Initiate = Occult 1, Adept = Occult 3, Master = Occult 5), which is a
+# code constant, not repeated here. `requirements` lists only the EXTRA Ability
+# minimums an individual Art imposes on top of that ladder.
+#
+# ArtRequirement = { ability, min, degree, focus? }
+#   "to hold Degree >= `degree` in this Art, need `ability` >= `min`."
+#   A per-Degree requirement (scales with degree) is written as one entry per
+#   Degree level. `focus` (Craft only) names the craft focus that satisfies it.
+
+[[art]]
+id = "alchemy"
+name = "Alchemy"
+source = "Oadenol's Codex"
+pages = "129"
+description = """
+Pharmacy, metallurgy, and other transformative crafts: brewing magical \
+medicines, transmuting base materials into noble ones, and temporarily \
+granting mortals Exalted-like qualities. An alchemist needs Lore 2 to gain a \
+Degree and Lore 4 to become an Adept. Beyond that, most formulas also require \
+one dot of Craft (Water) per Degree (some formulas call for a different Craft), \
+except healing formulas, which require one dot of Medicine per Degree instead \
+-- these are per-formula constraints rather than a fixed Art-Degree gate, so \
+only the Lore minimums are enforced here (Oadenol's Codex p.129)."""
+requirements = [
+    { ability = "Lore", min = 2, degree = 1 },
+    { ability = "Lore", min = 4, degree = 2 },
+]
+
+[[art]]
+id = "astrology"
+name = "Astrology"
+source = "Oadenol's Codex"
+pages = "132"
+description = """
+Reading and manipulating the influence of the Maidens' constellations to \
+divine the future and bestow fortune or misfortune. Requires an astrological \
+computer (such as an orrery) to perform the more advanced calculations."""
+requirements = []
+
+[[art]]
+id = "the-dead"
+name = "The Art of the Dead"
+source = "Oadenol's Codex"
+pages = "133"
+description = """
+Rituals for communing with, placating, binding, and laying to rest ghosts and \
+the restless dead. One of the three arts developed after the Primordial War."""
+requirements = []
+
+[[art]]
+id = "demon-summoning"
+name = "Demon Summoning"
+source = "Oadenol's Codex"
+pages = "135"
+description = """
+Summoning, binding, and bargaining with the demons of Malfeas. Dangerous work \
+requiring careful wards; the summoner must contend with the demon's will."""
+requirements = []
+
+[[art]]
+id = "elemental-summoning"
+name = "Elemental Summoning"
+source = "Oadenol's Codex"
+pages = "136"
+description = """
+Calling and treating with the elementals of Creation's five elements. One of \
+the three arts developed after the Primordial War."""
+requirements = []
+
+[[art]]
+id = "enchantment"
+name = "The Art of Enchantment"
+source = "Oadenol's Codex"
+pages = "136"
+description = """
+Imbuing objects with minor magical properties -- charms, talismans, and \
+thaumaturgic devices short of true artifice."""
+requirements = []
+
+[[art]]
+id = "geomancy"
+name = "Geomancy"
+source = "Oadenol's Codex"
+pages = "137"
+description = """
+The study and manipulation of Essence flows across the land -- dragon lines, \
+demesnes, and the siting and shaping of manses."""
+requirements = []
+
+[[art]]
+id = "husbandry"
+name = "Husbandry"
+source = "Oadenol's Codex"
+pages = "139"
+description = """
+Thaumaturgic cultivation of plants, beasts, and land -- coaxing bountiful \
+harvests, healthy herds, and cooperative weather-sensitive crops."""
+requirements = []
+
+[[art]]
+id = "spirit-beckoning"
+name = "The Art of Spirit Beckoning"
+source = "Oadenol's Codex"
+pages = "140"
+description = """
+Summoning, questioning, and treating with the gods and lesser spirits of \
+Creation, short of coercing them as an Exalt's Charms might."""
+requirements = []
+
+[[art]]
+id = "warding-and-exorcism"
+name = "Warding and Exorcism"
+source = "Oadenol's Codex"
+pages = "141"
+description = """
+Erecting protective wards against spirits, demons, and the dead, and driving \
+out those that have already intruded or possessed."""
+requirements = []
+
+[[art]]
+id = "weather-working"
+name = "Weather Working"
+source = "Oadenol's Codex"
+pages = "143"
+description = """
+Influencing and predicting local weather -- calling rain, calming storms, and \
+staving off frost or drought."""
+requirements = []

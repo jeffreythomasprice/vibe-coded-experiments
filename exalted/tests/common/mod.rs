@@ -7,7 +7,7 @@ use exalted::character::identity::VirtueFlaw;
 use exalted::character::{
     AbilityKind, AttributeGroup, AttributeKind, AttributePriority, BackgroundKind, BackgroundRef,
     Caste, CharmRef, Combo, Craft, DotSource, Intimacy, IntimacyKind, KnownLanguage,
-    LanguageFamily, Note, RatedTrait, SpellRef, VirtueKind, XpAward,
+    LanguageFamily, Note, OccultArt, Procedure, RatedTrait, SpellRef, VirtueKind, XpAward,
 };
 
 /// A canonical valid Solar Dawn character used as the baseline for chargen
@@ -173,7 +173,8 @@ pub fn valid_dawn() -> Character {
 /// plus pinned-timestamp notes on every supported location: the Character,
 /// one Background, one Charm, the spell, the Combo, and a top-level journal.
 /// Existing in-game rules require the sorcery Charm + Essence 3 before a
-/// spell can be learnt, hence the 46 XP outlay.
+/// spell can be learnt; with the Art of Astrology added on top, that is a
+/// 67 XP outlay.
 pub fn valid_dawn_with_notes_demo() -> Character {
     exalted::rules::database::init_database().ok();
     let mut c = valid_dawn();
@@ -233,9 +234,10 @@ pub fn valid_dawn_with_notes_demo() -> Character {
     );
 
     // Essence 2 → 3 (24 XP), Terrestrial Circle Sorcery (10 XP, Occult is
-    // non-C/F here), Blood Lash spell (10 XP), and the Watchful Step Combo
+    // non-C/F here), Blood Lash spell (10 XP), the Watchful Step Combo
     // bundling First Awareness + First Dodge (2 XP, sum of member min
-    // Ability ratings). 46 XP earned, 0 banked.
+    // Ability ratings), and the Art of Astrology to Adept + one Procedure
+    // (21 XP, added below). 67 XP earned, 0 banked.
     c.essence.add_xp(24);
     c.charms.push(CharmRef::lookup(
         "terrestrial-circle-sorcery",
@@ -266,7 +268,29 @@ pub fn valid_dawn_with_notes_demo() -> Character {
         )],
     });
 
-    c.xp_earned = 46;
+    // Thaumaturgy: the Art of Astrology to Adept (two Degrees at 10 XP each —
+    // Occult 3 is non-Caste/Favored here), plus one Master-rank Procedure at
+    // 1 XP. Occult 3 satisfies the Adept ladder (3) and the Master-Procedure
+    // floor (3). The Procedure emulates a Degree above the owned Adept, so it
+    // is a legitimate rote ritual rather than one the Degree would subsume.
+    // 21 XP, carrying the total from 46 to 67.
+    let mut astrology = OccultArt::lookup("astrology");
+    astrology.rating.add_xp(10); // Initiate
+    astrology.rating.add_xp(10); // Adept
+    astrology.procedures.push(Procedure {
+        name: "Reading the Loom's Master Thread".to_string(),
+        degree: 3,
+        source: DotSource::Xp { spent: 1 },
+        notes: Vec::new(),
+    });
+    astrology.notes.push(fixed_note(
+        "Casts natal charts for Nexus notables; keeps an orrery in the dojo loft.",
+        "2026-05-16T21:00:00Z",
+        "2026-05-16T21:00:00Z",
+    ));
+    c.occult_arts.push(astrology);
+
+    c.xp_earned = 67;
     c.xp_banked = 0;
     c.xp_awards = vec![
         fixed_award(
@@ -304,6 +328,12 @@ pub fn valid_dawn_with_notes_demo() -> Character {
             "Session 5 (downtime, dojo reconstruction): 4 base + 2 training",
             "2026-05-16T23:30:00Z",
             "2026-05-16T23:30:00Z",
+        ),
+        fixed_award(
+            21,
+            "Downtime arc — apprenticed to a Nexus astrologer; learned the Art of Astrology to Adept and a first Procedure",
+            "2026-05-23T23:30:00Z",
+            "2026-05-23T23:30:00Z",
         ),
     ];
 

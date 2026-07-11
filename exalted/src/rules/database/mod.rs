@@ -28,6 +28,7 @@ use crate::character::{AbilityKind, AttributeKind, BackgroundKind, SpellCircle};
 const CHARMS_TOML: &str = include_str!("../../../rules/charms.toml");
 const SPELLS_TOML: &str = include_str!("../../../rules/spells.toml");
 const BACKGROUNDS_TOML: &str = include_str!("../../../rules/backgrounds.toml");
+const ARTS_TOML: &str = include_str!("../../../rules/arts.toml");
 const GAME_RULES_MD: &str = include_str!("../../../rules/game_rules.md");
 const CHARACTER_CREATION_MD: &str = include_str!("../../../rules/character_creation.md");
 
@@ -52,12 +53,16 @@ pub enum LoadError {
     ParseSpells(toml::de::Error),
     #[error("failed to parse backgrounds.toml: {0}")]
     ParseBackgrounds(toml::de::Error),
+    #[error("failed to parse arts.toml: {0}")]
+    ParseArts(toml::de::Error),
     #[error("duplicate charm id: {0}")]
     DuplicateCharmId(String),
     #[error("duplicate spell id: {0}")]
     DuplicateSpellId(String),
     #[error("duplicate background id: {0}")]
     DuplicateBackgroundId(String),
+    #[error("duplicate art id: {0}")]
+    DuplicateArtId(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,6 +153,39 @@ pub struct BackgroundEntry {
     pub description: String,
 }
 
+/// One extra Ability minimum a Thaumaturgy Art imposes beyond the universal
+/// Occult ladder (Initiate→Occult 1, Adept→Occult 3, Master→Occult 5). Read as:
+/// "to hold Degree ≥ `degree` in this Art, the character needs `ability` ≥
+/// `min`." A requirement that scales per-Degree (e.g. Alchemy's Craft(Water) 1
+/// per Degree) is encoded as one `ArtRequirement` per Degree level.
+///
+/// `focus` disambiguates a family ability — for Craft, the craft focus (e.g.
+/// "Water"); ignored for other abilities. When set, the requirement is met by a
+/// craft of that focus rated ≥ `min`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArtRequirement {
+    pub ability: AbilityKind,
+    pub min: u8,
+    /// Lowest Degree (1..=3) this requirement applies from.
+    pub degree: u8,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub focus: String,
+}
+
+/// One Art of Thaumaturgy in the rules database. Requirements beyond the
+/// universal Occult ladder are listed in `requirements`; anything that resists
+/// structuring stays in `description`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArtEntry {
+    pub id: String,
+    pub name: String,
+    pub source: String,
+    pub pages: String,
+    #[serde(default)]
+    pub requirements: Vec<ArtRequirement>,
+    pub description: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct CharmsFile {
     #[serde(default)]
@@ -166,22 +204,30 @@ struct BackgroundsFile {
     background: Vec<BackgroundEntry>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ArtsFile {
+    #[serde(default)]
+    art: Vec<ArtEntry>,
+}
+
 #[derive(Debug, Clone)]
 pub struct RulesDatabase {
     charms: HashMap<String, CharmEntry>,
     spells: HashMap<String, SpellEntry>,
     backgrounds: HashMap<String, BackgroundEntry>,
+    arts: HashMap<String, ArtEntry>,
 }
 
 impl RulesDatabase {
     pub fn from_embedded() -> Result<Self, LoadError> {
-        Self::from_strings(CHARMS_TOML, SPELLS_TOML, BACKGROUNDS_TOML)
+        Self::from_strings(CHARMS_TOML, SPELLS_TOML, BACKGROUNDS_TOML, ARTS_TOML)
     }
 
     pub fn from_strings(
         charms_toml: &str,
         spells_toml: &str,
         backgrounds_toml: &str,
+        arts_toml: &str,
     ) -> Result<Self, LoadError> {
         let charms_file: CharmsFile =
             toml::from_str(charms_toml).map_err(LoadError::ParseCharms)?;
@@ -189,6 +235,7 @@ impl RulesDatabase {
             toml::from_str(spells_toml).map_err(LoadError::ParseSpells)?;
         let backgrounds_file: BackgroundsFile =
             toml::from_str(backgrounds_toml).map_err(LoadError::ParseBackgrounds)?;
+        let arts_file: ArtsFile = toml::from_str(arts_toml).map_err(LoadError::ParseArts)?;
 
         let expanded_charms = expand_excellency_templates(charms_file.charm);
 
@@ -216,10 +263,19 @@ impl RulesDatabase {
             backgrounds.insert(entry.id.clone(), entry);
         }
 
+        let mut arts = HashMap::new();
+        for entry in arts_file.art {
+            if arts.contains_key(&entry.id) {
+                return Err(LoadError::DuplicateArtId(entry.id));
+            }
+            arts.insert(entry.id.clone(), entry);
+        }
+
         Ok(Self {
             charms,
             spells,
             backgrounds,
+            arts,
         })
     }
 
@@ -235,6 +291,10 @@ impl RulesDatabase {
         self.backgrounds.get(id)
     }
 
+    pub fn art(&self, id: &str) -> Option<&ArtEntry> {
+        self.arts.get(id)
+    }
+
     pub fn charm_count(&self) -> usize {
         self.charms.len()
     }
@@ -247,6 +307,10 @@ impl RulesDatabase {
         self.backgrounds.len()
     }
 
+    pub fn art_count(&self) -> usize {
+        self.arts.len()
+    }
+
     pub fn iter_charms(&self) -> impl Iterator<Item = &CharmEntry> {
         self.charms.values()
     }
@@ -257,6 +321,10 @@ impl RulesDatabase {
 
     pub fn iter_backgrounds(&self) -> impl Iterator<Item = &BackgroundEntry> {
         self.backgrounds.values()
+    }
+
+    pub fn iter_arts(&self) -> impl Iterator<Item = &ArtEntry> {
+        self.arts.values()
     }
 }
 
@@ -435,6 +503,7 @@ mod tests {
             "got {} backgrounds",
             db.background_count()
         );
+        assert_eq!(db.art_count(), 11, "got {} arts", db.art_count());
         // Every BackgroundKind variant should be represented by at least one
         // entry whose `kind` matches.
         for &kind in BackgroundKind::ALL {
@@ -525,7 +594,7 @@ pages = "1"
 effect = "test"
 description = "test"
 "#;
-        let err = RulesDatabase::from_strings(dup, "", "").unwrap_err();
+        let err = RulesDatabase::from_strings(dup, "", "", "").unwrap_err();
         assert!(matches!(err, LoadError::DuplicateCharmId(ref id) if id == "x"));
     }
 
@@ -548,8 +617,29 @@ source = "test"
 pages = "1"
 description = "test"
 "#;
-        let err = RulesDatabase::from_strings("", "", dup).unwrap_err();
+        let err = RulesDatabase::from_strings("", "", dup, "").unwrap_err();
         assert!(matches!(err, LoadError::DuplicateBackgroundId(ref id) if id == "bg-x"));
+    }
+
+    #[test]
+    fn duplicate_art_id_rejected() {
+        let dup = r#"
+[[art]]
+id = "art-x"
+name = "X"
+source = "test"
+pages = "1"
+description = "test"
+
+[[art]]
+id = "art-x"
+name = "X again"
+source = "test"
+pages = "1"
+description = "test"
+"#;
+        let err = RulesDatabase::from_strings("", "", "", dup).unwrap_err();
+        assert!(matches!(err, LoadError::DuplicateArtId(ref id) if id == "art-x"));
     }
 
     #[test]
@@ -572,7 +662,7 @@ prerequisites = []
 source = "test"
 pages = "1"
 "#;
-        let err = RulesDatabase::from_strings(bad, "", "").unwrap_err();
+        let err = RulesDatabase::from_strings(bad, "", "", "").unwrap_err();
         assert!(matches!(err, LoadError::ParseCharms(_)));
     }
 

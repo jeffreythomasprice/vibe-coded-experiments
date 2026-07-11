@@ -72,3 +72,14 @@ pub fn xp_cost_spell(occult_favored_or_caste: bool) -> u32 {
 pub fn xp_cost_combo(min_ability_sum: u32) -> u32 {
     min_ability_sum
 }
+
+/// Cost to buy one Degree of a Thaumaturgy Art. Occult caste/favored = 8,
+/// otherwise = 10 (core p.140).
+pub fn xp_cost_art_degree(occult_favored_or_caste: bool) -> u32 {
+    if occult_favored_or_caste { 8 } else { 10 }
+}
+
+/// Cost to learn one thaumaturgic Procedure: a flat 1 XP each (core p.140).
+pub fn xp_cost_procedure() -> u32 {
+    1
+}

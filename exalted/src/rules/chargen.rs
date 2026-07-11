@@ -81,6 +81,38 @@ pub fn intimacy_bp_cost() -> u32 {
     3
 }
 
+/// BP cost of one Degree of a Thaumaturgy Art at chargen: 4 (Occult
+/// caste/favored) or 5 (otherwise). Mirrors the spell/charm occult discount.
+pub fn art_degree_bp_cost(occult_caste_or_favored: bool) -> u32 {
+    if occult_caste_or_favored { 4 } else { 5 }
+}
+
+/// Aggregate BP cost for `n` Procedures bought with bonus points at chargen:
+/// 3 Procedures per 1 BP → `ceil(n / 3)` (core p.140). Callers aggregate the
+/// BP-sourced procedures per Art before comparing against the paid total,
+/// mirroring [`specialty_bp_cost_for_ability`].
+pub fn procedure_bp_cost(n: usize) -> u32 {
+    (n as u32).div_ceil(3)
+}
+
+/// Minimum Occult rating required to hold Degree `degree` (1..=3) of any Art:
+/// Initiate → 1, Adept → 3, Master → 5 (core p.140). Degree 0 (Apprentice) and
+/// any out-of-range value floor to Occult 1.
+pub fn art_degree_occult_min(degree: u8) -> u8 {
+    match degree {
+        0 | 1 => 1,
+        2 => 3,
+        _ => 5,
+    }
+}
+
+/// Minimum Occult rating required to learn a Procedure that emulates Degree-rank
+/// `degree`: Initiate/Adept-rank → Occult 1, Master-rank → Occult 3 (core
+/// p.140). Procedures gate one tier lower than the full Degree.
+pub fn procedure_occult_min(degree: u8) -> u8 {
+    if degree >= 3 { 3 } else { 1 }
+}
+
 /// Run every chargen rule against the character. Collects all failures into
 /// a single `ValidationReport`.
 pub fn validate_chargen(character: &Character) -> ValidationReport {
@@ -93,6 +125,7 @@ pub fn validate_chargen(character: &Character) -> ValidationReport {
     check_backgrounds(character, &mut report);
     check_charms(character, &mut report);
     check_combos(character, &mut report);
+    check_occult_arts(character, &mut report);
     check_intimacies(character, &mut report);
     check_essence_at_chargen(character, &mut report);
     check_willpower_base(character, &mut report);
@@ -664,6 +697,117 @@ fn check_combos(c: &Character, report: &mut ValidationReport) {
     }
 }
 
+/// Structural validation for Thaumaturgy: unknown art ids, Degree cap, the
+/// universal Occult ladder, each Art's extra Ability requirements, procedure
+/// Occult floors, and a note for Procedures made redundant by an owned Degree.
+/// The BP/XP *cost* of degrees and procedures is checked in `validate_bp` /
+/// `validate_xp`, mirroring how charms/spells split across the two validators.
+fn check_occult_arts(c: &Character, report: &mut ValidationReport) {
+    let db = crate::rules::database::database();
+    let occult = c.ability(AbilityKind::Occult);
+
+    for art in &c.occult_arts {
+        let entry = art.entry(db);
+        let name = art.display_name(db).to_string();
+
+        if entry.is_none() {
+            report.push(ValidationError::UnknownArtId { id: art.id.clone() });
+        }
+
+        let degree = art.degree();
+        if degree > 3 {
+            report.push(ValidationError::ArtDegreeOverMax {
+                art: name.clone(),
+                got: degree,
+            });
+        }
+
+        // Universal Occult ladder for the held Degree (Initiate 1, Adept 3,
+        // Master 5). Degree 0 needs nothing beyond the Occult 1 floor.
+        if degree >= 1 {
+            let required = art_degree_occult_min(degree);
+            if occult < required {
+                report.push(ValidationError::ArtOccultTooLow {
+                    art: name.clone(),
+                    degree,
+                    required,
+                    got: occult,
+                });
+            }
+        }
+
+        // Per-Art extra Ability minimums, applied at the held Degree.
+        if let Some(entry) = entry {
+            for req in &entry.requirements {
+                if degree < req.degree {
+                    continue;
+                }
+                let got = ability_rating_for_requirement(c, req);
+                if got < req.min {
+                    report.push(ValidationError::ArtRequirementUnmet {
+                        art: name.clone(),
+                        degree,
+                        ability: requirement_label(req),
+                        required: req.min,
+                        got,
+                    });
+                }
+            }
+        }
+
+        // Procedures: Occult floor per emulated rank, plus a redundancy note.
+        for proc in &art.procedures {
+            let required = procedure_occult_min(proc.degree);
+            if occult < required {
+                report.push(ValidationError::ProcedureOccultTooLow {
+                    art: name.clone(),
+                    procedure: proc.name.clone(),
+                    degree: proc.degree,
+                    required,
+                    got: occult,
+                });
+            }
+            if proc.degree <= degree && degree >= 1 {
+                report.push_note(ValidationError::ProcedureCoveredByDegree {
+                    art: name.clone(),
+                    procedure: proc.name.clone(),
+                    degree: proc.degree,
+                    art_degree: degree,
+                });
+            }
+        }
+    }
+}
+
+/// Resolve the character's current rating for an `ArtRequirement`. For a Craft
+/// requirement with a `focus`, this is the rating of the matching craft focus
+/// (0 if the character has no such craft); otherwise the plain ability rating.
+fn ability_rating_for_requirement(
+    c: &Character,
+    req: &crate::rules::database::ArtRequirement,
+) -> u8 {
+    if req.ability == AbilityKind::Craft && !req.focus.is_empty() {
+        c.crafts
+            .iter()
+            .filter(|cr| cr.focus.eq_ignore_ascii_case(&req.focus))
+            .map(|cr| cr.rating.dots())
+            .max()
+            .unwrap_or(0)
+    } else {
+        c.ability(req.ability)
+    }
+}
+
+/// Human-readable ability label for a requirement, e.g. `Craft(Water)` or
+/// `Lore`.
+fn requirement_label(req: &crate::rules::database::ArtRequirement) -> String {
+    if req.ability == AbilityKind::Craft && !req.focus.is_empty() {
+        format!("Craft({})", req.focus)
+    } else {
+        format!("{:?}", req.ability)
+    }
+}
+
 fn check_intimacies(c: &Character, report: &mut ValidationReport) {
     let compassion = c.virtue(VirtueKind::Compassion);
     let willpower = c.willpower_dots();
@@ -1015,6 +1159,43 @@ pub fn validate_bp(c: &Character, report: &mut ValidationReport) {
             }
         }
     }
+
+    // Thaumaturgy Arts. Each Degree costs 4/5 BP (Occult caste/favored or not);
+    // Procedures are 3-per-BP, aggregated per Art like specialties.
+    let occult_cf = c.is_caste_or_favored_ability(AbilityKind::Occult);
+    for art in &c.occult_arts {
+        let name = art.display_name(db);
+        for p in &art.rating.purchases {
+            if let crate::character::DotSource::BonusPoints { spent } = p.source {
+                let expected = art_degree_bp_cost(occult_cf);
+                if spent as u32 != expected {
+                    report.push(ValidationError::BpCostWrong {
+                        trait_name: format!("Art::{name}"),
+                        paid: spent as u32,
+                        expected,
+                    });
+                }
+            }
+        }
+        let mut bp_proc_n = 0usize;
+        let mut bp_proc_spent = 0u32;
+        for proc in &art.procedures {
+            if let crate::character::DotSource::BonusPoints { spent } = proc.source {
+                bp_proc_n += 1;
+                bp_proc_spent += spent as u32;
+            }
+        }
+        if bp_proc_n > 0 {
+            let expected = procedure_bp_cost(bp_proc_n);
+            if bp_proc_spent != expected {
+                report.push(ValidationError::BpCostWrong {
+                    trait_name: format!("Procedure::{name} ({bp_proc_n} entries)"),
+                    paid: bp_proc_spent,
+                    expected,
+                });
+            }
+        }
+    }
 }
 
 /// Validate the XP ledger: every `Xp { spent }` purchase costs the canonical
@@ -1229,6 +1410,37 @@ pub fn validate_xp(c: &Character) -> ValidationReport {
                     paid: spent,
                     expected: canonical,
                 });
+            }
+        }
+    }
+
+    // Thaumaturgy Arts: Degrees cost 8/10 XP (Occult caste/favored or not);
+    // Procedures cost a flat 1 XP each.
+    let occult_cf = c.is_caste_or_favored_ability(AbilityKind::Occult);
+    for art in &c.occult_arts {
+        let name = art.display_name(db);
+        for p in &art.rating.purchases {
+            if let crate::character::DotSource::Xp { spent } = p.source {
+                let canonical = xp_costs::xp_cost_art_degree(occult_cf);
+                if spent != canonical {
+                    report.push(ValidationError::XpCostWrong {
+                        trait_name: format!("Art::{name}"),
+                        paid: spent,
+                        expected: canonical,
+                    });
+                }
+            }
+        }
+        for proc in &art.procedures {
+            if let crate::character::DotSource::Xp { spent } = proc.source {
+                let canonical = xp_costs::xp_cost_procedure();
+                if spent != canonical {
+                    report.push(ValidationError::XpCostWrong {
+                        trait_name: format!("Procedure::{name}::{}", proc.name),
+                        paid: spent,
+                        expected: canonical,
+                    });
+                }
             }
         }
     }

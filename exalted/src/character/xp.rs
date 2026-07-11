@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::character::{Character, DotSource};
-use crate::rules::chargen::specialty_bp_cost_for_ability;
+use crate::rules::chargen::{procedure_bp_cost, specialty_bp_cost_for_ability};
 
 /// A single XP award entered by the user — a timestamped, free-form note
 /// alongside the XP amount earned. `xp_earned` on the `Character` is the
@@ -77,6 +77,13 @@ pub fn total_xp_spent(c: &Character) -> u32 {
     for bg in &c.backgrounds {
         total += bg.trait_().xp_spent_on_dots();
     }
+    // Thaumaturgy: Degrees use the standard dot ledger; Procedures are 1 XP each.
+    for art in &c.occult_arts {
+        total += art.rating.xp_spent_on_dots();
+        for proc in &art.procedures {
+            total += proc.source.xp_spent();
+        }
+    }
     total
 }
 
@@ -141,6 +148,17 @@ pub fn total_bp_spent(c: &Character) -> u32 {
     }
     for bg in &c.backgrounds {
         total += bg.trait_().bp_spent_on_dots();
+    }
+    // Thaumaturgy: Degrees use the standard dot ledger; Procedures aggregate at
+    // 3-per-BP within each Art (ceil), matching `validate_bp`.
+    for art in &c.occult_arts {
+        total += art.rating.bp_spent_on_dots();
+        let n_bp_procs = art
+            .procedures
+            .iter()
+            .filter(|p| matches!(p.source, DotSource::BonusPoints { .. }))
+            .count();
+        total += procedure_bp_cost(n_bp_procs);
     }
     total
 }

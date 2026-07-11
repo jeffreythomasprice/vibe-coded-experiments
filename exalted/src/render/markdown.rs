@@ -29,6 +29,7 @@ pub fn character_to_markdown(c: &Character) -> String {
     section_charms(c, &mut out);
     section_combos(c, &mut out);
     section_spells(&c.spells, &mut out);
+    section_occult_arts(c, &mut out);
     section_backgrounds(c, &mut out);
     section_intimacies(c, &mut out);
     section_familiar(c, &mut out);
@@ -458,6 +459,62 @@ fn section_spells(spells: &[SpellRef], out: &mut String) {
         write_notes_block(s.notes(), "  ", out);
     }
     writeln!(out).unwrap();
+}
+
+fn section_occult_arts(c: &Character, out: &mut String) {
+    if c.occult_arts.is_empty() {
+        return;
+    }
+    let db = database();
+    let bonus = c.thaumaturgy_dice_bonus();
+    writeln!(
+        out,
+        "## Occult Arts (Thaumaturgy) — +{} dice to thaumaturgy rolls",
+        bonus
+    )
+    .unwrap();
+    for art in &c.occult_arts {
+        let degree = art.degree();
+        let degree_label = match degree {
+            0 => "Apprentice".to_string(),
+            1 => "Initiate".to_string(),
+            2 => "Adept".to_string(),
+            3 => "Master".to_string(),
+            n => format!("Degree {n}"),
+        };
+        writeln!(
+            out,
+            "- **{}** — {} ({}) *[{}]*",
+            art.display_name(db),
+            degree_label,
+            dots(degree, 3),
+            source_tag(degree_source(art)),
+        )
+        .unwrap();
+        for proc in &art.procedures {
+            writeln!(
+                out,
+                "  - Procedure: *{}* (rank {}) *[{}]*",
+                proc.name,
+                proc.degree,
+                source_tag(proc.source),
+            )
+            .unwrap();
+        }
+        write_notes_block(art.notes(), "  ", out);
+    }
+    writeln!(out).unwrap();
+}
+
+/// The source tag to show for an Art's Degree line: the source of its
+/// highest-degree purchase (they're usually all the same phase), or
+/// `ChargenPriority` as a benign default for a Degree-0 art.
+fn degree_source(art: &crate::character::OccultArt) -> crate::character::DotSource {
+    art.rating
+        .purchases
+        .last()
+        .map(|p| p.source)
+        .unwrap_or(crate::character::DotSource::ChargenPriority)
 }
 
 fn section_backgrounds(c: &Character, out: &mut String) {

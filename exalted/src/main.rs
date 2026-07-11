@@ -12,11 +12,12 @@ use exalted::Config;
 use exalted::cli::{Cli, Cmd, OutputFormat, RenderFormat, RulesTopic};
 use exalted::error::{ValidationError, ValidationReport};
 use exalted::render::{
-    background_to_markdown, backgrounds_to_markdown, character_to_markdown, character_to_pdf,
-    charm_to_markdown, charms_to_markdown, spell_to_markdown, spells_to_markdown,
+    art_to_markdown, arts_to_markdown, background_to_markdown, backgrounds_to_markdown,
+    character_to_markdown, character_to_pdf, charm_to_markdown, charms_to_markdown,
+    spell_to_markdown, spells_to_markdown,
 };
 use exalted::rules::database::{
-    BackgroundEntry, CharmEntry, SpellEntry, character_creation_markdown, database,
+    ArtEntry, BackgroundEntry, CharmEntry, SpellEntry, character_creation_markdown, database,
     game_rules_markdown, init_database,
 };
 
@@ -63,6 +64,7 @@ fn main() -> ExitCode {
         Some(Cmd::Backgrounds { id }) => run_backgrounds(id, fmt),
         Some(Cmd::Charms { id }) => run_charms(id, fmt),
         Some(Cmd::Spells { id }) => run_spells(id, fmt),
+        Some(Cmd::Arts { id }) => run_arts(id, fmt),
         None => run_ui(cli.file, config),
     }
 }
@@ -292,6 +294,22 @@ fn run_spells(id: Option<String>, fmt: OutputFormat) -> ExitCode {
             let mut entries: Vec<&SpellEntry> = db.iter_spells().collect();
             entries.sort_by(|a, b| a.id.cmp(&b.id));
             emit_list(&entries, |e| spells_to_markdown(e), fmt)
+        }
+    }
+}
+
+fn run_arts(id: Option<String>, fmt: OutputFormat) -> ExitCode {
+    tracing::info!(id = ?id, "arts");
+    let db = database();
+    match id {
+        Some(id) => match db.art(&id) {
+            Some(entry) => emit_single(entry, |a| art_to_markdown(a), fmt),
+            None => not_found("art", &id, fmt),
+        },
+        None => {
+            let mut entries: Vec<&ArtEntry> = db.iter_arts().collect();
+            entries.sort_by(|a, b| a.id.cmp(&b.id));
+            emit_list(&entries, |e| arts_to_markdown(e), fmt)
         }
     }
 }

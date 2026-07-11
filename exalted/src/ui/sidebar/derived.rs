@@ -105,6 +105,16 @@ pub fn render_body(ui: &mut egui::Ui, character: &Character) {
     section(ui, "Feats", |ui| {
         ui.label(format!("Lift: {} lbs", derived::lift_lbs(character)));
     });
+
+    if !character.occult_arts.is_empty() {
+        section(ui, "Thaumaturgy", |ui| {
+            ui.label(format!("Arts known: {}", character.occult_arts.len()));
+            ui.label(format!(
+                "Dice bonus:  +{} (to thaumaturgy rolls)",
+                character.thaumaturgy_dice_bonus()
+            ));
+        });
+    }
 }
 
 fn section(ui: &mut egui::Ui, title: &str, body: impl FnOnce(&mut egui::Ui)) {

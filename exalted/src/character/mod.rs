@@ -1,3 +1,4 @@
+pub mod arts;
 pub mod backgrounds;
 pub mod charms;
 pub mod combos;
@@ -17,6 +18,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+pub use arts::{OccultArt, Procedure};
 pub use backgrounds::{BackgroundKind, BackgroundRef, canonical_id as background_canonical_id};
 pub use charms::CharmRef;
 pub use combos::Combo;
@@ -59,6 +61,10 @@ pub struct Character {
     pub combos: Vec<Combo>,
     #[serde(default)]
     pub spells: Vec<SpellRef>,
+    /// Thaumaturgy — the Arts of the occult, with their Degrees and Procedures.
+    /// See [`arts`]. Defaulted so pre-existing character files load unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub occult_arts: Vec<OccultArt>,
     #[serde(default)]
     pub backgrounds: Vec<BackgroundRef>,
     pub intimacies: Vec<Intimacy>,
@@ -119,6 +125,7 @@ impl Character {
             charms: Vec::new(),
             combos: Vec::new(),
             spells: Vec::new(),
+            occult_arts: Vec::new(),
             backgrounds: Vec::new(),
             intimacies: Vec::new(),
             equipment: Equipment::default(),
@@ -205,6 +212,28 @@ impl Character {
 
     pub fn essence_dots(&self) -> u8 {
         self.essence.dots()
+    }
+
+    /// Highest Degree held in the given Art (0 if the character doesn't have it).
+    pub fn occult_art_degree(&self, id: &str) -> u8 {
+        self.occult_arts
+            .iter()
+            .filter(|a| a.id == id)
+            .map(|a| a.degree())
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Specialty-dice bonus thaumaturgy adds to Occult rolls: the highest Degree
+    /// across every Art known, capped at +3 (Exalted 2e core p.139). Procedures
+    /// grant no bonus and don't count.
+    pub fn thaumaturgy_dice_bonus(&self) -> u8 {
+        self.occult_arts
+            .iter()
+            .map(|a| a.degree())
+            .max()
+            .unwrap_or(0)
+            .min(3)
     }
 
     /// True while the character is still in character-creation — i.e. no XP
