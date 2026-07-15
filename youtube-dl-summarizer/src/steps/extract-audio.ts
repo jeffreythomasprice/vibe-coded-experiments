@@ -6,8 +6,10 @@ export async function extractAudio(
   cacheDir: string,
   verbose: boolean,
 ): Promise<void> {
+  const audioPath = join(cacheDir, CACHE_FILES.audio);
+
   if (await cacheExists(cacheDir, CACHE_FILES.audio)) {
-    console.error("Extracting audio... cached, skipping");
+    console.error(`Extracting audio... cached, skipping (${audioPath})`);
     return;
   }
 
@@ -23,6 +25,8 @@ export async function extractAudio(
     "-ac",
     "1",
     "-y",
-    join(cacheDir, CACHE_FILES.audio),
+    audioPath,
   ]);
+
+  console.error(`Audio saved to ${audioPath}`);
 }

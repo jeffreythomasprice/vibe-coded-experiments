@@ -11,8 +11,10 @@ export async function downloadVideo(
   cacheDir: string,
   verbose: boolean,
 ): Promise<void> {
+  const videoPath = join(cacheDir, CACHE_FILES.video);
+
   if (await cacheExists(cacheDir, CACHE_FILES.video)) {
-    console.error("Downloading video... cached, skipping");
+    console.error(`Downloading video... cached, skipping (${videoPath})`);
     return;
   }
 
@@ -55,7 +57,7 @@ export async function downloadVideo(
       "-f",
       "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
       "-o",
-      join(cacheDir, CACHE_FILES.video),
+      videoPath,
       "--no-playlist",
       "--newline",
       url,
@@ -64,6 +66,7 @@ export async function downloadVideo(
   );
 
   bar.done("done");
+  console.error(`Video saved to ${videoPath}`);
 }
 
 export async function downloadCaptions(
@@ -74,7 +77,7 @@ export async function downloadCaptions(
   // Check if we already have a .vtt file
   const existing = await findVttFile(cacheDir);
   if (existing) {
-    console.error("Downloading captions... cached, skipping");
+    console.error(`Downloading captions... cached, skipping (${existing})`);
     return existing;
   }
 
@@ -100,7 +103,9 @@ export async function downloadCaptions(
     return null;
   }
 
-  return findVttFile(cacheDir);
+  const vttPath = await findVttFile(cacheDir);
+  if (vttPath) console.error(`Captions saved to ${vttPath}`);
+  return vttPath;
 }
 
 async function findVttFile(cacheDir: string): Promise<string | null> {
