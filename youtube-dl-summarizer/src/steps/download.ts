@@ -6,6 +6,13 @@ import { Glob } from "bun";
 
 const INSTALL_HINT = "https://github.com/yt-dlp/yt-dlp#installation";
 
+// YouTube blocks yt-dlp's default player client with 403s; forcing these
+// clients works around it.
+const EXTRACTOR_ARGS = [
+  "--extractor-args",
+  "youtube:player-client=web_embedded,web,tv",
+];
+
 export async function downloadVideo(
   url: string,
   cacheDir: string,
@@ -60,6 +67,7 @@ export async function downloadVideo(
       videoPath,
       "--no-playlist",
       "--newline",
+      ...EXTRACTOR_ARGS,
       url,
     ],
     { onStdout },
@@ -96,6 +104,7 @@ export async function downloadCaptions(
       "--skip-download",
       "-o",
       join(cacheDir, "captions"),
+      ...EXTRACTOR_ARGS,
       url,
     ]);
   } catch {
