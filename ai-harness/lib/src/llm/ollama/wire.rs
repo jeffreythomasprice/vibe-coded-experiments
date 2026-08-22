@@ -478,6 +478,11 @@ struct WireLocalModelDetails {
     quantization_level: Option<String>,
     #[serde(default)]
     context_length: Option<u64>,
+    /// The size of the vector an embedding model produces. Only present on
+    /// embedding models — a chat model's `details` omits it entirely, so
+    /// `#[serde(default)]` alone (no `null_as_default`) is enough here.
+    #[serde(default)]
+    embedding_length: Option<u32>,
 }
 
 /// `#[serde(default)]` alone only kicks in when a key is *absent* — Ollama
@@ -508,16 +513,31 @@ pub fn parse_tags(body: &str) -> Result<Vec<ModelInfo>, LlmError> {
             id: m.name,
             display_name: None,
             created_at: m.modified_at.as_deref().and_then(parse_rfc3339_to_unix),
-            details: ModelDetails::OllamaLocal {
-                size_bytes: m.size,
-                digest: m.digest,
-                family: m.details.family,
-                families: m.details.families,
-                parameter_size: m.details.parameter_size,
-                quantization_level: m.details.quantization_level,
-                format: m.details.format,
-                context_length: m.details.context_length,
-                capabilities: m.capabilities,
+            details: if m.capabilities.iter().any(|c| c == "embedding") {
+                ModelDetails::OllamaLocalEmbedding {
+                    size_bytes: m.size,
+                    digest: m.digest,
+                    family: m.details.family,
+                    families: m.details.families,
+                    parameter_size: m.details.parameter_size,
+                    quantization_level: m.details.quantization_level,
+                    format: m.details.format,
+                    context_length: m.details.context_length,
+                    embedding_length: m.details.embedding_length,
+                    capabilities: m.capabilities,
+                }
+            } else {
+                ModelDetails::OllamaLocal {
+                    size_bytes: m.size,
+                    digest: m.digest,
+                    family: m.details.family,
+                    families: m.details.families,
+                    parameter_size: m.details.parameter_size,
+                    quantization_level: m.details.quantization_level,
+                    format: m.details.format,
+                    context_length: m.details.context_length,
+                    capabilities: m.capabilities,
+                }
             },
         })
         .collect())
@@ -895,7 +915,7 @@ mod tests {
     #[test]
     fn parses_local_models_including_capabilities_and_context_length() {
         let models = parse_tags(TAGS).unwrap();
-        assert_eq!(models.len(), 3);
+        assert_eq!(models.len(), 4);
         assert_eq!(models[0].id, "qwen3.8:latest");
         match &models[0].details {
             ModelDetails::OllamaLocal {
@@ -956,5 +976,37 @@ mod tests {
         let models = parse_tags(TAGS).unwrap();
         let cloud = models.iter().find(|m| m.id == "glm-5.2:cloud").unwrap();
         assert_eq!(cloud.created_at, Some(1_781_867_962));
+    }
+
+    #[test]
+    fn a_model_whose_capabilities_include_embedding_classifies_as_ollama_local_embedding() {
+        let models = parse_tags(TAGS).unwrap();
+        let embedder = models
+            .iter()
+            .find(|m| m.id == "nomic-embed-text:latest")
+            .unwrap();
+        assert!(embedder.details.is_embedding());
+        match &embedder.details {
+            ModelDetails::OllamaLocalEmbedding {
+                embedding_length,
+                context_length,
+                capabilities,
+                ..
+            } => {
+                assert_eq!(*embedding_length, Some(768));
+                assert_eq!(*context_length, Some(2048));
+                assert_eq!(capabilities, &vec!["embedding".to_string()]);
+            }
+            other => panic!("expected OllamaLocalEmbedding details, got {other:?}"),
+        }
+        assert_eq!(embedder.details.embedding_dimensions(), Some(768));
+        assert_eq!(embedder.details.max_input_tokens(), Some(2048));
+
+        // A chat model, even one whose wire payload carries its own
+        // (architectural, not embedding-task) embedding_length, must not be
+        // classified as an embedding model.
+        let chat = models.iter().find(|m| m.id == "llama3.1:8b").unwrap();
+        assert!(!chat.details.is_embedding());
+        assert!(matches!(chat.details, ModelDetails::OllamaLocal { .. }));
     }
 }

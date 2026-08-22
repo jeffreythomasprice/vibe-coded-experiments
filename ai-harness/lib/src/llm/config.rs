@@ -131,6 +131,10 @@ pub struct OllamaConfig {
     pub base_url: String,
     #[serde(default = "default_ollama_model")]
     pub model: String,
+    /// Model used for `EmbeddingProvider::embed` — distinct from `model`
+    /// since a chat model and an embedding model are different pulls.
+    #[serde(default = "default_ollama_embedding_model")]
+    pub embedding_model: String,
     /// How long Ollama keeps the model loaded after this request. Passed
     /// through verbatim as Ollama's own duration string (e.g. `"5m"`).
     #[serde(default = "default_ollama_keep_alive")]
@@ -148,6 +152,7 @@ impl Default for OllamaConfig {
         Self {
             base_url: default_ollama_base_url(),
             model: default_ollama_model(),
+            embedding_model: default_ollama_embedding_model(),
             keep_alive: default_ollama_keep_alive(),
             library_url: default_ollama_library_url(),
         }
@@ -160,6 +165,10 @@ fn default_ollama_base_url() -> String {
 
 fn default_ollama_model() -> String {
     "qwen3.5:latest".to_string()
+}
+
+fn default_ollama_embedding_model() -> String {
+    "nomic-embed-text".to_string()
 }
 
 fn default_ollama_keep_alive() -> String {
@@ -184,6 +193,10 @@ pub struct OpenAiConfig {
     /// model, since OpenAI's chat and image-generation models are disjoint.
     #[serde(default = "default_openai_image_model")]
     pub image_model: String,
+    /// Model used for `EmbeddingProvider::embed` — chat, image, and
+    /// embedding models are three disjoint sets on OpenAI.
+    #[serde(default = "default_openai_embedding_model")]
+    pub embedding_model: String,
 }
 
 impl Default for OpenAiConfig {
@@ -193,6 +206,7 @@ impl Default for OpenAiConfig {
             api_key_env: default_openai_api_key_env(),
             model: default_openai_model(),
             image_model: default_openai_image_model(),
+            embedding_model: default_openai_embedding_model(),
         }
     }
 }
@@ -219,6 +233,10 @@ fn default_openai_model() -> String {
 
 fn default_openai_image_model() -> String {
     "gpt-image-2".to_string()
+}
+
+fn default_openai_embedding_model() -> String {
+    "text-embedding-3-small".to_string()
 }
 
 /// Accepts either a TOML integer (seconds) or a suffixed string.
@@ -317,6 +335,7 @@ mod tests {
             [ollama]
             base_url = "http://localhost:11434"
             model = "llama3.1:8b"
+            embedding_model = "mxbai-embed-large"
             keep_alive = "1m"
             library_url = "https://ollama.example.com/library"
             [openai]
@@ -324,6 +343,7 @@ mod tests {
             api_key_env = "MY_OPENAI_KEY"
             model = "gpt-5.6"
             image_model = "gpt-image-1-mini"
+            embedding_model = "text-embedding-3-large"
             "#,
         )
         .unwrap();
@@ -331,8 +351,10 @@ mod tests {
         assert_eq!(parsed.max_retries, 5);
         assert_eq!(parsed.anthropic.model, "claude-haiku-4-5");
         assert_eq!(parsed.ollama.model, "llama3.1:8b");
+        assert_eq!(parsed.ollama.embedding_model, "mxbai-embed-large");
         assert_eq!(parsed.ollama.library_url, "https://ollama.example.com/library");
         assert_eq!(parsed.openai.image_model, "gpt-image-1-mini");
+        assert_eq!(parsed.openai.embedding_model, "text-embedding-3-large");
     }
 
     #[test]

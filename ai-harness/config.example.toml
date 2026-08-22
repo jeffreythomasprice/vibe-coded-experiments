@@ -76,6 +76,10 @@ base_url = "http://localhost:11434"
 
 model = "qwen3.5:latest"
 
+# Model used for `EmbeddingProvider::embed` — a distinct pull from `model`
+# above, since a chat model and an embedding model are different models.
+embedding_model = "nomic-embed-text"
+
 # How long Ollama keeps this model loaded in memory after the request.
 keep_alive = "5m"
 
@@ -93,6 +97,10 @@ model = "gpt-5.6"
 # the model `ImageProvider::generate` uses (see the README's "LLM providers"
 # section for why OpenAI is the only one of the three that offers it here).
 image_model = "gpt-image-2"
+
+# Model used for `EmbeddingProvider::embed` — a third, disjoint set from the
+# chat and image models above.
+embedding_model = "text-embedding-3-small"
 
 [cache]
 # A small disk cache for provider responses that are expensive or

@@ -260,6 +260,20 @@ mod tests {
             .find(|e| e.info.id == "glm-5.2:cloud")
             .unwrap();
         assert_eq!(cloud.local_tags, vec!["glm-5.2:cloud".to_string()]);
+
+        let embedder = entries
+            .iter()
+            .find(|e| e.info.id == "nomic-embed-text:latest")
+            .unwrap();
+        assert_eq!(
+            embedder.local_tags,
+            vec!["nomic-embed-text:latest".to_string()]
+        );
+        assert!(embedder.info.details.is_embedding());
+        assert!(matches!(
+            embedder.info.details,
+            ModelDetails::OllamaLocalEmbedding { .. }
+        ));
     }
 
     #[test]
@@ -272,6 +286,7 @@ mod tests {
             .chain(vec![
                 "qwen3.8:latest".to_string(),
                 "glm-5.2:cloud".to_string(),
+                "nomic-embed-text:latest".to_string(),
             ])
             .collect();
         let entries = merge_ollama(local, remote);

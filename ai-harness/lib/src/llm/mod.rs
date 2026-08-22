@@ -6,7 +6,7 @@
 //! `&[u8]`, unit-tested on recorded fixtures — no network) and a thin `mod.rs`
 //! that only does HTTP. There is deliberately no router here: callers
 //! construct the concrete client they want and talk to it through
-//! [`ChatProvider`] or [`ImageProvider`] directly.
+//! [`ChatProvider`], [`ImageProvider`], or [`EmbeddingProvider`] directly.
 //!
 //! See `README.md`'s "Tests" section and `CLAUDE.md` for the unit-vs-live
 //! testing split this module is built around.
@@ -32,8 +32,8 @@ use std::pin::Pin;
 use async_trait::async_trait;
 use futures_util::Stream;
 use shared::llm::{
-    ChatOptions, CompletedMessage, Conversation, GeneratedImage, ImageRequest, ModelInfo,
-    StreamEvent,
+    ChatOptions, CompletedMessage, Conversation, EmbeddingRequest, EmbeddingResponse,
+    GeneratedImage, ImageRequest, ModelInfo, StreamEvent,
 };
 
 /// A stream of `StreamEvent`s from [`ChatProvider::stream`].
@@ -118,4 +118,79 @@ pub trait ModelProvider: Send + Sync {
     fn name(&self) -> &'static str;
 
     async fn list_models(&self, freshness: Freshness) -> Result<Vec<ModelInfo>, LlmError>;
+}
+
+/// A provider that can turn text into vectors. `OpenAiClient` and
+/// `OllamaClient` implement this; `AnthropicClient` does not, following the
+/// same by-type capability discovery [`ImageProvider`] established —
+/// Anthropic's API surface is Messages, Batches, Files, Token Counting, and
+/// Models, with no embeddings endpoint at all.
+#[async_trait]
+pub trait EmbeddingProvider: Send + Sync {
+    fn name(&self) -> &'static str;
+
+    /// Every embeddings model this provider offers. Same shape as
+    /// [`ModelProvider::list_models`] — every entry's
+    /// `ModelDetails::is_embedding()` is `true`.
+    async fn list_embedding_models(&self, freshness: Freshness)
+        -> Result<Vec<ModelInfo>, LlmError>;
+
+    async fn embed(&self, request: &EmbeddingRequest) -> Result<EmbeddingResponse, LlmError>;
+}
+
+/// Filter a provider's full model list down to embeddings models. Shared by
+/// every [`EmbeddingProvider::list_embedding_models`] implementation so the
+/// filter exists in one place rather than being re-derived per provider.
+pub fn embedding_models(models: Vec<ModelInfo>) -> Vec<ModelInfo> {
+    models
+        .into_iter()
+        .filter(|m| m.details.is_embedding())
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use shared::llm::ModelDetails;
+
+    fn chat_model(id: &str) -> ModelInfo {
+        ModelInfo {
+            id: id.to_string(),
+            display_name: None,
+            created_at: None,
+            details: ModelDetails::OpenAi {
+                owned_by: "openai".to_string(),
+            },
+        }
+    }
+
+    fn embedding_model(id: &str) -> ModelInfo {
+        ModelInfo {
+            id: id.to_string(),
+            display_name: None,
+            created_at: None,
+            details: ModelDetails::OpenAiEmbedding {
+                owned_by: "openai".to_string(),
+            },
+        }
+    }
+
+    #[test]
+    fn embedding_models_keeps_only_embedding_entries_in_order() {
+        let models = vec![
+            chat_model("gpt-5.6"),
+            embedding_model("text-embedding-3-small"),
+            chat_model("gpt-image-2"),
+            embedding_model("text-embedding-3-large"),
+        ];
+        let filtered = embedding_models(models);
+        let ids: Vec<&str> = filtered.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, vec!["text-embedding-3-small", "text-embedding-3-large"]);
+    }
+
+    #[test]
+    fn embedding_models_is_empty_when_nothing_is_an_embedding_model() {
+        let models = vec![chat_model("gpt-5.6")];
+        assert!(embedding_models(models).is_empty());
+    }
 }

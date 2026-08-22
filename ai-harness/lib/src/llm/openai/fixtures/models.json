@@ -12,6 +12,12 @@
       "object": "model",
       "created": 1753315200,
       "owned_by": "system"
+    },
+    {
+      "id": "text-embedding-3-small",
+      "object": "model",
+      "created": 1753315200,
+      "owned_by": "system"
     }
   ]
 }

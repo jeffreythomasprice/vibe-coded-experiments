@@ -12,6 +12,7 @@
 //! capability that makes OpenAI worth having as a third provider, per this
 //! project's requirements.
 
+pub mod embeddings;
 pub mod images;
 pub mod wire;
 
@@ -20,14 +21,17 @@ use futures_util::StreamExt;
 use reqwest::Client;
 use std::time::{Duration, SystemTime};
 
-use shared::llm::{ChatOptions, CompletedMessage, Conversation, GeneratedImage, ImageRequest, ModelInfo};
+use shared::llm::{
+    ChatOptions, CompletedMessage, Conversation, EmbeddingRequest, EmbeddingResponse,
+    GeneratedImage, ImageRequest, ModelInfo,
+};
 
 use crate::cache::Cache;
 use crate::llm::config::OpenAiConfig;
 use crate::llm::error::LlmError;
 use crate::llm::http;
 use crate::llm::sse::SseDecoder;
-use crate::llm::{ChatProvider, ChatStream, Freshness, ImageProvider, ModelProvider};
+use crate::llm::{ChatProvider, ChatStream, EmbeddingProvider, Freshness, ImageProvider, ModelProvider};
 
 pub struct OpenAiClient {
     client: Client,
@@ -162,7 +166,12 @@ impl ModelProvider for OpenAiClient {
     }
 
     async fn list_models(&self, freshness: Freshness) -> Result<Vec<ModelInfo>, LlmError> {
-        const CACHE_KEY: &str = "openai-models.json";
+        // `-v2`: this cache stores the *parsed* `Vec<ModelInfo>`, and a list
+        // cached under the old key would still deserialize fine but classify
+        // every model as plain `OpenAi` — bumping the key means the new
+        // chat/embedding/image classification takes effect immediately
+        // rather than waiting out the TTL.
+        const CACHE_KEY: &str = "openai-models-v2.json";
 
         if freshness == Freshness::Cached {
             if let Some(cached) = self.cache.read(CACHE_KEY, SystemTime::now()) {
@@ -190,5 +199,42 @@ impl ModelProvider for OpenAiClient {
         }
 
         Ok(models)
+    }
+}
+
+#[async_trait]
+impl EmbeddingProvider for OpenAiClient {
+    fn name(&self) -> &'static str {
+        wire::PROVIDER
+    }
+
+    /// Reuses `ModelProvider::list_models` — the same `/v1/models` listing
+    /// already classifies embedding models via `wire::classify`, so there's
+    /// no separate endpoint or cache entry to maintain here.
+    async fn list_embedding_models(
+        &self,
+        freshness: Freshness,
+    ) -> Result<Vec<ModelInfo>, LlmError> {
+        let models = ModelProvider::list_models(self, freshness).await?;
+        Ok(crate::llm::embedding_models(models))
+    }
+
+    async fn embed(&self, request: &EmbeddingRequest) -> Result<EmbeddingResponse, LlmError> {
+        let model = request
+            .model
+            .clone()
+            .unwrap_or_else(|| self.cfg.embedding_model.clone());
+        let body = embeddings::build_request(request, &self.cfg);
+        let http_request = self.request("/v1/embeddings", &body)?;
+        let response = http::send_with_retry(wire::PROVIDER, http_request, self.max_retries, {
+            let model = model.clone();
+            move |status, body| embeddings::parse_error(status, body, &model)
+        })
+        .await?;
+        let text = response.text().await.map_err(|source| LlmError::Http {
+            provider: wire::PROVIDER,
+            source,
+        })?;
+        embeddings::parse_response(&text)
     }
 }

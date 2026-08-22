@@ -102,17 +102,21 @@ cd server && cargo tauri dev -- -- --config ../config.example.toml
 ### LLM providers
 
 `lib::llm` is a hand-rolled client for three providers, each behind the same
-`ChatProvider` trait (`OpenAiClient` additionally implements `ImageProvider`,
+`ChatProvider` trait. `OpenAiClient` additionally implements `ImageProvider`,
 since image generation is the one thing neither of the other two can do
 here — Ollama's image-generation endpoint is macOS-only and Anthropic
-doesn't offer one at all). There is no router: construct the client you want
-and call it directly.
+doesn't offer one at all. `OpenAiClient` and `OllamaClient` also implement
+`EmbeddingProvider`; `AnthropicClient` does not — Anthropic's API surface is
+Messages, Batches, Files, Token Counting, and Models, with no embeddings
+endpoint. There is no router: construct the client you want and call it
+directly.
 
 | | Anthropic | Ollama | OpenAI |
 |---|---|---|---|
 | Endpoint | `/v1/messages` | `/api/chat` (native) | `/v1/responses` + `/v1/images/generations` |
 | Streaming | SSE | NDJSON | SSE |
 | Images | not supported here | input only | generation only |
+| Embeddings | not supported here | `/api/embed` | `/v1/embeddings` |
 | Auth | `[llm.anthropic] api_key_env` | none | `[llm.openai] api_key_env` |
 
 Every `api_key_env` key names an **environment variable**, not the key

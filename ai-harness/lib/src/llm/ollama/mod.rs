@@ -8,6 +8,7 @@
 //! Unlike Anthropic and OpenAI, there is no API key here — a local Ollama
 //! install has none to send.
 
+pub mod embeddings;
 pub mod library;
 pub mod wire;
 
@@ -16,14 +17,16 @@ use futures_util::StreamExt;
 use reqwest::Client;
 use std::time::{Duration, SystemTime};
 
-use shared::llm::{ChatOptions, CompletedMessage, Conversation, ModelInfo};
+use shared::llm::{
+    ChatOptions, CompletedMessage, Conversation, EmbeddingRequest, EmbeddingResponse, ModelInfo,
+};
 
 use crate::cache::Cache;
 use crate::llm::config::OllamaConfig;
 use crate::llm::error::LlmError;
 use crate::llm::http;
 use crate::llm::ndjson::NdjsonDecoder;
-use crate::llm::{ChatProvider, ChatStream, Freshness, ModelProvider};
+use crate::llm::{ChatProvider, ChatStream, EmbeddingProvider, Freshness, ModelProvider};
 
 pub struct OllamaClient {
     client: Client,
@@ -60,6 +63,14 @@ impl OllamaClient {
 
     fn request(&self, body: &serde_json::Value) -> reqwest::RequestBuilder {
         self.client.post(self.endpoint()).json(body)
+    }
+
+    fn embed_endpoint(&self) -> String {
+        format!("{}/api/embed", self.cfg.base_url.trim_end_matches('/'))
+    }
+
+    fn embed_request(&self, body: &serde_json::Value) -> reqwest::RequestBuilder {
+        self.client.post(self.embed_endpoint()).json(body)
     }
 
     /// A plain `GET` with retry, shared by `list_models` (the local
@@ -210,5 +221,43 @@ impl ModelProvider for OllamaClient {
         let models = wire::parse_tags(&text)?;
         self.cache.write(CACHE_KEY, &text);
         Ok(models)
+    }
+}
+
+#[async_trait]
+impl EmbeddingProvider for OllamaClient {
+    fn name(&self) -> &'static str {
+        wire::PROVIDER
+    }
+
+    /// Reuses `ModelProvider::list_models` — the same `/api/tags` listing
+    /// already classifies embedding models via their `"embedding"`
+    /// capability, so there's no separate endpoint or cache entry to
+    /// maintain here.
+    async fn list_embedding_models(
+        &self,
+        freshness: Freshness,
+    ) -> Result<Vec<ModelInfo>, LlmError> {
+        let models = ModelProvider::list_models(self, freshness).await?;
+        Ok(crate::llm::embedding_models(models))
+    }
+
+    async fn embed(&self, request: &EmbeddingRequest) -> Result<EmbeddingResponse, LlmError> {
+        let model = request
+            .model
+            .clone()
+            .unwrap_or_else(|| self.cfg.embedding_model.clone());
+        let body = embeddings::build_request(request, &self.cfg);
+        let http_request = self.embed_request(&body);
+        let response = http::send_with_retry(wire::PROVIDER, http_request, self.max_retries, {
+            let model = model.clone();
+            move |status, body| embeddings::parse_error(status, body, &model)
+        })
+        .await?;
+        let text = response.text().await.map_err(|source| LlmError::Http {
+            provider: wire::PROVIDER,
+            source,
+        })?;
+        embeddings::parse_response(&text)
     }
 }

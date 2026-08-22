@@ -11,8 +11,13 @@ mod common;
 use futures_util::StreamExt;
 
 use lib::llm::accumulate::MessageAccumulator;
-use lib::llm::{ChatProvider, Freshness, ImageProvider, ModelProvider, OpenAiClient};
-use shared::llm::{ChatOptions, ContentBlock, Conversation, ImageRequest, Message, ToolDef};
+use lib::llm::{
+    ChatProvider, EmbeddingProvider, Freshness, ImageProvider, LlmError, ModelProvider,
+    OpenAiClient,
+};
+use shared::llm::{
+    ChatOptions, ContentBlock, Conversation, EmbeddingRequest, ImageRequest, Message, ToolDef,
+};
 
 fn client(test_name: &str) -> Option<OpenAiClient> {
     if common::skip_unless_live(test_name) {
@@ -168,4 +173,85 @@ async fn lists_models() {
         cfg.model,
         models.iter().map(|m| &m.id).collect::<Vec<_>>()
     );
+}
+
+#[tokio::test]
+async fn lists_embedding_models() {
+    let Some(client) = client("lists_embedding_models") else {
+        return;
+    };
+    let cfg = common::openai_config();
+    let models = client
+        .list_embedding_models(Freshness::Refresh)
+        .await
+        .expect("list_embedding_models failed");
+
+    assert!(!models.is_empty(), "expected at least one embedding model");
+    for model in &models {
+        assert!(
+            model.details.is_embedding(),
+            "list_embedding_models returned a non-embedding model: {model:?}"
+        );
+    }
+    assert!(
+        models.iter().any(|m| m.id == cfg.embedding_model),
+        "expected the configured embedding model {:?} to appear in {:?}",
+        cfg.embedding_model,
+        models.iter().map(|m| &m.id).collect::<Vec<_>>()
+    );
+}
+
+#[tokio::test]
+async fn embeds_text() {
+    let Some(client) = client("embeds_text") else {
+        return;
+    };
+    let request = EmbeddingRequest {
+        input: vec!["the quick brown fox".to_string(), "a red bicycle".to_string()],
+        model: None,
+        dimensions: None,
+    };
+    let response = client.embed(&request).await.expect("embed() failed");
+
+    assert_eq!(response.embeddings.len(), 2);
+    assert_eq!(response.embeddings[0].index, 0);
+    assert_eq!(response.embeddings[1].index, 1);
+    assert!(!response.embeddings[0].vector.is_empty());
+    assert_eq!(
+        response.embeddings[0].vector.len(),
+        response.embeddings[1].vector.len(),
+        "two inputs to the same model must produce equal-length vectors"
+    );
+    // Shape, not wording — two different inputs should not embed to the
+    // exact same vector.
+    assert_ne!(response.embeddings[0].vector, response.embeddings[1].vector);
+}
+
+#[tokio::test]
+async fn rejects_oversized_input() {
+    let Some(client) = client("rejects_oversized_input") else {
+        return;
+    };
+    // Comfortably past every current OpenAI embedding model's 8192-token
+    // limit — repetition rather than length keeps this a fast, cheap call.
+    let huge_input = "the quick brown fox jumps over the lazy dog ".repeat(4000);
+    let request = EmbeddingRequest {
+        input: vec![huge_input],
+        model: None,
+        dimensions: None,
+    };
+
+    let err = client
+        .embed(&request)
+        .await
+        .expect_err("expected embed() to reject oversized input");
+    match &err {
+        LlmError::InputTooLarge { message, .. } => {
+            // Printed so a real rejection body can be captured and committed
+            // as `openai/fixtures/error_context_length.json` if OpenAI's
+            // wording has since changed from what that fixture assumes.
+            eprintln!("live too-large rejection message: {message}");
+        }
+        other => panic!("expected InputTooLarge, got {other:?}"),
+    }
 }

@@ -36,7 +36,7 @@ pub fn App() -> impl IntoView {
     view! {
         <main>
             <h1>"ai-harness — models"</h1>
-            <p class="legend">"* = pulled locally"</p>
+            <p class="legend">"* = pulled locally · badge shows chat / embed / image"</p>
             {move || {
                 if let Some(message) = load_error.get() {
                     view! { <p class="error">{message}</p> }.into_any()
@@ -61,16 +61,84 @@ pub fn App() -> impl IntoView {
     }
 }
 
+/// The per-section filter dropdown's three choices. `Chat` excludes both
+/// embedding and image models — the dropdown only offers the two kinds this
+/// feature asked to distinguish, so an image model (only OpenAI's
+/// `gpt-image-*`/`dall-e*` today) shows up under "Show All" but not under
+/// either specific filter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Filter {
+    All,
+    Chat,
+    Embeddings,
+}
+
+impl Filter {
+    fn from_select_value(value: &str) -> Self {
+        match value {
+            "chat" => Filter::Chat,
+            "embeddings" => Filter::Embeddings,
+            _ => Filter::All,
+        }
+    }
+
+    fn matches(self, details: &ModelDetails) -> bool {
+        match self {
+            Filter::All => true,
+            Filter::Chat => !details.is_embedding() && !details.is_image(),
+            Filter::Embeddings => details.is_embedding(),
+        }
+    }
+}
+
 #[component]
 fn ProviderSection(provider: ProviderModels) -> impl IntoView {
-    let count = provider.models.len();
     let name = provider.provider.clone();
+    let is_ollama = provider.provider == "ollama";
     let errors = provider.errors.clone();
     let models = provider.models.clone();
 
+    let (filter, set_filter) = signal(Filter::All);
+    let (local_only, set_local_only) = signal(false);
+
+    // A `Memo`, not a plain closure, so both the header count and the `<For
+    // each=...>` below can read the filtered list without fighting over
+    // which one owns it.
+    let filtered = Memo::new(move |_| {
+        models
+            .iter()
+            .filter(|e| filter.get().matches(&e.info.details))
+            .filter(|e| !local_only.get() || !e.local_tags.is_empty())
+            .cloned()
+            .collect::<Vec<_>>()
+    });
+
     view! {
         <details open=true class="provider">
-            <summary>{format!("{name} ({count})")}</summary>
+            <summary>{move || format!("{name} ({})", filtered.get().len())}</summary>
+            <div class="controls">
+                <select on:change=move |ev| {
+                    set_filter.set(Filter::from_select_value(&event_target_value(&ev)));
+                }>
+                    <option value="all">"Show All"</option>
+                    <option value="chat">"Show Chat Only"</option>
+                    <option value="embeddings">"Show Embeddings Only"</option>
+                </select>
+                {is_ollama
+                    .then(|| {
+                        view! {
+                            <label>
+                                <input
+                                    type="checkbox"
+                                    on:change=move |ev| {
+                                        set_local_only.set(event_target_checked(&ev));
+                                    }
+                                />
+                                "Show Local Only"
+                            </label>
+                        }
+                    })}
+            </div>
             {(!errors.is_empty())
                 .then(|| {
                     view! {
@@ -82,7 +150,7 @@ fn ProviderSection(provider: ProviderModels) -> impl IntoView {
                     }
                 })}
             <ul class="models">
-                <For each=move || models.clone() key=|m| m.info.id.clone() let:entry>
+                <For each=move || filtered.get() key=|m| m.info.id.clone() let:entry>
                     <ModelRow entry=entry />
                 </For>
             </ul>
@@ -95,10 +163,18 @@ fn ModelRow(entry: CatalogEntry) -> impl IntoView {
     let starred = !entry.local_tags.is_empty();
     let id = entry.info.id.clone();
     let secondary = describe_details(&entry.info.details);
+    let (badge_class, badge_label) = if entry.info.details.is_embedding() {
+        ("badge embed", "embed")
+    } else if entry.info.details.is_image() {
+        ("badge image", "image")
+    } else {
+        ("badge chat", "chat")
+    };
 
     view! {
         <li class="model">
             <span class="star">{if starred { "*" } else { "" }}</span>
+            <span class=badge_class>{badge_label}</span>
             <code class="id">{id}</code>
             {secondary.map(|text| view! { <span class="meta">{text}</span> })}
         </li>
@@ -122,8 +198,13 @@ fn describe_details(details: &ModelDetails) -> Option<String> {
                 parts.push(format!("{tokens} out"));
             }
         }
-        ModelDetails::OpenAi { owned_by } => {
+        ModelDetails::OpenAi { owned_by } | ModelDetails::OpenAiImage { owned_by } => {
             parts.push(owned_by.clone());
+        }
+        ModelDetails::OpenAiEmbedding { owned_by } => {
+            parts.push(owned_by.clone());
+            // OpenAI's /v1/models reports no dimensions or input limit for
+            // any model — see ModelDetails::embedding_dimensions' doc.
         }
         ModelDetails::OllamaLocal {
             size_bytes,
@@ -143,7 +224,35 @@ fn describe_details(details: &ModelDetails) -> Option<String> {
                 parts.push(capabilities.join(", "));
             }
         }
+        ModelDetails::OllamaLocalEmbedding {
+            size_bytes,
+            parameter_size,
+            quantization_level,
+            embedding_length,
+            context_length,
+            ..
+        } => {
+            if let Some(size) = parameter_size {
+                parts.push(size.clone());
+            }
+            if let Some(quant) = quantization_level {
+                parts.push(quant.clone());
+            }
+            parts.push(format!("{:.1}GB", *size_bytes as f64 / 1e9));
+            if let Some(dims) = embedding_length {
+                parts.push(format!("{dims}-d"));
+            }
+            if let Some(tokens) = context_length {
+                parts.push(format!("{tokens} tok"));
+            }
+        }
         ModelDetails::OllamaRemote {
+            description,
+            capabilities,
+            parameter_sizes,
+            pulls,
+        }
+        | ModelDetails::OllamaRemoteEmbedding {
             description,
             capabilities,
             parameter_sizes,

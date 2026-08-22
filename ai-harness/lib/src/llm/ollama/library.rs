@@ -92,16 +92,28 @@ fn parse_library_card(card: &str) -> Option<ModelInfo> {
         search = tail;
     }
 
+    let pulls = extract_pulls(card);
+    let details = if capabilities.iter().any(|c| c == "embedding") {
+        ModelDetails::OllamaRemoteEmbedding {
+            description,
+            capabilities,
+            parameter_sizes,
+            pulls,
+        }
+    } else {
+        ModelDetails::OllamaRemote {
+            description,
+            capabilities,
+            parameter_sizes,
+            pulls,
+        }
+    };
+
     Some(ModelInfo {
         id: id.to_string(),
         display_name: None,
         created_at: None,
-        details: ModelDetails::OllamaRemote {
-            description,
-            capabilities,
-            parameter_sizes,
-            pulls: extract_pulls(card),
-        },
+        details,
     })
 }
 
@@ -331,7 +343,7 @@ mod tests {
     fn distinguishes_a_capability_chip_from_a_parameter_size_chip() {
         let models = parse_library(LIBRARY).unwrap();
         match &models[1].details {
-            ModelDetails::OllamaRemote {
+            ModelDetails::OllamaRemoteEmbedding {
                 capabilities,
                 parameter_sizes,
                 ..
@@ -339,8 +351,19 @@ mod tests {
                 assert_eq!(capabilities, &vec!["embedding".to_string()]);
                 assert_eq!(parameter_sizes, &vec!["22m".to_string(), "33m".to_string()]);
             }
-            other => panic!("expected OllamaRemote details, got {other:?}"),
+            other => panic!("expected OllamaRemoteEmbedding details, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_card_with_an_embedding_chip_classifies_as_ollama_remote_embedding() {
+        let models = parse_library(LIBRARY).unwrap();
+        let minilm = models.iter().find(|m| m.id == "all-minilm").unwrap();
+        assert!(minilm.details.is_embedding());
+
+        let llama = models.iter().find(|m| m.id == "llama3.1").unwrap();
+        assert!(!llama.details.is_embedding());
+        assert!(matches!(llama.details, ModelDetails::OllamaRemote { .. }));
     }
 
     #[test]

@@ -54,6 +54,24 @@
         "embedding_length": 4096
       },
       "capabilities": ["completion", "tools"]
+    },
+    {
+      "name": "nomic-embed-text:latest",
+      "model": "nomic-embed-text:latest",
+      "modified_at": "2026-07-01T09:12:03.000000000-04:00",
+      "size": 274302450,
+      "digest": "0a109f422b47e3a30ba2b10eca18548e7f4dcc7c2f4c8003d5f2a3b7c9c6df13",
+      "details": {
+        "parent_model": "",
+        "format": "gguf",
+        "family": "nomic-bert",
+        "families": ["nomic-bert"],
+        "parameter_size": "137M",
+        "quantization_level": "F16",
+        "context_length": 2048,
+        "embedding_length": 768
+      },
+      "capabilities": ["embedding"]
     }
   ]
 }

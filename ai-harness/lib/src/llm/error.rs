@@ -54,6 +54,24 @@ pub enum LlmError {
         provider: &'static str,
         message: String,
     },
+
+    /// An embeddings request's input was too large for the model — a
+    /// provider's own 400/413 rejection, reclassified from a plain
+    /// [`LlmError::Status`] by matching the error message's wording (see
+    /// each provider's `embeddings` module). Never raised speculatively:
+    /// this crate never estimates a request's size and refuses it locally,
+    /// only reclassifies what the API already rejected. See
+    /// `shared::llm::ModelDetails::probably_fits` for an opt-in, purely
+    /// advisory pre-flight estimate a caller may use instead.
+    #[error("{provider}: input too large for {model}: {message}")]
+    InputTooLarge {
+        provider: &'static str,
+        model: String,
+        /// The model's limit in tokens, when the provider's model listing
+        /// reports one (only `ModelDetails::OllamaLocalEmbedding` does).
+        max_input_tokens: Option<u64>,
+        message: String,
+    },
 }
 
 impl LlmError {
@@ -69,7 +87,8 @@ impl LlmError {
             LlmError::Decode { .. }
             | LlmError::Parse { .. }
             | LlmError::MissingApiKey { .. }
-            | LlmError::Stream { .. } => false,
+            | LlmError::Stream { .. }
+            | LlmError::InputTooLarge { .. } => false,
         }
     }
 }
@@ -170,5 +189,18 @@ mod tests {
         };
         assert!(err.to_string().contains("ANTHROPIC_API_KEY"));
         assert!(!err.is_retryable());
+    }
+
+    #[test]
+    fn input_too_large_is_never_retryable() {
+        let err = LlmError::InputTooLarge {
+            provider: "openai",
+            model: "text-embedding-3-small".to_string(),
+            max_input_tokens: Some(8192),
+            message: "input exceeds the maximum context length".to_string(),
+        };
+        assert!(!err.is_retryable());
+        assert!(err.to_string().contains("text-embedding-3-small"));
+        assert!(err.to_string().contains("exceeds the maximum context length"));
     }
 }

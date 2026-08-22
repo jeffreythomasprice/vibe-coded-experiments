@@ -483,14 +483,29 @@ pub fn parse_models(body: &str) -> Result<Vec<ModelInfo>, LlmError> {
         .data
         .into_iter()
         .map(|m| ModelInfo {
-            id: m.id,
+            id: m.id.clone(),
             display_name: None,
             created_at: m.created,
-            details: ModelDetails::OpenAi {
-                owned_by: m.owned_by.unwrap_or_default(),
-            },
+            details: classify(&m.id, m.owned_by.unwrap_or_default()),
         })
         .collect())
+}
+
+/// Sort a model id into chat / embedding / image, the only signal
+/// `GET /v1/models` gives us — the response carries no capability field, so
+/// this is an id-prefix rule rather than something read off the wire.
+///
+/// Deliberately reports no dimensions or input-token limit for an embedding
+/// model: OpenAI's API never states either, and a hardcoded table of them
+/// would go stale silently. See `ModelDetails::OpenAiEmbedding`'s doc.
+fn classify(id: &str, owned_by: String) -> ModelDetails {
+    if id.starts_with("text-embedding-") {
+        ModelDetails::OpenAiEmbedding { owned_by }
+    } else if id.starts_with("gpt-image-") || id.starts_with("dall-e") {
+        ModelDetails::OpenAiImage { owned_by }
+    } else {
+        ModelDetails::OpenAi { owned_by }
+    }
 }
 
 // ---------------------------------------------------------------------
@@ -908,12 +923,48 @@ mod tests {
     #[test]
     fn parses_a_models_list() {
         let models = parse_models(MODELS).unwrap();
-        assert_eq!(models.len(), 2);
+        assert_eq!(models.len(), 3);
         assert_eq!(models[0].id, "gpt-5.6");
         assert_eq!(models[0].created_at, Some(1_753_315_200));
         match &models[0].details {
             ModelDetails::OpenAi { owned_by } => assert_eq!(owned_by, "system"),
             other => panic!("expected OpenAi details, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn classifies_chat_image_and_embedding_models_by_id_prefix() {
+        let models = parse_models(MODELS).unwrap();
+
+        let chat = models.iter().find(|m| m.id == "gpt-5.6").unwrap();
+        assert!(matches!(chat.details, ModelDetails::OpenAi { .. }));
+        assert!(!chat.details.is_embedding());
+        assert!(!chat.details.is_image());
+
+        let image = models.iter().find(|m| m.id == "gpt-image-2").unwrap();
+        assert!(matches!(image.details, ModelDetails::OpenAiImage { .. }));
+        assert!(image.details.is_image());
+        assert!(!image.details.is_embedding());
+
+        let embedding = models
+            .iter()
+            .find(|m| m.id == "text-embedding-3-small")
+            .unwrap();
+        assert!(matches!(
+            embedding.details,
+            ModelDetails::OpenAiEmbedding { .. }
+        ));
+        assert!(embedding.details.is_embedding());
+        // OpenAI never reports dimensions or an input limit for any model.
+        assert_eq!(embedding.details.embedding_dimensions(), None);
+        assert_eq!(embedding.details.max_input_tokens(), None);
+    }
+
+    #[test]
+    fn classify_also_recognizes_dall_e() {
+        assert!(matches!(
+            classify("dall-e-3", "system".to_string()),
+            ModelDetails::OpenAiImage { .. }
+        ));
     }
 }

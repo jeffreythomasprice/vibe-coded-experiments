@@ -6,7 +6,7 @@
 //! as "skipped", not as a broken build.
 //!
 //!     ollama serve &
-//!     ollama pull llama3.1:8b && ollama pull qwen3.5:latest
+//!     ollama pull llama3.1:8b && ollama pull qwen3.5:latest && ollama pull nomic-embed-text
 //!     AI_HARNESS_LIVE=1 cargo test -p lib --test live_ollama -- --nocapture
 
 mod common;
@@ -17,9 +17,10 @@ use lib::cache::Cache;
 use lib::config::CacheConfig;
 use lib::llm::accumulate::MessageAccumulator;
 use lib::llm::config::OllamaConfig;
-use lib::llm::{ChatProvider, Freshness, LlmError, ModelProvider, OllamaClient};
+use lib::llm::{ChatProvider, EmbeddingProvider, Freshness, LlmError, ModelProvider, OllamaClient};
 use shared::llm::{
-    ChatOptions, ContentBlock, Conversation, ImageSource, MediaType, Message, StopReason, ToolDef,
+    ChatOptions, ContentBlock, Conversation, EmbeddingRequest, ImageSource, MediaType, Message,
+    StopReason, ToolDef,
 };
 
 fn client(test_name: &str, cfg: OllamaConfig) -> Option<OllamaClient> {
@@ -208,6 +209,103 @@ async fn lists_local_models() {
         cfg.model,
         models.iter().map(|m| &m.id).collect::<Vec<_>>()
     );
+}
+
+#[tokio::test]
+async fn lists_embedding_models() {
+    let Some(client) = client("lists_embedding_models", common::ollama_config()) else {
+        return;
+    };
+    let Some(models) = skip_if_unreachable(
+        "lists_embedding_models",
+        client.list_embedding_models(Freshness::Refresh).await,
+    ) else {
+        return;
+    };
+
+    let cfg = common::ollama_config();
+    for model in &models {
+        assert!(
+            model.details.is_embedding(),
+            "list_embedding_models returned a non-embedding model: {model:?}"
+        );
+    }
+    assert!(
+        models.iter().any(|m| m.id == cfg.embedding_model),
+        "expected the configured embedding model {:?} among the locally pulled \
+         embedding models {:?} — did you `ollama pull nomic-embed-text`?",
+        cfg.embedding_model,
+        models.iter().map(|m| &m.id).collect::<Vec<_>>()
+    );
+}
+
+#[tokio::test]
+async fn embeds_text() {
+    let Some(client) = client("embeds_text", common::ollama_config()) else {
+        return;
+    };
+    let request = EmbeddingRequest {
+        input: vec!["the quick brown fox".to_string(), "a red bicycle".to_string()],
+        model: None,
+        dimensions: None,
+    };
+    let Some(response) = skip_if_unreachable("embeds_text", client.embed(&request).await) else {
+        return;
+    };
+
+    assert_eq!(response.embeddings.len(), 2);
+    assert_eq!(response.embeddings[0].index, 0);
+    assert_eq!(response.embeddings[1].index, 1);
+    assert!(!response.embeddings[0].vector.is_empty());
+    assert_eq!(
+        response.embeddings[0].vector.len(),
+        response.embeddings[1].vector.len(),
+        "two inputs to the same model must produce equal-length vectors"
+    );
+    assert_ne!(response.embeddings[0].vector, response.embeddings[1].vector);
+}
+
+#[tokio::test]
+async fn rejects_oversized_input() {
+    let Some(client) = client("rejects_oversized_input", common::ollama_config()) else {
+        return;
+    };
+    // Repetition rather than length keeps this a fast, local-only call.
+    // Sized well past even a large-context embedding model (confirmed live
+    // against qwen3-embedding:8b's 40960-token window — nomic-embed-text's
+    // is a much smaller 2048) so this test doesn't silently pass just
+    // because AI_HARNESS_LIVE_OLLAMA_EMBEDDING_MODEL points at a
+    // bigger-context model than whatever was pulled when this was written.
+    let huge_input = "the quick brown fox jumps over the lazy dog ".repeat(20_000);
+    let request = EmbeddingRequest {
+        input: vec![huge_input],
+        model: None,
+        dimensions: None,
+    };
+
+    let result = client.embed(&request).await;
+    if matches!(result, Err(LlmError::Http { .. })) {
+        // Only a connection-level failure counts as "Ollama isn't
+        // reachable" — anything else, including a plain success, is this
+        // test's own outcome to assert on below.
+        skip_if_unreachable::<()>("rejects_oversized_input", result.map(|_| ()));
+        return;
+    }
+
+    match result {
+        Ok(_) => panic!(
+            "expected embed() to reject oversized input — did truncate:false stop \
+             being honored, or does this Ollama version not enforce the limit?"
+        ),
+        Err(LlmError::InputTooLarge { message, .. }) => {
+            // Printed so a real rejection body can be captured and committed
+            // as `ollama/fixtures/error_input_too_long.json` if the local
+            // Ollama version's wording differs from what that fixture
+            // assumes.
+            eprintln!("live too-large rejection message: {message}");
+        }
+        Err(other) => panic!("expected InputTooLarge, got {other:?}"),
+    }
 }
 
 /// Hits `ollama.com/library`, not the local server — free (no API key), but

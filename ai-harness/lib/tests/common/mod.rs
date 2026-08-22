@@ -64,18 +64,23 @@ pub fn anthropic_config() -> AnthropicConfig {
     cfg
 }
 
-/// The Ollama config to test against, honoring `AI_HARNESS_LIVE_OLLAMA_MODEL`.
+/// The Ollama config to test against, honoring `AI_HARNESS_LIVE_OLLAMA_MODEL`
+/// and `AI_HARNESS_LIVE_OLLAMA_EMBEDDING_MODEL`.
 pub fn ollama_config() -> OllamaConfig {
     let mut cfg = OllamaConfig::default();
     if let Ok(model) = std::env::var("AI_HARNESS_LIVE_OLLAMA_MODEL") {
         cfg.model = model;
     }
+    if let Ok(model) = std::env::var("AI_HARNESS_LIVE_OLLAMA_EMBEDDING_MODEL") {
+        cfg.embedding_model = model;
+    }
     cfg
 }
 
-/// The OpenAI config to test against, honoring `AI_HARNESS_LIVE_OPENAI_MODEL`
-/// and `AI_HARNESS_LIVE_OPENAI_IMAGE_MODEL` (e.g. to point at the cheaper
-/// `gpt-image-1-mini` for a smoke run).
+/// The OpenAI config to test against, honoring `AI_HARNESS_LIVE_OPENAI_MODEL`,
+/// `AI_HARNESS_LIVE_OPENAI_IMAGE_MODEL` (e.g. to point at the cheaper
+/// `gpt-image-1-mini` for a smoke run), and
+/// `AI_HARNESS_LIVE_OPENAI_EMBEDDING_MODEL`.
 pub fn openai_config() -> OpenAiConfig {
     let mut cfg = OpenAiConfig::default();
     if let Ok(model) = std::env::var("AI_HARNESS_LIVE_OPENAI_MODEL") {
@@ -83,6 +88,9 @@ pub fn openai_config() -> OpenAiConfig {
     }
     if let Ok(model) = std::env::var("AI_HARNESS_LIVE_OPENAI_IMAGE_MODEL") {
         cfg.image_model = model;
+    }
+    if let Ok(model) = std::env::var("AI_HARNESS_LIVE_OPENAI_EMBEDDING_MODEL") {
+        cfg.embedding_model = model;
     }
     cfg
 }
