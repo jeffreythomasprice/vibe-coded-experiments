@@ -29,7 +29,7 @@ const LIST_SQL: &str = "SELECT c.id, c.title, c.agent_config_id, c.agent_config_
      EXISTS(SELECT 1 FROM turns t WHERE t.conversation_id = c.id AND t.state = 'awaiting_approval') AS awaiting_approval \
      FROM conversations c \
      WHERE (? IS NULL OR c.title LIKE '%' || ? || '%') \
-     ORDER BY c.last_message_at DESC, c.id DESC LIMIT ? OFFSET ?";
+     ORDER BY COALESCE(c.last_message_at, c.updated_at) DESC, c.id DESC LIMIT ? OFFSET ?";
 
 pub async fn create(db: &Db, agent: &AgentConfig, title: Option<&str>) -> Result<ConversationSummary> {
     let now = now_iso8601();
@@ -318,6 +318,52 @@ mod tests {
         let db = Db::in_memory().await.unwrap();
         let err = rename(&db, ConversationId(999), "x").await.unwrap_err();
         assert!(matches!(err, DbError::NotFound { .. }));
+    }
+
+    /// `last_message_at` is NULL until the first message, so a fresh
+    /// conversation must not sort to the bottom of "most recently updated" —
+    /// see the `LIST_SQL` doc on `COALESCE(last_message_at, updated_at)`.
+    /// Timestamps are set directly via SQL rather than by waiting on the
+    /// real clock `now_iso8601` reads from, so the ordering asserted here
+    /// can't flake on a fast run where two calls land in the same
+    /// millisecond.
+    #[tokio::test]
+    async fn list_falls_back_to_updated_at_when_last_message_at_is_null() {
+        let db = Db::in_memory().await.unwrap();
+        let agent = seed_agent(&db).await;
+
+        let a = create(&db, &agent, Some("a")).await.unwrap();
+        let b = create(&db, &agent, Some("b")).await.unwrap();
+        let c = create(&db, &agent, Some("c")).await.unwrap();
+
+        // a: updated long ago, never messaged.
+        sqlx::query("UPDATE conversations SET updated_at = ? WHERE id = ?")
+            .bind("2026-01-01T00:00:00.000Z")
+            .bind(a.id.get())
+            .execute(db.pool())
+            .await
+            .unwrap();
+        // b: updated more recently than a, also never messaged.
+        sqlx::query("UPDATE conversations SET updated_at = ? WHERE id = ?")
+            .bind("2026-01-02T00:00:00.000Z")
+            .bind(b.id.get())
+            .execute(db.pool())
+            .await
+            .unwrap();
+        // c: stale updated_at, but messaged after both a and b were updated —
+        // last_message_at must win over updated_at for c, and over both a
+        // and b overall.
+        sqlx::query("UPDATE conversations SET updated_at = ?, last_message_at = ? WHERE id = ?")
+            .bind("2026-01-01T00:00:00.000Z")
+            .bind("2026-01-03T00:00:00.000Z")
+            .bind(c.id.get())
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        let listed = list(&db, &ListConversations::default()).await.unwrap();
+        let ids: Vec<ConversationId> = listed.iter().map(|s| s.id).collect();
+        assert_eq!(ids, vec![c.id, b.id, a.id]);
     }
 
     #[tokio::test]

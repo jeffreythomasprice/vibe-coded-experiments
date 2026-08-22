@@ -10,6 +10,7 @@ serde-wasm-bindgen = "0.6.5"
 wasm-bindgen = "0.2.127"
 wasm-bindgen-futures = "0.4.77"
 serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 tracing.workspace = true
 # Not the workspace pin: `env-filter` pulls regex into the wasm bundle and
 # there is no environment to read on this target anyway. See `logging.rs`.
@@ -21,3 +22,4 @@ tracing-subscriber = { version = "0.3", default-features = false, features = [
 tracing-web = "0.1"
 console_error_panic_hook = "0.1"
 js-sys = "0.3"
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
