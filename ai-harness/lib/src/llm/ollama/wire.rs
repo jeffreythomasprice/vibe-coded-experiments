@@ -16,11 +16,12 @@
 
 use std::collections::HashMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 use shared::llm::{
-    ChatOptions, CompletedMessage, ContentBlock, Conversation, Delta, Effort, Message, Role,
-    StopReason, StreamEvent, Thinking, ToolDef, ToolResultContent, Usage,
+    ChatOptions, CompletedMessage, ContentBlock, Conversation, Delta, Effort, Message,
+    ModelDetails, ModelInfo, Role, StopReason, StreamEvent, Thinking, ToolDef, ToolResultContent,
+    Usage,
 };
 
 use crate::llm::config::OllamaConfig;
@@ -432,6 +433,107 @@ pub fn parse_error(status: u16, body: &str) -> LlmError {
 }
 
 // ---------------------------------------------------------------------
+// Model listing
+// ---------------------------------------------------------------------
+
+/// `GET {base_url}/api/tags` — models already pulled and ready to run.
+/// Verified against a live v0.30.10 install: it carries more than
+/// `ollama/api/types.go` alone would suggest (`capabilities`, `details.
+/// context_length`), and sometimes a `remote_model`/`remote_host` pair for a
+/// cloud-backed model (e.g. `glm-5.2:cloud`) — neither is modeled here, since
+/// nothing in `ModelDetails::OllamaLocal` needs them yet, but they must not
+/// break parsing when present.
+#[derive(Debug, Deserialize)]
+struct WireTagsResponse {
+    #[serde(default)]
+    models: Vec<WireLocalModel>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireLocalModel {
+    name: String,
+    #[serde(default)]
+    modified_at: Option<String>,
+    #[serde(default)]
+    size: u64,
+    #[serde(default)]
+    digest: String,
+    #[serde(default)]
+    details: WireLocalModelDetails,
+    #[serde(default, deserialize_with = "null_as_default")]
+    capabilities: Vec<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct WireLocalModelDetails {
+    #[serde(default)]
+    format: Option<String>,
+    #[serde(default)]
+    family: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    families: Vec<String>,
+    #[serde(default)]
+    parameter_size: Option<String>,
+    #[serde(default)]
+    quantization_level: Option<String>,
+    #[serde(default)]
+    context_length: Option<u64>,
+}
+
+/// `#[serde(default)]` alone only kicks in when a key is *absent* — Ollama
+/// sometimes sends `"families": null` or `"capabilities": null` outright
+/// (observed on models where family/capability detection comes up empty,
+/// e.g. some embedding models), which a bare `Vec<String>` field rejects
+/// with "invalid type: null, expected a sequence". This treats an explicit
+/// `null` the same as a missing key.
+fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::deserialize(deserializer)?.unwrap_or_default())
+}
+
+pub fn parse_tags(body: &str) -> Result<Vec<ModelInfo>, LlmError> {
+    let wire: WireTagsResponse = serde_json::from_str(body).map_err(|source| LlmError::Decode {
+        provider: PROVIDER,
+        context: "tags response".to_string(),
+        source,
+    })?;
+
+    Ok(wire
+        .models
+        .into_iter()
+        .map(|m| ModelInfo {
+            id: m.name,
+            display_name: None,
+            created_at: m.modified_at.as_deref().and_then(parse_rfc3339_to_unix),
+            details: ModelDetails::OllamaLocal {
+                size_bytes: m.size,
+                digest: m.digest,
+                family: m.details.family,
+                families: m.details.families,
+                parameter_size: m.details.parameter_size,
+                quantization_level: m.details.quantization_level,
+                format: m.details.format,
+                context_length: m.details.context_length,
+                capabilities: m.capabilities,
+            },
+        })
+        .collect())
+}
+
+/// Convert an RFC 3339 timestamp (Ollama's `modified_at` shape, with a
+/// numeric UTC offset rather than Anthropic's bare `Z`) to unix seconds.
+/// `None` on anything that doesn't parse, so one model's unexpected
+/// timestamp shape doesn't fail the whole listing.
+fn parse_rfc3339_to_unix(s: &str) -> Option<i64> {
+    time::OffsetDateTime::parse(s, &time::format_description::well_known::Rfc3339)
+        .ok()
+        .map(|dt| dt.unix_timestamp())
+}
+
+// ---------------------------------------------------------------------
 // Streaming
 // ---------------------------------------------------------------------
 
@@ -572,6 +674,8 @@ mod tests {
         include_str!("fixtures/response_tool_call_leaked_as_text.json");
     const STREAM_TEXT: &str = include_str!("fixtures/stream_text.ndjson");
     const ERROR: &str = include_str!("fixtures/error.json");
+    const TAGS: &str = include_str!("fixtures/tags.json");
+    const TAGS_NULL_ARRAYS: &str = include_str!("fixtures/tags_null_arrays.json");
 
     fn cfg() -> OllamaConfig {
         OllamaConfig::default()
@@ -786,5 +890,71 @@ mod tests {
             serde_json::to_value(&streamed.content).unwrap(),
             serde_json::to_value(&blocking.content).unwrap()
         );
+    }
+
+    #[test]
+    fn parses_local_models_including_capabilities_and_context_length() {
+        let models = parse_tags(TAGS).unwrap();
+        assert_eq!(models.len(), 3);
+        assert_eq!(models[0].id, "qwen3.8:latest");
+        match &models[0].details {
+            ModelDetails::OllamaLocal {
+                size_bytes,
+                parameter_size,
+                context_length,
+                capabilities,
+                ..
+            } => {
+                assert_eq!(*size_bytes, 17_741_872_154);
+                assert_eq!(parameter_size.as_deref(), Some("27.3B"));
+                assert_eq!(*context_length, Some(262_144));
+                assert_eq!(
+                    capabilities,
+                    &vec![
+                        "completion".to_string(),
+                        "tools".to_string(),
+                        "thinking".to_string(),
+                        "vision".to_string(),
+                    ]
+                );
+            }
+            other => panic!("expected OllamaLocal details, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn converts_modified_at_with_a_numeric_offset_to_unix_seconds() {
+        let models = parse_tags(TAGS).unwrap();
+        assert_eq!(models[0].created_at, Some(1_787_393_775));
+    }
+
+    #[test]
+    fn tolerates_explicit_null_for_families_and_capabilities() {
+        // Real Ollama installs sometimes send `"families": null` and/or
+        // `"capabilities": null` (observed on models where detection comes
+        // up empty) rather than omitting the key or sending `[]` — this used
+        // to fail with "invalid type: null, expected a sequence".
+        let models = parse_tags(TAGS_NULL_ARRAYS).unwrap();
+        assert_eq!(models.len(), 1);
+        match &models[0].details {
+            ModelDetails::OllamaLocal {
+                families,
+                capabilities,
+                ..
+            } => {
+                assert!(families.is_empty());
+                assert!(capabilities.is_empty());
+            }
+            other => panic!("expected OllamaLocal details, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tolerates_the_remote_model_and_remote_host_fields_on_a_cloud_backed_model() {
+        // glm-5.2:cloud carries remote_model/remote_host on the wire — this
+        // must parse without error even though neither field is modeled.
+        let models = parse_tags(TAGS).unwrap();
+        let cloud = models.iter().find(|m| m.id == "glm-5.2:cloud").unwrap();
+        assert_eq!(cloud.created_at, Some(1_781_867_962));
     }
 }

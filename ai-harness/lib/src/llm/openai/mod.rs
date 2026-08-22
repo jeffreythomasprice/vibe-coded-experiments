@@ -18,20 +18,22 @@ pub mod wire;
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use reqwest::Client;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
-use shared::llm::{ChatOptions, CompletedMessage, Conversation, GeneratedImage, ImageRequest};
+use shared::llm::{ChatOptions, CompletedMessage, Conversation, GeneratedImage, ImageRequest, ModelInfo};
 
+use crate::cache::Cache;
 use crate::llm::config::OpenAiConfig;
 use crate::llm::error::LlmError;
 use crate::llm::http;
 use crate::llm::sse::SseDecoder;
-use crate::llm::{ChatProvider, ChatStream, ImageProvider};
+use crate::llm::{ChatProvider, ChatStream, Freshness, ImageProvider, ModelProvider};
 
 pub struct OpenAiClient {
     client: Client,
     cfg: OpenAiConfig,
     max_retries: u32,
+    cache: Cache,
 }
 
 impl OpenAiClient {
@@ -44,7 +46,15 @@ impl OpenAiClient {
             client: http::build_client(request_timeout)?,
             cfg,
             max_retries,
+            cache: Cache::disabled(),
         })
+    }
+
+    /// Opt into caching `list_models` results — see `crate::cache`'s module
+    /// doc. Not wired to any construction site by default.
+    pub fn with_cache(mut self, cache: Cache) -> Self {
+        self.cache = cache;
+        self
     }
 
     fn endpoint(&self, path: &str) -> String {
@@ -58,6 +68,11 @@ impl OpenAiClient {
             .post(self.endpoint(path))
             .bearer_auth(api_key)
             .json(body))
+    }
+
+    fn get_request(&self, path: &str) -> Result<reqwest::RequestBuilder, LlmError> {
+        let api_key = self.cfg.api_key()?;
+        Ok(self.client.get(self.endpoint(path)).bearer_auth(api_key))
     }
 }
 
@@ -137,5 +152,43 @@ impl ImageProvider for OpenAiClient {
             source,
         })?;
         images::parse_response(&text, request.output_format.as_deref())
+    }
+}
+
+#[async_trait]
+impl ModelProvider for OpenAiClient {
+    fn name(&self) -> &'static str {
+        wire::PROVIDER
+    }
+
+    async fn list_models(&self, freshness: Freshness) -> Result<Vec<ModelInfo>, LlmError> {
+        const CACHE_KEY: &str = "openai-models.json";
+
+        if freshness == Freshness::Cached {
+            if let Some(cached) = self.cache.read(CACHE_KEY, SystemTime::now()) {
+                match serde_json::from_str::<Vec<ModelInfo>>(&cached) {
+                    Ok(models) => return Ok(models),
+                    Err(err) => {
+                        tracing::debug!(%err, "ignoring a cached openai model list that failed to parse");
+                    }
+                }
+            }
+        }
+
+        let request = self.get_request("/v1/models")?;
+        let response =
+            http::send_with_retry(wire::PROVIDER, request, self.max_retries, wire::parse_error)
+                .await?;
+        let text = response.text().await.map_err(|source| LlmError::Http {
+            provider: wire::PROVIDER,
+            source,
+        })?;
+        let models = wire::parse_models(&text)?;
+
+        if let Ok(body) = serde_json::to_string(&models) {
+            self.cache.write(CACHE_KEY, &body);
+        }
+
+        Ok(models)
     }
 }

@@ -11,7 +11,7 @@ mod common;
 use futures_util::StreamExt;
 
 use lib::llm::accumulate::MessageAccumulator;
-use lib::llm::{AnthropicClient, ChatProvider};
+use lib::llm::{AnthropicClient, ChatProvider, Freshness, ModelProvider};
 use shared::llm::{
     ChatOptions, ContentBlock, Conversation, Effort, Message, StopReason, Thinking, ToolDef,
 };
@@ -127,4 +127,22 @@ async fn calls_a_tool() {
     if let Some(ContentBlock::ToolUse { name, .. }) = tool_use {
         assert_eq!(name, "get_current_time");
     }
+}
+
+#[tokio::test]
+async fn lists_models() {
+    let Some(client) = client("lists_models") else {
+        return;
+    };
+    let models = client
+        .list_models(Freshness::Refresh)
+        .await
+        .expect("list_models failed");
+
+    assert!(!models.is_empty(), "expected at least one model");
+    assert!(
+        models.iter().all(|m| m.id.starts_with("claude")),
+        "expected every id to start with \"claude\", got {:?}",
+        models.iter().map(|m| &m.id).collect::<Vec<_>>()
+    );
 }

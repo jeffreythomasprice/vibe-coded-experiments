@@ -8,6 +8,7 @@
 
 pub mod image;
 pub mod message;
+pub mod model;
 pub mod stream;
 pub mod tool;
 
@@ -16,5 +17,6 @@ pub use message::{
     CompletedMessage, ContentBlock, Conversation, Message, Role, StopReason, ToolResultContent,
     Usage,
 };
+pub use model::{CatalogEntry, ModelCatalog, ModelDetails, ModelInfo, ProviderModels};
 pub use stream::{Delta, StreamEvent};
 pub use tool::{ChatOptions, Effort, Thinking, ToolChoice, ToolDef};

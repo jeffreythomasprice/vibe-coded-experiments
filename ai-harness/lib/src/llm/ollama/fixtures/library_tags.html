@@ -1,0 +1,137 @@
+<!-- Trimmed from a real `GET https://ollama.com/library/llama3.1/tags`
+     response, preserving the exact markup `ollama::library::parse_tags_page`
+     scans for. Every tag renders twice on the real page — once in a desktop
+     table row, once in a `md:hidden` mobile card — but only llama3.1:70b's
+     desktop row is kept here, to exercise the dedup path without bloating
+     the fixture with a duplicate of every tag. -->
+<div>
+  <div class="group px-4 py-3">
+    <a href="/library/llama3.1:8b" class="md:hidden flex flex-col space-y-[6px] group">
+      <div class="flex items-center font-medium">
+        <div class="flex items-center justify-between w-full">
+          <div>
+            <span class="group-hover:underline">llama3.1:8b</span>
+            </span>
+              <span class="ml-2 inline-flex items-center rounded-full px-2 py-px text-xs font-medium border border-blue-500 text-blue-600">latest</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex flex-col text-neutral-500 text-[13px]">
+        <span>
+          <span class="font-mono">
+            46e0c10c039e</span> • 4.9GB • 128K context window  •
+          <span class="hidden sm:inline">
+            Text input •
+            1 year ago
+          </span>
+        </span>
+          <div class="flex sm:hidden">
+            Text input •
+            1 year ago
+          </div>
+        </span>
+      </div>
+    </a>
+  </div>
+
+  <div class="group px-4 py-3">
+    <a href="/library/llama3.1:405b" class="md:hidden flex flex-col space-y-[6px] group">
+      <div class="flex items-center font-medium">
+        <div class="flex items-center justify-between w-full">
+          <div>
+            <span class="group-hover:underline">llama3.1:405b</span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="flex flex-col text-neutral-500 text-[13px]">
+        <span>
+          <span class="font-mono">
+            dbd6b9ea93de</span> • 243GB • 128K context window  •
+          <span class="hidden sm:inline">
+            Text input •
+            1 year ago
+          </span>
+        </span>
+          <div class="flex sm:hidden">
+            Text input •
+            1 year ago
+          </div>
+        </span>
+      </div>
+    </a>
+  </div>
+
+  <div class="group px-4 py-3">
+    <a href="/library/llama3.1:70b" class="md:hidden flex flex-col space-y-[6px] group">
+      <div class="flex items-center font-medium">
+        <div class="flex items-center justify-between w-full">
+          <div>
+            <span class="group-hover:underline">llama3.1:70b</span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="flex flex-col text-neutral-500 text-[13px]">
+        <span>
+          <span class="font-mono">
+            711a9e8463af</span> • 43GB • 128K context window  •
+          <span class="hidden sm:inline">
+            Text input •
+            1 year ago
+          </span>
+        </span>
+          <div class="flex sm:hidden">
+            Text input •
+            1 year ago
+          </div>
+        </span>
+      </div>
+    </a>
+
+    <div class="hidden md:flex flex-col space-y-[6px]">
+      <div class="grid grid-cols-12 items-center">
+        <span class="flex items-center font-medium col-span-6 group text-sm">
+          <a href="/library/llama3.1:70b" class="group-hover:underline">llama3.1:70b</a>
+          <input class="command hidden" value="llama3.1:70b" />
+        </span>
+        <p class="col-span-2 text-neutral-500 text-[13px]">43GB</p>
+        <p class="col-span-2 text-neutral-500 text-[13px]">128K</p>
+        <div class="col-span-2 text-neutral-500 text-[13px] ">
+          Text
+        </div>
+      </div>
+      <div class="flex text-neutral-500 text-xs items-center">
+        <span class="font-mono text-[11px]">711a9e8463af</span>&nbsp;·&nbsp;1 year ago
+      </div>
+    </div>
+  </div>
+
+  <div class="group px-4 py-3">
+    <a href="/library/llama3.1:8b-instruct-q4_K_M" class="md:hidden flex flex-col space-y-[6px] group">
+      <div class="flex items-center font-medium">
+        <div class="flex items-center justify-between w-full">
+          <div>
+            <span class="group-hover:underline">llama3.1:8b-instruct-q4_K_M</span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="flex flex-col text-neutral-500 text-[13px]">
+        <span>
+          <span class="font-mono">
+            46e0c10c039e</span> • 4.9GB • 128K context window  •
+          <span class="hidden sm:inline">
+            Text input •
+            1 year ago
+          </span>
+        </span>
+          <div class="flex sm:hidden">
+            Text input •
+            1 year ago
+          </div>
+        </span>
+      </div>
+    </a>
+  </div>
+</div>

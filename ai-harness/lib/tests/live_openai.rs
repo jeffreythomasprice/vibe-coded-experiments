@@ -11,7 +11,7 @@ mod common;
 use futures_util::StreamExt;
 
 use lib::llm::accumulate::MessageAccumulator;
-use lib::llm::{ChatProvider, ImageProvider, OpenAiClient};
+use lib::llm::{ChatProvider, Freshness, ImageProvider, ModelProvider, OpenAiClient};
 use shared::llm::{ChatOptions, ContentBlock, Conversation, ImageRequest, Message, ToolDef};
 
 fn client(test_name: &str) -> Option<OpenAiClient> {
@@ -148,4 +148,24 @@ async fn generates_an_image() {
     let path = std::env::temp_dir().join("ai-harness-live-openai-generated.png");
     std::fs::write(&path, &bytes).expect("failed to write the generated image to disk");
     eprintln!("wrote generated image to {}", path.display());
+}
+
+#[tokio::test]
+async fn lists_models() {
+    let Some(client) = client("lists_models") else {
+        return;
+    };
+    let cfg = common::openai_config();
+    let models = client
+        .list_models(Freshness::Refresh)
+        .await
+        .expect("list_models failed");
+
+    assert!(!models.is_empty(), "expected at least one model");
+    assert!(
+        models.iter().any(|m| m.id == cfg.model),
+        "expected the configured model {:?} to appear in {:?}",
+        cfg.model,
+        models.iter().map(|m| &m.id).collect::<Vec<_>>()
+    );
 }

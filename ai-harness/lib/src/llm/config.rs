@@ -135,6 +135,12 @@ pub struct OllamaConfig {
     /// through verbatim as Ollama's own duration string (e.g. `"5m"`).
     #[serde(default = "default_ollama_keep_alive")]
     pub keep_alive: String,
+    /// The web index `OllamaClient::list_models_remote` and
+    /// `list_remote_tags` scrape — there is no JSON API for it (verified
+    /// against the live service; see `ollama::library`'s module doc).
+    /// Configurable so a mirror or a fixture server can stand in for it.
+    #[serde(default = "default_ollama_library_url")]
+    pub library_url: String,
 }
 
 impl Default for OllamaConfig {
@@ -143,6 +149,7 @@ impl Default for OllamaConfig {
             base_url: default_ollama_base_url(),
             model: default_ollama_model(),
             keep_alive: default_ollama_keep_alive(),
+            library_url: default_ollama_library_url(),
         }
     }
 }
@@ -157,6 +164,10 @@ fn default_ollama_model() -> String {
 
 fn default_ollama_keep_alive() -> String {
     "5m".to_string()
+}
+
+fn default_ollama_library_url() -> String {
+    "https://ollama.com/library".to_string()
 }
 
 /// The `[llm.openai]` table.
@@ -218,7 +229,7 @@ enum DurationSpec {
     Text(String),
 }
 
-fn deserialize_duration_secs<'de, D>(deserializer: D) -> Result<u64, D::Error>
+pub(crate) fn deserialize_duration_secs<'de, D>(deserializer: D) -> Result<u64, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -231,7 +242,10 @@ where
 /// Parse a duration: a bare number (seconds), or a number with an `s`/`m`/`h`
 /// suffix. Case-insensitive; whitespace between number and suffix is
 /// permitted. Mirrors `crate::config::parse_size`.
-fn parse_duration_secs(s: &str) -> Result<u64, String> {
+///
+/// `pub(crate)` — also used by `crate::cache`'s `[cache].ttl` key, so a
+/// second duration parser doesn't need to exist.
+pub(crate) fn parse_duration_secs(s: &str) -> Result<u64, String> {
     let t = s.trim();
     let split = t.find(|c: char| !c.is_ascii_digit()).unwrap_or(t.len());
     let (digits, suffix) = t.split_at(split);
@@ -283,6 +297,7 @@ mod tests {
         assert_eq!(parsed.anthropic.base_url, defaults.anthropic.base_url);
         assert_eq!(parsed.anthropic.model, defaults.anthropic.model);
         assert_eq!(parsed.ollama.base_url, defaults.ollama.base_url);
+        assert_eq!(parsed.ollama.library_url, defaults.ollama.library_url);
         assert_eq!(parsed.openai.base_url, defaults.openai.base_url);
         assert_eq!(parsed.openai.model, defaults.openai.model);
     }
@@ -303,6 +318,7 @@ mod tests {
             base_url = "http://localhost:11434"
             model = "llama3.1:8b"
             keep_alive = "1m"
+            library_url = "https://ollama.example.com/library"
             [openai]
             base_url = "https://api.openai.com"
             api_key_env = "MY_OPENAI_KEY"
@@ -315,6 +331,7 @@ mod tests {
         assert_eq!(parsed.max_retries, 5);
         assert_eq!(parsed.anthropic.model, "claude-haiku-4-5");
         assert_eq!(parsed.ollama.model, "llama3.1:8b");
+        assert_eq!(parsed.ollama.library_url, "https://ollama.example.com/library");
         assert_eq!(parsed.openai.image_model, "gpt-image-1-mini");
     }
 

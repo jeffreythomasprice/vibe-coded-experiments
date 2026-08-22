@@ -10,7 +10,8 @@ use serde::Deserialize;
 
 use shared::llm::{
     ChatOptions, CompletedMessage, ContentBlock, Conversation, Delta, Effort, MediaType, Message,
-    Role, StopReason, StreamEvent, Thinking, ToolChoice, ToolDef, ToolResultContent, Usage,
+    ModelDetails, ModelInfo, Role, StopReason, StreamEvent, Thinking, ToolChoice, ToolDef,
+    ToolResultContent, Usage,
 };
 
 use crate::llm::config::OpenAiConfig;
@@ -449,6 +450,50 @@ fn extract_stream_error_message(data: &str) -> String {
 }
 
 // ---------------------------------------------------------------------
+// Model listing
+// ---------------------------------------------------------------------
+
+/// `GET {base_url}/v1/models` — unlike Anthropic, unpaginated: one call
+/// returns every model the API key can use.
+#[derive(Debug, Deserialize)]
+struct WireModelsResponse {
+    #[serde(default)]
+    data: Vec<WireModel>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireModel {
+    id: String,
+    /// Already unix seconds on the wire, unlike Anthropic's RFC 3339
+    /// `created_at` — no conversion needed here.
+    #[serde(default)]
+    created: Option<i64>,
+    #[serde(default)]
+    owned_by: Option<String>,
+}
+
+pub fn parse_models(body: &str) -> Result<Vec<ModelInfo>, LlmError> {
+    let wire: WireModelsResponse = serde_json::from_str(body).map_err(|source| LlmError::Decode {
+        provider: PROVIDER,
+        context: "models response".to_string(),
+        source,
+    })?;
+
+    Ok(wire
+        .data
+        .into_iter()
+        .map(|m| ModelInfo {
+            id: m.id,
+            display_name: None,
+            created_at: m.created,
+            details: ModelDetails::OpenAi {
+                owned_by: m.owned_by.unwrap_or_default(),
+            },
+        })
+        .collect())
+}
+
+// ---------------------------------------------------------------------
 // Streaming
 // ---------------------------------------------------------------------
 
@@ -660,6 +705,7 @@ mod tests {
     const RESPONSE_TOOL_CALL: &str = include_str!("fixtures/response_tool_call.json");
     const STREAM_TEXT: &str = include_str!("fixtures/stream_text.sse");
     const ERROR: &str = include_str!("fixtures/error.json");
+    const MODELS: &str = include_str!("fixtures/models.json");
 
     fn cfg() -> OpenAiConfig {
         OpenAiConfig::default()
@@ -857,5 +903,17 @@ mod tests {
             serde_json::to_value(&streamed.content).unwrap(),
             serde_json::to_value(&blocking.content).unwrap()
         );
+    }
+
+    #[test]
+    fn parses_a_models_list() {
+        let models = parse_models(MODELS).unwrap();
+        assert_eq!(models.len(), 2);
+        assert_eq!(models[0].id, "gpt-5.6");
+        assert_eq!(models[0].created_at, Some(1_753_315_200));
+        match &models[0].details {
+            ModelDetails::OpenAi { owned_by } => assert_eq!(owned_by, "system"),
+            other => panic!("expected OpenAi details, got {other:?}"),
+        }
     }
 }

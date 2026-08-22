@@ -1,0 +1,59 @@
+{
+  "models": [
+    {
+      "name": "qwen3.8:latest",
+      "model": "qwen3.8:latest",
+      "modified_at": "2026-08-22T06:16:15.319536336-04:00",
+      "size": 17741872154,
+      "digest": "22130167c4c20e20c7b71454612966ca8e8171e9b3cc8ab6ce8aa6cbfec79643",
+      "details": {
+        "parent_model": "qwen3.8:27b-q4_K_M",
+        "format": "gguf",
+        "family": "qwen35",
+        "families": ["qwen35"],
+        "parameter_size": "27.3B",
+        "quantization_level": "Q4_K_M",
+        "context_length": 262144,
+        "embedding_length": 5120
+      },
+      "capabilities": ["completion", "tools", "thinking", "vision"]
+    },
+    {
+      "name": "glm-5.2:cloud",
+      "model": "glm-5.2:cloud",
+      "remote_model": "glm-5.2",
+      "remote_host": "https://ollama.com:443",
+      "modified_at": "2026-06-19T07:19:22.924224698-04:00",
+      "size": 338,
+      "digest": "ce8fd6f94793a6786f6858717b38067feba631861e3b35e8122cb6635004cd4a",
+      "details": {
+        "parent_model": "",
+        "format": "",
+        "family": "glm",
+        "families": ["glm"],
+        "parameter_size": "756b",
+        "quantization_level": "",
+        "context_length": 1000000
+      },
+      "capabilities": ["completion", "tools", "thinking"]
+    },
+    {
+      "name": "llama3.1:8b",
+      "model": "llama3.1:8b",
+      "modified_at": "2026-06-17T19:40:11.000000000-04:00",
+      "size": 4920753328,
+      "digest": "46e0c10c039e2a0f5b6f4a0f0b6e6c3f3e8b1a2d5f9c8e7b6a5d4c3b2a1f0e9d",
+      "details": {
+        "parent_model": "",
+        "format": "gguf",
+        "family": "llama",
+        "families": ["llama"],
+        "parameter_size": "8.0B",
+        "quantization_level": "Q4_K_M",
+        "context_length": 131072,
+        "embedding_length": 4096
+      },
+      "capabilities": ["completion", "tools"]
+    }
+  ]
+}

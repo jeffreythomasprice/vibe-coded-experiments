@@ -23,6 +23,49 @@ pub struct Config {
     pub log: LogConfig,
     #[serde(default)]
     pub llm: LlmConfig,
+    #[serde(default)]
+    pub cache: CacheConfig,
+}
+
+/// The `[cache]` table: a small disk cache for provider responses that are
+/// expensive or rate-limited to refetch. The one consumer that actually
+/// needs it is `OllamaClient::list_models_remote`/`list_remote_tags` — see
+/// `crate::cache`'s module doc for why that scrape in particular needs one —
+/// but `catalog::load` wires this cache into all three providers' clients,
+/// since fetching every provider's models together on every launch benefits
+/// even though no single `list_models` call would on its own.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CacheConfig {
+    /// Directory holding cached response bodies. Created on first write if
+    /// absent. A leading `~` is expanded (see [`Config::expand_paths`]).
+    #[serde(default = "default_cache_dir")]
+    pub dir: PathBuf,
+    /// How long a cached response stays fresh. A bare integer is seconds;
+    /// `"6h"`/`"30m"` suffixes work too. `0` disables caching — every call
+    /// refetches and nothing is ever read back from disk.
+    #[serde(
+        default = "default_cache_ttl_secs",
+        deserialize_with = "crate::llm::config::deserialize_duration_secs"
+    )]
+    pub ttl_secs: u64,
+}
+
+impl Default for CacheConfig {
+    fn default() -> Self {
+        Self {
+            dir: default_cache_dir(),
+            ttl_secs: default_cache_ttl_secs(),
+        }
+    }
+}
+
+fn default_cache_dir() -> PathBuf {
+    PathBuf::from("/tmp/ai-harness/cache")
+}
+
+fn default_cache_ttl_secs() -> u64 {
+    6 * 3_600
 }
 
 /// The `[log]` table.
@@ -128,6 +171,7 @@ impl Config {
     /// Tilde-expand paths in place. Call once, right after [`Config::load`].
     pub fn expand_paths(&mut self) -> anyhow::Result<()> {
         self.log.dir = expand_tilde(&self.log.dir)?;
+        self.cache.dir = expand_tilde(&self.cache.dir)?;
         Ok(())
     }
 }
@@ -249,6 +293,35 @@ mod tests {
         assert_eq!(parsed.log.rotation.max_size, defaults.log.rotation.max_size);
         assert_eq!(parsed.log.rotation.keep, defaults.log.rotation.keep);
         assert_eq!(parsed.log.rotation.interval, defaults.log.rotation.interval);
+        assert_eq!(parsed.cache.dir, defaults.cache.dir);
+        assert_eq!(parsed.cache.ttl_secs, defaults.cache.ttl_secs);
+    }
+
+    #[test]
+    fn parses_a_cache_table() {
+        let parsed: Config = toml::from_str(
+            r#"
+            [cache]
+            dir = "/var/cache/ai-harness"
+            ttl_secs = "30m"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(parsed.cache.dir, PathBuf::from("/var/cache/ai-harness"));
+        assert_eq!(parsed.cache.ttl_secs, 1_800);
+    }
+
+    #[test]
+    fn cache_ttl_accepts_a_bare_integer_and_zero_disables_caching() {
+        let parsed: Config = toml::from_str("[cache]\nttl_secs = 0\n").unwrap();
+        assert_eq!(parsed.cache.ttl_secs, 0);
+        let parsed: Config = toml::from_str("[cache]\nttl_secs = 3600\n").unwrap();
+        assert_eq!(parsed.cache.ttl_secs, 3_600);
+    }
+
+    #[test]
+    fn rejects_unknown_cache_keys() {
+        assert!(toml::from_str::<Config>("[cache]\nnope = 1\n").is_err());
     }
 
     #[test]

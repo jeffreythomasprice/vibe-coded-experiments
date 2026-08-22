@@ -79,6 +79,11 @@ model = "qwen3.5:latest"
 # How long Ollama keeps this model loaded in memory after the request.
 keep_alive = "5m"
 
+# The web index `OllamaClient::list_models_remote`/`list_remote_tags` scrape
+# — there is no JSON API for it (see `lib::llm::ollama::library`'s module
+# doc). Configurable so a mirror or a fixture server can stand in for it.
+library_url = "https://ollama.com/library"
+
 [llm.openai]
 base_url = "https://api.openai.com"
 api_key_env = "OPENAI_API_KEY"
@@ -88,3 +93,22 @@ model = "gpt-5.6"
 # the model `ImageProvider::generate` uses (see the README's "LLM providers"
 # section for why OpenAI is the only one of the three that offers it here).
 image_model = "gpt-image-2"
+
+[cache]
+# A small disk cache for provider responses that are expensive or
+# rate-limited to refetch. The one consumer that actually needs this is
+# `OllamaClient::list_models_remote`/`list_remote_tags` (the
+# `ollama.com/library` scrape above has no JSON API, so re-fetching its
+# ~800KB HTML on every call isn't acceptable) — the three JSON
+# model-listing endpoints (`ModelProvider::list_models` on all three
+# providers) are individually cheap enough to always hit the network, but
+# `catalog::load` wires this cache into all three anyway, since fetching
+# every provider's models together on every launch is what benefits, even
+# though no single one of those calls would on its own.
+# Created on first write if absent. A leading `~` is expanded.
+dir = "/tmp/ai-harness/cache"
+
+# How long a cached response stays fresh. A bare integer is seconds;
+# "30m"/"6h" suffixes work too. `0` disables caching — every call refetches
+# and nothing is ever read back from disk.
+ttl_secs = "6h"

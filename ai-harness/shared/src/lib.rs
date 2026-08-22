@@ -9,16 +9,6 @@ use serde::{Deserialize, Serialize};
 
 pub mod llm;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GreetRequest {
-    pub name: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GreetResponse {
-    pub message: String,
-}
-
 /// Severity of a forwarded client log event, mirroring `tracing::Level`.
 ///
 /// `tracing::Level` is neither `Serialize` nor `Deserialize`, so the IPC

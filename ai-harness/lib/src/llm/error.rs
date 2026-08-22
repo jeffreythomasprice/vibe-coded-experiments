@@ -35,6 +35,17 @@ pub enum LlmError {
         source: serde_json::Error,
     },
 
+    /// A hand-rolled parser (not `serde_json`) couldn't make sense of what it
+    /// was given — currently only Ollama's `ollama.com/library` HTML scrape.
+    /// Distinct from [`LlmError::Decode`], which is specifically a
+    /// `serde_json::Error`.
+    #[error("{provider}: failed to parse {context}: {message}")]
+    Parse {
+        provider: &'static str,
+        context: String,
+        message: String,
+    },
+
     #[error("missing API key: environment variable {var} is not set")]
     MissingApiKey { var: String },
 
@@ -55,9 +66,10 @@ impl LlmError {
             // A connection-level failure (DNS, TCP reset, TLS handshake) is
             // usually transient and worth one more attempt.
             LlmError::Http { .. } => true,
-            LlmError::Decode { .. } | LlmError::MissingApiKey { .. } | LlmError::Stream { .. } => {
-                false
-            }
+            LlmError::Decode { .. }
+            | LlmError::Parse { .. }
+            | LlmError::MissingApiKey { .. }
+            | LlmError::Stream { .. } => false,
         }
     }
 }
@@ -138,6 +150,17 @@ mod tests {
             request_id: None,
         };
         assert!(!err.is_retryable());
+    }
+
+    #[test]
+    fn a_parse_error_is_never_retryable() {
+        let err = LlmError::Parse {
+            provider: "ollama",
+            context: "library index".to_string(),
+            message: "no model cards found".to_string(),
+        };
+        assert!(!err.is_retryable());
+        assert!(err.to_string().contains("no model cards found"));
     }
 
     #[test]

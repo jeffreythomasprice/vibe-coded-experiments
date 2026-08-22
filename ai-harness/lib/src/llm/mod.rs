@@ -31,7 +31,10 @@ use std::pin::Pin;
 
 use async_trait::async_trait;
 use futures_util::Stream;
-use shared::llm::{ChatOptions, CompletedMessage, Conversation, GeneratedImage, ImageRequest, StreamEvent};
+use shared::llm::{
+    ChatOptions, CompletedMessage, Conversation, GeneratedImage, ImageRequest, ModelInfo,
+    StreamEvent,
+};
 
 /// A stream of `StreamEvent`s from [`ChatProvider::stream`].
 ///
@@ -82,4 +85,37 @@ pub trait ImageProvider: Send + Sync {
     fn name(&self) -> &'static str;
 
     async fn generate(&self, request: &ImageRequest) -> Result<Vec<GeneratedImage>, LlmError>;
+}
+
+/// Whether [`ModelProvider::list_models`] (and Ollama's `list_models_remote`
+/// / `list_remote_tags`) may answer from the on-disk cache configured by
+/// `[cache]`, or must hit the network.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Freshness {
+    /// Reuse a cached list if it's younger than `[cache].ttl_secs`. The
+    /// right default for "what models are there" — a model list changes
+    /// rarely enough that a few hours of staleness is a fine trade for
+    /// skipping the network.
+    #[default]
+    Cached,
+    /// Ignore any cached entry and re-fetch, writing the fresh result back
+    /// to the cache. Needed right after `ollama pull` — Ollama's own
+    /// `/api/tags` would otherwise not show the new model until the cached
+    /// entry expires.
+    Refresh,
+}
+
+/// A provider that can report which models it offers. Anthropic, Ollama, and
+/// OpenAI all implement this, following the same by-type capability
+/// discovery [`ImageProvider`] already established. Ollama additionally
+/// exposes two inherent (non-trait) methods,
+/// `OllamaClient::list_models_remote` and `OllamaClient::list_remote_tags`,
+/// for `ollama.com/library` — nothing else could implement them, since only
+/// Ollama distinguishes "models pulled and ready to run" from "models
+/// available to pull".
+#[async_trait]
+pub trait ModelProvider: Send + Sync {
+    fn name(&self) -> &'static str;
+
+    async fn list_models(&self, freshness: Freshness) -> Result<Vec<ModelInfo>, LlmError>;
 }

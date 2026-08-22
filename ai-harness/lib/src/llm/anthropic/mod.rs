@@ -10,20 +10,28 @@ pub mod wire;
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use reqwest::Client;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
-use shared::llm::{ChatOptions, CompletedMessage, Conversation};
+use shared::llm::{ChatOptions, CompletedMessage, Conversation, ModelInfo};
 
+use crate::cache::Cache;
 use crate::llm::config::AnthropicConfig;
 use crate::llm::error::LlmError;
 use crate::llm::http;
 use crate::llm::sse::SseDecoder;
-use crate::llm::{ChatProvider, ChatStream};
+use crate::llm::{ChatProvider, ChatStream, Freshness, ModelProvider};
+
+/// A hard cap on how many `/v1/models` pages [`AnthropicClient::list_models`]
+/// will follow. At the maximum `limit` of 1000 this covers 20,000 models —
+/// far more than Anthropic has ever listed — so this only exists to stop a
+/// server that never clears `has_more` from spinning forever.
+const MAX_MODEL_PAGES: u32 = 20;
 
 pub struct AnthropicClient {
     client: Client,
     cfg: AnthropicConfig,
     max_retries: u32,
+    cache: Cache,
 }
 
 impl AnthropicClient {
@@ -36,7 +44,15 @@ impl AnthropicClient {
             client: http::build_client(request_timeout)?,
             cfg,
             max_retries,
+            cache: Cache::disabled(),
         })
+    }
+
+    /// Opt into caching `list_models` results — see `crate::cache`'s module
+    /// doc. Not wired to any construction site by default.
+    pub fn with_cache(mut self, cache: Cache) -> Self {
+        self.cache = cache;
+        self
     }
 
     fn endpoint(&self) -> String {
@@ -51,6 +67,16 @@ impl AnthropicClient {
             .header("x-api-key", api_key)
             .header("anthropic-version", self.cfg.anthropic_version.clone())
             .json(body))
+    }
+
+    fn get_request(&self, path_and_query: &str) -> Result<reqwest::RequestBuilder, LlmError> {
+        let api_key = self.cfg.api_key()?;
+        let url = format!("{}{path_and_query}", self.cfg.base_url.trim_end_matches('/'));
+        Ok(self
+            .client
+            .get(url)
+            .header("x-api-key", api_key)
+            .header("anthropic-version", self.cfg.anthropic_version.clone()))
     }
 }
 
@@ -109,5 +135,61 @@ impl ChatProvider for AnthropicClient {
         };
 
         Ok(Box::pin(stream))
+    }
+}
+
+#[async_trait]
+impl ModelProvider for AnthropicClient {
+    fn name(&self) -> &'static str {
+        wire::PROVIDER
+    }
+
+    /// Follows `has_more`/`last_id` pagination to assemble the full list
+    /// (capped at [`MAX_MODEL_PAGES`]), then caches the assembled result
+    /// under one key — a page boundary is an implementation detail of one
+    /// listing, not something a cache read should have to know about.
+    async fn list_models(&self, freshness: Freshness) -> Result<Vec<ModelInfo>, LlmError> {
+        const CACHE_KEY: &str = "anthropic-models.json";
+
+        if freshness == Freshness::Cached {
+            if let Some(cached) = self.cache.read(CACHE_KEY, SystemTime::now()) {
+                match serde_json::from_str::<Vec<ModelInfo>>(&cached) {
+                    Ok(models) => return Ok(models),
+                    Err(err) => {
+                        tracing::debug!(%err, "ignoring a cached anthropic model list that failed to parse");
+                    }
+                }
+            }
+        }
+
+        let mut models = Vec::new();
+        let mut after_id: Option<String> = None;
+        for _ in 0..MAX_MODEL_PAGES {
+            let mut path = "/v1/models?limit=1000".to_string();
+            if let Some(id) = &after_id {
+                path.push_str("&after_id=");
+                path.push_str(id);
+            }
+            let request = self.get_request(&path)?;
+            let response =
+                http::send_with_retry(wire::PROVIDER, request, self.max_retries, wire::parse_error)
+                    .await?;
+            let text = response.text().await.map_err(|source| LlmError::Http {
+                provider: wire::PROVIDER,
+                source,
+            })?;
+            let page = wire::parse_models(&text)?;
+            models.extend(page.models);
+            match page.next_after_id {
+                Some(id) => after_id = Some(id),
+                None => break,
+            }
+        }
+
+        if let Ok(body) = serde_json::to_string(&models) {
+            self.cache.write(CACHE_KEY, &body);
+        }
+
+        Ok(models)
     }
 }

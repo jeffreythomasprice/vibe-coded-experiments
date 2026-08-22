@@ -1,0 +1,20 @@
+{
+  "models": [
+    {
+      "name": "all-minilm:latest",
+      "model": "all-minilm:latest",
+      "modified_at": "2026-01-01T00:00:00.000000000-04:00",
+      "size": 45960996,
+      "digest": "1b226e2802dbb772b5fc32a58f5a1f7f8c1a6b1c9d8e0f1a2b3c4d5e6f7a8b9c",
+      "details": {
+        "parent_model": "",
+        "format": "gguf",
+        "family": "bert",
+        "families": null,
+        "parameter_size": "23M",
+        "quantization_level": "F16"
+      },
+      "capabilities": null
+    }
+  ]
+}

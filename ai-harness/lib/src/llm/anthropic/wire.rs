@@ -9,7 +9,8 @@ use serde::Deserialize;
 
 use shared::llm::{
     ChatOptions, CompletedMessage, ContentBlock, Conversation, Delta, Effort, MediaType, Message,
-    Role, StopReason, StreamEvent, Thinking, ToolChoice, ToolDef, ToolResultContent, Usage,
+    ModelDetails, ModelInfo, Role, StopReason, StreamEvent, Thinking, ToolChoice, ToolDef,
+    ToolResultContent, Usage,
 };
 
 use crate::llm::config::AnthropicConfig;
@@ -250,6 +251,82 @@ pub fn parse_error(status: u16, body: &str) -> LlmError {
 }
 
 // ---------------------------------------------------------------------
+// Model listing
+// ---------------------------------------------------------------------
+
+/// One page of `GET {base_url}/v1/models`.
+#[derive(Debug)]
+pub struct ModelsPage {
+    pub models: Vec<ModelInfo>,
+    /// `last_id` from the response, but only when `has_more` is true — the
+    /// cursor to pass as `after_id` on the next call. `None` means this was
+    /// the last page.
+    pub next_after_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireModelsResponse {
+    data: Vec<WireModel>,
+    #[serde(default)]
+    has_more: bool,
+    #[serde(default)]
+    last_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireModel {
+    id: String,
+    #[serde(default)]
+    display_name: Option<String>,
+    #[serde(default)]
+    created_at: Option<String>,
+    #[serde(default)]
+    max_input_tokens: Option<u64>,
+    /// Named `max_tokens` on the wire — "Maximum value for the `max_tokens`
+    /// parameter when using this model" — which is really a cap on *output*
+    /// tokens, hence `ModelDetails::Anthropic::max_output_tokens` below.
+    #[serde(default)]
+    max_tokens: Option<u64>,
+}
+
+pub fn parse_models(body: &str) -> Result<ModelsPage, LlmError> {
+    let wire: WireModelsResponse = serde_json::from_str(body).map_err(|source| LlmError::Decode {
+        provider: PROVIDER,
+        context: "models response".to_string(),
+        source,
+    })?;
+
+    let models = wire
+        .data
+        .into_iter()
+        .map(|m| ModelInfo {
+            id: m.id,
+            display_name: m.display_name,
+            created_at: m.created_at.as_deref().and_then(parse_rfc3339_to_unix),
+            details: ModelDetails::Anthropic {
+                max_input_tokens: m.max_input_tokens,
+                max_output_tokens: m.max_tokens,
+            },
+        })
+        .collect();
+
+    Ok(ModelsPage {
+        models,
+        next_after_id: if wire.has_more { wire.last_id } else { None },
+    })
+}
+
+/// Convert an RFC 3339 timestamp (Anthropic's `created_at` shape) to unix
+/// seconds. `None` on anything that doesn't parse — one field failing to
+/// parse shouldn't fail the whole listing; the model is still returned, just
+/// with `created_at: None`.
+fn parse_rfc3339_to_unix(s: &str) -> Option<i64> {
+    time::OffsetDateTime::parse(s, &time::format_description::well_known::Rfc3339)
+        .ok()
+        .map(|dt| dt.unix_timestamp())
+}
+
+// ---------------------------------------------------------------------
 // Streaming
 // ---------------------------------------------------------------------
 
@@ -471,6 +548,8 @@ mod tests {
     const STREAM_TEXT: &str = include_str!("fixtures/stream_text.sse");
     const ERROR_OVERLOADED: &str = include_str!("fixtures/error_overloaded.json");
     const ERROR_INVALID_REQUEST: &str = include_str!("fixtures/error_invalid_request.json");
+    const MODELS: &str = include_str!("fixtures/models.json");
+    const MODELS_LAST_PAGE: &str = include_str!("fixtures/models_last_page.json");
 
     fn cfg() -> AnthropicConfig {
         AnthropicConfig::default()
@@ -671,5 +750,38 @@ mod tests {
             serde_json::to_value(&streamed.content).unwrap(),
             serde_json::to_value(&blocking.content).unwrap()
         );
+    }
+
+    #[test]
+    fn parses_a_page_of_models() {
+        let page = parse_models(MODELS).unwrap();
+        assert_eq!(page.models.len(), 2);
+        assert_eq!(page.models[0].id, "claude-opus-5");
+        assert_eq!(page.models[0].display_name.as_deref(), Some("Claude Opus 5"));
+        match &page.models[0].details {
+            ModelDetails::Anthropic {
+                max_input_tokens,
+                max_output_tokens,
+            } => {
+                assert_eq!(*max_input_tokens, Some(1_000_000));
+                assert_eq!(*max_output_tokens, Some(64_000));
+            }
+            other => panic!("expected Anthropic details, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn converts_rfc3339_created_at_to_unix_seconds() {
+        let page = parse_models(MODELS).unwrap();
+        assert_eq!(page.models[0].created_at, Some(1_784_851_200));
+    }
+
+    #[test]
+    fn hands_back_last_id_as_the_next_cursor_only_when_has_more() {
+        let page = parse_models(MODELS).unwrap();
+        assert_eq!(page.next_after_id.as_deref(), Some("claude-sonnet-5"));
+
+        let last_page = parse_models(MODELS_LAST_PAGE).unwrap();
+        assert_eq!(last_page.next_after_id, None);
     }
 }

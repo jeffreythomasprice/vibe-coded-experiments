@@ -4,12 +4,16 @@ use std::process::ExitCode;
 use anyhow::Context;
 use lib::config::Config;
 
+/// Every model from every configured provider, merging Ollama's local
+/// `/api/tags` list into its `ollama.com/library` index (see
+/// `lib::catalog::merge_ollama`). Returns `Result` only because Tauri
+/// requires it of an async command that borrows `State`; a per-provider
+/// failure rides inside the payload's `ProviderModels::errors` rather than
+/// failing this command outright, so one misconfigured provider never blanks
+/// out the others.
 #[tauri::command]
-fn greet(request: shared::GreetRequest) -> shared::GreetResponse {
-    tracing::debug!(name = %request.name, "greet command");
-    shared::GreetResponse {
-        message: lib::build_greeting(&request.name),
-    }
+async fn model_catalog(config: tauri::State<'_, Config>) -> Result<shared::llm::ModelCatalog, String> {
+    Ok(lib::catalog::load(&config).await)
 }
 
 /// Sink for log events forwarded from the wasm frontend, so client and server
@@ -64,7 +68,8 @@ fn run() -> anyhow::Result<()> {
 
     tracing::info!("starting tauri");
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![greet, log_from_client])
+        .manage(config.clone())
+        .invoke_handler(tauri::generate_handler![model_catalog, log_from_client])
         .run(tauri::generate_context!())?;
     Ok(())
 }
