@@ -8,7 +8,9 @@
 use serde::{Deserialize, Serialize};
 
 pub mod agent;
+pub mod conversation;
 pub mod error;
+pub mod ids;
 pub mod llm;
 
 /// Severity of a forwarded client log event, mirroring `tracing::Level`.

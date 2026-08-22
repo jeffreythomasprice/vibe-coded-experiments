@@ -13,7 +13,7 @@ pub struct ToolDef {
 
 /// Whether/which tool the model must use. Ollama accepts and silently
 /// ignores this field — see `lib::llm::ollama`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolChoice {
     Auto,

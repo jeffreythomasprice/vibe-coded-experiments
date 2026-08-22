@@ -1,8 +1,11 @@
+mod commands;
+
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anyhow::Context;
 use lib::config::Config;
+use lib::service::Service;
 
 /// Every model from every configured provider, merging Ollama's local
 /// `/api/tags` list into its `ollama.com/library` index (see
@@ -66,10 +69,37 @@ fn run() -> anyhow::Result<()> {
         Err(err) => tracing::warn!(%err, "could not render effective config"),
     }
 
+    // A `Service` opens the database and builds the LLM router — both do
+    // real I/O, so this needs the async runtime, but `run()` itself stays
+    // sync (Tauri's `App::run` never returns; there is no natural point to
+    // `.await` after it starts). `tauri::async_runtime::block_on` runs this
+    // to completion on the same runtime Tauri's own async commands use,
+    // rather than spinning up a second one just for this one call.
+    let service = tauri::async_runtime::block_on(Service::from_config(&config))
+        .context("starting the local database and LLM router")?;
+
     tracing::info!("starting tauri");
     tauri::Builder::default()
         .manage(config.clone())
-        .invoke_handler(tauri::generate_handler![model_catalog, log_from_client])
+        .manage(service)
+        .invoke_handler(tauri::generate_handler![
+            model_catalog,
+            log_from_client,
+            commands::agents::list_agents,
+            commands::agents::get_agent,
+            commands::agents::tool_catalog,
+            commands::agents::create_agent,
+            commands::agents::update_agent,
+            commands::agents::delete_agent,
+            commands::conversations::list_conversations,
+            commands::conversations::create_conversation,
+            commands::conversations::get_conversation,
+            commands::conversations::rename_conversation,
+            commands::conversations::delete_conversation,
+            commands::conversations::send_message,
+            commands::conversations::approve_tools,
+            commands::conversations::cancel_pending,
+        ])
         .run(tauri::generate_context!())?;
     Ok(())
 }

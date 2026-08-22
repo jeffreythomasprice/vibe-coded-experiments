@@ -187,6 +187,35 @@ every pending call has an `Approve` or `Deny` decision. `Agent::stream_turn`
 `max_steps` (default 8) is the control for a multi-step turn's total
 cost/runaway risk.
 
+### Persistence
+
+Agent configs and conversations are stored in one SQLite file, at the path
+named by `[database]` in `config.toml` (default `/tmp/ai-harness/ai-harness.db`
+— see [`config.example.toml`](config.example.toml)). It's a plain SQLite
+file — nothing Turso/libSQL-specific — so `sqlx`'s driver can be swapped for
+`sqlx-turso` later without touching anything above `lib::db`.
+
+- `lib::db::migrate` — a hand-rolled runner, not `sqlx::migrate!`: a
+  migration is `Step::Sql(&str)` or `Step::Rust(fn)`, so a backfill that has
+  to read a row, transform it in Rust, and write it back is possible, not
+  just schema DDL. Each migration and its `_migrations` ledger row commit in
+  one transaction. `Db::open` runs this on startup.
+- `lib::db` (`agents`, `conversations`, `turns`) — the DAL. A turn's messages
+  are held back from `messages` until it reaches a terminal outcome, so the
+  table never holds an unresolved `tool_use`; a turn suspended on
+  `TurnStop::AwaitingApproval` is stored as the whole `AgentTurn`, serialized
+  verbatim, so `Agent::resume` can't see a reconstructed value that doesn't
+  match what it suspended on. See that module's doc for the rest of the
+  invariants.
+- `lib::agent::registry::ToolRegistry` — the process-wide catalog a stored
+  `AgentConfig`'s tool selection resolves against; `build_agent` turns a
+  config into a runnable `Agent`.
+- `lib::service::Service` — the layer Tauri commands call into: CRUD on
+  agent configs, and `send_message`/`approve_tools`, which drive a turn and
+  persist it only at its terminal outcome — never partway through a stream
+  (a truncated assistant message isn't replayable). One lock per
+  conversation keeps two turns from racing on the same history.
+
 ## Logs
 
 Every crate logs through `tracing`. Lines carry an ISO8601 UTC timestamp with

@@ -50,7 +50,7 @@ pub enum TurnStop {
 
 /// One tool call the model wants to make that needs a decision before it can
 /// run.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolApprovalRequest {
     pub tool_use_id: String,
     pub name: String,

@@ -10,9 +10,11 @@
 //! `lib::llm::testing::ScriptedProvider` — no network involved.
 
 pub mod error;
+pub mod registry;
 pub mod tool;
 
 pub use error::AgentError;
+pub use registry::{build_agent, with_approval, ToolRegistry};
 pub use tool::{json_tool, schema_for, tool, FnTool, JsonSchema, Tool, ToolBox, ToolOutput};
 
 use std::collections::{BTreeSet, HashMap};

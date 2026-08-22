@@ -25,6 +25,35 @@ pub struct Config {
     pub llm: LlmConfig,
     #[serde(default)]
     pub cache: CacheConfig,
+    #[serde(default)]
+    pub database: DatabaseConfig,
+}
+
+/// The `[database]` table: the local SQLite file `lib::db::Db::open` reads
+/// and migrates on startup.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DatabaseConfig {
+    /// The SQLite file. Created, along with its parent directory, on first
+    /// run. A leading `~` is expanded (see [`Config::expand_paths`]).
+    ///
+    /// Deliberately the only key here: pool size and busy timeout are
+    /// constants in `lib::db`, not deployment settings — a single-user local
+    /// file has no tuning story worth a config key that could go wrong.
+    #[serde(default = "default_database_path")]
+    pub path: PathBuf,
+}
+
+impl Default for DatabaseConfig {
+    fn default() -> Self {
+        Self {
+            path: default_database_path(),
+        }
+    }
+}
+
+fn default_database_path() -> PathBuf {
+    PathBuf::from("/tmp/ai-harness/ai-harness.db")
 }
 
 /// The `[cache]` table: a small disk cache for provider responses that are
@@ -172,6 +201,7 @@ impl Config {
     pub fn expand_paths(&mut self) -> anyhow::Result<()> {
         self.log.dir = expand_tilde(&self.log.dir)?;
         self.cache.dir = expand_tilde(&self.cache.dir)?;
+        self.database.path = expand_tilde(&self.database.path)?;
         Ok(())
     }
 }
@@ -325,6 +355,26 @@ mod tests {
     }
 
     #[test]
+    fn parses_a_database_table() {
+        let parsed: Config = toml::from_str(
+            r#"
+            [database]
+            path = "/var/lib/ai-harness/ai-harness.db"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(
+            parsed.database.path,
+            PathBuf::from("/var/lib/ai-harness/ai-harness.db")
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_database_keys() {
+        assert!(toml::from_str::<Config>("[database]\nnope = 1\n").is_err());
+    }
+
+    #[test]
     fn parses_a_full_config() {
         let parsed: Config = toml::from_str(
             r#"
@@ -406,5 +456,6 @@ mod tests {
         assert_eq!(parsed.llm.openai.api_key_env, defaults.llm.openai.api_key_env);
         assert_eq!(parsed.cache.dir, defaults.cache.dir);
         assert_eq!(parsed.cache.ttl_secs, defaults.cache.ttl_secs);
+        assert_eq!(parsed.database.path, defaults.database.path);
     }
 }

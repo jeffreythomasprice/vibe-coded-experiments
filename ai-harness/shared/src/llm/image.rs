@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// JS array of numbers (large and slow to marshal); every provider this crate
 /// talks to wants base64 on the wire anyway, so this avoids a decode/encode
 /// round trip in both directions.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ImageSource {
     pub media_type: MediaType,
     pub data: String,

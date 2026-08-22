@@ -7,10 +7,12 @@
 //! that applies here too. `lib::agent` builds and runs an actual `Agent` from
 //! an [`AgentSpec`]; nothing in this module executes anything.
 
+pub mod config;
 pub mod event;
 pub mod spec;
 pub mod turn;
 
+pub use config::{AgentConfig, AgentConfigInput, ToolSelection};
 pub use event::AgentEvent;
 pub use spec::{AgentSpec, Approval, ToolSpec};
 pub use turn::{AgentTurn, Decision, ToolApprovalRequest, ToolDecision, TurnStop};

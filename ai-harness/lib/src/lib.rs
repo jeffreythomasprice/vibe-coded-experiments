@@ -7,5 +7,7 @@ pub mod agent;
 pub mod cache;
 pub mod catalog;
 pub mod config;
+pub mod db;
 pub mod llm;
 pub mod logging;
+pub mod service;

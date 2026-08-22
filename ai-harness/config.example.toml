@@ -110,3 +110,10 @@ dir = "/tmp/ai-harness/cache"
 # "30m"/"6h" suffixes work too. `0` disables caching — every call refetches
 # and nothing is ever read back from disk.
 ttl_secs = "6h"
+
+[database]
+# The local SQLite file holding agent configs and conversation history.
+# Created, along with its parent directory, on first run. A leading `~` is
+# expanded. Deliberately the only key in this table — pool size and busy
+# timeout are constants in `lib::db`, not deployment settings.
+path = "/tmp/ai-harness/ai-harness.db"

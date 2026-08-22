@@ -22,7 +22,7 @@ pub struct Conversation {
     pub messages: Vec<Message>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Message {
     pub role: Role,
     pub content: Vec<ContentBlock>,
@@ -59,7 +59,7 @@ pub enum Role {
 /// `Unknown` block carries no payload, so it must never be sent back to a
 /// provider: `lib::llm`'s request builders drop it with a `tracing::warn!`
 /// rather than round-tripping `{"type":"unknown"}`, which providers reject.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
     Text {
@@ -102,7 +102,7 @@ pub enum ContentBlock {
 /// Content of a `tool_result` block. Anthropic allows a bare string here;
 /// callers should normalize to `Text` on the way in so this crate only has
 /// one shape to deal with.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolResultContent {
     Text { text: String },

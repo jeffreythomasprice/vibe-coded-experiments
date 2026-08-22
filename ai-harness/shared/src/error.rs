@@ -44,6 +44,13 @@ pub enum ErrorKind {
     /// An agent-loop invariant, not a provider failure (e.g. a decision was
     /// given for a tool call that was not pending).
     Agent,
+    /// The app's own local database failed — not a provider. A UI should say
+    /// "something's wrong with this install," not "the model is down."
+    Storage,
+    /// The requested operation collides with one already in flight (e.g. a
+    /// second turn on a conversation that is already streaming). Distinct
+    /// from `Storage`: the fix here is "wait" or "retry," not "file a bug."
+    Conflict,
     Other,
 }
 

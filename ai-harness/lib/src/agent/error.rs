@@ -23,6 +23,12 @@ pub enum AgentError {
     #[error("duplicate tool name {name:?}")]
     DuplicateTool { name: String },
 
+    /// A stored `AgentConfig` named a tool that isn't registered in this
+    /// build's `crate::agent::registry::ToolRegistry` — see
+    /// `LlmError::UnknownProvider`, which this mirrors.
+    #[error("no tool named {name:?} is registered (have: {available:?})")]
+    UnknownTool { name: String, available: Vec<String> },
+
     /// `Agent::resume` was called on an `AgentTurn` whose `stop` isn't
     /// `TurnStop::AwaitingApproval`.
     #[error("this turn is not awaiting approval")]
