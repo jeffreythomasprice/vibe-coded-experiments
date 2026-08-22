@@ -4,9 +4,13 @@
 //! Each provider lives in its own submodule and is split into a `wire`
 //! module (pure request-building and response/error parsing over `&str` /
 //! `&[u8]`, unit-tested on recorded fixtures — no network) and a thin `mod.rs`
-//! that only does HTTP. There is deliberately no router here: callers
-//! construct the concrete client they want and talk to it through
-//! [`ChatProvider`], [`ImageProvider`], or [`EmbeddingProvider`] directly.
+//! that only does HTTP. A caller that wants one concrete provider still
+//! constructs it directly and talks to it through [`ChatProvider`],
+//! [`ImageProvider`], [`ModelProvider`], or [`EmbeddingProvider`]; a caller
+//! that wants to address "whichever provider `shared::llm::ModelRef` names"
+//! goes through [`router::Router`] instead, which resolves one of those
+//! traits from a registered [`router::ProviderEntry`]. See `crate::agent`,
+//! which is built on the router rather than any one concrete client.
 //!
 //! See `README.md`'s "Tests" section and `CLAUDE.md` for the unit-vs-live
 //! testing split this module is built around.
@@ -19,13 +23,17 @@ pub mod http;
 pub mod ndjson;
 pub mod ollama;
 pub mod openai;
+pub mod router;
 pub mod sse;
+#[cfg(test)]
+pub(crate) mod testing;
 
 pub use anthropic::AnthropicClient;
 pub use config::LlmConfig;
 pub use error::{ApiErrorKind, LlmError};
 pub use ollama::OllamaClient;
 pub use openai::OpenAiClient;
+pub use router::{ProviderEntry, Router};
 
 use std::pin::Pin;
 

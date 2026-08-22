@@ -3,6 +3,32 @@
 
 use serde::{Deserialize, Serialize};
 
+/// The only way to address a model: an exact provider and an exact model id on
+/// that provider. There is deliberately no "just the provider" form (a bare
+/// provider name has no model to send) and no "just the model id" form (a bare
+/// id would have to be guessed back to a provider by prefix, which goes stale,
+/// and which Ollama — whose ids are arbitrary local tags — breaks outright).
+/// See `lib::llm::router::Router`, which resolves one of these to a live
+/// provider client.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ModelRef {
+    /// A key registered with the router — `"anthropic"`, `"ollama"`,
+    /// `"openai"`, or a caller-registered name (a gateway, a proxy, a test
+    /// double). Not necessarily the same as `ChatProvider::name()`.
+    pub provider: String,
+    /// Exactly what you'd put in `ChatOptions.model`.
+    pub model: String,
+}
+
+impl ModelRef {
+    pub fn new(provider: impl Into<String>, model: impl Into<String>) -> Self {
+        Self {
+            provider: provider.into(),
+            model: model.into(),
+        }
+    }
+}
+
 /// One model, as reported by a provider's model-listing endpoint (or, for
 /// Ollama's remote library, scraped from its web index).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -257,6 +283,18 @@ pub struct ModelCatalog {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn model_ref_round_trips_through_json() {
+        let model_ref = ModelRef::new("anthropic", "claude-opus-5");
+        let json = serde_json::to_value(&model_ref).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({"provider": "anthropic", "model": "claude-opus-5"})
+        );
+        let back: ModelRef = serde_json::from_value(json).unwrap();
+        assert_eq!(back, model_ref);
+    }
 
     #[test]
     fn catalog_entry_omits_empty_local_tags() {

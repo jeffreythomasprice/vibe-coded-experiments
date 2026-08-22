@@ -72,6 +72,20 @@ pub enum LlmError {
         max_input_tokens: Option<u64>,
         message: String,
     },
+
+    /// `Router::chat`/`embeddings` was asked for a provider name nothing was
+    /// ever registered under.
+    #[error("unknown provider {name:?}; registered: {}", available.join(", "))]
+    UnknownProvider { name: String, available: Vec<String> },
+
+    /// The named provider is registered, but not with the capability being
+    /// asked for (e.g. `router.embeddings(...)` on a provider registered
+    /// chat-only).
+    #[error("provider {provider:?} does not support {capability}")]
+    Unsupported {
+        provider: String,
+        capability: &'static str,
+    },
 }
 
 impl LlmError {
@@ -88,7 +102,9 @@ impl LlmError {
             | LlmError::Parse { .. }
             | LlmError::MissingApiKey { .. }
             | LlmError::Stream { .. }
-            | LlmError::InputTooLarge { .. } => false,
+            | LlmError::InputTooLarge { .. }
+            | LlmError::UnknownProvider { .. }
+            | LlmError::Unsupported { .. } => false,
         }
     }
 }
@@ -189,6 +205,30 @@ mod tests {
         };
         assert!(err.to_string().contains("ANTHROPIC_API_KEY"));
         assert!(!err.is_retryable());
+    }
+
+    #[test]
+    fn unknown_provider_names_what_is_registered() {
+        let err = LlmError::UnknownProvider {
+            name: "azure".to_string(),
+            available: vec!["anthropic".to_string(), "ollama".to_string()],
+        };
+        assert!(!err.is_retryable());
+        let message = err.to_string();
+        assert!(message.contains("azure"));
+        assert!(message.contains("anthropic"));
+        assert!(message.contains("ollama"));
+    }
+
+    #[test]
+    fn unsupported_names_the_provider_and_capability() {
+        let err = LlmError::Unsupported {
+            provider: "anthropic".to_string(),
+            capability: "embeddings",
+        };
+        assert!(!err.is_retryable());
+        assert!(err.to_string().contains("anthropic"));
+        assert!(err.to_string().contains("embeddings"));
     }
 
     #[test]

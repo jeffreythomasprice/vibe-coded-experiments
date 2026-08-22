@@ -109,8 +109,11 @@ here — Ollama's image-generation endpoint is macOS-only and Anthropic
 doesn't offer one at all. `OpenAiClient` and `OllamaClient` also implement
 `EmbeddingProvider`; `AnthropicClient` does not — Anthropic's API surface is
 Messages, Batches, Files, Token Counting, and Models, with no embeddings
-endpoint. There is no router: construct the client you want and call it
-directly.
+endpoint. A caller that wants one specific provider still constructs that
+client directly and calls it; a caller that wants to address "whichever
+provider a `shared::llm::ModelRef` names" goes through
+`lib::llm::router::Router` instead — see [Agents](#agents) below, which is
+built on it.
 
 | | Anthropic | Ollama | OpenAI |
 |---|---|---|---|
@@ -133,6 +136,56 @@ deployment settings, so they're required fields on `ChatOptions` /
 `EmbeddingRequest` / `ImageRequest` (`shared::llm`) instead of config
 defaults — a caller that forgets to pick a model gets a compile error, not a
 request silently sent to whatever id was baked in months ago.
+
+### Agents
+
+`lib::agent::Agent` is a model, a system prompt, and a set of tools, plus the
+loop that drives a conversation through them. `shared::agent::AgentSpec` is
+the serializable definition (crosses the Tauri IPC boundary the same way
+`shared::llm` does); `lib::agent` is the executable side — the `Tool` trait,
+the loop, and the router-backed builder.
+
+```rust
+let router = Router::from_config(&config.llm);
+
+let weather = tool("get_weather", "Look up the weather", |args: WeatherArgs| async move {
+    Ok(format!("72F and sunny in {}", args.city))
+});
+let deploy = tool("deploy", "Ship to prod", |args: DeployArgs| async move { .. })
+    .requiring_approval();
+
+let agent = Agent::builder(ModelRef::new("anthropic", "claude-opus-5"), 1024)
+    .system("You are a helpful ops assistant.")
+    .tool(weather)
+    .tool(deploy)
+    .build(&router)?;
+
+let turn = agent.next_turn(conversation).await?;
+```
+
+Three ways to write a tool, in `lib::agent::tool`: implement the `Tool` trait
+directly for full control; `tool(name, description, handler)` for a plain
+Rust fn whose argument type derives `JsonSchema` (re-exported from
+`schemars`) — the ergonomic default; or `json_tool(name, description,
+schema, handler)` for a hand-written schema when there's no Rust type to
+derive one from (a tool assembled from config or a remote listing).
+
+`Agent::next_turn`/`send` run the full tool loop — calling the model,
+executing every automatic tool call, feeding the results back, and repeating
+— except for a tool marked `.requiring_approval()`. When the model asks for
+one of those, the turn suspends at `TurnStop::AwaitingApproval` (any
+automatic calls from the same step already ran; their results ride in
+`completed` rather than being sent, since a provider requires a
+`tool_result` for every `tool_use` in the preceding message — a partial set
+isn't a sendable request on its own) and `Agent::resume` continues it once
+every pending call has an `Approve` or `Deny` decision. `Agent::stream_turn`
+/ `resume_stream` are the streaming equivalents, emitting a `StepStart` /
+`Model` / `ToolStart` / `ToolEnd` event stream that terminates in the same
+`AgentTurn` the blocking call would have returned.
+
+`max_tokens` on `AgentSpec` applies **per model call**, not per turn —
+`max_steps` (default 8) is the control for a multi-step turn's total
+cost/runaway risk.
 
 ## Logs
 

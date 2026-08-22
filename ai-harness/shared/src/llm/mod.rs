@@ -20,7 +20,8 @@ pub use message::{
     Usage,
 };
 pub use model::{
-    estimated_tokens, CatalogEntry, ModelCatalog, ModelDetails, ModelInfo, ProviderModels,
+    estimated_tokens, CatalogEntry, ModelCatalog, ModelDetails, ModelInfo, ModelRef,
+    ProviderModels,
 };
 pub use stream::{Delta, StreamEvent};
 pub use tool::{ChatOptions, Effort, Thinking, ToolChoice, ToolDef};
