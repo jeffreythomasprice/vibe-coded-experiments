@@ -1,14 +1,12 @@
+mod ipc;
+mod logging;
+
+use ipc::invoke;
 use leptos::mount::mount_to_body;
 use leptos::prelude::*;
 use serde::Serialize;
 use shared::{GreetRequest, GreetResponse};
-use wasm_bindgen::prelude::*;
-
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"], js_name = invoke)]
-    async fn invoke(cmd: &str, args: JsValue) -> JsValue;
-}
+use wasm_bindgen::JsValue;
 
 #[derive(Serialize)]
 struct GreetArgs {
@@ -16,6 +14,8 @@ struct GreetArgs {
 }
 
 fn main() {
+    logging::init();
+    tracing::info!("client starting");
     mount_to_body(App);
 }
 
@@ -27,13 +27,23 @@ fn App() -> impl IntoView {
     let greet = move |_| {
         let name = name.get();
         wasm_bindgen_futures::spawn_local(async move {
+            tracing::debug!(%name, "invoking greet");
             let request = GreetRequest { name };
-            let args = serde_wasm_bindgen::to_value(&GreetArgs { request })
-                .expect("failed to serialize GreetRequest");
-            let result = invoke("greet", args).await;
-            let response: GreetResponse = serde_wasm_bindgen::from_value(result)
-                .expect("failed to deserialize GreetResponse");
-            set_greeting.set(response.message);
+            let args = match serde_wasm_bindgen::to_value(&GreetArgs { request }) {
+                Ok(args) => args,
+                Err(err) => {
+                    tracing::error!(%err, "failed to serialize GreetRequest");
+                    return;
+                }
+            };
+            let result: JsValue = invoke("greet", args).await;
+            match serde_wasm_bindgen::from_value::<GreetResponse>(result) {
+                Ok(response) => {
+                    tracing::trace!(message = %response.message, "greet returned");
+                    set_greeting.set(response.message);
+                }
+                Err(err) => tracing::error!(%err, "failed to deserialize GreetResponse"),
+            }
         });
     };
 

@@ -1,0 +1,18 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"resp_01ABC","model":"gpt-5.6"}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_01ABC","role":"assistant","content":[]}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","item_id":"msg_01ABC","output_index":0,"content_index":0,"delta":"The capital of France "}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","item_id":"msg_01ABC","output_index":0,"content_index":0,"delta":"is Paris."}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_01ABC","role":"assistant","content":[{"type":"output_text","text":"The capital of France is Paris."}]}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_01ABC","model":"gpt-5.6","status":"completed","usage":{"input_tokens":10,"output_tokens":8,"input_tokens_details":{"cached_tokens":0}}}}
+

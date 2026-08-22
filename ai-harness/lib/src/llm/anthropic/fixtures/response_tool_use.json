@@ -1,0 +1,13 @@
+{
+  "id": "msg_01DEF",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-opus-5",
+  "content": [
+    {"type": "text", "text": "Let me check the weather."},
+    {"type": "tool_use", "id": "toolu_01XYZ", "name": "get_weather", "input": {"location": "Paris"}}
+  ],
+  "stop_reason": "tool_use",
+  "stop_sequence": null,
+  "usage": {"input_tokens": 20, "output_tokens": 18}
+}

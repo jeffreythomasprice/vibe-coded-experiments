@@ -1,0 +1,10 @@
+{
+  "created": 1765000000,
+  "data": [
+    {
+      "b64_json": "aGVsbG8gd29ybGQ=",
+      "revised_prompt": "A red cube on a white table, studio lighting."
+    }
+  ],
+  "usage": {"total_tokens": 100, "input_tokens": 20, "output_tokens": 80}
+}

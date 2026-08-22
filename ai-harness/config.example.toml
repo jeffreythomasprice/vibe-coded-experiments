@@ -1,0 +1,90 @@
+# ai-harness configuration.
+#
+# Copy to ~/.config/ai-harness/config.toml, or pass it explicitly:
+#
+#     cargo run -p server -- --config ./config.example.toml
+#
+# Config is read from the first location that exists:
+#   1. --config <path>            (a path given here that doesn't exist is a hard error)
+#   2. ./config.toml              (the working directory)
+#   3. ~/.config/ai-harness/config.toml
+#   4. built-in defaults
+#
+# Every key is optional. The values below ARE the built-in defaults, so this
+# file is equivalent to having no config file at all. Unknown keys are rejected
+# rather than ignored, so a typo fails loudly instead of silently doing nothing.
+
+[log]
+# Directory holding the rotating log files. Created on startup if absent.
+# A leading `~` is expanded.
+dir = "/tmp/ai-harness/logs"
+
+# Which modules log at which level, in `RUST_LOG` syntax. The bare `warn` is the
+# floor for everything unmatched — i.e. all third-party crates — and our own
+# crates are then raised to trace.
+#
+# This is a full override, not an addition to the default. Setting RUST_LOG in
+# the environment overrides this key in turn.
+filter = "warn,server=trace,lib=trace,shared=trace,client=trace"
+
+[log.rotation]
+# Rotate at least this often, aligned to the UTC calendar rather than to process
+# start, so "daily" means at midnight UTC even across restarts.
+# One of: "hourly", "daily", "weekly", "never" ("never" = rotate on size only).
+interval = "daily"
+
+# Rotate once the active file would exceed this size — whichever of this and
+# `interval` comes first. Accepts a bare byte count or a suffixed string:
+# decimal KB/MB/GB, or binary KiB/MiB/GiB.
+max_size = "100MB"
+
+# How many rotated files to keep. The active file is not counted, so the
+# directory holds at most `keep + 1` files. Lowering this takes effect on the
+# next start.
+keep = 10
+
+# The active file is always `<dir>/ai-harness.log` — a stable path, so `tail -f`
+# on it keeps working across rotations. On rotation it is renamed to
+# `ai-harness-<timestamp>.log`, where the timestamp is the moment of rotation in
+# ISO8601 basic format, e.g. ai-harness-20260821T201403417Z.log
+
+[llm]
+# Per-request timeout. A bare integer is seconds; "5m"/"2h" suffixes work too.
+request_timeout_secs = 120
+
+# How many times to retry a retryable failure (429 rate-limited, 5xx, or
+# Anthropic's 529 overloaded) before giving up. Non-retryable failures (400,
+# 401, 403, ...) are never retried regardless of this value.
+max_retries = 2
+
+[llm.anthropic]
+base_url = "https://api.anthropic.com"
+
+# Name of the environment variable holding the API key — never the key value
+# itself. The effective config is dumped to the logs on every startup, so
+# storing the key here (instead of its variable name) would leak it.
+api_key_env = "ANTHROPIC_API_KEY"
+
+model = "claude-opus-5"
+max_tokens = 16000
+anthropic_version = "2023-06-01"
+
+[llm.ollama]
+# Scheme, host, and port together — there is no separate `port` key, since a
+# split host/port pair could disagree with this URL.
+base_url = "http://localhost:11434"
+
+model = "qwen3.5:latest"
+
+# How long Ollama keeps this model loaded in memory after the request.
+keep_alive = "5m"
+
+[llm.openai]
+base_url = "https://api.openai.com"
+api_key_env = "OPENAI_API_KEY"
+model = "gpt-5.6"
+
+# OpenAI's chat and image-generation models are entirely separate — this is
+# the model `ImageProvider::generate` uses (see the README's "LLM providers"
+# section for why OpenAI is the only one of the three that offers it here).
+image_model = "gpt-image-2"

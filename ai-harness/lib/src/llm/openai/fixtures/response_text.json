@@ -1,0 +1,22 @@
+{
+  "id": "resp_01ABC",
+  "object": "response",
+  "created_at": 1765000000,
+  "model": "gpt-5.6",
+  "status": "completed",
+  "output": [
+    {
+      "type": "message",
+      "id": "msg_01ABC",
+      "role": "assistant",
+      "content": [
+        {"type": "output_text", "text": "The capital of France is Paris."}
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 10,
+    "output_tokens": 8,
+    "input_tokens_details": {"cached_tokens": 0}
+  }
+}
