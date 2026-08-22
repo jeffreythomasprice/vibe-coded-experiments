@@ -25,7 +25,9 @@ use shared::llm::{
 };
 
 use crate::llm::config::OllamaConfig;
-use crate::llm::error::{ApiErrorKind, LlmError};
+use crate::llm::error::{classify_stream_error, ApiError, LlmError};
+#[cfg(test)]
+use crate::llm::error::ApiErrorKind;
 
 pub const PROVIDER: &str = "ollama";
 
@@ -418,22 +420,40 @@ struct WireErrorEnvelope {
 
 /// Ollama's error body is a bare `{"error": "message"}`, not an envelope
 /// with a type/code — so unlike the other two providers, there's no
-/// `request_id` to recover here.
-pub fn parse_error(status: u16, body: &str) -> LlmError {
-    let kind = ApiErrorKind::from_status(status);
+/// `request_id`, and no `code`, to recover here.
+fn parse_error_message(body: &str) -> String {
     let envelope: WireErrorEnvelope = serde_json::from_str(body).unwrap_or_default();
-    let message = if envelope.error.is_empty() {
+    if envelope.error.is_empty() {
         body.to_string()
     } else {
         envelope.error
-    };
-    LlmError::Status {
+    }
+}
+
+/// Turn an HTTP status and response body into a typed error, with no model
+/// to reclassify an oversized-input rejection against — used for requests
+/// that don't name one (model listings).
+pub fn parse_error(status: u16, body: &str) -> LlmError {
+    parse_error_for(status, body, None)
+}
+
+/// The same as [`parse_error`], but reclassifies an oversized-input
+/// rejection into `LlmError::InputTooLarge` naming `model` — used for the
+/// chat and embeddings requests, which do name one.
+pub fn parse_error_for_model(status: u16, body: &str, model: &str) -> LlmError {
+    parse_error_for(status, body, Some(model.to_string()))
+}
+
+fn parse_error_for(status: u16, body: &str, model: Option<String>) -> LlmError {
+    ApiError {
         provider: PROVIDER,
         status,
-        kind,
-        message,
+        code: None,
+        message: parse_error_message(body),
         request_id: None,
+        model,
     }
+    .classify()
 }
 
 // ---------------------------------------------------------------------
@@ -574,10 +594,28 @@ pub struct StreamState {
     saw_tool_use: bool,
 }
 
+/// Ollama's chat stream (`/api/chat` with `stream: true`) can emit a bare
+/// `{"error": "..."}` line mid-stream instead of a normal chunk — e.g. the
+/// model crashing partway through generation. A normal chunk line has no
+/// `error` key, so this parses harmlessly to `None` on one, letting
+/// `translate_line` fall through to `WireChunk` — which a genuine error line
+/// would otherwise fail against (it has no `message` field) as a misleading
+/// `LlmError::Decode`.
+#[derive(Debug, Default, Deserialize)]
+struct WireStreamError {
+    #[serde(default)]
+    error: Option<String>,
+}
+
 /// Translate one decoded NDJSON line into the `StreamEvent`s it produces —
 /// zero, one, or occasionally two (a block's first delta also opens it).
 /// Pure — no I/O.
 pub fn translate_line(line: &str, state: &mut StreamState) -> Result<Vec<StreamEvent>, LlmError> {
+    if let Ok(WireStreamError { error: Some(message) }) = serde_json::from_str::<WireStreamError>(line)
+    {
+        return Err(classify_stream_error(PROVIDER, None, message));
+    }
+
     let wire: WireChunk = serde_json::from_str(line).map_err(|source| LlmError::Decode {
         provider: PROVIDER,
         context: "streamed chat chunk".to_string(),
@@ -698,6 +736,7 @@ mod tests {
         include_str!("fixtures/response_tool_call_leaked_as_text.json");
     const STREAM_TEXT: &str = include_str!("fixtures/stream_text.ndjson");
     const ERROR: &str = include_str!("fixtures/error.json");
+    const ERROR_INPUT_TOO_LONG: &str = include_str!("fixtures/error_input_too_long.json");
     const TAGS: &str = include_str!("fixtures/tags.json");
     const TAGS_NULL_ARRAYS: &str = include_str!("fixtures/tags_null_arrays.json");
 
@@ -894,12 +933,38 @@ mod tests {
     fn surfaces_the_bare_error_field() {
         let err = parse_error(404, ERROR);
         match err {
-            LlmError::Status { kind, message, request_id, .. } => {
+            LlmError::Status { kind, message, request_id, code, .. } => {
                 assert_eq!(kind, ApiErrorKind::NotFound);
                 assert!(message.contains("not found"));
                 assert_eq!(request_id, None);
+                assert_eq!(code, None, "Ollama's bare error body carries no code");
             }
             other => panic!("expected Status, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_error_for_model_reclassifies_an_oversized_input_rejection() {
+        let err = parse_error_for_model(400, ERROR_INPUT_TOO_LONG, "nomic-embed-text");
+        match err {
+            LlmError::InputTooLarge { provider, model, .. } => {
+                assert_eq!(provider, PROVIDER);
+                assert_eq!(model, "nomic-embed-text");
+            }
+            other => panic!("expected InputTooLarge, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_in_band_error_line_is_a_stream_error_not_a_decode_error() {
+        let mut state = StreamState::default();
+        let err = translate_line(r#"{"error":"the model is currently overloaded"}"#, &mut state)
+            .unwrap_err();
+        match err {
+            LlmError::Stream { message, .. } => {
+                assert_eq!(message, "the model is currently overloaded");
+            }
+            other => panic!("expected Stream, got {other:?} (not Decode)"),
         }
     }
 

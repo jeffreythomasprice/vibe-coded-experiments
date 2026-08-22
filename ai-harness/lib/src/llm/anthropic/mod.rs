@@ -93,9 +93,11 @@ impl ChatProvider for AnthropicClient {
     ) -> Result<CompletedMessage, LlmError> {
         let body = wire::build_request(conversation, options, false);
         let request = self.request(&body)?;
-        let response =
-            http::send_with_retry(wire::PROVIDER, request, self.max_retries, wire::parse_error)
-                .await?;
+        let response = http::send_with_retry(wire::PROVIDER, request, self.max_retries, {
+            let model = options.model.clone();
+            move |status, body| wire::parse_error_for_model(status, body, &model)
+        })
+        .await?;
         let text = response
             .text()
             .await
@@ -113,9 +115,11 @@ impl ChatProvider for AnthropicClient {
     ) -> Result<ChatStream, LlmError> {
         let body = wire::build_request(conversation, options, true);
         let request = self.request(&body)?;
-        let response =
-            http::send_with_retry(wire::PROVIDER, request, self.max_retries, wire::parse_error)
-                .await?;
+        let response = http::send_with_retry(wire::PROVIDER, request, self.max_retries, {
+            let model = options.model.clone();
+            move |status, body| wire::parse_error_for_model(status, body, &model)
+        })
+        .await?;
 
         let stream = async_stream::try_stream! {
             let mut byte_stream = response.bytes_stream();

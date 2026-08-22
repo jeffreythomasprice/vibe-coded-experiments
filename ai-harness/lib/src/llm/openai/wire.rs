@@ -14,7 +14,9 @@ use shared::llm::{
     ToolResultContent, Usage,
 };
 
-use crate::llm::error::{ApiErrorKind, LlmError};
+use crate::llm::error::{classify_stream_error, ApiError, LlmError};
+#[cfg(test)]
+use crate::llm::error::ApiErrorKind;
 use crate::llm::sse::{SseDecoder, SseFrame};
 
 pub const PROVIDER: &str = "openai";
@@ -418,34 +420,58 @@ struct WireErrorEnvelope {
 
 #[derive(Debug, Default, Deserialize)]
 struct WireErrorDetail {
+    /// OpenAI's coarser error category — e.g. `invalid_request_error`.
+    #[serde(default)]
+    r#type: Option<String>,
+    /// OpenAI's more specific identifier — e.g. `context_length_exceeded`,
+    /// `insufficient_quota` — present far more often than `type` is useful
+    /// for classification, but not on every error. `code.or(type)` is what's
+    /// fed into `ApiError::classify`/`classify_stream_error` as the error's
+    /// `code`.
+    #[serde(default)]
+    code: Option<String>,
     #[serde(default)]
     message: String,
 }
 
-pub fn parse_error(status: u16, body: &str) -> LlmError {
-    let kind = ApiErrorKind::from_status(status);
+/// Parse OpenAI's error envelope — `{"error":{"type":...,"code":...,
+/// "message":...}}` — out of a response body into `(code, message)`; a body
+/// that doesn't parse as that shape falls back to the raw body as the
+/// message rather than losing it. Shared by the HTTP path below and the
+/// stream `"error"`/`"response.error"` frame arm in [`translate_frame`].
+fn parse_error_envelope(body: &str) -> (Option<String>, String) {
     let envelope: WireErrorEnvelope = serde_json::from_str(body).unwrap_or_default();
-    let message = envelope
-        .error
-        .map(|e| e.message)
-        .filter(|m| !m.is_empty())
-        .unwrap_or_else(|| body.to_string());
-    LlmError::Status {
-        provider: PROVIDER,
-        status,
-        kind,
-        message,
-        request_id: None,
+    match envelope.error {
+        Some(detail) if !detail.message.is_empty() => (detail.code.or(detail.r#type), detail.message),
+        _ => (None, body.to_string()),
     }
 }
 
-fn extract_stream_error_message(data: &str) -> String {
-    let envelope: WireErrorEnvelope = serde_json::from_str(data).unwrap_or_default();
-    envelope
-        .error
-        .map(|e| e.message)
-        .filter(|m| !m.is_empty())
-        .unwrap_or_else(|| data.to_string())
+/// Turn an HTTP status and response body into a typed error, with no model
+/// to reclassify an oversized-input rejection against — used for requests
+/// that don't name one (model listings, image generation).
+pub fn parse_error(status: u16, body: &str) -> LlmError {
+    parse_error_for(status, body, None)
+}
+
+/// The same as [`parse_error`], but reclassifies an oversized-input
+/// rejection into `LlmError::InputTooLarge` naming `model` — used for the
+/// chat and embeddings requests, which do name one.
+pub fn parse_error_for_model(status: u16, body: &str, model: &str) -> LlmError {
+    parse_error_for(status, body, Some(model.to_string()))
+}
+
+fn parse_error_for(status: u16, body: &str, model: Option<String>) -> LlmError {
+    let (code, message) = parse_error_envelope(body);
+    ApiError {
+        provider: PROVIDER,
+        status,
+        code,
+        message,
+        request_id: None,
+        model,
+    }
+    .classify()
 }
 
 // ---------------------------------------------------------------------
@@ -683,10 +709,10 @@ pub fn translate_frame(
                 usage: to_shared_usage(wire.response.usage.unwrap_or_default()),
             }))
         }
-        "response.error" | "error" => Err(LlmError::Stream {
-            provider: PROVIDER,
-            message: extract_stream_error_message(&frame.data),
-        }),
+        "response.error" | "error" => {
+            let (code, message) = parse_error_envelope(&frame.data);
+            Err(classify_stream_error(PROVIDER, code, message))
+        }
         other => {
             tracing::warn!(event = other, "ignoring an unrecognized OpenAI Responses SSE event");
             Ok(None)
@@ -719,6 +745,8 @@ mod tests {
     const RESPONSE_TOOL_CALL: &str = include_str!("fixtures/response_tool_call.json");
     const STREAM_TEXT: &str = include_str!("fixtures/stream_text.sse");
     const ERROR: &str = include_str!("fixtures/error.json");
+    const ERROR_CONTEXT_LENGTH: &str = include_str!("fixtures/error_context_length.json");
+    const ERROR_INSUFFICIENT_QUOTA: &str = include_str!("fixtures/error_insufficient_quota.json");
     const MODELS: &str = include_str!("fixtures/models.json");
 
     /// Only used to check that a request's model/max_tokens land on the
@@ -884,12 +912,41 @@ mod tests {
     fn maps_openai_error_envelopes_to_typed_errors() {
         let err = parse_error(400, ERROR);
         match err {
-            LlmError::Status { kind, message, .. } => {
+            LlmError::Status { kind, message, code, .. } => {
                 assert_eq!(kind, ApiErrorKind::InvalidRequest);
                 assert_eq!(message, "Invalid value for 'model'.");
+                // `code` is null on this fixture, so `type` is what's
+                // recovered — and it happens to be the same identifier
+                // `from_status(400)` already implies, so no behavior change.
+                assert_eq!(code.as_deref(), Some("invalid_request_error"));
             }
             other => panic!("expected Status, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_context_length_error_becomes_input_too_large_on_the_chat_path() {
+        // Chat requests now get the same context-length reclassification
+        // embeddings has always had — `parse_error_for_model` is what the
+        // chat call sites use (see `openai::mod`).
+        let err = parse_error_for_model(400, ERROR_CONTEXT_LENGTH, "gpt-5.6");
+        match err {
+            LlmError::InputTooLarge { provider, model, .. } => {
+                assert_eq!(provider, PROVIDER);
+                assert_eq!(model, "gpt-5.6");
+            }
+            other => panic!("expected InputTooLarge, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_429_insufficient_quota_becomes_insufficient_credit_and_is_not_retryable() {
+        let err = parse_error(429, ERROR_INSUFFICIENT_QUOTA);
+        match &err {
+            LlmError::InsufficientCredit { provider, .. } => assert_eq!(*provider, PROVIDER),
+            other => panic!("expected InsufficientCredit, got {other:?}"),
+        }
+        assert!(!err.is_retryable(), "a billing failure must never be retried");
     }
 
     #[test]

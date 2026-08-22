@@ -153,9 +153,11 @@ impl ChatProvider for OllamaClient {
     ) -> Result<CompletedMessage, LlmError> {
         let body = wire::build_request(conversation, options, &self.cfg, false);
         let request = self.request(&body);
-        let response =
-            http::send_with_retry(wire::PROVIDER, request, self.max_retries, wire::parse_error)
-                .await?;
+        let response = http::send_with_retry(wire::PROVIDER, request, self.max_retries, {
+            let model = options.model.clone();
+            move |status, body| wire::parse_error_for_model(status, body, &model)
+        })
+        .await?;
         let text = response.text().await.map_err(|source| LlmError::Http {
             provider: wire::PROVIDER,
             source,
@@ -170,9 +172,11 @@ impl ChatProvider for OllamaClient {
     ) -> Result<ChatStream, LlmError> {
         let body = wire::build_request(conversation, options, &self.cfg, true);
         let request = self.request(&body);
-        let response =
-            http::send_with_retry(wire::PROVIDER, request, self.max_retries, wire::parse_error)
-                .await?;
+        let response = http::send_with_retry(wire::PROVIDER, request, self.max_retries, {
+            let model = options.model.clone();
+            move |status, body| wire::parse_error_for_model(status, body, &model)
+        })
+        .await?;
 
         let stream = async_stream::try_stream! {
             let mut byte_stream = response.bytes_stream();
@@ -247,7 +251,7 @@ impl EmbeddingProvider for OllamaClient {
         let http_request = self.embed_request(&body);
         let response = http::send_with_retry(wire::PROVIDER, http_request, self.max_retries, {
             let model = request.model.clone();
-            move |status, body| embeddings::parse_error(status, body, &model)
+            move |status, body| wire::parse_error_for_model(status, body, &model)
         })
         .await?;
         let text = response.text().await.map_err(|source| LlmError::Http {

@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 use shared::llm::{CompletedMessage, ContentBlock, Delta, Role, StopReason, StreamEvent, Usage};
 
-use crate::llm::error::LlmError;
+use crate::llm::error::{ApiErrorKind, LlmError};
 
 /// Accumulates `StreamEvent`s in order. Block index is the correlation key —
 /// events for the same index are expected to arrive together (`BlockStart`,
@@ -108,6 +108,7 @@ impl MessageAccumulator {
                     (block, delta) => {
                         return Err(LlmError::Stream {
                             provider: "accumulate",
+                            kind: ApiErrorKind::Other,
                             message: format!(
                                 "delta {delta:?} does not match the block in progress at index {index}: {block:?}"
                             ),
@@ -129,6 +130,7 @@ impl MessageAccumulator {
     pub fn finish(self) -> Result<CompletedMessage, LlmError> {
         let stop_reason = self.stop_reason.ok_or_else(|| LlmError::Stream {
             provider: "accumulate",
+            kind: ApiErrorKind::Other,
             message: "stream ended without a message_stop event".to_string(),
         })?;
 

@@ -11,7 +11,7 @@ use shared::llm::{Embedding, EmbeddingRequest, EmbeddingResponse, EmbeddingUsage
 
 use crate::llm::error::LlmError;
 
-use super::wire::{self, PROVIDER};
+use super::wire::PROVIDER;
 
 /// Build the JSON body for `POST {base_url}/v1/embeddings`. Model comes
 /// from `request` — a required field on `EmbeddingRequest`, since it has no
@@ -72,53 +72,17 @@ pub fn parse_response(body: &str) -> Result<EmbeddingResponse, LlmError> {
     })
 }
 
-/// Substrings OpenAI's own error messages use for an input that exceeds a
-/// model's context length. Older wording: `"This model's maximum context
-/// length is 8192 tokens, however you requested ... tokens"`. Newer wording,
-/// observed on the embeddings endpoint: `"Invalid 'input[0]': maximum input
-/// length is 8192 tokens."` Matched case-insensitively so a minor wording
-/// change doesn't silently stop being caught; kept as a list since OpenAI has
-/// already changed this wording once.
-const TOO_LONG_SIGNATURES: &[&str] = &["maximum context length", "maximum input length"];
-
-fn names_too_long_input(message: &str) -> bool {
-    let lower = message.to_lowercase();
-    TOO_LONG_SIGNATURES.iter().any(|sig| lower.contains(sig))
-}
-
-/// Delegates to `wire::parse_error` for the general case, then upgrades a
-/// 400/413 whose message names the context-length limit into
-/// [`LlmError::InputTooLarge`] — every other error (auth, rate limit, an
-/// unrelated 400) passes through unchanged.
-pub fn parse_error(status: u16, body: &str, model: &str) -> LlmError {
-    let err = wire::parse_error(status, body);
-    match err {
-        LlmError::Status {
-            status: 400 | 413,
-            message,
-            ..
-        } if names_too_long_input(&message) => LlmError::InputTooLarge {
-            provider: PROVIDER,
-            model: model.to_string(),
-            // OpenAI's error message states a limit, but not in a form worth
-            // parsing back out — `ModelDetails::OpenAiEmbedding` never
-            // reports one either (see its doc), so this stays consistent
-            // with what the model listing already says.
-            max_input_tokens: None,
-            message,
-        },
-        other => other,
-    }
-}
+// Error parsing for this endpoint is now handled by `wire::parse_error_for_model`
+// (see `crate::llm::error::ApiError::classify`) — the same reclassification
+// this module used to do on its own now applies to the chat path too. See
+// `lib/src/llm/error.rs`'s tests for the context-length/billing coverage
+// that used to live here.
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     const EMBEDDINGS: &str = include_str!("fixtures/embeddings.json");
-    const ERROR_CONTEXT_LENGTH: &str = include_str!("fixtures/error_context_length.json");
-    const ERROR_INPUT_TOO_LONG: &str = include_str!("fixtures/error_input_too_long.json");
-    const ERROR: &str = include_str!("fixtures/error.json");
 
     #[test]
     fn builds_a_minimal_embeddings_request() {
@@ -161,36 +125,8 @@ mod tests {
         assert_eq!(response.usage.unwrap().input_tokens, Some(6));
     }
 
-    #[test]
-    fn a_context_length_error_becomes_input_too_large() {
-        let err = parse_error(400, ERROR_CONTEXT_LENGTH, "text-embedding-3-small");
-        match err {
-            LlmError::InputTooLarge { provider, model, .. } => {
-                assert_eq!(provider, PROVIDER);
-                assert_eq!(model, "text-embedding-3-small");
-            }
-            other => panic!("expected InputTooLarge, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn an_input_too_long_error_becomes_input_too_large() {
-        let err = parse_error(400, ERROR_INPUT_TOO_LONG, "text-embedding-3-small");
-        match err {
-            LlmError::InputTooLarge { provider, model, .. } => {
-                assert_eq!(provider, PROVIDER);
-                assert_eq!(model, "text-embedding-3-small");
-            }
-            other => panic!("expected InputTooLarge, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn an_unrelated_error_stays_a_plain_status() {
-        let err = parse_error(400, ERROR, "text-embedding-3-small");
-        match err {
-            LlmError::Status { status, .. } => assert_eq!(status, 400),
-            other => panic!("expected Status, got {other:?}"),
-        }
-    }
+    // The context-length/billing reclassification tests that used to live
+    // here moved to `lib/src/llm/error.rs`, alongside `ApiError::classify` —
+    // they now go through `wire::parse_error_for_model` directly, since that
+    // (not a per-endpoint wrapper) is what `embed()` calls.
 }

@@ -882,6 +882,50 @@ async fn the_stream_emits_tool_start_and_tool_end_around_a_tool_call_and_termina
     assert_eq!(*calls.lock().unwrap(), 1);
 }
 
+/// `ScriptedProvider` can only fail a call outright (its `stream` derives
+/// from the same `Result` `complete` would return) unless a test opts into
+/// `with_stream_error` — which injects a failure *after* some content has
+/// already streamed, the shape a real provider's mid-stream error takes.
+/// This proves that shape survives the agent loop: the `LlmError` (with its
+/// classification — here, `InsufficientCredit`, and `is_retryable() == false`)
+/// reaches the caller as `Err(AgentError::Llm(..))`, not silently swallowed
+/// or flattened into something less specific.
+#[tokio::test]
+async fn stream_turn_propagates_a_mid_stream_llm_error_with_its_classification_intact() {
+    let provider = Arc::new(
+        ScriptedProvider::new(vec![Ok(text_message("partial..."))]).with_stream_error(
+            0,
+            LlmError::InsufficientCredit {
+                provider: "openai",
+                message: "you exceeded your current quota".to_string(),
+            },
+        ),
+    );
+    let agent = Arc::new(Agent::builder(model_ref(), 1024).build_with(provider).unwrap());
+
+    let mut stream = agent.stream_turn(Conversation::default());
+    let mut saw_model_event = false;
+    let mut err = None;
+    while let Some(event) = stream.next().await {
+        match event {
+            Ok(AgentEvent::Model { .. }) => saw_model_event = true,
+            Ok(_) => {}
+            Err(e) => {
+                err = Some(e);
+                break;
+            }
+        }
+    }
+
+    assert!(saw_model_event, "content streamed before the failure must still arrive");
+    match err {
+        Some(AgentError::Llm(LlmError::InsufficientCredit { provider, .. })) => {
+            assert_eq!(provider, "openai");
+        }
+        other => panic!("expected AgentError::Llm(InsufficientCredit), got {other:?}"),
+    }
+}
+
 #[tokio::test]
 async fn resume_stream_emits_tool_events_and_terminates_with_the_turn_resume_would_return() {
     let (agent, turn, calls) = awaiting_turn_with_one_gated_call().await;

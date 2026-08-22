@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use reqwest::Client;
 
-use crate::llm::error::{ApiErrorKind, LlmError};
+use crate::llm::error::LlmError;
 
 /// Build a client with the given per-request timeout. One client is shared
 /// across every request a provider makes, so connections can be reused.
@@ -26,11 +26,14 @@ pub fn build_client(timeout: Duration) -> Result<Client, LlmError> {
 
 /// Send `request`, retrying a retryable failure up to `max_retries` times.
 ///
-/// On a non-retryable failure, or once retries are exhausted, `parse_error`
-/// turns the status and response body into a provider-shaped `LlmError` —
-/// each provider's `wire::parse_error` knows how to pull a message and
-/// request ID out of its own error envelope; this function only needs the
-/// HTTP status to decide whether to retry at all.
+/// The response body is read on *every* failed attempt (not only once
+/// retries are exhausted) and handed to `parse_error` before the retry
+/// decision is made — a failure's classification can depend on the body,
+/// not just the HTTP status: OpenAI reports a billing/quota exhaustion as a
+/// plain 429, indistinguishable from an ordinary rate limit until the body
+/// is parsed, and only the body's `LlmError::is_retryable()` tells them
+/// apart. Error bodies are small, so this costs nothing on the success path
+/// (still returned as an unconsumed `Response`) and little on failure.
 pub async fn send_with_retry(
     provider: &'static str,
     request: reqwest::RequestBuilder,
@@ -52,14 +55,15 @@ pub async fn send_with_retry(
         }
 
         let status = response.status().as_u16();
-        let kind = ApiErrorKind::from_status(status);
         let retry_after = response
             .headers()
             .get(reqwest::header::RETRY_AFTER)
             .and_then(|v| v.to_str().ok())
             .and_then(parse_retry_after);
+        let body = response.text().await.unwrap_or_default();
+        let err = parse_error(status, &body);
 
-        match retry_delay(&kind, retry_after, attempt, max_retries) {
+        match retry_delay(err.is_retryable(), retry_after, attempt, max_retries) {
             Some(delay) => {
                 tracing::warn!(
                     provider,
@@ -71,10 +75,7 @@ pub async fn send_with_retry(
                 tokio::time::sleep(delay).await;
                 attempt += 1;
             }
-            None => {
-                let body = response.text().await.unwrap_or_default();
-                return Err(parse_error(status, &body));
-            }
+            None => return Err(err),
         }
     }
 }
@@ -82,14 +83,18 @@ pub async fn send_with_retry(
 /// How long to wait before the next attempt, or `None` to give up.
 ///
 /// Pure — no clock, no network — so it's directly unit-testable, the same
-/// trick `RotatingWriter::write_at` uses with an injected `now`.
+/// trick `RotatingWriter::write_at` uses with an injected `now`. Takes the
+/// already-decided `retryable` bool rather than an `ApiErrorKind` so a
+/// caller's more specific classification (e.g. `LlmError::is_retryable`,
+/// which knows to refuse an `InsufficientCredit` despite its 429 status)
+/// always wins.
 pub fn retry_delay(
-    kind: &ApiErrorKind,
+    retryable: bool,
     retry_after: Option<Duration>,
     attempt: u32,
     max_retries: u32,
 ) -> Option<Duration> {
-    if !kind.is_retryable() || attempt >= max_retries {
+    if !retryable || attempt >= max_retries {
         return None;
     }
     if let Some(delay) = retry_after {
@@ -112,36 +117,39 @@ mod tests {
 
     #[test]
     fn does_not_retry_a_400() {
-        let kind = ApiErrorKind::InvalidRequest;
-        assert_eq!(retry_delay(&kind, None, 0, 3), None);
+        assert_eq!(retry_delay(false, None, 0, 3), None);
     }
 
     #[test]
     fn honours_retry_after_over_computed_backoff() {
-        let kind = ApiErrorKind::RateLimit;
-        let delay = retry_delay(&kind, Some(Duration::from_secs(7)), 0, 3);
+        let delay = retry_delay(true, Some(Duration::from_secs(7)), 0, 3);
         assert_eq!(delay, Some(Duration::from_secs(7)));
     }
 
     #[test]
     fn backs_off_exponentially_without_a_retry_after_hint() {
-        let kind = ApiErrorKind::Server;
-        assert_eq!(retry_delay(&kind, None, 0, 5), Some(Duration::from_millis(500)));
-        assert_eq!(retry_delay(&kind, None, 1, 5), Some(Duration::from_millis(1000)));
-        assert_eq!(retry_delay(&kind, None, 2, 5), Some(Duration::from_millis(2000)));
+        assert_eq!(retry_delay(true, None, 0, 5), Some(Duration::from_millis(500)));
+        assert_eq!(retry_delay(true, None, 1, 5), Some(Duration::from_millis(1000)));
+        assert_eq!(retry_delay(true, None, 2, 5), Some(Duration::from_millis(2000)));
     }
 
     #[test]
     fn gives_up_after_the_configured_attempt_count() {
-        let kind = ApiErrorKind::Overloaded;
-        assert_eq!(retry_delay(&kind, None, 3, 3), None);
-        assert!(retry_delay(&kind, None, 2, 3).is_some());
+        assert_eq!(retry_delay(true, None, 3, 3), None);
+        assert!(retry_delay(true, None, 2, 3).is_some());
     }
 
     #[test]
     fn zero_max_retries_disables_retrying_entirely() {
-        let kind = ApiErrorKind::RateLimit;
-        assert_eq!(retry_delay(&kind, None, 0, 0), None);
+        assert_eq!(retry_delay(true, None, 0, 0), None);
+    }
+
+    /// The regression case: OpenAI's `insufficient_quota` arrives as a 429,
+    /// which would look retryable by status alone — `retry_delay` must
+    /// refuse anyway once the caller has classified it as not retryable.
+    #[test]
+    fn does_not_retry_an_insufficient_credit_429() {
+        assert_eq!(retry_delay(false, None, 0, 3), None);
     }
 
     #[test]

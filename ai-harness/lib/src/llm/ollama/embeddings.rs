@@ -17,7 +17,7 @@ use shared::llm::{Embedding, EmbeddingRequest, EmbeddingResponse, EmbeddingUsage
 use crate::llm::config::OllamaConfig;
 use crate::llm::error::LlmError;
 
-use super::wire::{self, PROVIDER};
+use super::wire::PROVIDER;
 
 /// Build the JSON body for `POST {base_url}/api/embed`. Model comes from
 /// `request` — a required field on `EmbeddingRequest`, since it has no
@@ -78,44 +78,17 @@ pub fn parse_response(body: &str) -> Result<EmbeddingResponse, LlmError> {
     })
 }
 
-/// The substring Ollama's server uses when `truncate: false` and the input
-/// doesn't fit the model's context window (observed wording: `"the input
-/// length exceeds the context length"`). Matched case-insensitively so a
-/// minor wording change doesn't silently stop being caught.
-const TOO_LONG_SIGNATURE: &str = "exceeds the context length";
-
-/// Delegates to `wire::parse_error` for the general case, then upgrades a
-/// 400 whose message names the context-length limit into
-/// [`LlmError::InputTooLarge`] — every other error (model not found, an
-/// unreachable server) passes through unchanged.
-pub fn parse_error(status: u16, body: &str, model: &str) -> LlmError {
-    let err = wire::parse_error(status, body);
-    match err {
-        LlmError::Status {
-            status: 400,
-            message,
-            ..
-        } if message.to_lowercase().contains(TOO_LONG_SIGNATURE) => LlmError::InputTooLarge {
-            provider: PROVIDER,
-            model: model.to_string(),
-            // The rejection names a limit was exceeded but not the number —
-            // a caller wanting the limit itself should read it off the
-            // model listing (`ModelDetails::OllamaLocalEmbedding::context_length`,
-            // surfaced through `max_input_tokens()`), not this message.
-            max_input_tokens: None,
-            message,
-        },
-        other => other,
-    }
-}
+// Error parsing for this endpoint is now handled by `wire::parse_error_for_model`
+// (see `crate::llm::error::ApiError::classify`) — the same reclassification
+// this module used to do on its own now applies to the chat path too. See
+// `lib/src/llm/error.rs`'s tests for the context-length/billing coverage
+// that used to live here.
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     const EMBED: &str = include_str!("fixtures/embed.json");
-    const ERROR_INPUT_TOO_LONG: &str = include_str!("fixtures/error_input_too_long.json");
-    const ERROR: &str = include_str!("fixtures/error.json");
 
     fn cfg() -> OllamaConfig {
         OllamaConfig::default()
@@ -164,24 +137,8 @@ mod tests {
         assert_eq!(response.usage.unwrap().input_tokens, Some(12));
     }
 
-    #[test]
-    fn a_context_length_error_becomes_input_too_large() {
-        let err = parse_error(400, ERROR_INPUT_TOO_LONG, "nomic-embed-text");
-        match err {
-            LlmError::InputTooLarge { provider, model, .. } => {
-                assert_eq!(provider, PROVIDER);
-                assert_eq!(model, "nomic-embed-text");
-            }
-            other => panic!("expected InputTooLarge, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn a_model_not_found_error_stays_a_plain_status() {
-        let err = parse_error(404, ERROR, "nonexistent:latest");
-        match err {
-            LlmError::Status { status, .. } => assert_eq!(status, 404),
-            other => panic!("expected Status, got {other:?}"),
-        }
-    }
+    // The context-length/billing reclassification tests that used to live
+    // here moved to `lib/src/llm/error.rs`, alongside `ApiError::classify` —
+    // they now go through `wire::parse_error_for_model` directly, since that
+    // (not a per-endpoint wrapper) is what `embed()` calls.
 }

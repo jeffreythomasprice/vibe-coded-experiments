@@ -13,7 +13,9 @@ use shared::llm::{
     ToolResultContent, Usage,
 };
 
-use crate::llm::error::{ApiErrorKind, LlmError};
+use crate::llm::error::{classify_stream_error, ApiError, LlmError};
+#[cfg(test)]
+use crate::llm::error::ApiErrorKind;
 use crate::llm::sse::{SseDecoder, SseFrame};
 
 pub const PROVIDER: &str = "anthropic";
@@ -225,30 +227,57 @@ struct WireErrorEnvelope {
 
 #[derive(Debug, Default, Deserialize)]
 struct WireErrorDetail {
+    /// Anthropic's own error identifier — `invalid_request_error`,
+    /// `overloaded_error`, `rate_limit_error`, etc. Fed into
+    /// `ApiError::classify`/`classify_stream_error` as the error's `code`.
+    #[serde(default)]
+    r#type: Option<String>,
     #[serde(default)]
     message: String,
 }
 
-/// Turn an HTTP status and response body into a typed error. Anthropic's
-/// error envelope is `{"type":"error","error":{"type":...,"message":...},
-/// "request_id":...}`; a body that doesn't parse as that shape (e.g. an
-/// upstream proxy's plain-text error page) falls back to the raw body as the
-/// message rather than losing it.
-pub fn parse_error(status: u16, body: &str) -> LlmError {
-    let kind = ApiErrorKind::from_status(status);
+/// Parse Anthropic's error envelope —
+/// `{"type":"error","error":{"type":...,"message":...},"request_id":...}` —
+/// out of a response body into `(code, message, request_id)`; a body that
+/// doesn't parse as that shape (e.g. an upstream proxy's plain-text error
+/// page) falls back to the raw body as the message rather than losing it.
+/// Shared by the HTTP path below and the stream `"error"` frame arm in
+/// [`translate_frame`] (which has no `request_id` slot to fill, so it
+/// ignores that third element).
+fn parse_error_envelope(body: &str) -> (Option<String>, String, Option<String>) {
     let envelope: WireErrorEnvelope = serde_json::from_str(body).unwrap_or_default();
-    let message = envelope
-        .error
-        .map(|e| e.message)
-        .filter(|m| !m.is_empty())
-        .unwrap_or_else(|| body.to_string());
-    LlmError::Status {
+    let (code, message) = match envelope.error {
+        Some(detail) if !detail.message.is_empty() => (detail.r#type, detail.message),
+        _ => (None, body.to_string()),
+    };
+    (code, message, envelope.request_id)
+}
+
+/// Turn an HTTP status and response body into a typed error, with no model
+/// to reclassify an oversized-input rejection against — used for requests
+/// that don't name one (model listings).
+pub fn parse_error(status: u16, body: &str) -> LlmError {
+    parse_error_for(status, body, None)
+}
+
+/// The same as [`parse_error`], but reclassifies an oversized-input
+/// rejection into `LlmError::InputTooLarge` naming `model` — used for the
+/// chat request, which does name one.
+pub fn parse_error_for_model(status: u16, body: &str, model: &str) -> LlmError {
+    parse_error_for(status, body, Some(model.to_string()))
+}
+
+fn parse_error_for(status: u16, body: &str, model: Option<String>) -> LlmError {
+    let (code, message, request_id) = parse_error_envelope(body);
+    ApiError {
         provider: PROVIDER,
         status,
-        kind,
+        code,
         message,
-        request_id: envelope.request_id,
+        request_id,
+        model,
     }
+    .classify()
 }
 
 // ---------------------------------------------------------------------
@@ -502,16 +531,8 @@ pub fn translate_frame(
         }
         "ping" => Ok(None),
         "error" => {
-            let envelope: WireErrorEnvelope = serde_json::from_str(&frame.data).unwrap_or_default();
-            let message = envelope
-                .error
-                .map(|e| e.message)
-                .filter(|m| !m.is_empty())
-                .unwrap_or_else(|| frame.data.clone());
-            Err(LlmError::Stream {
-                provider: PROVIDER,
-                message,
-            })
+            let (code, message, _request_id) = parse_error_envelope(&frame.data);
+            Err(classify_stream_error(PROVIDER, code, message))
         }
         other => {
             tracing::warn!(event = other, "ignoring an unrecognized Anthropic SSE event");
@@ -549,6 +570,8 @@ mod tests {
     const STREAM_TEXT: &str = include_str!("fixtures/stream_text.sse");
     const ERROR_OVERLOADED: &str = include_str!("fixtures/error_overloaded.json");
     const ERROR_INVALID_REQUEST: &str = include_str!("fixtures/error_invalid_request.json");
+    const ERROR_BILLING: &str = include_str!("fixtures/error_billing.json");
+    const STREAM_ERROR_OVERLOADED: &str = include_str!("fixtures/stream_error_overloaded.sse");
     const MODELS: &str = include_str!("fixtures/models.json");
     const MODELS_LAST_PAGE: &str = include_str!("fixtures/models_last_page.json");
 
@@ -712,8 +735,29 @@ mod tests {
     fn a_malformed_error_body_falls_back_to_the_raw_text() {
         let err = parse_error(500, "<html>Bad Gateway</html>");
         match err {
-            LlmError::Status { message, .. } => assert_eq!(message, "<html>Bad Gateway</html>"),
+            LlmError::Status { message, code, .. } => {
+                assert_eq!(message, "<html>Bad Gateway</html>");
+                assert_eq!(code, None);
+            }
             other => panic!("expected Status, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn recovers_the_error_type_as_the_status_code() {
+        let err = parse_error(529, ERROR_OVERLOADED);
+        match err {
+            LlmError::Status { code, .. } => assert_eq!(code.as_deref(), Some("overloaded_error")),
+            other => panic!("expected Status, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_error_for_model_reclassifies_a_credit_balance_rejection() {
+        let err = parse_error_for_model(400, ERROR_BILLING, "claude-opus-5");
+        match err {
+            LlmError::InsufficientCredit { provider, .. } => assert_eq!(provider, PROVIDER),
+            other => panic!("expected InsufficientCredit, got {other:?}"),
         }
     }
 
@@ -731,6 +775,20 @@ mod tests {
             LlmError::Stream { message, .. } => assert_eq!(message, "Overloaded"),
             other => panic!("expected Stream, got {other:?}"),
         }
+    }
+
+    /// The direct counterpart of `a_stream_error_event_surfaces_as_an_error`:
+    /// before `LlmError::Stream` carried a `kind`, an `overloaded_error`
+    /// arriving mid-stream was hardcoded non-retryable — the opposite of
+    /// what the same error arriving as an HTTP 529 gets.
+    #[test]
+    fn a_stream_overloaded_error_is_retryable() {
+        let err = parse_stream_events(STREAM_ERROR_OVERLOADED).unwrap_err();
+        match &err {
+            LlmError::Stream { kind, .. } => assert_eq!(*kind, ApiErrorKind::Overloaded),
+            other => panic!("expected Stream, got {other:?}"),
+        }
+        assert!(err.is_retryable());
     }
 
     #[test]

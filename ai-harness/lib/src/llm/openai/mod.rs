@@ -93,9 +93,11 @@ impl ChatProvider for OpenAiClient {
     ) -> Result<CompletedMessage, LlmError> {
         let body = wire::build_request(conversation, options, false);
         let request = self.request("/v1/responses", &body)?;
-        let response =
-            http::send_with_retry(wire::PROVIDER, request, self.max_retries, wire::parse_error)
-                .await?;
+        let response = http::send_with_retry(wire::PROVIDER, request, self.max_retries, {
+            let model = options.model.clone();
+            move |status, body| wire::parse_error_for_model(status, body, &model)
+        })
+        .await?;
         let text = response.text().await.map_err(|source| LlmError::Http {
             provider: wire::PROVIDER,
             source,
@@ -110,9 +112,11 @@ impl ChatProvider for OpenAiClient {
     ) -> Result<ChatStream, LlmError> {
         let body = wire::build_request(conversation, options, true);
         let request = self.request("/v1/responses", &body)?;
-        let response =
-            http::send_with_retry(wire::PROVIDER, request, self.max_retries, wire::parse_error)
-                .await?;
+        let response = http::send_with_retry(wire::PROVIDER, request, self.max_retries, {
+            let model = options.model.clone();
+            move |status, body| wire::parse_error_for_model(status, body, &model)
+        })
+        .await?;
 
         let stream = async_stream::try_stream! {
             let mut byte_stream = response.bytes_stream();
@@ -224,7 +228,7 @@ impl EmbeddingProvider for OpenAiClient {
         let http_request = self.request("/v1/embeddings", &body)?;
         let response = http::send_with_retry(wire::PROVIDER, http_request, self.max_retries, {
             let model = request.model.clone();
-            move |status, body| embeddings::parse_error(status, body, &model)
+            move |status, body| wire::parse_error_for_model(status, body, &model)
         })
         .await?;
         let text = response.text().await.map_err(|source| LlmError::Http {

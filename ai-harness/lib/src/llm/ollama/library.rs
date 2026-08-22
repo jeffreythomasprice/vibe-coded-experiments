@@ -268,6 +268,7 @@ pub fn parse_error(status: u16, body: &str) -> LlmError {
         provider: PROVIDER,
         status,
         kind,
+        code: None,
         message,
         request_id: None,
     }

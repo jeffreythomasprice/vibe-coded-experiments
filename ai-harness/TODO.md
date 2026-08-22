@@ -5,6 +5,15 @@ I want to make sure that our llm provider and our agent system all use sensible 
 
 todos:
 
+I want to set up a turso database. The file location should be in config.toml and default to some filename in /tmp/ai-harness
+
+We should introduce sqlx and some migration system. The migration system needs to support both pure sql and rust functions.
+
+The initial state of the db should be:
+- agent configs
+- conversations, including all messages, tool use, which agent, etc.
+
+
 cost estimates? token estimates?
 
 left sidebar is list of conversations

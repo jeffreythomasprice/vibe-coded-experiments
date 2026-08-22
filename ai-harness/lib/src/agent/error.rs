@@ -63,6 +63,34 @@ pub enum AgentError {
     ConversationMismatch,
 }
 
+impl AgentError {
+    /// Whether retrying the same turn might succeed. Only a transport
+    /// failure can be — every agent-level variant here is a caller mistake
+    /// (a duplicate tool name, an out-of-date decision list, ...) that
+    /// retrying the same call would reproduce exactly.
+    pub fn is_retryable(&self) -> bool {
+        matches!(self, AgentError::Llm(err) if err.is_retryable())
+    }
+}
+
+/// Flatten an `AgentError` into the same IPC-safe DTO an `LlmError` becomes —
+/// an `Llm` error delegates to its `LlmError` conversion; every other
+/// variant is an agent-loop invariant, not a provider failure, so it reports
+/// as `ErrorKind::Agent` with no provider and never retryable.
+impl From<&AgentError> for shared::error::ErrorReport {
+    fn from(err: &AgentError) -> Self {
+        match err {
+            AgentError::Llm(inner) => inner.into(),
+            other => shared::error::ErrorReport {
+                kind: shared::error::ErrorKind::Agent,
+                provider: None,
+                message: other.to_string(),
+                retryable: false,
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -104,5 +132,51 @@ mod tests {
             stop_reason: StopReason::ToolUse,
         };
         assert!(err.to_string().contains("ToolUse"));
+    }
+
+    #[test]
+    fn is_retryable_delegates_to_the_wrapped_llm_error() {
+        let retryable = AgentError::Llm(LlmError::Status {
+            provider: "openai",
+            status: 429,
+            kind: crate::llm::error::ApiErrorKind::RateLimit,
+            code: None,
+            message: "slow down".to_string(),
+            request_id: None,
+        });
+        assert!(retryable.is_retryable());
+
+        let not_retryable = AgentError::Llm(LlmError::MissingApiKey {
+            var: "ANTHROPIC_API_KEY".to_string(),
+        });
+        assert!(!not_retryable.is_retryable());
+    }
+
+    #[test]
+    fn every_agent_level_variant_is_never_retryable() {
+        assert!(!AgentError::NotAwaitingApproval.is_retryable());
+        assert!(!AgentError::ConversationMismatch.is_retryable());
+        assert!(!AgentError::DuplicateTool {
+            name: "ping".to_string()
+        }
+        .is_retryable());
+    }
+
+    #[test]
+    fn an_agent_level_error_reports_as_agent_and_not_retryable() {
+        let err = AgentError::NotAwaitingApproval;
+        let report: shared::error::ErrorReport = (&err).into();
+        assert_eq!(report.kind, shared::error::ErrorKind::Agent);
+        assert_eq!(report.provider, None);
+        assert!(!report.retryable);
+    }
+
+    #[test]
+    fn a_wrapped_llm_error_delegates_its_report() {
+        let err = AgentError::Llm(LlmError::MissingApiKey {
+            var: "ANTHROPIC_API_KEY".to_string(),
+        });
+        let report: shared::error::ErrorReport = (&err).into();
+        assert_eq!(report.kind, shared::error::ErrorKind::Config);
     }
 }

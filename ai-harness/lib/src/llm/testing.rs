@@ -11,7 +11,7 @@
 
 #![allow(dead_code)]
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
 
 use async_trait::async_trait;
@@ -27,6 +27,12 @@ use crate::llm::error::LlmError;
 pub(crate) struct ScriptedProvider {
     name: &'static str,
     responses: Mutex<VecDeque<Result<CompletedMessage, LlmError>>>,
+    /// Keyed by 0-based call index (see `with_stream_error`) — when present,
+    /// `stream`'s synthesized stream for that call ends with this error
+    /// instead of its normal `MessageStop`, once the scripted
+    /// `CompletedMessage`'s content blocks have already been emitted. Empty
+    /// by default: every call streams to a clean completion.
+    stream_errors: Mutex<HashMap<usize, LlmError>>,
     pub(crate) calls: Mutex<Vec<(Conversation, ChatOptions)>>,
 }
 
@@ -35,6 +41,7 @@ impl ScriptedProvider {
         Self {
             name: "scripted",
             responses: Mutex::new(responses.into()),
+            stream_errors: Mutex::new(HashMap::new()),
             calls: Mutex::new(Vec::new()),
         }
     }
@@ -43,6 +50,20 @@ impl ScriptedProvider {
     /// router tests that want to see it show up in an error message.
     pub(crate) fn named(mut self, name: &'static str) -> Self {
         self.name = name;
+        self
+    }
+
+    /// Makes `stream`'s *n*th call (0-based, matching `calls`'s indices)
+    /// fail mid-stream with `err`, after that call's scripted
+    /// `CompletedMessage` content has already been emitted as ordinary
+    /// events — the corresponding script entry must still be `Ok`, since the
+    /// failure is injected only once streaming has started. `complete` for
+    /// the same call is unaffected; this only reshapes what `stream`
+    /// produces, letting a test prove a failure arriving partway through a
+    /// stream (as opposed to one that fails the call outright) still
+    /// reaches the caller as `Err` with its classification intact.
+    pub(crate) fn with_stream_error(self, call_index: usize, err: LlmError) -> Self {
+        self.stream_errors.lock().unwrap().insert(call_index, err);
         self
     }
 
@@ -77,16 +98,28 @@ impl ChatProvider for ScriptedProvider {
     /// served, shaped so folding it with
     /// [`crate::llm::accumulate::MessageAccumulator`] reproduces the exact
     /// `CompletedMessage` `complete` would have returned for the same call —
-    /// see [`synthesize_stream_events`].
+    /// see [`synthesize_stream_events`]. If `with_stream_error` targeted this
+    /// call's index, the final `MessageStop` is replaced with that error
+    /// instead.
     async fn stream(
         &self,
         conversation: &Conversation,
         options: &ChatOptions,
     ) -> Result<ChatStream, LlmError> {
         let message = self.complete(conversation, options).await?;
-        let events = synthesize_stream_events(&message);
-        let stream = stream::iter(events.into_iter().map(Ok::<_, LlmError>));
-        Ok(Box::pin(stream))
+        let call_index = self.calls.lock().unwrap().len() - 1;
+        let mut events = synthesize_stream_events(&message);
+
+        let mut items: Vec<Result<StreamEvent, LlmError>> = Vec::with_capacity(events.len());
+        if let Some(err) = self.stream_errors.lock().unwrap().remove(&call_index) {
+            events.pop(); // drop MessageStop — the stream ends in failure instead
+            items.extend(events.into_iter().map(Ok));
+            items.push(Err(err));
+        } else {
+            items.extend(events.into_iter().map(Ok));
+        }
+
+        Ok(Box::pin(stream::iter(items)))
     }
 }
 
@@ -202,5 +235,43 @@ mod tests {
         assert_eq!(accumulated.stop_reason, message.stop_reason);
         assert_eq!(accumulated.usage, message.usage);
         assert_eq!(accumulated.model, message.model);
+    }
+
+    #[tokio::test]
+    async fn with_stream_error_replaces_message_stop_with_the_injected_error() {
+        let provider = ScriptedProvider::new(vec![Ok(sample_message())]).with_stream_error(
+            0,
+            LlmError::InsufficientCredit {
+                provider: "openai",
+                message: "you exceeded your current quota".to_string(),
+            },
+        );
+        let mut stream = provider
+            .stream(
+                &Conversation::default(),
+                &ChatOptions::new("claude-opus-5", 1024),
+            )
+            .await
+            .unwrap();
+
+        use futures_util::StreamExt;
+        let mut saw_block_start = false;
+        let mut saw_message_stop = false;
+        let mut err = None;
+        while let Some(event) = stream.next().await {
+            match event {
+                Ok(StreamEvent::BlockStart { .. }) => saw_block_start = true,
+                Ok(StreamEvent::MessageStop { .. }) => saw_message_stop = true,
+                Ok(_) => {}
+                Err(e) => err = Some(e),
+            }
+        }
+
+        assert!(saw_block_start, "content emitted before the failure must still arrive");
+        assert!(!saw_message_stop, "the injected error replaces MessageStop, not follows it");
+        match err {
+            Some(LlmError::InsufficientCredit { provider, .. }) => assert_eq!(provider, "openai"),
+            other => panic!("expected InsufficientCredit, got {other:?}"),
+        }
     }
 }
