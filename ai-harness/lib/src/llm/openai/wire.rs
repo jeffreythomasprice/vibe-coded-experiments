@@ -14,7 +14,6 @@ use shared::llm::{
     ToolResultContent, Usage,
 };
 
-use crate::llm::config::OpenAiConfig;
 use crate::llm::error::{ApiErrorKind, LlmError};
 use crate::llm::sse::{SseDecoder, SseFrame};
 
@@ -24,24 +23,24 @@ pub const PROVIDER: &str = "openai";
 // Request building
 // ---------------------------------------------------------------------
 
-/// Build the JSON body for `POST {base_url}/v1/responses`.
+/// Build the JSON body for `POST {base_url}/v1/responses`. Model and
+/// `max_tokens` come from `options` — both required fields on
+/// `ChatOptions`, since neither has a sensible config-level default (see
+/// `crate::llm::config`'s module doc).
 pub fn build_request(
     conversation: &Conversation,
     options: &ChatOptions,
-    cfg: &OpenAiConfig,
     stream: bool,
 ) -> serde_json::Value {
     let mut body = serde_json::json!({
-        "model": options.model.clone().unwrap_or_else(|| cfg.model.clone()),
+        "model": options.model,
         "input": to_wire_input(&conversation.messages),
         "stream": stream,
+        "max_output_tokens": options.max_tokens,
     });
 
     if let Some(instructions) = &conversation.system {
         body["instructions"] = serde_json::json!(instructions);
-    }
-    if let Some(max_tokens) = options.max_tokens {
-        body["max_output_tokens"] = serde_json::json!(max_tokens);
     }
     if !options.tools.is_empty() {
         body["tools"] =
@@ -722,9 +721,9 @@ mod tests {
     const ERROR: &str = include_str!("fixtures/error.json");
     const MODELS: &str = include_str!("fixtures/models.json");
 
-    fn cfg() -> OpenAiConfig {
-        OpenAiConfig::default()
-    }
+    /// Only used to check that a request's model/max_tokens land on the
+    /// wire unchanged — not a config default.
+    const MODEL: &str = "gpt-5.6";
 
     #[test]
     fn builds_a_responses_request_with_internally_tagged_tools() {
@@ -741,9 +740,9 @@ mod tests {
         };
         let options = ChatOptions {
             tools: vec![tool],
-            ..ChatOptions::default()
+            ..ChatOptions::new(MODEL, 1024)
         };
-        let body = build_request(&conv, &options, &cfg(), false);
+        let body = build_request(&conv, &options, false);
         assert_eq!(body["model"], serde_json::json!("gpt-5.6"));
         assert_eq!(body["instructions"], serde_json::json!("Be terse."));
         assert_eq!(
@@ -754,6 +753,16 @@ mod tests {
         assert_eq!(body["tools"][0]["type"], serde_json::json!("function"));
         assert_eq!(body["tools"][0]["name"], serde_json::json!("get_weather"));
         assert!(body["tools"][0].get("function").is_none());
+    }
+
+    /// `max_tokens` is a required field on `ChatOptions` (see
+    /// `crate::llm::config`'s module doc), so `max_output_tokens` must always
+    /// land on the wire — never omitted the way it used to be when the field
+    /// was optional.
+    #[test]
+    fn max_output_tokens_is_always_sent() {
+        let body = build_request(&Conversation::default(), &ChatOptions::new(MODEL, 512), false);
+        assert_eq!(body["max_output_tokens"], serde_json::json!(512));
     }
 
     #[test]
@@ -767,7 +776,7 @@ mod tests {
                 },
             }])],
         };
-        let body = build_request(&conv, &ChatOptions::default(), &cfg(), false);
+        let body = build_request(&conv, &ChatOptions::new(MODEL, 1024), false);
         assert_eq!(
             body["input"][0]["content"][0]["image_url"],
             serde_json::json!("data:image/png;base64,aGVsbG8=")
@@ -782,7 +791,7 @@ mod tests {
                 text: "Paris.".to_string(),
             }])],
         };
-        let body = build_request(&conv, &ChatOptions::default(), &cfg(), false);
+        let body = build_request(&conv, &ChatOptions::new(MODEL, 1024), false);
         assert_eq!(
             body["input"][0]["content"][0]["type"],
             serde_json::json!("output_text")
@@ -808,7 +817,7 @@ mod tests {
                 }]),
             ],
         };
-        let body = build_request(&conv, &ChatOptions::default(), &cfg(), false);
+        let body = build_request(&conv, &ChatOptions::new(MODEL, 1024), false);
         let input = body["input"].as_array().unwrap();
         assert_eq!(input.len(), 2);
         assert_eq!(input[0]["type"], serde_json::json!("function_call"));
@@ -854,7 +863,7 @@ mod tests {
                 }]),
             ],
         };
-        let body = build_request(&conv, &ChatOptions::default(), &cfg(), false);
+        let body = build_request(&conv, &ChatOptions::new(MODEL, 1024), false);
         assert_eq!(body["input"][1]["call_id"], serde_json::json!(id));
     }
 

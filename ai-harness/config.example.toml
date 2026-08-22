@@ -57,6 +57,14 @@ request_timeout_secs = 120
 # 401, 403, ...) are never retried regardless of this value.
 max_retries = 2
 
+# Deliberately no model id (or `max_tokens`/image-model/embedding-model) on
+# any [llm.*] table below. A model is a property of a request, not of this
+# deployment — it changes per call and goes stale as providers ship new
+# models, so there is no default here to silently keep sending. Callers
+# supply one on `ChatOptions`/`EmbeddingRequest`/`ImageRequest` instead (all
+# required fields); an integration test that needs a fixed model uses a
+# `const` at the top of its own file (see `lib/tests/live_*.rs`).
+
 [llm.anthropic]
 base_url = "https://api.anthropic.com"
 
@@ -65,20 +73,12 @@ base_url = "https://api.anthropic.com"
 # storing the key here (instead of its variable name) would leak it.
 api_key_env = "ANTHROPIC_API_KEY"
 
-model = "claude-opus-5"
-max_tokens = 16000
 anthropic_version = "2023-06-01"
 
 [llm.ollama]
 # Scheme, host, and port together — there is no separate `port` key, since a
 # split host/port pair could disagree with this URL.
 base_url = "http://localhost:11434"
-
-model = "qwen3.5:latest"
-
-# Model used for `EmbeddingProvider::embed` — a distinct pull from `model`
-# above, since a chat model and an embedding model are different models.
-embedding_model = "nomic-embed-text"
 
 # How long Ollama keeps this model loaded in memory after the request.
 keep_alive = "5m"
@@ -91,16 +91,6 @@ library_url = "https://ollama.com/library"
 [llm.openai]
 base_url = "https://api.openai.com"
 api_key_env = "OPENAI_API_KEY"
-model = "gpt-5.6"
-
-# OpenAI's chat and image-generation models are entirely separate — this is
-# the model `ImageProvider::generate` uses (see the README's "LLM providers"
-# section for why OpenAI is the only one of the three that offers it here).
-image_model = "gpt-image-2"
-
-# Model used for `EmbeddingProvider::embed` — a third, disjoint set from the
-# chat and image models above.
-embedding_model = "text-embedding-3-small"
 
 [cache]
 # A small disk cache for provider responses that are expensive or

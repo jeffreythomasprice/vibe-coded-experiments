@@ -19,7 +19,9 @@ use crate::llm::error::LlmError;
 
 use super::wire::{self, PROVIDER};
 
-/// Build the JSON body for `POST {base_url}/api/embed`.
+/// Build the JSON body for `POST {base_url}/api/embed`. Model comes from
+/// `request` — a required field on `EmbeddingRequest`, since it has no
+/// sensible config-level default (see `crate::llm::config`'s module doc).
 ///
 /// `truncate` is always sent as `false`, overriding Ollama's own default of
 /// `true` (silently truncate oversized input to fit the context window).
@@ -29,7 +31,7 @@ use super::wire::{self, PROVIDER};
 /// `parse_error` below for how the resulting rejection is classified.
 pub fn build_request(request: &EmbeddingRequest, cfg: &OllamaConfig) -> serde_json::Value {
     let mut body = serde_json::json!({
-        "model": request.model.clone().unwrap_or_else(|| cfg.embedding_model.clone()),
+        "model": request.model,
         "input": request.input,
         "truncate": false,
         "keep_alive": cfg.keep_alive,
@@ -121,11 +123,7 @@ mod tests {
 
     #[test]
     fn builds_a_minimal_embed_request_with_truncate_disabled() {
-        let req = EmbeddingRequest {
-            input: vec!["hello world".to_string()],
-            model: None,
-            dimensions: None,
-        };
+        let req = EmbeddingRequest::new("nomic-embed-text", vec!["hello world".to_string()]);
         let body = build_request(&req, &cfg());
         assert_eq!(body["model"], serde_json::json!("nomic-embed-text"));
         assert_eq!(body["input"], serde_json::json!(["hello world"]));
@@ -139,23 +137,18 @@ mod tests {
     }
 
     #[test]
-    fn a_requested_model_overrides_the_configured_default() {
-        let req = EmbeddingRequest {
-            input: vec!["hi".to_string()],
-            model: Some("mxbai-embed-large".to_string()),
-            dimensions: None,
-        };
+    fn a_requested_model_lands_on_the_wire() {
+        let req = EmbeddingRequest::new("mxbai-embed-large", vec!["hi".to_string()]);
         let body = build_request(&req, &cfg());
         assert_eq!(body["model"], serde_json::json!("mxbai-embed-large"));
     }
 
     #[test]
     fn a_batch_of_inputs_is_sent_as_one_array() {
-        let req = EmbeddingRequest {
-            input: vec!["a".to_string(), "b".to_string()],
-            model: None,
-            dimensions: None,
-        };
+        let req = EmbeddingRequest::new(
+            "nomic-embed-text",
+            vec!["a".to_string(), "b".to_string()],
+        );
         let body = build_request(&req, &cfg());
         assert_eq!(body["input"], serde_json::json!(["a", "b"]));
     }

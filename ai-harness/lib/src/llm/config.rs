@@ -5,6 +5,15 @@
 //! `#[serde(default = "…")]` backed by the same function the hand-written
 //! `Default` impl uses — so a missing table, an empty one, and one that
 //! spells out the defaults all behave identically.
+//!
+//! Deliberately absent: a model id, image model, embedding model, or token
+//! budget on any provider table. Those are per-request decisions, not
+//! deployment settings — a config-level default would silently keep sending
+//! whatever id was baked in months ago to a caller that forgot to pick one.
+//! Callers supply them on `shared::llm::ChatOptions`/`EmbeddingRequest`/
+//! `ImageRequest` instead (all required fields); a live integration test
+//! that needs a fixed model uses a `const` at the top of its own file — see
+//! `lib/tests/live_*.rs`.
 
 use serde::{Deserialize, Serialize};
 
@@ -73,10 +82,6 @@ pub struct AnthropicConfig {
     /// (`server/src/main.rs`), so storing the value here would leak it.
     #[serde(default = "default_anthropic_api_key_env")]
     pub api_key_env: String,
-    #[serde(default = "default_anthropic_model")]
-    pub model: String,
-    #[serde(default = "default_anthropic_max_tokens")]
-    pub max_tokens: u32,
     #[serde(default = "default_anthropic_version")]
     pub anthropic_version: String,
 }
@@ -86,8 +91,6 @@ impl Default for AnthropicConfig {
         Self {
             base_url: default_anthropic_base_url(),
             api_key_env: default_anthropic_api_key_env(),
-            model: default_anthropic_model(),
-            max_tokens: default_anthropic_max_tokens(),
             anthropic_version: default_anthropic_version(),
         }
     }
@@ -111,14 +114,6 @@ fn default_anthropic_api_key_env() -> String {
     "ANTHROPIC_API_KEY".to_string()
 }
 
-fn default_anthropic_model() -> String {
-    "claude-opus-5".to_string()
-}
-
-fn default_anthropic_max_tokens() -> u32 {
-    16_000
-}
-
 fn default_anthropic_version() -> String {
     "2023-06-01".to_string()
 }
@@ -129,12 +124,6 @@ fn default_anthropic_version() -> String {
 pub struct OllamaConfig {
     #[serde(default = "default_ollama_base_url")]
     pub base_url: String,
-    #[serde(default = "default_ollama_model")]
-    pub model: String,
-    /// Model used for `EmbeddingProvider::embed` — distinct from `model`
-    /// since a chat model and an embedding model are different pulls.
-    #[serde(default = "default_ollama_embedding_model")]
-    pub embedding_model: String,
     /// How long Ollama keeps the model loaded after this request. Passed
     /// through verbatim as Ollama's own duration string (e.g. `"5m"`).
     #[serde(default = "default_ollama_keep_alive")]
@@ -151,8 +140,6 @@ impl Default for OllamaConfig {
     fn default() -> Self {
         Self {
             base_url: default_ollama_base_url(),
-            model: default_ollama_model(),
-            embedding_model: default_ollama_embedding_model(),
             keep_alive: default_ollama_keep_alive(),
             library_url: default_ollama_library_url(),
         }
@@ -161,14 +148,6 @@ impl Default for OllamaConfig {
 
 fn default_ollama_base_url() -> String {
     "http://localhost:11434".to_string()
-}
-
-fn default_ollama_model() -> String {
-    "qwen3.5:latest".to_string()
-}
-
-fn default_ollama_embedding_model() -> String {
-    "nomic-embed-text".to_string()
 }
 
 fn default_ollama_keep_alive() -> String {
@@ -187,16 +166,6 @@ pub struct OpenAiConfig {
     pub base_url: String,
     #[serde(default = "default_openai_api_key_env")]
     pub api_key_env: String,
-    #[serde(default = "default_openai_model")]
-    pub model: String,
-    /// Model used for `ImageProvider::generate` — a distinct chat vs. image
-    /// model, since OpenAI's chat and image-generation models are disjoint.
-    #[serde(default = "default_openai_image_model")]
-    pub image_model: String,
-    /// Model used for `EmbeddingProvider::embed` — chat, image, and
-    /// embedding models are three disjoint sets on OpenAI.
-    #[serde(default = "default_openai_embedding_model")]
-    pub embedding_model: String,
 }
 
 impl Default for OpenAiConfig {
@@ -204,9 +173,6 @@ impl Default for OpenAiConfig {
         Self {
             base_url: default_openai_base_url(),
             api_key_env: default_openai_api_key_env(),
-            model: default_openai_model(),
-            image_model: default_openai_image_model(),
-            embedding_model: default_openai_embedding_model(),
         }
     }
 }
@@ -225,18 +191,6 @@ fn default_openai_base_url() -> String {
 
 fn default_openai_api_key_env() -> String {
     "OPENAI_API_KEY".to_string()
-}
-
-fn default_openai_model() -> String {
-    "gpt-5.6".to_string()
-}
-
-fn default_openai_image_model() -> String {
-    "gpt-image-2".to_string()
-}
-
-fn default_openai_embedding_model() -> String {
-    "text-embedding-3-small".to_string()
 }
 
 /// Accepts either a TOML integer (seconds) or a suffixed string.
@@ -313,11 +267,11 @@ mod tests {
         assert_eq!(parsed.request_timeout_secs, defaults.request_timeout_secs);
         assert_eq!(parsed.max_retries, defaults.max_retries);
         assert_eq!(parsed.anthropic.base_url, defaults.anthropic.base_url);
-        assert_eq!(parsed.anthropic.model, defaults.anthropic.model);
+        assert_eq!(parsed.anthropic.anthropic_version, defaults.anthropic.anthropic_version);
         assert_eq!(parsed.ollama.base_url, defaults.ollama.base_url);
         assert_eq!(parsed.ollama.library_url, defaults.ollama.library_url);
         assert_eq!(parsed.openai.base_url, defaults.openai.base_url);
-        assert_eq!(parsed.openai.model, defaults.openai.model);
+        assert_eq!(parsed.openai.api_key_env, defaults.openai.api_key_env);
     }
 
     #[test]
@@ -329,32 +283,24 @@ mod tests {
             [anthropic]
             base_url = "http://localhost:9999"
             api_key_env = "MY_KEY"
-            model = "claude-haiku-4-5"
-            max_tokens = 1024
             anthropic_version = "2023-06-01"
             [ollama]
             base_url = "http://localhost:11434"
-            model = "llama3.1:8b"
-            embedding_model = "mxbai-embed-large"
             keep_alive = "1m"
             library_url = "https://ollama.example.com/library"
             [openai]
             base_url = "https://api.openai.com"
             api_key_env = "MY_OPENAI_KEY"
-            model = "gpt-5.6"
-            image_model = "gpt-image-1-mini"
-            embedding_model = "text-embedding-3-large"
             "#,
         )
         .unwrap();
         assert_eq!(parsed.request_timeout_secs, 300);
         assert_eq!(parsed.max_retries, 5);
-        assert_eq!(parsed.anthropic.model, "claude-haiku-4-5");
-        assert_eq!(parsed.ollama.model, "llama3.1:8b");
-        assert_eq!(parsed.ollama.embedding_model, "mxbai-embed-large");
+        assert_eq!(parsed.anthropic.base_url, "http://localhost:9999");
+        assert_eq!(parsed.anthropic.api_key_env, "MY_KEY");
+        assert_eq!(parsed.ollama.keep_alive, "1m");
         assert_eq!(parsed.ollama.library_url, "https://ollama.example.com/library");
-        assert_eq!(parsed.openai.image_model, "gpt-image-1-mini");
-        assert_eq!(parsed.openai.embedding_model, "text-embedding-3-large");
+        assert_eq!(parsed.openai.api_key_env, "MY_OPENAI_KEY");
     }
 
     #[test]
@@ -362,6 +308,30 @@ mod tests {
         assert!(toml::from_str::<LlmConfig>("[anthropic]\nnope = 1\n").is_err());
         assert!(toml::from_str::<LlmConfig>("[ollama]\nport = 1\n").is_err());
         assert!(toml::from_str::<LlmConfig>("nope = 1\n").is_err());
+    }
+
+    /// A `config.toml` written before model ids moved out of config (see this
+    /// module's doc) must fail loudly rather than silently ignore the key —
+    /// `#[serde(deny_unknown_fields)]` is what buys this.
+    #[test]
+    fn rejects_a_config_that_still_bakes_in_a_model_id() {
+        assert!(toml::from_str::<LlmConfig>("[anthropic]\nmodel = \"claude-opus-5\"\n").is_err());
+        assert!(toml::from_str::<LlmConfig>("[ollama]\nmodel = \"qwen3.5:latest\"\n").is_err());
+        assert!(toml::from_str::<LlmConfig>("[ollama]\nembedding_model = \"nomic-embed-text\"\n")
+            .is_err());
+        assert!(toml::from_str::<LlmConfig>("[openai]\nmodel = \"gpt-5.6\"\n").is_err());
+        assert!(toml::from_str::<LlmConfig>("[openai]\nimage_model = \"gpt-image-2\"\n").is_err());
+        assert!(toml::from_str::<LlmConfig>(
+            "[openai]\nembedding_model = \"text-embedding-3-small\"\n"
+        )
+        .is_err());
+    }
+
+    /// Anthropic's `max_tokens` is now a per-request field on `ChatOptions`,
+    /// not a deployment setting — pin that it stays off this config struct.
+    #[test]
+    fn anthropic_config_has_no_max_tokens_field() {
+        assert!(toml::from_str::<AnthropicConfig>("max_tokens = 1024\n").is_err());
     }
 
     #[test]

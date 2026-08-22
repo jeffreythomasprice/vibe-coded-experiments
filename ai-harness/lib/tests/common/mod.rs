@@ -14,8 +14,6 @@
 
 use std::time::Duration;
 
-use lib::llm::config::{AnthropicConfig, OllamaConfig, OpenAiConfig};
-
 /// A tiny (4x4, solid red) PNG, generated once and checked in, so the vision
 /// test doesn't depend on any file outside the repo.
 pub const PIXEL_PNG: &[u8] = include_bytes!("pixel.png");
@@ -51,46 +49,4 @@ pub fn skip_unless_live(test_name: &str) -> bool {
     } else {
         false
     }
-}
-
-/// The Anthropic config to test against, honoring
-/// `AI_HARNESS_LIVE_ANTHROPIC_MODEL` so a smoke run can point at something
-/// cheaper (e.g. `claude-haiku-4-5`) without touching the default config.
-pub fn anthropic_config() -> AnthropicConfig {
-    let mut cfg = AnthropicConfig::default();
-    if let Ok(model) = std::env::var("AI_HARNESS_LIVE_ANTHROPIC_MODEL") {
-        cfg.model = model;
-    }
-    cfg
-}
-
-/// The Ollama config to test against, honoring `AI_HARNESS_LIVE_OLLAMA_MODEL`
-/// and `AI_HARNESS_LIVE_OLLAMA_EMBEDDING_MODEL`.
-pub fn ollama_config() -> OllamaConfig {
-    let mut cfg = OllamaConfig::default();
-    if let Ok(model) = std::env::var("AI_HARNESS_LIVE_OLLAMA_MODEL") {
-        cfg.model = model;
-    }
-    if let Ok(model) = std::env::var("AI_HARNESS_LIVE_OLLAMA_EMBEDDING_MODEL") {
-        cfg.embedding_model = model;
-    }
-    cfg
-}
-
-/// The OpenAI config to test against, honoring `AI_HARNESS_LIVE_OPENAI_MODEL`,
-/// `AI_HARNESS_LIVE_OPENAI_IMAGE_MODEL` (e.g. to point at the cheaper
-/// `gpt-image-1-mini` for a smoke run), and
-/// `AI_HARNESS_LIVE_OPENAI_EMBEDDING_MODEL`.
-pub fn openai_config() -> OpenAiConfig {
-    let mut cfg = OpenAiConfig::default();
-    if let Ok(model) = std::env::var("AI_HARNESS_LIVE_OPENAI_MODEL") {
-        cfg.model = model;
-    }
-    if let Ok(model) = std::env::var("AI_HARNESS_LIVE_OPENAI_IMAGE_MODEL") {
-        cfg.image_model = model;
-    }
-    if let Ok(model) = std::env::var("AI_HARNESS_LIVE_OPENAI_EMBEDDING_MODEL") {
-        cfg.embedding_model = model;
-    }
-    cfg
 }

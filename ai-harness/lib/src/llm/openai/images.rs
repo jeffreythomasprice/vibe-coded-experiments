@@ -12,15 +12,16 @@ use serde::Deserialize;
 
 use shared::llm::{GeneratedImage, ImageRequest, MediaType};
 
-use crate::llm::config::OpenAiConfig;
 use crate::llm::error::LlmError;
 
 use super::wire::PROVIDER;
 
-/// Build the JSON body for `POST {base_url}/v1/images/generations`.
-pub fn build_request(request: &ImageRequest, cfg: &OpenAiConfig) -> serde_json::Value {
+/// Build the JSON body for `POST {base_url}/v1/images/generations`. Model
+/// comes from `request` — a required field on `ImageRequest`, since it has
+/// no sensible config-level default (see `crate::llm::config`'s module doc).
+pub fn build_request(request: &ImageRequest) -> serde_json::Value {
     let mut body = serde_json::json!({
-        "model": request.model.clone().unwrap_or_else(|| cfg.image_model.clone()),
+        "model": request.model,
         "prompt": request.prompt,
         "n": request.n,
     });
@@ -106,15 +107,11 @@ mod tests {
     #[test]
     fn builds_a_minimal_images_request() {
         let req = ImageRequest {
-            prompt: "a red cube on a white table".to_string(),
-            model: None,
             size: Some("1024x1024".to_string()),
             quality: Some("high".to_string()),
-            background: None,
-            output_format: None,
-            n: 1,
+            ..ImageRequest::new("gpt-image-2", "a red cube on a white table")
         };
-        let body = build_request(&req, &OpenAiConfig::default());
+        let body = build_request(&req);
         assert_eq!(body["model"], serde_json::json!("gpt-image-2"));
         assert_eq!(
             body["prompt"],

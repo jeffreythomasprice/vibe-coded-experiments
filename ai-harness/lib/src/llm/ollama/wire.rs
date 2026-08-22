@@ -33,7 +33,10 @@ pub const PROVIDER: &str = "ollama";
 // Request building
 // ---------------------------------------------------------------------
 
-/// Build the JSON body for `POST {base_url}/api/chat`.
+/// Build the JSON body for `POST {base_url}/api/chat`. Model and
+/// `max_tokens` come from `options` — both required fields on
+/// `ChatOptions`, since neither has a sensible config-level default (see
+/// `crate::llm::config`'s module doc).
 pub fn build_request(
     conversation: &Conversation,
     options: &ChatOptions,
@@ -48,7 +51,7 @@ pub fn build_request(
     messages.extend(to_wire_messages(&conversation.messages, &mut tool_names));
 
     let mut body = serde_json::json!({
-        "model": options.model.clone().unwrap_or_else(|| cfg.model.clone()),
+        "model": options.model,
         "messages": messages,
         "stream": stream,
         "keep_alive": cfg.keep_alive,
@@ -77,9 +80,10 @@ pub fn build_request(
     };
 
     let mut wire_options = serde_json::Map::new();
-    if let Some(max_tokens) = options.max_tokens {
-        wire_options.insert("num_predict".to_string(), serde_json::json!(max_tokens));
-    }
+    wire_options.insert(
+        "num_predict".to_string(),
+        serde_json::json!(options.max_tokens),
+    );
     if !options.stop_sequences.is_empty() {
         wire_options.insert(
             "stop".to_string(),
@@ -701,6 +705,10 @@ mod tests {
         OllamaConfig::default()
     }
 
+    /// Only used to check that a request's model/max_tokens land on the
+    /// wire unchanged — not a config default.
+    const MODEL: &str = "llama3.1:8b";
+
     #[test]
     fn flattens_text_blocks_into_a_single_content_string() {
         let conv = Conversation {
@@ -714,11 +722,26 @@ mod tests {
                 },
             ])],
         };
-        let body = build_request(&conv, &ChatOptions::default(), &cfg(), false);
+        let body = build_request(&conv, &ChatOptions::new(MODEL, 1024), &cfg(), false);
         assert_eq!(
             body["messages"][0]["content"],
             serde_json::json!("first line\nsecond line")
         );
+    }
+
+    /// `max_tokens` is a required field on `ChatOptions` (see
+    /// `crate::llm::config`'s module doc), so `options.num_predict` must
+    /// always land on the wire — never omitted the way it used to be when
+    /// the field was optional.
+    #[test]
+    fn num_predict_is_always_sent() {
+        let body = build_request(
+            &Conversation::default(),
+            &ChatOptions::new(MODEL, 512),
+            &cfg(),
+            false,
+        );
+        assert_eq!(body["options"]["num_predict"], serde_json::json!(512));
     }
 
     #[test]
@@ -737,7 +760,7 @@ mod tests {
                 },
             ])],
         };
-        let body = build_request(&conv, &ChatOptions::default(), &cfg(), false);
+        let body = build_request(&conv, &ChatOptions::new(MODEL, 1024), &cfg(), false);
         assert_eq!(body["messages"][0]["content"], serde_json::json!("what is this?"));
         assert_eq!(
             body["messages"][0]["images"],
@@ -764,7 +787,7 @@ mod tests {
                 }]),
             ],
         };
-        let body = build_request(&conv, &ChatOptions::default(), &cfg(), false);
+        let body = build_request(&conv, &ChatOptions::new(MODEL, 1024), &cfg(), false);
         let messages = body["messages"].as_array().unwrap();
         // assistant message with tool_calls, then a separate tool message —
         // never a "user" message wrapping the tool result.
@@ -790,7 +813,7 @@ mod tests {
         let conv = Conversation::default();
         let options = ChatOptions {
             tools: vec![tool],
-            ..ChatOptions::default()
+            ..ChatOptions::new(MODEL, 1024)
         };
         let body = build_request(&conv, &options, &cfg(), false);
         assert_eq!(body["tools"][0]["type"], serde_json::json!("function"));
@@ -806,7 +829,12 @@ mod tests {
         // model — Ollama falls back to that model's own default, which is
         // typically to think anyway (confirmed live: qwen3.5 kept
         // reasoning with `think` unset until it ran out of `max_tokens`).
-        let body = build_request(&Conversation::default(), &ChatOptions::default(), &cfg(), false);
+        let body = build_request(
+            &Conversation::default(),
+            &ChatOptions::new(MODEL, 1024),
+            &cfg(),
+            false,
+        );
         assert_eq!(body["think"], serde_json::json!(false));
     }
 
@@ -816,7 +844,7 @@ mod tests {
             thinking: Thinking::Adaptive {
                 effort: Effort::High,
             },
-            ..ChatOptions::default()
+            ..ChatOptions::new(MODEL, 1024)
         };
         let body = build_request(&Conversation::default(), &options, &cfg(), false);
         assert_eq!(body["think"], serde_json::json!("high"));

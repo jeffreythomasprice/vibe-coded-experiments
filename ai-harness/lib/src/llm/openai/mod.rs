@@ -91,7 +91,7 @@ impl ChatProvider for OpenAiClient {
         conversation: &Conversation,
         options: &ChatOptions,
     ) -> Result<CompletedMessage, LlmError> {
-        let body = wire::build_request(conversation, options, &self.cfg, false);
+        let body = wire::build_request(conversation, options, false);
         let request = self.request("/v1/responses", &body)?;
         let response =
             http::send_with_retry(wire::PROVIDER, request, self.max_retries, wire::parse_error)
@@ -108,7 +108,7 @@ impl ChatProvider for OpenAiClient {
         conversation: &Conversation,
         options: &ChatOptions,
     ) -> Result<ChatStream, LlmError> {
-        let body = wire::build_request(conversation, options, &self.cfg, true);
+        let body = wire::build_request(conversation, options, true);
         let request = self.request("/v1/responses", &body)?;
         let response =
             http::send_with_retry(wire::PROVIDER, request, self.max_retries, wire::parse_error)
@@ -142,7 +142,7 @@ impl ImageProvider for OpenAiClient {
     }
 
     async fn generate(&self, request: &ImageRequest) -> Result<Vec<GeneratedImage>, LlmError> {
-        let body = images::build_request(request, &self.cfg);
+        let body = images::build_request(request);
         let http_request = self.request("/v1/images/generations", &body)?;
         let response = http::send_with_retry(
             wire::PROVIDER,
@@ -220,14 +220,10 @@ impl EmbeddingProvider for OpenAiClient {
     }
 
     async fn embed(&self, request: &EmbeddingRequest) -> Result<EmbeddingResponse, LlmError> {
-        let model = request
-            .model
-            .clone()
-            .unwrap_or_else(|| self.cfg.embedding_model.clone());
-        let body = embeddings::build_request(request, &self.cfg);
+        let body = embeddings::build_request(request);
         let http_request = self.request("/v1/embeddings", &body)?;
         let response = http::send_with_retry(wire::PROVIDER, http_request, self.max_retries, {
-            let model = model.clone();
+            let model = request.model.clone();
             move |status, body| embeddings::parse_error(status, body, &model)
         })
         .await?;

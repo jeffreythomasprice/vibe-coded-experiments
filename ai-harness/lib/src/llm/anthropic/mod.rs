@@ -91,7 +91,7 @@ impl ChatProvider for AnthropicClient {
         conversation: &Conversation,
         options: &ChatOptions,
     ) -> Result<CompletedMessage, LlmError> {
-        let body = wire::build_request(conversation, options, &self.cfg, false);
+        let body = wire::build_request(conversation, options, false);
         let request = self.request(&body)?;
         let response =
             http::send_with_retry(wire::PROVIDER, request, self.max_retries, wire::parse_error)
@@ -111,7 +111,7 @@ impl ChatProvider for AnthropicClient {
         conversation: &Conversation,
         options: &ChatOptions,
     ) -> Result<ChatStream, LlmError> {
-        let body = wire::build_request(conversation, options, &self.cfg, true);
+        let body = wire::build_request(conversation, options, true);
         let request = self.request(&body)?;
         let response =
             http::send_with_retry(wire::PROVIDER, request, self.max_retries, wire::parse_error)

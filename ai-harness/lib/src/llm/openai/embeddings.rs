@@ -9,15 +9,16 @@ use serde::Deserialize;
 
 use shared::llm::{Embedding, EmbeddingRequest, EmbeddingResponse, EmbeddingUsage};
 
-use crate::llm::config::OpenAiConfig;
 use crate::llm::error::LlmError;
 
 use super::wire::{self, PROVIDER};
 
-/// Build the JSON body for `POST {base_url}/v1/embeddings`.
-pub fn build_request(request: &EmbeddingRequest, cfg: &OpenAiConfig) -> serde_json::Value {
+/// Build the JSON body for `POST {base_url}/v1/embeddings`. Model comes
+/// from `request` — a required field on `EmbeddingRequest`, since it has no
+/// sensible config-level default (see `crate::llm::config`'s module doc).
+pub fn build_request(request: &EmbeddingRequest) -> serde_json::Value {
     let mut body = serde_json::json!({
-        "model": request.model.clone().unwrap_or_else(|| cfg.embedding_model.clone()),
+        "model": request.model,
         "input": request.input,
     });
     if let Some(dimensions) = request.dimensions {
@@ -71,12 +72,19 @@ pub fn parse_response(body: &str) -> Result<EmbeddingResponse, LlmError> {
     })
 }
 
-/// The substring OpenAI's own error message uses for an input that exceeds a
-/// model's context length (observed wording: `"This model's maximum context
-/// length is 8192 tokens, however you requested ... tokens"`). Matched
-/// case-insensitively so a minor wording change doesn't silently stop being
-/// caught.
-const TOO_LONG_SIGNATURE: &str = "maximum context length";
+/// Substrings OpenAI's own error messages use for an input that exceeds a
+/// model's context length. Older wording: `"This model's maximum context
+/// length is 8192 tokens, however you requested ... tokens"`. Newer wording,
+/// observed on the embeddings endpoint: `"Invalid 'input[0]': maximum input
+/// length is 8192 tokens."` Matched case-insensitively so a minor wording
+/// change doesn't silently stop being caught; kept as a list since OpenAI has
+/// already changed this wording once.
+const TOO_LONG_SIGNATURES: &[&str] = &["maximum context length", "maximum input length"];
+
+fn names_too_long_input(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    TOO_LONG_SIGNATURES.iter().any(|sig| lower.contains(sig))
+}
 
 /// Delegates to `wire::parse_error` for the general case, then upgrades a
 /// 400/413 whose message names the context-length limit into
@@ -89,7 +97,7 @@ pub fn parse_error(status: u16, body: &str, model: &str) -> LlmError {
             status: 400 | 413,
             message,
             ..
-        } if message.to_lowercase().contains(TOO_LONG_SIGNATURE) => LlmError::InputTooLarge {
+        } if names_too_long_input(&message) => LlmError::InputTooLarge {
             provider: PROVIDER,
             model: model.to_string(),
             // OpenAI's error message states a limit, but not in a form worth
@@ -109,45 +117,36 @@ mod tests {
 
     const EMBEDDINGS: &str = include_str!("fixtures/embeddings.json");
     const ERROR_CONTEXT_LENGTH: &str = include_str!("fixtures/error_context_length.json");
+    const ERROR_INPUT_TOO_LONG: &str = include_str!("fixtures/error_input_too_long.json");
     const ERROR: &str = include_str!("fixtures/error.json");
-
-    fn cfg() -> OpenAiConfig {
-        OpenAiConfig::default()
-    }
 
     #[test]
     fn builds_a_minimal_embeddings_request() {
-        let req = EmbeddingRequest {
-            input: vec!["hello world".to_string()],
-            model: None,
-            dimensions: None,
-        };
-        let body = build_request(&req, &cfg());
+        let req = EmbeddingRequest::new("text-embedding-3-small", vec!["hello world".to_string()]);
+        let body = build_request(&req);
         assert_eq!(body["model"], serde_json::json!("text-embedding-3-small"));
         assert_eq!(body["input"], serde_json::json!(["hello world"]));
         assert!(body.get("dimensions").is_none());
     }
 
     #[test]
-    fn a_requested_model_overrides_the_configured_default() {
+    fn a_requested_model_lands_on_the_wire() {
         let req = EmbeddingRequest {
-            input: vec!["hi".to_string()],
-            model: Some("text-embedding-3-large".to_string()),
             dimensions: Some(256),
+            ..EmbeddingRequest::new("text-embedding-3-large", vec!["hi".to_string()])
         };
-        let body = build_request(&req, &cfg());
+        let body = build_request(&req);
         assert_eq!(body["model"], serde_json::json!("text-embedding-3-large"));
         assert_eq!(body["dimensions"], serde_json::json!(256));
     }
 
     #[test]
     fn a_batch_of_inputs_is_sent_as_one_array() {
-        let req = EmbeddingRequest {
-            input: vec!["a".to_string(), "b".to_string(), "c".to_string()],
-            model: None,
-            dimensions: None,
-        };
-        let body = build_request(&req, &cfg());
+        let req = EmbeddingRequest::new(
+            "text-embedding-3-small",
+            vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        );
+        let body = build_request(&req);
         assert_eq!(body["input"], serde_json::json!(["a", "b", "c"]));
     }
 
@@ -165,6 +164,18 @@ mod tests {
     #[test]
     fn a_context_length_error_becomes_input_too_large() {
         let err = parse_error(400, ERROR_CONTEXT_LENGTH, "text-embedding-3-small");
+        match err {
+            LlmError::InputTooLarge { provider, model, .. } => {
+                assert_eq!(provider, PROVIDER);
+                assert_eq!(model, "text-embedding-3-small");
+            }
+            other => panic!("expected InputTooLarge, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_input_too_long_error_becomes_input_too_large() {
+        let err = parse_error(400, ERROR_INPUT_TOO_LONG, "text-embedding-3-small");
         match err {
             LlmError::InputTooLarge { provider, model, .. } => {
                 assert_eq!(provider, PROVIDER);

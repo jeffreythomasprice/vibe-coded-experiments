@@ -376,4 +376,35 @@ mod tests {
             PathBuf::from("/tmp/a~b")
         );
     }
+
+    /// Guards `config.example.toml` against drifting out of sync with these
+    /// structs — its header claims "the values below ARE the built-in
+    /// defaults", so it must always parse, and every value it spells out
+    /// must match `Config::default()`.
+    #[test]
+    fn the_checked_in_example_config_parses_and_matches_the_builtin_defaults() {
+        const EXAMPLE: &str = include_str!("../../config.example.toml");
+        let parsed: Config = toml::from_str(EXAMPLE).unwrap();
+        let defaults = Config::default();
+        assert_eq!(parsed.log.dir, defaults.log.dir);
+        assert_eq!(parsed.log.filter, defaults.log.filter);
+        assert_eq!(parsed.log.rotation.interval, defaults.log.rotation.interval);
+        assert_eq!(parsed.log.rotation.max_size, defaults.log.rotation.max_size);
+        assert_eq!(parsed.log.rotation.keep, defaults.log.rotation.keep);
+        assert_eq!(parsed.llm.request_timeout_secs, defaults.llm.request_timeout_secs);
+        assert_eq!(parsed.llm.max_retries, defaults.llm.max_retries);
+        assert_eq!(parsed.llm.anthropic.base_url, defaults.llm.anthropic.base_url);
+        assert_eq!(parsed.llm.anthropic.api_key_env, defaults.llm.anthropic.api_key_env);
+        assert_eq!(
+            parsed.llm.anthropic.anthropic_version,
+            defaults.llm.anthropic.anthropic_version
+        );
+        assert_eq!(parsed.llm.ollama.base_url, defaults.llm.ollama.base_url);
+        assert_eq!(parsed.llm.ollama.keep_alive, defaults.llm.ollama.keep_alive);
+        assert_eq!(parsed.llm.ollama.library_url, defaults.llm.ollama.library_url);
+        assert_eq!(parsed.llm.openai.base_url, defaults.llm.openai.base_url);
+        assert_eq!(parsed.llm.openai.api_key_env, defaults.llm.openai.api_key_env);
+        assert_eq!(parsed.cache.dir, defaults.cache.dir);
+        assert_eq!(parsed.cache.ttl_secs, defaults.cache.ttl_secs);
+    }
 }

@@ -6,7 +6,7 @@
 //! as "skipped", not as a broken build.
 //!
 //!     ollama serve &
-//!     ollama pull llama3.1:8b && ollama pull qwen3.5:latest && ollama pull nomic-embed-text
+//!     ollama pull llama3.1:8b && ollama pull qwen3.5:latest && ollama pull qwen3-embedding:8b
 //!     AI_HARNESS_LIVE=1 cargo test -p lib --test live_ollama -- --nocapture
 
 mod common;
@@ -22,6 +22,15 @@ use shared::llm::{
     ChatOptions, ContentBlock, Conversation, EmbeddingRequest, ImageSource, MediaType, Message,
     StopReason, ToolDef,
 };
+
+/// The models this file's tests call. One-line edit points for a different
+/// local pull — see `crate::llm::config`'s module doc for why these live
+/// here as constants rather than as config defaults.
+const CHAT_MODEL: &str = "qwen3.5:latest";
+const VISION_MODEL: &str = "qwen3.5:latest";
+const TOOL_MODEL: &str = "llama3.1:8b";
+const EMBEDDING_MODEL: &str = "qwen3-embedding:8b";
+const LIBRARY_MODEL: &str = "llama3.1";
 
 fn client(test_name: &str, cfg: OllamaConfig) -> Option<OllamaClient> {
     if common::skip_unless_live(test_name) {
@@ -44,7 +53,7 @@ fn skip_if_unreachable<T>(test_name: &str, result: Result<T, LlmError>) -> Optio
 
 #[tokio::test]
 async fn completes_a_turn() {
-    let Some(client) = client("completes_a_turn", common::ollama_config()) else {
+    let Some(client) = client("completes_a_turn", OllamaConfig::default()) else {
         return;
     };
     let conversation = Conversation {
@@ -53,10 +62,7 @@ async fn completes_a_turn() {
             text: "Reply with exactly one word: pong".to_string(),
         }])],
     };
-    let options = ChatOptions {
-        max_tokens: Some(64),
-        ..ChatOptions::default()
-    };
+    let options = ChatOptions::new(CHAT_MODEL, 64);
     let Some(message) = skip_if_unreachable(
         "completes_a_turn",
         client.complete(&conversation, &options).await,
@@ -73,7 +79,7 @@ async fn completes_a_turn() {
 
 #[tokio::test]
 async fn streams_ndjson() {
-    let Some(client) = client("streams_ndjson", common::ollama_config()) else {
+    let Some(client) = client("streams_ndjson", OllamaConfig::default()) else {
         return;
     };
     let conversation = Conversation {
@@ -82,10 +88,7 @@ async fn streams_ndjson() {
             text: "Reply with exactly one word: pong".to_string(),
         }])],
     };
-    let options = ChatOptions {
-        max_tokens: Some(64),
-        ..ChatOptions::default()
-    };
+    let options = ChatOptions::new(CHAT_MODEL, 64);
     let stream_result = client.stream(&conversation, &options).await;
     let Some(mut stream) = skip_if_unreachable("streams_ndjson", stream_result) else {
         return;
@@ -102,12 +105,7 @@ async fn streams_ndjson() {
 
 #[tokio::test]
 async fn describes_an_image() {
-    // Vision needs a multimodal model — override the default regardless of
-    // AI_HARNESS_LIVE_OLLAMA_MODEL, since a caller pointing that at a
-    // text-only model for the other tests shouldn't break this one.
-    let mut cfg = common::ollama_config();
-    cfg.model = "qwen3.5:latest".to_string();
-    let Some(client) = client("describes_an_image", cfg) else {
+    let Some(client) = client("describes_an_image", OllamaConfig::default()) else {
         return;
     };
     let conversation = Conversation {
@@ -124,10 +122,7 @@ async fn describes_an_image() {
             },
         ])],
     };
-    let options = ChatOptions {
-        max_tokens: Some(64),
-        ..ChatOptions::default()
-    };
+    let options = ChatOptions::new(VISION_MODEL, 64);
     let Some(message) = skip_if_unreachable(
         "describes_an_image",
         client.complete(&conversation, &options).await,
@@ -146,9 +141,7 @@ async fn describes_an_image() {
 
 #[tokio::test]
 async fn calls_a_tool() {
-    let mut cfg = common::ollama_config();
-    cfg.model = "llama3.1:8b".to_string();
-    let Some(client) = client("calls_a_tool", cfg) else {
+    let Some(client) = client("calls_a_tool", OllamaConfig::default()) else {
         return;
     };
     let tool = ToolDef {
@@ -164,9 +157,8 @@ async fn calls_a_tool() {
         }])],
     };
     let options = ChatOptions {
-        max_tokens: Some(256),
         tools: vec![tool],
-        ..ChatOptions::default()
+        ..ChatOptions::new(TOOL_MODEL, 256)
     };
     let Some(message) = skip_if_unreachable("calls_a_tool", client.complete(&conversation, &options).await)
     else {
@@ -192,7 +184,7 @@ async fn calls_a_tool() {
 
 #[tokio::test]
 async fn lists_local_models() {
-    let Some(client) = client("lists_local_models", common::ollama_config()) else {
+    let Some(client) = client("lists_local_models", OllamaConfig::default()) else {
         return;
     };
     let Some(models) = skip_if_unreachable(
@@ -202,18 +194,16 @@ async fn lists_local_models() {
         return;
     };
 
-    let cfg = common::ollama_config();
     assert!(
-        models.iter().any(|m| m.id == cfg.model),
-        "expected the configured model {:?} among the locally pulled models {:?}",
-        cfg.model,
+        models.iter().any(|m| m.id == CHAT_MODEL),
+        "expected {CHAT_MODEL:?} among the locally pulled models {:?}",
         models.iter().map(|m| &m.id).collect::<Vec<_>>()
     );
 }
 
 #[tokio::test]
 async fn lists_embedding_models() {
-    let Some(client) = client("lists_embedding_models", common::ollama_config()) else {
+    let Some(client) = client("lists_embedding_models", OllamaConfig::default()) else {
         return;
     };
     let Some(models) = skip_if_unreachable(
@@ -223,7 +213,6 @@ async fn lists_embedding_models() {
         return;
     };
 
-    let cfg = common::ollama_config();
     for model in &models {
         assert!(
             model.details.is_embedding(),
@@ -231,24 +220,22 @@ async fn lists_embedding_models() {
         );
     }
     assert!(
-        models.iter().any(|m| m.id == cfg.embedding_model),
-        "expected the configured embedding model {:?} among the locally pulled \
-         embedding models {:?} — did you `ollama pull nomic-embed-text`?",
-        cfg.embedding_model,
+        models.iter().any(|m| m.id == EMBEDDING_MODEL),
+        "expected {EMBEDDING_MODEL:?} among the locally pulled embedding models {:?} — \
+         did you `ollama pull {EMBEDDING_MODEL}`?",
         models.iter().map(|m| &m.id).collect::<Vec<_>>()
     );
 }
 
 #[tokio::test]
 async fn embeds_text() {
-    let Some(client) = client("embeds_text", common::ollama_config()) else {
+    let Some(client) = client("embeds_text", OllamaConfig::default()) else {
         return;
     };
-    let request = EmbeddingRequest {
-        input: vec!["the quick brown fox".to_string(), "a red bicycle".to_string()],
-        model: None,
-        dimensions: None,
-    };
+    let request = EmbeddingRequest::new(
+        EMBEDDING_MODEL,
+        vec!["the quick brown fox".to_string(), "a red bicycle".to_string()],
+    );
     let Some(response) = skip_if_unreachable("embeds_text", client.embed(&request).await) else {
         return;
     };
@@ -267,21 +254,17 @@ async fn embeds_text() {
 
 #[tokio::test]
 async fn rejects_oversized_input() {
-    let Some(client) = client("rejects_oversized_input", common::ollama_config()) else {
+    let Some(client) = client("rejects_oversized_input", OllamaConfig::default()) else {
         return;
     };
     // Repetition rather than length keeps this a fast, local-only call.
     // Sized well past even a large-context embedding model (confirmed live
     // against qwen3-embedding:8b's 40960-token window — nomic-embed-text's
     // is a much smaller 2048) so this test doesn't silently pass just
-    // because AI_HARNESS_LIVE_OLLAMA_EMBEDDING_MODEL points at a
-    // bigger-context model than whatever was pulled when this was written.
+    // because EMBEDDING_MODEL above got pointed at a bigger-context model
+    // than whatever was pulled when this was written.
     let huge_input = "the quick brown fox jumps over the lazy dog ".repeat(20_000);
-    let request = EmbeddingRequest {
-        input: vec![huge_input],
-        model: None,
-        dimensions: None,
-    };
+    let request = EmbeddingRequest::new(EMBEDDING_MODEL, vec![huge_input]);
 
     let result = client.embed(&request).await;
     if matches!(result, Err(LlmError::Http { .. })) {
@@ -313,7 +296,7 @@ async fn rejects_oversized_input() {
 /// other test in this file.
 #[tokio::test]
 async fn lists_remote_library_models() {
-    let Some(client) = client("lists_remote_library_models", common::ollama_config()) else {
+    let Some(client) = client("lists_remote_library_models", OllamaConfig::default()) else {
         return;
     };
     let models = client
@@ -327,25 +310,26 @@ async fn lists_remote_library_models() {
         models.len()
     );
     assert!(
-        models.iter().any(|m| m.id == "llama3.1"),
-        "expected \"llama3.1\" in the library index"
+        models.iter().any(|m| m.id == LIBRARY_MODEL),
+        "expected {LIBRARY_MODEL:?} in the library index"
     );
 }
 
 #[tokio::test]
 async fn lists_remote_tags_for_a_model() {
-    let Some(client) = client("lists_remote_tags_for_a_model", common::ollama_config()) else {
+    let Some(client) = client("lists_remote_tags_for_a_model", OllamaConfig::default()) else {
         return;
     };
     let tags = client
-        .list_remote_tags("llama3.1", Freshness::Refresh)
+        .list_remote_tags(LIBRARY_MODEL, Freshness::Refresh)
         .await
         .expect("list_remote_tags failed");
 
     assert!(!tags.is_empty(), "expected at least one tag");
+    let prefix = format!("{LIBRARY_MODEL}:");
     assert!(
-        tags.iter().all(|m| m.id.starts_with("llama3.1:")),
-        "expected every tag id to start with \"llama3.1:\", got {:?}",
+        tags.iter().all(|m| m.id.starts_with(&prefix)),
+        "expected every tag id to start with {prefix:?}, got {:?}",
         tags.iter().map(|m| &m.id).collect::<Vec<_>>()
     );
 }
@@ -366,7 +350,7 @@ async fn caches_the_remote_library_listing_on_disk() {
         dir: dir.clone(),
         ttl_secs: 3600,
     });
-    let cached_client = OllamaClient::new(common::ollama_config(), common::TIMEOUT, 0)
+    let cached_client = OllamaClient::new(OllamaConfig::default(), common::TIMEOUT, 0)
         .expect("client construction")
         .with_cache(cache);
 

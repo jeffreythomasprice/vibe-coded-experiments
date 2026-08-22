@@ -74,10 +74,11 @@ AI_HARNESS_LIVE=1 cargo test -p lib --test live_anthropic -- --nocapture  # real
 AI_HARNESS_LIVE=1 cargo test -p lib --test live_openai -- --nocapture     # real money
 ```
 
-`AI_HARNESS_LIVE_ANTHROPIC_MODEL` / `AI_HARNESS_LIVE_OLLAMA_MODEL` /
-`AI_HARNESS_LIVE_OPENAI_MODEL` / `AI_HARNESS_LIVE_OPENAI_IMAGE_MODEL` override
-the model a live run uses, so a smoke test can point at something cheaper
-(`claude-haiku-4-5`, `gpt-image-1-mini`) without touching the default config.
+The model each live test calls is a `const` at the top of its own
+`lib/tests/live_*.rs` file, not a config default (see
+[Configuration](#configuration) below for why) — point a smoke run at
+something cheaper (`claude-haiku-4-5`, `gpt-image-1-mini`) by editing that
+constant.
 
 ## Configuration
 
@@ -125,6 +126,13 @@ storing a raw key in `config.toml` would leak it there. Set the named
 variable (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` by default) in your shell,
 or in `.env` (see [Environment variables](#environment-variables) above),
 before running anything that talks to that provider.
+
+Deliberately absent from every `[llm.*]` table: a model id, image model,
+embedding model, or `max_tokens`. Those are per-request decisions, not
+deployment settings, so they're required fields on `ChatOptions` /
+`EmbeddingRequest` / `ImageRequest` (`shared::llm`) instead of config
+defaults — a caller that forgets to pick a model gets a compile error, not a
+request silently sent to whatever id was baked in months ago.
 
 ## Logs
 

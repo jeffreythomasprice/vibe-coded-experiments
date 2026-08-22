@@ -11,17 +11,23 @@ mod common;
 use futures_util::StreamExt;
 
 use lib::llm::accumulate::MessageAccumulator;
+use lib::llm::config::AnthropicConfig;
 use lib::llm::{AnthropicClient, ChatProvider, Freshness, ModelProvider};
 use shared::llm::{
     ChatOptions, ContentBlock, Conversation, Effort, Message, StopReason, Thinking, ToolDef,
 };
+
+/// The model this file's tests call. A one-line edit point for a cheaper
+/// smoke run — see `crate::llm::config`'s module doc for why this lives here
+/// as a constant rather than as a config default.
+const MODEL: &str = "claude-opus-5";
 
 /// Build the client, or print why we're skipping and return `None`.
 fn client(test_name: &str) -> Option<AnthropicClient> {
     if common::skip_unless_live(test_name) {
         return None;
     }
-    let cfg = common::anthropic_config();
+    let cfg = AnthropicConfig::default();
     if let Err(err) = cfg.api_key() {
         eprintln!("skipping {test_name}: {err}");
         return None;
@@ -35,9 +41,8 @@ fn client(test_name: &str) -> Option<AnthropicClient> {
 /// any visible text) small.
 fn cheap_options() -> ChatOptions {
     ChatOptions {
-        max_tokens: Some(1024),
         thinking: Thinking::Adaptive { effort: Effort::Low },
-        ..ChatOptions::default()
+        ..ChatOptions::new(MODEL, 1024)
     }
 }
 

@@ -13,7 +13,6 @@ use shared::llm::{
     ToolResultContent, Usage,
 };
 
-use crate::llm::config::AnthropicConfig;
 use crate::llm::error::{ApiErrorKind, LlmError};
 use crate::llm::sse::{SseDecoder, SseFrame};
 
@@ -23,16 +22,18 @@ pub const PROVIDER: &str = "anthropic";
 // Request building
 // ---------------------------------------------------------------------
 
-/// Build the JSON body for `POST {base_url}/v1/messages`.
+/// Build the JSON body for `POST {base_url}/v1/messages`. Model and
+/// `max_tokens` come from `options` — both required fields on
+/// `ChatOptions`, since neither has a sensible config-level default (see
+/// `crate::llm::config`'s module doc).
 pub fn build_request(
     conversation: &Conversation,
     options: &ChatOptions,
-    cfg: &AnthropicConfig,
     stream: bool,
 ) -> serde_json::Value {
     let mut body = serde_json::json!({
-        "model": options.model.clone().unwrap_or_else(|| cfg.model.clone()),
-        "max_tokens": options.max_tokens.unwrap_or(cfg.max_tokens),
+        "model": options.model,
+        "max_tokens": options.max_tokens,
         "messages": conversation.messages.iter().map(to_wire_message).collect::<Vec<_>>(),
         "stream": stream,
     });
@@ -551,9 +552,9 @@ mod tests {
     const MODELS: &str = include_str!("fixtures/models.json");
     const MODELS_LAST_PAGE: &str = include_str!("fixtures/models_last_page.json");
 
-    fn cfg() -> AnthropicConfig {
-        AnthropicConfig::default()
-    }
+    /// Only used to check that a request's model/max_tokens land on the
+    /// wire unchanged — not a config default.
+    const MODEL: &str = "claude-opus-5";
 
     #[test]
     fn builds_a_minimal_messages_request() {
@@ -563,7 +564,7 @@ mod tests {
                 text: "Hi".to_string(),
             }])],
         };
-        let body = build_request(&conv, &ChatOptions::default(), &cfg(), false);
+        let body = build_request(&conv, &ChatOptions::new(MODEL, 16_000), false);
         assert_eq!(body["model"], serde_json::json!("claude-opus-5"));
         assert_eq!(body["max_tokens"], serde_json::json!(16_000));
         assert_eq!(body["stream"], serde_json::json!(false));
@@ -583,9 +584,9 @@ mod tests {
             thinking: Thinking::Adaptive {
                 effort: Effort::High,
             },
-            ..ChatOptions::default()
+            ..ChatOptions::new(MODEL, 1024)
         };
-        let body = build_request(&conv, &options, &cfg(), false);
+        let body = build_request(&conv, &options, false);
         // `ChatOptions` has no `temperature`/`top_p`/`top_k`/`budget_tokens`
         // fields at all, so there is no way for this function to emit them —
         // this test guards against a future field being added and silently
@@ -617,7 +618,7 @@ mod tests {
                 },
             ])],
         };
-        let body = build_request(&conv, &ChatOptions::default(), &cfg(), false);
+        let body = build_request(&conv, &ChatOptions::new(MODEL, 1024), false);
         let content = body["messages"][0]["content"].as_array().unwrap();
         assert_eq!(content.len(), 1, "the image block should have been dropped");
     }
@@ -667,7 +668,7 @@ mod tests {
             system: None,
             messages: vec![Message::assistant(message.content.clone())],
         };
-        let body = build_request(&conv, &ChatOptions::default(), &cfg(), false);
+        let body = build_request(&conv, &ChatOptions::new(MODEL, 1024), false);
         assert_eq!(
             body["messages"][0]["content"][0]["signature"],
             serde_json::json!("sig-EAoSDAoGYWJjMTIzEAE=")

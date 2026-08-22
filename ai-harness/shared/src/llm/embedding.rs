@@ -13,12 +13,23 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmbeddingRequest {
     pub input: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
+    /// Which model to call. Required — see `ChatOptions::model`'s doc for
+    /// why there's no configured default to fall back to.
+    pub model: String,
     /// Only OpenAI's `text-embedding-3-*` models honor this (Matryoshka
     /// truncation); Ollama has no equivalent and ignores it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dimensions: Option<u32>,
+}
+
+impl EmbeddingRequest {
+    pub fn new(model: impl Into<String>, input: Vec<String>) -> Self {
+        Self {
+            input,
+            model: model.into(),
+            dimensions: None,
+        }
+    }
 }
 
 /// One input's vector, at `index` in the request's `input` array — providers
@@ -52,13 +63,9 @@ mod tests {
 
     #[test]
     fn embedding_request_omits_absent_optional_fields() {
-        let req = EmbeddingRequest {
-            input: vec!["hello".to_string()],
-            model: None,
-            dimensions: None,
-        };
+        let req = EmbeddingRequest::new("text-embedding-3-small", vec!["hello".to_string()]);
         let json = serde_json::to_value(&req).unwrap();
-        assert!(json.get("model").is_none());
+        assert_eq!(json["model"], serde_json::json!("text-embedding-3-small"));
         assert!(json.get("dimensions").is_none());
     }
 

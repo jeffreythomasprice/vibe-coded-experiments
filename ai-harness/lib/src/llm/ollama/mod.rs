@@ -243,14 +243,10 @@ impl EmbeddingProvider for OllamaClient {
     }
 
     async fn embed(&self, request: &EmbeddingRequest) -> Result<EmbeddingResponse, LlmError> {
-        let model = request
-            .model
-            .clone()
-            .unwrap_or_else(|| self.cfg.embedding_model.clone());
         let body = embeddings::build_request(request, &self.cfg);
         let http_request = self.embed_request(&body);
         let response = http::send_with_retry(wire::PROVIDER, http_request, self.max_retries, {
-            let model = model.clone();
+            let model = request.model.clone();
             move |status, body| embeddings::parse_error(status, body, &model)
         })
         .await?;

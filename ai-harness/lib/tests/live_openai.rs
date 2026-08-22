@@ -11,6 +11,7 @@ mod common;
 use futures_util::StreamExt;
 
 use lib::llm::accumulate::MessageAccumulator;
+use lib::llm::config::OpenAiConfig;
 use lib::llm::{
     ChatProvider, EmbeddingProvider, Freshness, ImageProvider, LlmError, ModelProvider,
     OpenAiClient,
@@ -19,11 +20,18 @@ use shared::llm::{
     ChatOptions, ContentBlock, Conversation, EmbeddingRequest, ImageRequest, Message, ToolDef,
 };
 
+/// The models this file's tests call. One-line edit points for a cheaper
+/// smoke run — see `crate::llm::config`'s module doc for why these live here
+/// as constants rather than as config defaults.
+const CHAT_MODEL: &str = "gpt-5.5";
+const IMAGE_MODEL: &str = "gpt-image-2";
+const EMBEDDING_MODEL: &str = "text-embedding-3-small";
+
 fn client(test_name: &str) -> Option<OpenAiClient> {
     if common::skip_unless_live(test_name) {
         return None;
     }
-    let cfg = common::openai_config();
+    let cfg = OpenAiConfig::default();
     if let Err(err) = cfg.api_key() {
         eprintln!("skipping {test_name}: {err}");
         return None;
@@ -42,10 +50,7 @@ async fn completes_a_turn() {
             text: "Reply with exactly one word: pong".to_string(),
         }])],
     };
-    let options = ChatOptions {
-        max_tokens: Some(256),
-        ..ChatOptions::default()
-    };
+    let options = ChatOptions::new(CHAT_MODEL, 256);
     let message = client
         .complete(&conversation, &options)
         .await
@@ -69,10 +74,7 @@ async fn streams_deltas() {
             text: "Reply with exactly one word: pong".to_string(),
         }])],
     };
-    let options = ChatOptions {
-        max_tokens: Some(256),
-        ..ChatOptions::default()
-    };
+    let options = ChatOptions::new(CHAT_MODEL, 256);
     let mut stream = client
         .stream(&conversation, &options)
         .await
@@ -105,9 +107,8 @@ async fn calls_a_tool() {
         }])],
     };
     let options = ChatOptions {
-        max_tokens: Some(256),
         tools: vec![tool],
-        ..ChatOptions::default()
+        ..ChatOptions::new(CHAT_MODEL, 256)
     };
     let message = client
         .complete(&conversation, &options)
@@ -130,13 +131,10 @@ async fn generates_an_image() {
         return;
     };
     let request = ImageRequest {
-        prompt: "a single red circle on a plain white background".to_string(),
-        model: None,
         size: Some("1024x1024".to_string()),
         quality: Some("low".to_string()),
-        background: None,
         output_format: Some("png".to_string()),
-        n: 1,
+        ..ImageRequest::new(IMAGE_MODEL, "a single red circle on a plain white background")
     };
     let images = client.generate(&request).await.expect("generate() failed");
     assert_eq!(images.len(), 1);
@@ -160,7 +158,6 @@ async fn lists_models() {
     let Some(client) = client("lists_models") else {
         return;
     };
-    let cfg = common::openai_config();
     let models = client
         .list_models(Freshness::Refresh)
         .await
@@ -168,9 +165,8 @@ async fn lists_models() {
 
     assert!(!models.is_empty(), "expected at least one model");
     assert!(
-        models.iter().any(|m| m.id == cfg.model),
-        "expected the configured model {:?} to appear in {:?}",
-        cfg.model,
+        models.iter().any(|m| m.id == CHAT_MODEL),
+        "expected {CHAT_MODEL:?} to appear in {:?}",
         models.iter().map(|m| &m.id).collect::<Vec<_>>()
     );
 }
@@ -180,7 +176,6 @@ async fn lists_embedding_models() {
     let Some(client) = client("lists_embedding_models") else {
         return;
     };
-    let cfg = common::openai_config();
     let models = client
         .list_embedding_models(Freshness::Refresh)
         .await
@@ -194,9 +189,8 @@ async fn lists_embedding_models() {
         );
     }
     assert!(
-        models.iter().any(|m| m.id == cfg.embedding_model),
-        "expected the configured embedding model {:?} to appear in {:?}",
-        cfg.embedding_model,
+        models.iter().any(|m| m.id == EMBEDDING_MODEL),
+        "expected {EMBEDDING_MODEL:?} to appear in {:?}",
         models.iter().map(|m| &m.id).collect::<Vec<_>>()
     );
 }
@@ -206,11 +200,10 @@ async fn embeds_text() {
     let Some(client) = client("embeds_text") else {
         return;
     };
-    let request = EmbeddingRequest {
-        input: vec!["the quick brown fox".to_string(), "a red bicycle".to_string()],
-        model: None,
-        dimensions: None,
-    };
+    let request = EmbeddingRequest::new(
+        EMBEDDING_MODEL,
+        vec!["the quick brown fox".to_string(), "a red bicycle".to_string()],
+    );
     let response = client.embed(&request).await.expect("embed() failed");
 
     assert_eq!(response.embeddings.len(), 2);
@@ -235,11 +228,7 @@ async fn rejects_oversized_input() {
     // Comfortably past every current OpenAI embedding model's 8192-token
     // limit — repetition rather than length keeps this a fast, cheap call.
     let huge_input = "the quick brown fox jumps over the lazy dog ".repeat(4000);
-    let request = EmbeddingRequest {
-        input: vec![huge_input],
-        model: None,
-        dimensions: None,
-    };
+    let request = EmbeddingRequest::new(EMBEDDING_MODEL, vec![huge_input]);
 
     let err = client
         .embed(&request)

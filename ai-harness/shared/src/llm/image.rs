@@ -46,8 +46,9 @@ pub enum MediaType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageRequest {
     pub prompt: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
+    /// Which model to call. Required — see `ChatOptions::model`'s doc for
+    /// why there's no configured default to fall back to.
+    pub model: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -64,6 +65,20 @@ pub struct ImageRequest {
 
 fn default_image_count() -> u32 {
     1
+}
+
+impl ImageRequest {
+    pub fn new(model: impl Into<String>, prompt: impl Into<String>) -> Self {
+        Self {
+            prompt: prompt.into(),
+            model: model.into(),
+            size: None,
+            quality: None,
+            background: None,
+            output_format: None,
+            n: default_image_count(),
+        }
+    }
 }
 
 /// One generated image.
@@ -113,16 +128,9 @@ mod tests {
 
     #[test]
     fn image_request_omits_absent_optional_fields() {
-        let req = ImageRequest {
-            prompt: "a red cube".to_string(),
-            model: None,
-            size: None,
-            quality: None,
-            background: None,
-            output_format: None,
-            n: 1,
-        };
+        let req = ImageRequest::new("gpt-image-2", "a red cube");
         let json = serde_json::to_value(&req).unwrap();
+        assert_eq!(json["model"], serde_json::json!("gpt-image-2"));
         assert!(json.get("size").is_none());
         assert!(json.get("quality").is_none());
         assert!(json.get("background").is_none());
