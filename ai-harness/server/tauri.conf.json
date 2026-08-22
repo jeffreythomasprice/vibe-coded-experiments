@@ -1,0 +1,34 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ai-harness",
+  "version": "0.1.0",
+  "identifier": "com.jeffprice.ai-harness",
+  "build": {
+    "beforeDevCommand": {
+      "script": "trunk serve",
+      "cwd": "../client"
+    },
+    "beforeBuildCommand": {
+      "script": "trunk build",
+      "cwd": "../client"
+    },
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../client/dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "ai-harness",
+        "width": 800,
+        "height": 600
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false
+  }
+}
