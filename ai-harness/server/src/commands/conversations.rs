@@ -1,32 +1,16 @@
-//! Starting, driving, and deleting conversations.
+//! Starting, driving, attaching to, and deleting conversations.
 
-use lib::service::{EventSink, Service};
+use std::sync::Arc;
+
+use lib::service::Service;
 use shared::agent::{AgentEvent, ToolDecision};
-use shared::conversation::{ConversationSummary, ConversationView, ListConversations, TurnOutcome};
+use shared::conversation::{ConversationSummary, ConversationView, ListConversations, RunStatus};
 use shared::error::ErrorReport;
 use shared::ids::{AgentConfigId, ConversationId};
 
-/// Forwards every `AgentEvent` a turn produces over a Tauri IPC channel —
-/// the bridge `shared::agent::event`'s module doc anticipated between the
-/// agent loop and the frontend.
-struct ChannelSink(tauri::ipc::Channel<AgentEvent>);
-
-impl EventSink for ChannelSink {
-    /// A send failure means the webview dropped the channel — the user
-    /// navigated away, or closed the window. Logged, never propagated: the
-    /// turn is already in flight and its result still has to be persisted;
-    /// aborting here to save a UI update nobody is listening for would
-    /// throw the model's answer away instead of just failing to show it.
-    fn emit(&self, event: &AgentEvent) {
-        if let Err(err) = self.0.send(event.clone()) {
-            tracing::debug!(%err, "dropping agent event: channel closed");
-        }
-    }
-}
-
 #[tauri::command]
 pub async fn list_conversations(
-    service: tauri::State<'_, Service>,
+    service: tauri::State<'_, Arc<Service>>,
     query: ListConversations,
 ) -> Result<Vec<ConversationSummary>, ErrorReport> {
     service.list_conversations(query).await.map_err(|err| (&err).into())
@@ -34,7 +18,7 @@ pub async fn list_conversations(
 
 #[tauri::command]
 pub async fn create_conversation(
-    service: tauri::State<'_, Service>,
+    service: tauri::State<'_, Arc<Service>>,
     agent_config_id: AgentConfigId,
     title: Option<String>,
 ) -> Result<ConversationSummary, ErrorReport> {
@@ -46,7 +30,7 @@ pub async fn create_conversation(
 
 #[tauri::command]
 pub async fn get_conversation(
-    service: tauri::State<'_, Service>,
+    service: tauri::State<'_, Arc<Service>>,
     id: ConversationId,
 ) -> Result<ConversationView, ErrorReport> {
     service.get_conversation(id).await.map_err(|err| (&err).into())
@@ -54,7 +38,7 @@ pub async fn get_conversation(
 
 #[tauri::command]
 pub async fn rename_conversation(
-    service: tauri::State<'_, Service>,
+    service: tauri::State<'_, Arc<Service>>,
     id: ConversationId,
     title: String,
 ) -> Result<(), ErrorReport> {
@@ -62,44 +46,72 @@ pub async fn rename_conversation(
 }
 
 #[tauri::command]
-pub async fn delete_conversation(service: tauri::State<'_, Service>, id: ConversationId) -> Result<(), ErrorReport> {
+pub async fn delete_conversation(
+    service: tauri::State<'_, Arc<Service>>,
+    id: ConversationId,
+) -> Result<(), ErrorReport> {
     service.delete_conversation(id).await.map_err(|err| (&err).into())
 }
 
-/// Streams the turn's `AgentEvent`s over `on_event` and returns once it ends.
-/// Deliberately awaits the whole stream rather than returning early: a
-/// mid-stream failure comes back as this call's `Err`, since `AgentEvent`
-/// has no error variant and should not grow one for a transport concern.
+/// Reserves `conversation_id`'s run and drives the turn on a task detached
+/// from this call, so it outlives the command — unlike the old
+/// `send_message`, whose whole turn lived inside one IPC call's future and
+/// vanished the moment the caller stopped awaiting it. Returns as soon as
+/// the turn is accepted; a caller watches it happen via
+/// [`attach_conversation`], not this call's return value.
 #[tauri::command]
-pub async fn send_message(
-    service: tauri::State<'_, Service>,
+pub async fn start_message(
+    service: tauri::State<'_, Arc<Service>>,
     conversation_id: ConversationId,
     text: String,
-    on_event: tauri::ipc::Channel<AgentEvent>,
-) -> Result<TurnOutcome, ErrorReport> {
-    service
-        .send_message(conversation_id, text, &ChannelSink(on_event))
-        .await
-        .map_err(|err| (&err).into())
+) -> Result<(), ErrorReport> {
+    service.start_message(conversation_id, text).map_err(|err| (&err).into())
 }
 
+/// The `approve_tools` counterpart to [`start_message`].
 #[tauri::command]
-pub async fn approve_tools(
-    service: tauri::State<'_, Service>,
+pub async fn start_approve_tools(
+    service: tauri::State<'_, Arc<Service>>,
     conversation_id: ConversationId,
     decisions: Vec<ToolDecision>,
-    on_event: tauri::ipc::Channel<AgentEvent>,
-) -> Result<TurnOutcome, ErrorReport> {
+) -> Result<(), ErrorReport> {
     service
-        .approve_tools(conversation_id, decisions, &ChannelSink(on_event))
-        .await
+        .start_approve_tools(conversation_id, decisions)
         .map_err(|err| (&err).into())
 }
 
 #[tauri::command]
 pub async fn cancel_pending(
-    service: tauri::State<'_, Service>,
+    service: tauri::State<'_, Arc<Service>>,
     conversation_id: ConversationId,
 ) -> Result<(), ErrorReport> {
     service.cancel_pending(conversation_id).await.map_err(|err| (&err).into())
+}
+
+/// Replays whatever `conversation_id`'s run has already emitted over
+/// `on_event`, then forwards live events until it settles — the call a
+/// client makes on mount, and again on returning to a conversation it left
+/// mid-stream, to pick a run back up without losing anything it missed.
+///
+/// A dead `on_event` (the webview navigated away, or closed, mid-call) stops
+/// this call from following further; the turn itself is unaffected; it
+/// keeps running and settles normally; see `Service::attach`'s doc. In that
+/// case there is nothing left to deliver a status to — `RunStatus::Idle` is
+/// a harmless filler for a caller that is already gone.
+#[tauri::command]
+pub async fn attach_conversation(
+    service: tauri::State<'_, Arc<Service>>,
+    conversation_id: ConversationId,
+    on_event: tauri::ipc::Channel<AgentEvent>,
+) -> Result<RunStatus, ErrorReport> {
+    let status = service
+        .attach(conversation_id, move |event| match on_event.send(event.clone()) {
+            Ok(()) => true,
+            Err(err) => {
+                tracing::debug!(%err, "dropping agent event: channel closed");
+                false
+            }
+        })
+        .await;
+    Ok(status.unwrap_or(RunStatus::Idle))
 }

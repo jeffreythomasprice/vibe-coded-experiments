@@ -1,14 +1,14 @@
 in flight:
 
 
+
 todos:
 
+start a conversation
+click away to new conversation, then click back
+server aborts
+
 merge db migrations back into one
-
-options menu
-one option to start, light/dark/system mode
-
-needs spinner while waiting on response
 
 ctrl+enter should submit
 

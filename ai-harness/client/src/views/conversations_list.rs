@@ -6,6 +6,7 @@ use wasm_bindgen_futures::spawn_local;
 
 use crate::app::Route;
 use crate::commands;
+use crate::spinner::LoadingPanel;
 
 #[component]
 pub fn AllConversations() -> impl IntoView {
@@ -14,6 +15,9 @@ pub fn AllConversations() -> impl IntoView {
 
     let conversations = RwSignal::new(Vec::<ConversationSummary>::new());
     let error = RwSignal::new(None::<String>);
+    // Only the very first load — an empty list after that is a real "no
+    // conversations yet" state, not a wait.
+    let loading = RwSignal::new(true);
 
     Effect::new(move |_| {
         reload.get();
@@ -25,31 +29,41 @@ pub fn AllConversations() -> impl IntoView {
                 }
                 Err(err) => error.set(Some(err.message)),
             }
+            loading.set(false);
         });
     });
 
     view! {
         <div class="all-conversations">
             <h1>"All conversations"</h1>
-            {move || error.get().map(|message| view! { <p class="error">{message}</p> })}
-            <ul class="conversation-list">
-                <For each=move || conversations.get() key=|c| c.id.get() let:conv>
-                    <li>
-                        <button
-                            class="conversation-row"
-                            on:click=move |_| route.set(Route::Conversation(conv.id))
-                        >
-                            <span class="conversation-title">
-                                {conv.title.clone().unwrap_or_else(|| conv.agent_name.clone())}
-                            </span>
-                            <span class="conversation-meta">{conv.updated_at.clone()}</span>
-                            {conv
-                                .awaiting_approval
-                                .then(|| view! { <span class="badge">"awaiting approval"</span> })}
-                        </button>
-                    </li>
-                </For>
-            </ul>
+            {move || {
+                if loading.get() {
+                    view! { <LoadingPanel label="Loading conversations…" /> }.into_any()
+                } else {
+                    view! {
+                        {move || error.get().map(|message| view! { <p class="error">{message}</p> })}
+                        <ul class="conversation-list">
+                            <For each=move || conversations.get() key=|c| c.id.get() let:conv>
+                                <li>
+                                    <button
+                                        class="conversation-row"
+                                        on:click=move |_| route.set(Route::Conversation(conv.id))
+                                    >
+                                        <span class="conversation-title">
+                                            {conv.title.clone().unwrap_or_else(|| conv.agent_name.clone())}
+                                        </span>
+                                        <span class="conversation-meta">{conv.updated_at.clone()}</span>
+                                        {conv
+                                            .awaiting_approval
+                                            .then(|| view! { <span class="badge">"awaiting approval"</span> })}
+                                    </button>
+                                </li>
+                            </For>
+                        </ul>
+                    }
+                        .into_any()
+                }
+            }}
         </div>
     }
 }

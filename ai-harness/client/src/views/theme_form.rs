@@ -7,6 +7,7 @@ use shared::theme::{Theme, ThemeField, UserTheme, UserThemeInput};
 use wasm_bindgen_futures::spawn_local;
 
 use crate::commands;
+use crate::spinner::BusyOverlay;
 
 /// What this form is doing, and what it prefills from.
 #[derive(Debug, Clone)]
@@ -82,21 +83,24 @@ pub fn ThemeForm(
 
     view! {
         <form class="theme-form" on:submit=submit>
-            <label class="theme-form-field">
-                <span>"Name"</span>
-                <input
-                    type="text"
-                    required=true
-                    prop:value=move || name.get()
-                    on:input=move |ev| name.set(event_target_value(&ev))
-                />
-            </label>
+            {move || saving.get().then(|| view! { <BusyOverlay label="Saving theme…" /> })}
+            <fieldset disabled=saving>
+                <label class="theme-form-field">
+                    <span>"Name"</span>
+                    <input
+                        type="text"
+                        required=true
+                        prop:value=move || name.get()
+                        on:input=move |ev| name.set(event_target_value(&ev))
+                    />
+                </label>
 
-            <For each=move || fields.clone() key=|(field, _)| *field let:entry>
-                <ThemeColorField field=entry.0 value=entry.1 />
-            </For>
+                <For each=move || fields.clone() key=|(field, _)| *field let:entry>
+                    <ThemeColorField field=entry.0 value=entry.1 />
+                </For>
 
-            {move || error.get().map(|message| view! { <p class="error">{message}</p> })}
+                {move || error.get().map(|message| view! { <p class="error">{message}</p> })}
+            </fieldset>
 
             <div class="theme-form-actions">
                 <button type="submit" disabled=move || saving.get()>

@@ -3,9 +3,10 @@
 
 use leptos::prelude::*;
 use shared::ids::ConversationId;
-use shared::llm::model::ModelCatalog;
 use wasm_bindgen_futures::spawn_local;
 
+use crate::models::CatalogState;
+use crate::runs::Runs;
 use crate::sidebar::Sidebar;
 use crate::{models, views};
 
@@ -24,15 +25,21 @@ pub enum Route {
 #[component]
 pub fn App() -> impl IntoView {
     let route = RwSignal::new(Route::Blank);
-    // Bumped after any create/send/delete so the sidebar and list views know
-    // to refetch. A plain counter, not a fine-grained event bus — this app
-    // has a handful of views, not enough to need one.
+    // Bumped after any create/send/delete — and now also whenever a
+    // streaming run settles, see `runs::Runs` — so the sidebar and list
+    // views know to refetch. A plain counter, not a fine-grained event bus —
+    // this app has a handful of views, not enough to need one.
     let reload = RwSignal::new(0u32);
-    let catalog = RwSignal::new(None::<ModelCatalog>);
+    let catalog = RwSignal::new(CatalogState::Loading);
+    // Owned here, not by `views::Conversation`, so a turn keeps streaming
+    // into this store across a navigation away and back — see `runs`'
+    // module doc.
+    let runs = Runs::new(reload);
 
     provide_context(route);
     provide_context(reload);
     provide_context(catalog);
+    provide_context(runs);
     // Installs the theme context and starts painting the root element. Must
     // be inside a component: `provide_context` no-ops without a reactive
     // owner.
@@ -42,8 +49,11 @@ pub fn App() -> impl IntoView {
     // makes four sequential HTTP calls (disk-cached, but still not free).
     spawn_local(async move {
         match models::fetch().await {
-            Ok(loaded) => catalog.set(Some(loaded)),
-            Err(err) => tracing::error!(message = %err.message, "failed to load the model catalog"),
+            Ok(loaded) => catalog.set(CatalogState::Ready(loaded)),
+            Err(err) => {
+                tracing::error!(message = %err.message, "failed to load the model catalog");
+                catalog.set(CatalogState::Failed(err.message));
+            }
         }
     });
 

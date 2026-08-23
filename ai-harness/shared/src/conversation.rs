@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::agent::config::AgentConfig;
 use crate::agent::turn::ToolApprovalRequest;
+use crate::error::ErrorReport;
 use crate::ids::{ConversationId, MessageId, TurnId};
 use crate::llm::message::{ContentBlock, Role, StopReason, Usage};
 
@@ -109,6 +110,22 @@ pub enum TurnOutcome {
         usage: Usage,
         messages: Vec<StoredMessage>,
     },
+}
+
+/// What `attach_conversation` reports once it stops following a
+/// conversation's in-flight run.
+///
+/// Struct variants, not a newtype wrapping `TurnOutcome`: `TurnOutcome` is
+/// itself `#[serde(tag = "type")]`, so a newtype variant would nest a second
+/// competing `"type"` key inside this one's.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum RunStatus {
+    /// Nothing was in flight for this conversation — the persisted view
+    /// (from `get_conversation`) is already current.
+    Idle,
+    Finished { outcome: TurnOutcome },
+    Failed { error: ErrorReport },
 }
 
 /// Query parameters for listing conversations.
@@ -241,6 +258,44 @@ mod tests {
         };
         let json = serde_json::to_value(&max_steps).unwrap();
         assert_eq!(json["type"], serde_json::json!("max_steps"));
+    }
+
+    #[test]
+    fn run_status_variants_round_trip_with_the_expected_wire_tags() {
+        let idle = RunStatus::Idle;
+        let json = serde_json::to_value(&idle).unwrap();
+        assert_eq!(json, serde_json::json!({"type": "idle"}));
+        let back: RunStatus = serde_json::from_value(json).unwrap();
+        assert_eq!(back, idle);
+
+        let finished = RunStatus::Finished {
+            outcome: TurnOutcome::Done {
+                turn_id: TurnId(1),
+                steps: 1,
+                usage: Usage::default(),
+                stop_reason: StopReason::EndTurn,
+                messages: vec![],
+            },
+        };
+        let json = serde_json::to_value(&finished).unwrap();
+        assert_eq!(json["type"], serde_json::json!("finished"));
+        assert_eq!(json["outcome"]["type"], serde_json::json!("done"));
+        let back: RunStatus = serde_json::from_value(json).unwrap();
+        assert_eq!(back, finished);
+
+        let failed = RunStatus::Failed {
+            error: ErrorReport {
+                kind: crate::error::ErrorKind::Server,
+                provider: Some("scripted".to_string()),
+                message: "boom".to_string(),
+                retryable: true,
+            },
+        };
+        let json = serde_json::to_value(&failed).unwrap();
+        assert_eq!(json["type"], serde_json::json!("failed"));
+        assert_eq!(json["error"]["kind"], serde_json::json!("server"));
+        let back: RunStatus = serde_json::from_value(json).unwrap();
+        assert_eq!(back, failed);
     }
 
     #[test]

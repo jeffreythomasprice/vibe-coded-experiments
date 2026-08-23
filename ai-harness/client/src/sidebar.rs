@@ -50,10 +50,10 @@ pub fn Sidebar() -> impl IntoView {
                 {move || {
                     error.get().map(|message| view! { <p class="error sidebar-error">{message}</p> })
                 }}
+                <button class="sidebar-item" on:click=move |_| route.set(Route::AllConversations)>
+                    "View all conversations"
+                </button>
             </div>
-            <button class="sidebar-item" on:click=move |_| route.set(Route::AllConversations)>
-                "View all conversations"
-            </button>
             <button
                 class="sidebar-item sidebar-settings"
                 class:active=move || route.get() == Route::Settings

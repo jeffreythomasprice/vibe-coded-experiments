@@ -10,6 +10,22 @@ use shared::llm::model::{CatalogEntry, ModelCatalog};
 
 use crate::ipc;
 
+/// The model catalog's fetch lifecycle, as `App` tracks it in context.
+///
+/// A bare `RwSignal<Option<ModelCatalog>>` can't tell "still loading" apart
+/// from "the fetch failed" — both read as `None`. That distinction matters
+/// to `views::AgentForm`: while loading, the whole form should wait (its
+/// provider/model suggestions aren't ready yet); once *failed*, the form
+/// must not stay disabled forever — provider and model are free-text
+/// inputs, so the form is still usable without suggestions, just with a
+/// note that they're unavailable.
+#[derive(Debug, Clone)]
+pub enum CatalogState {
+    Loading,
+    Ready(ModelCatalog),
+    Failed(String),
+}
+
 /// Fetch every provider's models via the `model_catalog` Tauri command
 /// (`lib::catalog::load`). Cheap to call once and share — `lib::catalog::load`
 /// makes four sequential, disk-cached HTTP calls, so this should be fetched

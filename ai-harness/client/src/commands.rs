@@ -10,7 +10,7 @@
 use serde::Serialize;
 use shared::agent::event::AgentEvent;
 use shared::agent::{AgentConfig, AgentConfigInput, ToolSpec};
-use shared::conversation::{ConversationSummary, ConversationView, ListConversations, TurnOutcome};
+use shared::conversation::{ConversationSummary, ConversationView, ListConversations, RunStatus};
 use shared::error::ErrorReport;
 use shared::ids::{AgentConfigId, ConversationId, ThemeId};
 use shared::theme::{UserTheme, UserThemeInput};
@@ -70,20 +70,33 @@ pub async fn get_conversation(id: ConversationId) -> Result<ConversationView, Er
     ipc::call("get_conversation", &Args { id }).await
 }
 
-/// Sends `text` on `conversation_id`, streaming `AgentEvent`s to `on_event`
-/// as they arrive, and resolving once the turn settles.
-pub async fn send_message(
-    conversation_id: ConversationId,
-    text: String,
-    on_event: impl FnMut(AgentEvent) + 'static,
-) -> Result<TurnOutcome, ErrorReport> {
+/// Reserves `conversation_id`'s run and drives the turn on the backend,
+/// detached from this call — it returns as soon as the turn is accepted, not
+/// once it finishes. Watch it happen with [`attach_conversation`].
+pub async fn start_message(conversation_id: ConversationId, text: String) -> Result<(), ErrorReport> {
     #[derive(Serialize)]
     #[serde(rename_all = "camelCase")]
     struct Args {
         conversation_id: ConversationId,
         text: String,
     }
-    ipc::call_streaming("send_message", &Args { conversation_id, text }, on_event).await
+    ipc::call("start_message", &Args { conversation_id, text }).await
+}
+
+/// Replays whatever `conversation_id`'s run has already emitted to
+/// `on_event`, then streams live events until it settles — the same
+/// `AgentEvent`s a direct `send_message` used to stream, so
+/// `transcript::Draft::apply` folds them identically either way.
+pub async fn attach_conversation(
+    conversation_id: ConversationId,
+    on_event: impl FnMut(AgentEvent) + 'static,
+) -> Result<RunStatus, ErrorReport> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Args {
+        conversation_id: ConversationId,
+    }
+    ipc::call_streaming("attach_conversation", &Args { conversation_id }, on_event).await
 }
 
 /// Read one row from the `preferences` table. `Ok(None)` means "not set" —

@@ -64,9 +64,86 @@ h4 {
   color: var(--muted);
 }
 
-.loading {
+/* ---- Spinner / loading ---- */
+
+.spinner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   color: var(--muted);
-  padding: 1rem;
+}
+
+.spinner-dial {
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spinner-spin 0.7s linear infinite;
+}
+
+.spinner-label {
+  font-size: 0.85rem;
+}
+
+@keyframes spinner-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spinner-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner-dial {
+    animation: spinner-pulse 1.2s ease-in-out infinite;
+  }
+}
+
+/* A view's very first load, with nothing else on screen yet — centered on
+its own, no overlay needed since there's no content underneath to dim. */
+.loading-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+}
+
+/* A scrim over already-rendered content that's waiting on something — pairs
+with a `disabled` `<fieldset>` around that content; see the `fieldset` reset
+below. Positioned against the nearest `position: relative` ancestor, which
+every container that uses this already sets. */
+.busy-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  border-radius: 8px;
+  z-index: 1;
+}
+
+/* Un-styles every `<fieldset>` used purely to group-disable a set of
+controls (never to visually group them — that's what the surrounding markup
+already does): no box of its own, so its children stay direct participants
+in whatever flex/grid layout their parent already establishes, exactly as if
+the `<fieldset>` wrapper weren't there at all. `disabled` still cascades to
+every descendant control regardless — that's an HTML forms behavior, not a
+rendering one, so `display: contents` doesn't touch it. */
+fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: contents;
 }
 
 button {
@@ -166,10 +243,12 @@ input[type="color"] {
   gap: 0.1rem;
   margin: 0.5rem 0;
   /* Absorbs the sidebar's free space and is the thing that scrolls, so New /
-     Agents / View-all / Settings stay visible above and below it regardless
-     of how many conversations there are. `min-height: 0` overrides a flex
-     item's default of refusing to shrink below its content size — without
-     it, this would push the sidebar itself to overflow instead. */
+     Agents / Settings stay visible above and below it regardless of how many
+     conversations there are. `min-height: 0` overrides a flex item's default
+     of refusing to shrink below its content size — without it, this would
+     push the sidebar itself to overflow instead. View-all-conversations is
+     the last child here (not a sibling after this div), so it sits right
+     below the list instead of being flexed down to the sidebar's bottom. */
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -379,6 +458,9 @@ input[type="color"] {
   flex-direction: column;
   gap: 0.75rem;
   max-width: 640px;
+  /* Positions `.busy-overlay` for the three of these that show one
+  (agent-form, theme-form, new-conversation) — harmless for the rest. */
+  position: relative;
 }
 
 .agent-form-field,

@@ -7,6 +7,7 @@ pub mod chat;
 pub mod conversations;
 pub mod error;
 pub mod preferences;
+mod runs;
 pub mod themes;
 
 pub use error::ServiceError;
@@ -23,6 +24,7 @@ use crate::agent::ToolRegistry;
 use crate::config::Config;
 use crate::db::Db;
 use crate::llm::router::Router;
+use runs::Runs;
 
 /// Where a turn's `AgentEvent`s go while it streams. `server` implements
 /// this over a `tauri::ipc::Channel<AgentEvent>`; tests implement it over a
@@ -51,6 +53,13 @@ pub struct Service {
     /// (see `sql/0001_init.sql`) is the durable backstop behind the same
     /// guarantee, in case this lock is ever bypassed.
     locks: std::sync::Mutex<HashMap<i64, Arc<tokio::sync::Mutex<()>>>>,
+    /// The registry of turns currently streaming, keyed by conversation —
+    /// what lets a client detach and reattach without losing a partial
+    /// response. See `runs`' module doc; process memory only, never
+    /// persisted. Distinct from `locks`: `locks` is the fine-grained
+    /// backstop against a second concurrent turn on the same conversation,
+    /// `runs` is what makes a turn followable and replayable.
+    runs: Runs,
 }
 
 impl Service {
@@ -60,6 +69,7 @@ impl Service {
             router,
             tools,
             locks: std::sync::Mutex::new(HashMap::new()),
+            runs: Runs::new(),
         }
     }
 

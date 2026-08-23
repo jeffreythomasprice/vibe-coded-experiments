@@ -1,11 +1,13 @@
 //! Generic key-value preferences (e.g. the preferred theme).
 
+use std::sync::Arc;
+
 use lib::service::Service;
 use shared::error::ErrorReport;
 
 #[tauri::command]
 pub async fn get_preference(
-    service: tauri::State<'_, Service>,
+    service: tauri::State<'_, Arc<Service>>,
     key: String,
 ) -> Result<Option<String>, ErrorReport> {
     service.preference(&key).await.map_err(|err| (&err).into())
@@ -13,7 +15,7 @@ pub async fn get_preference(
 
 #[tauri::command]
 pub async fn set_preference(
-    service: tauri::State<'_, Service>,
+    service: tauri::State<'_, Arc<Service>>,
     key: String,
     value: String,
 ) -> Result<(), ErrorReport> {

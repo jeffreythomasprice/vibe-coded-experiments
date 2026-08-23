@@ -2,6 +2,7 @@ mod commands;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use anyhow::Context;
 use lib::config::Config;
@@ -75,8 +76,15 @@ fn run() -> anyhow::Result<()> {
     // `.await` after it starts). `tauri::async_runtime::block_on` runs this
     // to completion on the same runtime Tauri's own async commands use,
     // rather than spinning up a second one just for this one call.
-    let service = tauri::async_runtime::block_on(Service::from_config(&config))
-        .context("starting the local database and LLM router")?;
+    //
+    // Managed as `Arc<Service>`, not `Service`: `start_message`/
+    // `start_approve_tools` drive a turn on a task detached from the
+    // command that started it, which needs an owned `Arc<Service>` clone to
+    // outlive that command's own borrow of Tauri's managed state.
+    let service = Arc::new(
+        tauri::async_runtime::block_on(Service::from_config(&config))
+            .context("starting the local database and LLM router")?,
+    );
 
     tracing::info!("starting tauri");
     tauri::Builder::default()
@@ -96,9 +104,10 @@ fn run() -> anyhow::Result<()> {
             commands::conversations::get_conversation,
             commands::conversations::rename_conversation,
             commands::conversations::delete_conversation,
-            commands::conversations::send_message,
-            commands::conversations::approve_tools,
+            commands::conversations::start_message,
+            commands::conversations::start_approve_tools,
             commands::conversations::cancel_pending,
+            commands::conversations::attach_conversation,
             commands::preferences::get_preference,
             commands::preferences::set_preference,
             commands::themes::list_themes,

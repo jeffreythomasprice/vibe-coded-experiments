@@ -7,6 +7,7 @@ use shared::ids::AgentConfigId;
 use wasm_bindgen_futures::spawn_local;
 
 use crate::commands;
+use crate::spinner::LoadingPanel;
 use crate::views::AgentForm;
 
 #[component]
@@ -16,6 +17,9 @@ pub fn Agents() -> impl IntoView {
     let creating = RwSignal::new(false);
     let confirming_delete = RwSignal::new(None::<AgentConfigId>);
     let refresh = RwSignal::new(0u32);
+    // Only the very first load — an empty list after that is a real "no
+    // agents yet" state, not a wait.
+    let loading = RwSignal::new(true);
 
     Effect::new(move |_| {
         refresh.get();
@@ -27,6 +31,7 @@ pub fn Agents() -> impl IntoView {
                 }
                 Err(err) => error.set(Some(err.message)),
             }
+            loading.set(false);
         });
     });
 
@@ -42,29 +47,38 @@ pub fn Agents() -> impl IntoView {
     view! {
         <div class="agents-view">
             <h1>"Agents"</h1>
-            {move || error.get().map(|message| view! { <p class="error">{message}</p> })}
-            <ul class="agent-list">
-                <For each=move || agents.get() key=|a| a.id.get() let:agent>
-                    <AgentRow agent=agent confirming_delete=confirming_delete on_delete=delete />
-                </For>
-            </ul>
             {move || {
-                if creating.get() {
-                    view! {
-                        <AgentForm
-                            on_saved=move |_agent| {
-                                creating.set(false);
-                                refresh.update(|n| *n += 1);
-                            }
-                            on_cancel=move |_| creating.set(false)
-                        />
-                    }
-                        .into_any()
+                if loading.get() {
+                    view! { <LoadingPanel label="Loading agents…" /> }.into_any()
                 } else {
                     view! {
-                        <button class="new-agent-button" on:click=move |_| creating.set(true)>
-                            "New"
-                        </button>
+                        {move || error.get().map(|message| view! { <p class="error">{message}</p> })}
+                        <ul class="agent-list">
+                            <For each=move || agents.get() key=|a| a.id.get() let:agent>
+                                <AgentRow agent=agent confirming_delete=confirming_delete on_delete=delete />
+                            </For>
+                        </ul>
+                        {move || {
+                            if creating.get() {
+                                view! {
+                                    <AgentForm
+                                        on_saved=move |_agent| {
+                                            creating.set(false);
+                                            refresh.update(|n| *n += 1);
+                                        }
+                                        on_cancel=move |_| creating.set(false)
+                                    />
+                                }
+                                    .into_any()
+                            } else {
+                                view! {
+                                    <button class="new-agent-button" on:click=move |_| creating.set(true)>
+                                        "New"
+                                    </button>
+                                }
+                                    .into_any()
+                            }
+                        }}
                     }
                         .into_any()
                 }

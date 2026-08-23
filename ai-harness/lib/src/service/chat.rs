@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use futures_util::StreamExt;
 use shared::agent::{AgentEvent, AgentTurn, ToolDecision, TurnStop};
-use shared::conversation::TurnOutcome;
+use shared::conversation::{RunStatus, TurnOutcome};
 use shared::error::ErrorReport;
 use shared::ids::{ConversationId, TurnId};
 use shared::llm::message::{ContentBlock, Message};
@@ -30,7 +30,7 @@ use shared::llm::message::{ContentBlock, Message};
 use crate::agent::{build_agent, AgentStream};
 use crate::db::{self, DbError};
 
-use super::{EventSink, Service, ServiceError};
+use super::{runs, EventSink, Service, ServiceError};
 
 impl Service {
     /// Append `text` as a user turn and drive the agent forward, forwarding
@@ -89,6 +89,72 @@ impl Service {
         db::turns::abandon(&self.db, conversation_id)
             .await
             .map_err(|err| not_found_to_no_pending(conversation_id, err))
+    }
+
+    /// The detached counterpart to [`Service::send_message`]: reserves
+    /// `conversation_id`'s run and drives the turn on a task that outlives
+    /// this call, instead of a future scoped to one Tauri command
+    /// invocation. Every [`AgentEvent`] still lands wherever
+    /// [`Service::attach`] is currently following, exactly as it would over
+    /// a direct `send_message`'s sink — attaching costs no accumulator of
+    /// its own, since `Run` records the identical event stream.
+    ///
+    /// The reservation is synchronous: a second call while one is already
+    /// registered fails immediately with `ServiceError::ConversationBusy`,
+    /// before any task is ever spawned. Must be called from inside a Tokio
+    /// runtime — every async Tauri command already runs on one.
+    pub fn start_message(self: &Arc<Self>, conversation_id: ConversationId, text: String) -> Result<(), ServiceError> {
+        let run = self.runs.begin(conversation_id)?;
+        let this = Arc::clone(self);
+        tokio::spawn(async move {
+            let status = match this.send_message(conversation_id, text, run.as_ref()).await {
+                Ok(outcome) => RunStatus::Finished { outcome },
+                Err(err) => RunStatus::Failed { error: (&err).into() },
+            };
+            run.finish(status);
+            this.runs.end(conversation_id);
+        });
+        Ok(())
+    }
+
+    /// The detached counterpart to [`Service::approve_tools`] — see
+    /// [`Service::start_message`]'s doc for what "detached" buys.
+    pub fn start_approve_tools(
+        self: &Arc<Self>,
+        conversation_id: ConversationId,
+        decisions: Vec<ToolDecision>,
+    ) -> Result<(), ServiceError> {
+        let run = self.runs.begin(conversation_id)?;
+        let this = Arc::clone(self);
+        tokio::spawn(async move {
+            let status = match this.approve_tools(conversation_id, decisions, run.as_ref()).await {
+                Ok(outcome) => RunStatus::Finished { outcome },
+                Err(err) => RunStatus::Failed { error: (&err).into() },
+            };
+            run.finish(status);
+            this.runs.end(conversation_id);
+        });
+        Ok(())
+    }
+
+    /// Replay everything `conversation_id`'s run has emitted so far into
+    /// `emit`, then forward live events until the run settles or `emit`
+    /// itself declines to continue.
+    ///
+    /// `Some(RunStatus::Idle)` if nothing is running for this conversation
+    /// — the caller's own `get_conversation` is already current. `None`
+    /// only when `emit` returned `false` before the run reached a terminal
+    /// status: see [`runs::follow`]'s doc for why that case reports nothing
+    /// rather than a status a dead caller can't use anyway.
+    pub async fn attach(
+        &self,
+        conversation_id: ConversationId,
+        emit: impl FnMut(&AgentEvent) -> bool,
+    ) -> Option<RunStatus> {
+        match self.runs.get(conversation_id) {
+            Some(run) => runs::follow(run, emit).await,
+            None => Some(RunStatus::Idle),
+        }
     }
 
     async fn drive(
@@ -454,5 +520,108 @@ mod tests {
         // to `failed` (not left `running`), so the conversation is free to
         // try again — a fresh lock acquisition succeeds immediately.
         let _guard = service.try_lock_conversation(conv).unwrap();
+    }
+
+    #[tokio::test]
+    async fn start_message_and_attach_sees_exactly_what_a_direct_send_message_produces() {
+        let direct = service_with_script(vec![text_response("hi there")], false).await;
+        let direct_conv = seed_conversation(&direct, vec![]).await;
+        let sink = CollectingSink::new();
+        direct.send_message(direct_conv, "hello".to_string(), &sink).await.unwrap();
+
+        let detached = Arc::new(service_with_script(vec![text_response("hi there")], false).await);
+        let conv = seed_conversation(&detached, vec![]).await;
+        detached.start_message(conv, "hello".to_string()).unwrap();
+
+        let mut attached = Vec::new();
+        let status = detached
+            .attach(conv, |event| {
+                attached.push(event.clone());
+                true
+            })
+            .await;
+
+        assert!(matches!(status, Some(RunStatus::Finished { .. })));
+        // `AgentEvent` derives no `PartialEq` — compare the two event
+        // sequences structurally via their JSON encoding instead.
+        assert_eq!(
+            serde_json::to_value(&attached).unwrap(),
+            serde_json::to_value(sink.events()).unwrap(),
+        );
+    }
+
+    #[tokio::test]
+    async fn a_second_start_message_while_one_is_registered_is_conversation_busy() {
+        let service = Arc::new(service_with_script(vec![text_response("hi")], false).await);
+        let conv = seed_conversation(&service, vec![]).await;
+        service.start_message(conv, "hello".to_string()).unwrap();
+        let err = service.start_message(conv, "again".to_string()).unwrap_err();
+        assert!(matches!(err, ServiceError::ConversationBusy { .. }));
+    }
+
+    #[tokio::test]
+    async fn attach_on_an_idle_conversation_reports_idle() {
+        let service = service_with_script(vec![], false).await;
+        let conv = seed_conversation(&service, vec![]).await;
+        let status = service.attach(conv, |_event| true).await;
+        assert_eq!(status, Some(RunStatus::Idle));
+    }
+
+    #[tokio::test]
+    async fn start_message_with_a_mid_stream_error_reports_failed_and_frees_the_conversation() {
+        let db = Db::in_memory().await.unwrap();
+        let scripted = ScriptedProvider::new(vec![Err(crate::llm::error::LlmError::Status {
+            provider: "scripted",
+            status: 500,
+            kind: crate::llm::error::ApiErrorKind::Server,
+            code: None,
+            message: "boom".to_string(),
+            request_id: None,
+        })]);
+        let mut router = Router::new();
+        router.register(
+            "scripted",
+            ProviderEntry {
+                chat: Some(Arc::new(scripted)),
+                ..Default::default()
+            },
+        );
+        let service = Arc::new(Service::new(db, Arc::new(router), Arc::new(crate::agent::ToolRegistry::new())));
+        let conv = seed_conversation(&service, vec![]).await;
+
+        service.start_message(conv, "hello".to_string()).unwrap();
+        let status = service.attach(conv, |_event| true).await;
+        let Some(RunStatus::Failed { error }) = status else {
+            panic!("expected Failed, got {status:?}");
+        };
+        assert!(error.retryable, "a 500 should be reported as retryable");
+
+        let view = service.get_conversation(conv).await.unwrap();
+        assert_eq!(view.messages.len(), 1);
+        assert_eq!(view.messages[0].role, Role::User);
+
+        // The run was deregistered on settle (a later attach sees nothing
+        // running), and the fine-grained lock was released too.
+        assert_eq!(service.attach(conv, |_event| true).await, Some(RunStatus::Idle));
+        let _guard = service.try_lock_conversation(conv).unwrap();
+    }
+
+    #[tokio::test]
+    async fn attach_declining_early_does_not_interrupt_the_turn_still_running() {
+        let service = Arc::new(service_with_script(vec![text_response("hi there")], false).await);
+        let conv = seed_conversation(&service, vec![]).await;
+        service.start_message(conv, "hello".to_string()).unwrap();
+
+        // Detach as soon as the first event arrives — the dead-webview case.
+        let early = service.attach(conv, |_event| false).await;
+        assert_eq!(early, None);
+
+        // The turn is still running regardless: attaching again, without
+        // declining this time, rides it to completion.
+        let status = service.attach(conv, |_event| true).await;
+        assert!(matches!(status, Some(RunStatus::Finished { .. })));
+
+        let view = service.get_conversation(conv).await.unwrap();
+        assert_eq!(view.messages.len(), 2, "user + assistant");
     }
 }

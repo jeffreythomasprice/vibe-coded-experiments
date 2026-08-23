@@ -10,16 +10,21 @@ use wasm_bindgen_futures::spawn_local;
 
 use crate::commands;
 use crate::markdown;
-use crate::transcript::{self, Bubble, Draft, Rendered, ToolOutcome};
+use crate::runs::{Phase, Runs};
+use crate::spinner::{LoadingPanel, Spinner};
+use crate::transcript::{self, Bubble, Rendered, ToolOutcome};
 
 #[component]
 pub fn Conversation(id: ConversationId) -> impl IntoView {
     let reload = use_context::<RwSignal<u32>>().expect("reload counter context is provided by App");
+    let runs = use_context::<Runs>().expect("Runs context is provided by App");
+    // Fixed for this component's whole lifetime — see `Runs::state`'s doc on
+    // why this must be read exactly once, here, rather than re-derived
+    // inside a closure.
+    let run = runs.state(id);
 
     let view = RwSignal::new(None::<ConversationViewDto>);
     let error = RwSignal::new(None::<String>);
-    let draft = RwSignal::new(Draft::new());
-    let sending = RwSignal::new(false);
     let message = RwSignal::new(String::new());
 
     let load = move || {
@@ -28,6 +33,10 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
                 Ok(loaded) => {
                     view.set(Some(loaded));
                     error.set(None);
+                    // The refetch just landed — if nothing is running, this
+                    // is the point where a just-finished draft's text is
+                    // superseded by what `loaded.messages` now carries.
+                    runs.forget(id);
                 }
                 Err(err) => error.set(Some(err.message)),
             }
@@ -37,20 +46,26 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
     // Runs once for this mount (a different conversation id means the parent
     // swapped in a whole new `Conversation` component, not a prop update on
     // this one) and again whenever something elsewhere bumps the reload
-    // counter.
+    // counter — including this conversation's own run settling, see
+    // `runs::Runs::follow`.
     Effect::new(move |_| {
         reload.get();
         load();
+        // Resumes following a run left in flight by a previous mount of
+        // this same conversation (switched away and back); a no-op if
+        // nothing is running, or if this conversation is already being
+        // followed.
+        runs.ensure_following(id);
     });
 
     // Only recomputed when the persisted view changes — not on every
-    // streaming delta, which only touches `draft`.
+    // streaming delta, which only touches `run`'s draft.
     let persisted_bubbles = Memo::new(move |_| {
         view.get().map(|v| transcript::flatten(&v.messages)).unwrap_or_default()
     });
 
     let submit = move |_| {
-        if sending.get() {
+        if run.get_untracked().phase != Phase::Idle {
             return;
         }
         let text = message.get();
@@ -59,31 +74,19 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
         }
         message.set(String::new());
         error.set(None);
-        sending.set(true);
-        draft.set(Draft::new());
-        spawn_local(async move {
-            let outcome = commands::send_message(id, text, move |event| {
-                draft.update(|d| d.apply(&event));
-            })
-            .await;
-            sending.set(false);
-            draft.set(Draft::new());
-            match outcome {
-                Ok(_) => load(),
-                Err(err) => error.set(Some(err.message)),
-            }
-        });
+        runs.send(id, text);
     };
 
     view! {
         <div class="conversation-view">
             {move || match view.get() {
-                None => view! { <p class="loading">"Loading…"</p> }.into_any(),
+                None => view! { <LoadingPanel label="Loading conversation…" /> }.into_any(),
                 Some(loaded) => {
+                    let run_state = run.get();
+                    let busy = run_state.phase != Phase::Idle;
                     let mut bubbles = persisted_bubbles.get();
-                    let in_flight = draft.get();
-                    if !in_flight.is_empty() {
-                        bubbles.extend(in_flight.bubbles());
+                    if !run_state.draft.is_empty() {
+                        bubbles.extend(run_state.draft.bubbles());
                     }
                     let indexed_bubbles: Vec<(usize, Rendered)> = bubbles.into_iter().enumerate().collect();
                     let pending_indexed: Option<Vec<(usize, Rendered)>> = loaded
@@ -96,6 +99,7 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
                         .clone()
                         .unwrap_or_else(|| loaded.summary.agent_name.clone());
                     let has_pending = loaded.pending.is_some();
+                    let composer_disabled = busy || has_pending;
                     view! {
                         <div class="conversation-body">
                             <h1>{title}</h1>
@@ -104,6 +108,7 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
                                     <BubbleView rendered=item.1 />
                                 </For>
                             </div>
+                            {busy.then(|| view! { <Spinner label="Responding…" /> })}
                             {pending_indexed
                                 .map(|indexed| {
                                     view! {
@@ -124,21 +129,20 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
                                     submit(());
                                 }
                             >
-                                <textarea
-                                    placeholder="Message…"
-                                    prop:value=move || message.get()
-                                    on:input=move |ev| message.set(event_target_value(&ev))
-                                    disabled=move || sending.get() || has_pending
-                                ></textarea>
-                                {move || error.get().map(|m| view! { <p class="error">{m}</p> })}
-                                <button
-                                    type="submit"
-                                    disabled=move || {
-                                        sending.get() || has_pending || message.get().trim().is_empty()
-                                    }
-                                >
-                                    {move || if sending.get() { "Sending…" } else { "Send" }}
-                                </button>
+                                <fieldset disabled=composer_disabled>
+                                    <textarea
+                                        placeholder="Message…"
+                                        prop:value=move || message.get()
+                                        on:input=move |ev| message.set(event_target_value(&ev))
+                                    ></textarea>
+                                    {move || error.get().map(|m| view! { <p class="error">{m}</p> })}
+                                    {move || run.get().error.map(|m| view! { <p class="error">{m}</p> })}
+                                    <button type="submit" disabled=move || message.get().trim().is_empty()>
+                                        <Show when=move || busy fallback=|| "Send">
+                                            <Spinner label="Sending…" />
+                                        </Show>
+                                    </button>
+                                </fieldset>
                             </form>
                         </div>
                     }
