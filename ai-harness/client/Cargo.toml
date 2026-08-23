@@ -23,3 +23,18 @@ tracing-web = "0.1"
 console_error_panic_hook = "0.1"
 js-sys = "0.3"
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+# Only `MediaQueryList` is actually missing from what `leptos`/`tachys` already
+# enable (checked with `cargo tree -p client --target wasm32-unknown-unknown -e
+# features -i web-sys`) — `Window::match_media` is gated on it. The rest are
+# named anyway so a future `tachys` release dropping one becomes a compile
+# error in `theme.rs`, not a mystery. Features are additive across the
+# dependency graph, so this only adds to what's already enabled.
+web-sys = { version = "0.3", features = [
+    "CssStyleDeclaration",
+    "Document",
+    "Element",
+    "EventTarget",
+    "HtmlElement",
+    "MediaQueryList",
+    "Window",
+] }

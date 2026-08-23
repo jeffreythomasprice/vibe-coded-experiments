@@ -1,10 +1,12 @@
 mod app;
 mod commands;
+mod icons;
 mod ipc;
 mod logging;
 mod markdown;
 mod models;
 mod sidebar;
+mod theme;
 mod transcript;
 mod views;
 

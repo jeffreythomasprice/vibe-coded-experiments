@@ -54,6 +54,14 @@ pub fn Sidebar() -> impl IntoView {
             <button class="sidebar-item" on:click=move |_| route.set(Route::AllConversations)>
                 "View all conversations"
             </button>
+            <button
+                class="sidebar-item sidebar-settings"
+                class:active=move || route.get() == Route::Settings
+                on:click=move |_| route.set(Route::Settings)
+            >
+                <span class="icon" inner_html=crate::icons::GEAR></span>
+                <span>"Settings"</span>
+            </button>
         </nav>
     }
 }

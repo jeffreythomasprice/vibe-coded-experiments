@@ -5,3 +5,4 @@
 
 pub mod agents;
 pub mod conversations;
+pub mod preferences;

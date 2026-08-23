@@ -99,6 +99,8 @@ fn run() -> anyhow::Result<()> {
             commands::conversations::send_message,
             commands::conversations::approve_tools,
             commands::conversations::cancel_pending,
+            commands::preferences::get_preference,
+            commands::preferences::set_preference,
         ])
         .run(tauri::generate_context!())?;
     Ok(())

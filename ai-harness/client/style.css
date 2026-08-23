@@ -10,7 +10,6 @@
   --accent-fg: #ffffff;
   --bubble-human-bg: #2563eb;
   --bubble-human-fg: #ffffff;
-  --bubble-bg: #f5f5f5;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -25,7 +24,6 @@
     --accent-fg: #0b1220;
     --bubble-human-bg: #3f6fd1;
     --bubble-human-fg: #ffffff;
-    --bubble-bg: #282828;
   }
 }
 
@@ -124,7 +122,9 @@ textarea {
   padding: 0.75rem;
   border-right: 1px solid var(--border);
   background: var(--bg-raised);
-  overflow-y: auto;
+  /* .sidebar-recent does its own scrolling below, so the settings button at
+     the bottom stays put instead of scrolling away with a long list. */
+  overflow: hidden;
 }
 
 .sidebar-item {
@@ -155,6 +155,13 @@ textarea {
   flex-direction: column;
   gap: 0.1rem;
   margin: 0.5rem 0;
+  /* Absorbs the sidebar's free space and is the thing that scrolls, so New /
+     Agents / View-all / Settings stay visible above and below it regardless
+     of how many conversations there are. `min-height: 0` overrides a flex
+     item's default of refusing to shrink below its content size — without
+     it, this would push the sidebar itself to overflow instead. */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -167,6 +174,27 @@ textarea {
 .sidebar-error {
   padding: 0 0.6rem;
   font-size: 0.8rem;
+}
+
+.sidebar-settings {
+  /* `margin-top: auto` only pins this when .sidebar-recent leaves free space;
+     it's .sidebar-recent's `flex: 1 1 auto` that guarantees it always does. */
+  flex: none;
+  margin-top: auto;
+  /* .sidebar-item is space-between for its title/badge layout, which would
+     fling the icon and label to opposite edges here. */
+  justify-content: flex-start;
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.icon svg {
+  display: block;
+  width: 1rem;
+  height: 1rem;
 }
 
 .badge {
@@ -274,7 +302,7 @@ textarea {
 .bubble-thinking,
 .bubble-tool {
   align-self: flex-start;
-  background: var(--bubble-bg);
+  background: var(--bg-raised);
   border: 1px solid var(--border);
 }
 
@@ -334,14 +362,16 @@ textarea {
 .agent-form,
 .new-conversation,
 .agents-view,
-.all-conversations {
+.all-conversations,
+.settings-view {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   max-width: 640px;
 }
 
-.agent-form-field {
+.agent-form-field,
+.settings-field {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;

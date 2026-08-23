@@ -84,3 +84,23 @@ pub async fn send_message(
     }
     ipc::call_streaming("send_message", &Args { conversation_id, text }, on_event).await
 }
+
+/// Read one row from the `preferences` table. `Ok(None)` means "not set" —
+/// the caller decides what the default is.
+pub async fn get_preference(key: &str) -> Result<Option<String>, ErrorReport> {
+    #[derive(Serialize)]
+    struct Args<'a> {
+        key: &'a str,
+    }
+    ipc::call("get_preference", &Args { key }).await
+}
+
+/// Insert or replace one `preferences` row.
+pub async fn set_preference(key: &str, value: &str) -> Result<(), ErrorReport> {
+    #[derive(Serialize)]
+    struct Args<'a> {
+        key: &'a str,
+        value: &'a str,
+    }
+    ipc::call("set_preference", &Args { key, value }).await
+}

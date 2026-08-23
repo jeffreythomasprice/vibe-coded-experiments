@@ -18,6 +18,7 @@ pub enum Route {
     Agents,
     AllConversations,
     Conversation(ConversationId),
+    Settings,
 }
 
 #[component]
@@ -32,6 +33,10 @@ pub fn App() -> impl IntoView {
     provide_context(route);
     provide_context(reload);
     provide_context(catalog);
+    // Installs the theme context and starts painting the root element. Must
+    // be inside a component: `provide_context` no-ops without a reactive
+    // owner.
+    crate::theme::provide_theme();
 
     // Fetched once, here, rather than per form open — `lib::catalog::load`
     // makes four sequential HTTP calls (disk-cached, but still not free).
@@ -52,6 +57,7 @@ pub fn App() -> impl IntoView {
                     Route::Agents => view! { <views::Agents /> }.into_any(),
                     Route::AllConversations => view! { <views::AllConversations /> }.into_any(),
                     Route::Conversation(id) => view! { <views::Conversation id=id /> }.into_any(),
+                    Route::Settings => view! { <views::Settings /> }.into_any(),
                 }}
             </main>
         </div>

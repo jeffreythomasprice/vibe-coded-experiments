@@ -3,9 +3,11 @@ mod agents;
 mod conversation;
 mod conversations_list;
 mod new_conversation;
+mod settings;
 
 pub use agent_form::AgentForm;
 pub use agents::Agents;
 pub use conversation::Conversation;
 pub use conversations_list::AllConversations;
 pub use new_conversation::NewConversation;
+pub use settings::Settings;

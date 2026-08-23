@@ -6,6 +6,7 @@ pub mod agents;
 pub mod chat;
 pub mod conversations;
 pub mod error;
+pub mod preferences;
 
 pub use error::ServiceError;
 

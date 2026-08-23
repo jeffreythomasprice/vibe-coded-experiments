@@ -30,6 +30,7 @@ pub mod agents;
 pub mod conversations;
 pub mod error;
 pub mod migrate;
+pub mod preferences;
 #[cfg(test)]
 pub(crate) mod testing;
 pub mod turns;
