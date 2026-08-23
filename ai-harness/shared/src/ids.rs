@@ -43,6 +43,7 @@ id_type!(AgentConfigId, "Primary key of `agent_configs`.");
 id_type!(ConversationId, "Primary key of `conversations`.");
 id_type!(TurnId, "Primary key of `turns`.");
 id_type!(MessageId, "Primary key of `messages`.");
+id_type!(ThemeId, "Primary key of `themes`.");
 
 #[cfg(test)]
 mod tests {

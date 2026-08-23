@@ -4,6 +4,7 @@ mod conversation;
 mod conversations_list;
 mod new_conversation;
 mod settings;
+mod theme_form;
 
 pub use agent_form::AgentForm;
 pub use agents::Agents;
@@ -11,3 +12,4 @@ pub use conversation::Conversation;
 pub use conversations_list::AllConversations;
 pub use new_conversation::NewConversation;
 pub use settings::Settings;
+pub use theme_form::{ThemeForm, ThemeFormMode};

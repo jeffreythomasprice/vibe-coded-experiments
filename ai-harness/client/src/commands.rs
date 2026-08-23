@@ -12,7 +12,8 @@ use shared::agent::event::AgentEvent;
 use shared::agent::{AgentConfig, AgentConfigInput, ToolSpec};
 use shared::conversation::{ConversationSummary, ConversationView, ListConversations, TurnOutcome};
 use shared::error::ErrorReport;
-use shared::ids::{AgentConfigId, ConversationId};
+use shared::ids::{AgentConfigId, ConversationId, ThemeId};
+use shared::theme::{UserTheme, UserThemeInput};
 
 use crate::ipc;
 
@@ -103,4 +104,34 @@ pub async fn set_preference(key: &str, value: &str) -> Result<(), ErrorReport> {
         value: &'a str,
     }
     ipc::call("set_preference", &Args { key, value }).await
+}
+
+pub async fn list_themes() -> Result<Vec<UserTheme>, ErrorReport> {
+    ipc::call0("list_themes").await
+}
+
+pub async fn create_theme(input: UserThemeInput) -> Result<UserTheme, ErrorReport> {
+    #[derive(Serialize)]
+    struct Args {
+        input: UserThemeInput,
+    }
+    ipc::call("create_theme", &Args { input }).await
+}
+
+pub async fn update_theme(id: ThemeId, input: UserThemeInput) -> Result<UserTheme, ErrorReport> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Args {
+        id: ThemeId,
+        input: UserThemeInput,
+    }
+    ipc::call("update_theme", &Args { id, input }).await
+}
+
+pub async fn delete_theme(id: ThemeId) -> Result<(), ErrorReport> {
+    #[derive(Serialize)]
+    struct Args {
+        id: ThemeId,
+    }
+    ipc::call("delete_theme", &Args { id }).await
 }

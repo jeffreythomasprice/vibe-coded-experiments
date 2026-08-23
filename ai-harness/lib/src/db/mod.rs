@@ -33,6 +33,7 @@ pub mod migrate;
 pub mod preferences;
 #[cfg(test)]
 pub(crate) mod testing;
+pub mod themes;
 pub mod turns;
 
 pub use error::{DbError, Result};

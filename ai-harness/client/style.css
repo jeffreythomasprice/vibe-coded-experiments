@@ -106,6 +106,16 @@ textarea {
   min-height: 4rem;
 }
 
+input[type="color"] {
+  width: 2.5rem;
+  height: 2.25rem;
+  padding: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  cursor: pointer;
+}
+
 /* ---- App shell ---- */
 
 .shell {
@@ -360,6 +370,7 @@ textarea {
 /* ---- Agents / forms ---- */
 
 .agent-form,
+.theme-form,
 .new-conversation,
 .agents-view,
 .all-conversations,
@@ -371,10 +382,21 @@ textarea {
 }
 
 .agent-form-field,
+.theme-form-field,
 .settings-field {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+}
+
+.theme-color-input {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.theme-color-input input[type="text"] {
+  flex: 1;
 }
 
 .agent-form-advanced {
@@ -399,8 +421,41 @@ textarea {
   padding: 0;
 }
 
-.agent-form-actions {
+.agent-form-actions,
+.theme-form-actions {
   display: flex;
+  gap: 0.5rem;
+}
+
+.theme-palette {
+  border-collapse: collapse;
+  width: 100%;
+  max-width: 640px;
+}
+
+.theme-palette td {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.theme-palette-value {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.theme-swatch {
+  display: inline-block;
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.theme-actions {
+  display: flex;
+  align-items: center;
   gap: 0.5rem;
 }
 

@@ -52,6 +52,13 @@ pub enum DbError {
     /// fallback if the in-memory lock is ever bypassed.
     #[error("a turn is already in progress for conversation {conversation_id}")]
     ConversationBusy { conversation_id: i64 },
+
+    /// A theme named `name` already exists (case-insensitively), either as
+    /// another row in `themes` or as a built-in's label. Detected by a
+    /// `SELECT` inside the same `write_tx` as the insert/update, ahead of the
+    /// `themes_name` unique index — see `lib::db::themes`'s doc.
+    #[error("a theme named {name:?} already exists")]
+    ThemeNameTaken { name: String },
 }
 
 pub type Result<T> = std::result::Result<T, DbError>;
@@ -88,6 +95,12 @@ impl From<&DbError> for shared::error::ErrorReport {
                 provider: None,
                 message: err.to_string(),
                 retryable: true,
+            },
+            DbError::ThemeNameTaken { .. } => ErrorReport {
+                kind: ErrorKind::Conflict,
+                provider: None,
+                message: err.to_string(),
+                retryable: false,
             },
             other => ErrorReport {
                 kind: ErrorKind::Storage,

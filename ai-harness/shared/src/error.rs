@@ -47,9 +47,12 @@ pub enum ErrorKind {
     /// The app's own local database failed — not a provider. A UI should say
     /// "something's wrong with this install," not "the model is down."
     Storage,
-    /// The requested operation collides with one already in flight (e.g. a
-    /// second turn on a conversation that is already streaming). Distinct
-    /// from `Storage`: the fix here is "wait" or "retry," not "file a bug."
+    /// The requested operation collides with something else: one already in
+    /// flight (e.g. a second turn on a conversation that is already
+    /// streaming — retryable), or an entity that already exists (e.g. a
+    /// theme name that's taken — not retryable as-is, but fixable by
+    /// changing the request). Distinct from `Storage`: the fix here is
+    /// "wait," "retry," or "pick a different value," not "file a bug."
     Conflict,
     Other,
 }

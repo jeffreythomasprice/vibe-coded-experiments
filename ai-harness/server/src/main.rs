@@ -101,6 +101,10 @@ fn run() -> anyhow::Result<()> {
             commands::conversations::cancel_pending,
             commands::preferences::get_preference,
             commands::preferences::set_preference,
+            commands::themes::list_themes,
+            commands::themes::create_theme,
+            commands::themes::update_theme,
+            commands::themes::delete_theme,
         ])
         .run(tauri::generate_context!())?;
     Ok(())

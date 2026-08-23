@@ -13,7 +13,7 @@
 //! style — and one effect writes it. Nothing else in the crate should touch it.
 
 use leptos::prelude::*;
-use shared::theme::{resolve, Theme, ThemeChoice, THEME_PREFERENCE_KEY};
+use shared::theme::{resolve, Theme, ThemeChoice, UserTheme, THEME_PREFERENCE_KEY};
 use wasm_bindgen::prelude::Closure;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::spawn_local;
@@ -37,6 +37,11 @@ pub struct ThemeContext {
     /// Live `prefers-color-scheme: dark`. `false` if this webview has no
     /// `matchMedia` at all.
     pub system_dark: RwSignal<bool>,
+    /// The user's own theme catalog — every row in the `themes` table.
+    /// `theme` resolves a `ThemeChoice::User` against this, so an edit or
+    /// delete just needs to reload this list; nothing else about the theme
+    /// pipeline changes.
+    pub user_themes: RwSignal<Vec<UserTheme>>,
     /// The last failure to *persist* a choice. A failed write never blocks
     /// the switch — see [`ThemeContext::set_choice`].
     pub error: RwSignal<Option<String>>,
@@ -54,11 +59,26 @@ impl ThemeContext {
         self.choice.set(choice);
         self.error.set(None);
         spawn_local(async move {
-            match commands::set_preference(THEME_PREFERENCE_KEY, choice.as_str()).await {
+            match commands::set_preference(THEME_PREFERENCE_KEY, &choice.to_stored()).await {
                 Ok(()) => {}
                 Err(err) => {
                     tracing::warn!(message = %err.message, "could not save the theme choice");
                     self.error.set(Some(err.message));
+                }
+            }
+        });
+    }
+
+    /// Refetch the user's theme catalog. Called once at startup and again
+    /// after every create/update/delete, so a saved edit — including one to
+    /// the currently active theme — repaints without any extra wiring: the
+    /// `theme` `Memo` re-resolves as soon as `user_themes` changes.
+    pub fn reload_user_themes(self) {
+        spawn_local(async move {
+            match commands::list_themes().await {
+                Ok(themes) => self.user_themes.set(themes),
+                Err(err) => {
+                    tracing::warn!(message = %err.message, "could not load user themes");
                 }
             }
         });
@@ -79,10 +99,11 @@ pub fn provide_theme() {
 
     let choice = RwSignal::new(ThemeChoice::System);
     let system_dark = RwSignal::new(dark_now);
-    let theme = Memo::new(move |_| resolve(choice.get(), system_dark.get()));
+    let user_themes = RwSignal::new(Vec::<UserTheme>::new());
+    let theme = Memo::new(move |_| resolve(choice.get(), system_dark.get(), &user_themes.read()));
     let error = RwSignal::new(None::<String>);
 
-    let ctx = ThemeContext { theme, choice, system_dark, error };
+    let ctx = ThemeContext { theme, choice, system_dark, user_themes, error };
     provide_context(ctx);
 
     // The one writer of the root element's inline style. Re-runs whenever the
@@ -94,6 +115,13 @@ pub fn provide_theme() {
     });
 
     subscribe_to_os_changes(media, system_dark);
+
+    // The user's theme catalog, read once — same "nothing to track, runs
+    // exactly once" `Effect::new` + `spawn_local` idiom as the stored-choice
+    // read just below. Read before the stored choice resolves so a `User`
+    // choice has something to resolve against as soon as it's set, not one
+    // tick later.
+    Effect::new(move |_| ctx.reload_user_themes());
 
     // The stored choice, read once. `Effect::new` + `spawn_local` rather than
     // a bare `spawn_local` to match how every other fetch in this crate is

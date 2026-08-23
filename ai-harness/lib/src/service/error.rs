@@ -31,6 +31,23 @@ pub enum ServiceError {
     /// as a silent success if that ever stops being true.
     #[error("the agent's event stream ended without a terminal event")]
     TruncatedStream,
+
+    /// A theme name matches a built-in's label, case-insensitively. The
+    /// database's `themes_name` unique index only sees other user themes —
+    /// built-ins never have a row — so this half of "a theme's name must be
+    /// unique across every theme" is checked here, in
+    /// `crate::service::themes`, before ever reaching the database.
+    #[error("a theme named {name:?} already exists")]
+    ThemeNameConflict { name: String },
+
+    /// A [`shared::theme::ThemeField`]'s value on a `UserThemeInput` isn't
+    /// `#rrggbb`.
+    #[error("{field} is not a valid color: {value:?} (expected #rrggbb)")]
+    InvalidThemeColor { field: &'static str, value: String },
+
+    /// A theme's name was empty or all whitespace.
+    #[error("a theme's name can't be empty")]
+    EmptyThemeName,
 }
 
 impl ServiceError {
@@ -40,6 +57,9 @@ impl ServiceError {
             ServiceError::Agent(err) => err.is_retryable(),
             ServiceError::ConversationBusy { .. } => true,
             ServiceError::NoPendingTurn { .. } | ServiceError::TruncatedStream => false,
+            ServiceError::ThemeNameConflict { .. }
+            | ServiceError::InvalidThemeColor { .. }
+            | ServiceError::EmptyThemeName => false,
         }
     }
 }
@@ -70,6 +90,18 @@ impl From<&ServiceError> for shared::error::ErrorReport {
             },
             ServiceError::TruncatedStream => ErrorReport {
                 kind: ErrorKind::Agent,
+                provider: None,
+                message: err.to_string(),
+                retryable: false,
+            },
+            ServiceError::ThemeNameConflict { .. } => ErrorReport {
+                kind: ErrorKind::Conflict,
+                provider: None,
+                message: err.to_string(),
+                retryable: false,
+            },
+            ServiceError::InvalidThemeColor { .. } | ServiceError::EmptyThemeName => ErrorReport {
+                kind: ErrorKind::InvalidRequest,
                 provider: None,
                 message: err.to_string(),
                 retryable: false,

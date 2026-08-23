@@ -7,6 +7,7 @@ pub mod chat;
 pub mod conversations;
 pub mod error;
 pub mod preferences;
+pub mod themes;
 
 pub use error::ServiceError;
 
