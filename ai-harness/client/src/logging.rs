@@ -7,9 +7,10 @@
 
 use std::cell::Cell;
 use std::fmt;
+use std::panic::PanicHookInfo;
 
 use serde::Serialize;
-use shared::ClientLogRecord;
+use shared::{ClientLogRecord, LogLevel};
 use tracing::field::{Field, Visit};
 use tracing::{Event, Subscriber};
 use tracing_subscriber::filter::{LevelFilter, Targets};
@@ -17,9 +18,10 @@ use tracing_subscriber::layer::{Context, Layer, SubscriberExt};
 use tracing_subscriber::registry;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_web::MakeWebConsoleWriter;
+use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::spawn_local;
 
-use crate::ipc::invoke;
+use crate::ipc::{invoke, invoke_sync};
 
 /// Argument envelope for the backend's `log_from_client` command. The Rust
 /// parameter is named `record`, so the JS-side key must be `record` too.
@@ -36,7 +38,19 @@ thread_local! {
 
 /// Install the frontend subscriber. Call once, before mounting.
 pub fn init() {
-    console_error_panic_hook::set_once();
+    // Not `console_error_panic_hook::set_once()`: a panic is not a `tracing`
+    // event, so `ForwardLayer` below never sees one, and a wasm panic aborts
+    // the module before any `.await` point runs — the previous incident this
+    // hook exists for showed up only as an unactionable devtools stack, with
+    // "no relevant logging on the server". This hook still logs to the
+    // console exactly as `console_error_panic_hook::hook` always has, and
+    // additionally forwards the same message to the backend synchronously
+    // (see `invoke_sync`'s doc on why it can't go through `invoke`), so the
+    // next panic lands in the rotated log files too.
+    std::panic::set_hook(Box::new(|info| {
+        console_error_panic_hook::hook(info);
+        forward_panic(info);
+    }));
 
     // `Targets`, not `EnvFilter`: wasm has no environment to read, and
     // `EnvFilter` would pull regex into the bundle for nothing. Mirrors the
@@ -57,6 +71,37 @@ pub fn init() {
         .with(console_layer)
         .with(ForwardLayer)
         .try_init();
+}
+
+/// Forwards a panic straight to the backend's `log_from_client`, bypassing
+/// `tracing` and `ForwardLayer` entirely: a wasm panic aborts the module
+/// before the microtask queue runs again, so anything that relies on
+/// `spawn_local` or an `async fn` being polled — including the normal
+/// forwarding path below — never actually fires. `invoke_sync` posts the IPC
+/// message immediately instead.
+fn forward_panic(info: &PanicHookInfo<'_>) {
+    let payload = info.payload();
+    let message = payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("Box<dyn Any> (non-string panic payload)");
+    let (file, line) = match info.location() {
+        Some(loc) => (Some(loc.file().to_string()), Some(loc.line())),
+        None => (None, None),
+    };
+    let record = ClientLogRecord {
+        timestamp: String::from(js_sys::Date::new_0().to_iso_string()),
+        level: LogLevel::Error,
+        target: "client::panic".to_string(),
+        file,
+        line,
+        message: message.to_string(),
+    };
+    let Ok(args) = serde_wasm_bindgen::to_value(&LogArgs { record }) else {
+        return;
+    };
+    let _: JsValue = invoke_sync("log_from_client", args);
 }
 
 /// Ships each event to the backend over IPC.

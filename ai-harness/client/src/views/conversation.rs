@@ -26,6 +26,11 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
     let view = RwSignal::new(None::<ConversationViewDto>);
     let error = RwSignal::new(None::<String>);
     let message = RwSignal::new(String::new());
+    // Only the very first load — an "error and no view" state after that
+    // still shows the error (see the render below), but doesn't fall back to
+    // the loading panel, the same distinction `views::AllConversations`
+    // draws between its own `loading` flag and an empty list.
+    let loading = RwSignal::new(true);
 
     let load = move || {
         spawn_local(async move {
@@ -40,6 +45,7 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
                 }
                 Err(err) => error.set(Some(err.message)),
             }
+            loading.set(false);
         });
     };
 
@@ -51,11 +57,19 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
     Effect::new(move |_| {
         reload.get();
         load();
-        // Resumes following a run left in flight by a previous mount of
-        // this same conversation (switched away and back); a no-op if
-        // nothing is running, or if this conversation is already being
-        // followed.
-        runs.ensure_following(id);
+    });
+
+    // Runs exactly once per mount, deliberately not tied to `reload`: this is
+    // the probe that resumes following a run left in flight by a previous
+    // mount of this same conversation (switched away and back); a no-op if
+    // nothing is running, or if this conversation is already being followed.
+    // Tying it to `reload` too would re-probe every time this same
+    // conversation's own run settles and bumps the counter, racing the
+    // `load` above for `Runs::forget` — see that fn's doc.
+    Effect::new(move |ran: Option<()>| {
+        if ran.is_none() {
+            runs.ensure_following(id);
+        }
     });
 
     // Only recomputed when the persisted view changes — not on every
@@ -64,26 +78,49 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
         view.get().map(|v| transcript::flatten(&v.messages)).unwrap_or_default()
     });
 
-    let submit = move |_| {
-        if run.get_untracked().phase != Phase::Idle {
-            return;
+    // `run` is `ArcRwSignal`, not `Copy` (see `Runs::state`'s doc), so every
+    // closure that needs it below gets its own clone rather than sharing the
+    // one captured here — cloning an `ArcRwSignal` is cheap (it's just two
+    // `Arc`s), and `submit` owning its own copy means it doesn't compete with
+    // `view!`'s own uses of `run` for which closure gets to consume it.
+    let submit = {
+        let run = run.clone();
+        move |_| {
+            // `!= Idle`, not `!is_busy()`: the composer stays enabled during a
+            // `Probing` mount (see `run_state.phase.is_busy()` below), but a
+            // submit landing in that one-round-trip window is simply dropped
+            // here rather than risking two concurrent followers on the same
+            // conversation.
+            if run.get_untracked().phase != Phase::Idle {
+                return;
+            }
+            let text = message.get();
+            if text.trim().is_empty() {
+                return;
+            }
+            message.set(String::new());
+            error.set(None);
+            runs.send(id, text);
         }
-        let text = message.get();
-        if text.trim().is_empty() {
-            return;
-        }
-        message.set(String::new());
-        error.set(None);
-        runs.send(id, text);
     };
 
     view! {
         <div class="conversation-view">
             {move || match view.get() {
-                None => view! { <LoadingPanel label="Loading conversation…" /> }.into_any(),
+                // Distinguishing on `loading` (rather than showing this
+                // whenever there's no view yet) is what lets a failed fetch
+                // report its error instead of spinning forever — see
+                // `loading`'s doc.
+                None if loading.get() => view! { <LoadingPanel label="Loading conversation…" /> }.into_any(),
+                None => view! { <p class="error">{move || error.get().unwrap_or_default()}</p> }.into_any(),
                 Some(loaded) => {
                     let run_state = run.get();
-                    let busy = run_state.phase != Phase::Idle;
+                    // `Probing` is deliberately not "busy" — see `Phase::is_busy`'s
+                    // doc — so reopening an already-settled conversation
+                    // doesn't flash a "Responding…" spinner and a disabled
+                    // composer for the one round trip that finds nothing
+                    // running.
+                    let busy = run_state.phase.is_busy();
                     let mut bubbles = persisted_bubbles.get();
                     if !run_state.draft.is_empty() {
                         bubbles.extend(run_state.draft.bubbles());
@@ -124,9 +161,18 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
                                 })}
                             <form
                                 class="composer"
-                                on:submit=move |ev| {
-                                    ev.prevent_default();
-                                    submit(());
+                                on:submit={
+                                    // Cloned for the same reason `run` is
+                                    // cloned below: this whole arm — and so
+                                    // this attribute closure — is rebuilt on
+                                    // every reactive re-render, and `submit`
+                                    // (capturing a non-`Copy` `ArcRwSignal`)
+                                    // is only `Clone`, not `Copy`.
+                                    let submit = submit.clone();
+                                    move |ev| {
+                                        ev.prevent_default();
+                                        submit(());
+                                    }
                                 }
                             >
                                 <fieldset disabled=composer_disabled>
@@ -136,7 +182,18 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
                                         on:input=move |ev| message.set(event_target_value(&ev))
                                     ></textarea>
                                     {move || error.get().map(|m| view! { <p class="error">{m}</p> })}
-                                    {move || run.get().error.map(|m| view! { <p class="error">{m}</p> })}
+                                    {
+                                        // Cloned, not moved: this whole
+                                        // `Some(loaded)` arm re-runs on every
+                                        // reactive update, reconstructing this
+                                        // closure afresh each time — moving
+                                        // the outer `run` into it directly
+                                        // would consume the copy the *next*
+                                        // re-run needs, since `ArcRwSignal`
+                                        // isn't `Copy`.
+                                        let run = run.clone();
+                                        move || run.get().error.map(|m| view! { <p class="error">{m}</p> })
+                                    }
                                     <button type="submit" disabled=move || message.get().trim().is_empty()>
                                         <Show when=move || busy fallback=|| "Send">
                                             <Spinner label="Sending…" />

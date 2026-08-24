@@ -153,7 +153,13 @@ impl Service {
     ) -> Option<RunStatus> {
         match self.runs.get(conversation_id) {
             Some(run) => runs::follow(run, emit).await,
-            None => Some(RunStatus::Idle),
+            None => {
+                tracing::trace!(
+                    conversation_id = conversation_id.get(),
+                    "attach found no run registered; reporting idle without subscribing"
+                );
+                Some(RunStatus::Idle)
+            }
         }
     }
 

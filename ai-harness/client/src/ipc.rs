@@ -18,6 +18,17 @@ extern "C" {
     #[wasm_bindgen(catch, js_namespace = ["window", "__TAURI__", "core"], js_name = invoke)]
     pub(crate) async fn invoke(cmd: &str, args: JsValue) -> Result<JsValue, JsValue>;
 
+    /// Synchronous counterpart to [`invoke`], for the one call site that
+    /// cannot `.await`: `logging`'s panic hook. A Rust future does not touch
+    /// JS until it is first polled, and after a wasm panic (`panic = abort`)
+    /// nothing ever polls it again — an `async fn invoke(...)` call made from
+    /// a panic hook would build a future and immediately drop it unsent. This
+    /// binding posts the IPC message the moment it's called; the resulting
+    /// promise is dropped unawaited, which is fine since nothing here needs
+    /// the command's result.
+    #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"], js_name = invoke)]
+    pub(crate) fn invoke_sync(cmd: &str, args: JsValue) -> JsValue;
+
     /// A live channel a streaming command's `on_event` argument turns into a
     /// series of `onmessage` calls. Constructed fresh per call — it can't
     /// cross `serde_wasm_bindgen` like a plain value, since it's a stateful

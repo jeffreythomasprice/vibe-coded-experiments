@@ -25,6 +25,11 @@ use super::{EventSink, ServiceError};
 /// One turn's live event history and its followers.
 #[derive(Debug)]
 pub(crate) struct Run {
+    /// Carried only for `tracing` context — every log line below names the
+    /// conversation a subscriber attach/detach or a settle belongs to, since
+    /// none of that is otherwise visible from outside this process (see this
+    /// module's doc).
+    conversation_id: ConversationId,
     state: Mutex<RunState>,
 }
 
@@ -46,8 +51,9 @@ struct RunState {
 }
 
 impl Run {
-    fn new() -> Arc<Self> {
+    fn new(conversation_id: ConversationId) -> Arc<Self> {
         Arc::new(Self {
+            conversation_id,
             state: Mutex::new(RunState {
                 events: Vec::new(),
                 subscribers: HashMap::new(),
@@ -60,11 +66,23 @@ impl Run {
     /// Record `event` and forward it to every live follower. A sender whose
     /// receiver was dropped without going through `Subscription`'s `Drop`
     /// (never happens via this module's own API, but is cheap insurance
-    /// against a future caller that doesn't use it) is swept here too.
+    /// against a future caller that doesn't use it) is swept here too — logged
+    /// at `trace` since it's the one path here that shouldn't happen, not
+    /// because it's expected to be noisy: unlike `publish` itself, this fires
+    /// only on that fallback, not once per event.
     fn publish(&self, event: AgentEvent) {
         let mut state = self.state.lock().expect("run state poisoned");
         state.events.push(event.clone());
+        let before = state.subscribers.len();
         state.subscribers.retain(|_, tx| tx.send(event.clone()).is_ok());
+        let dropped = before - state.subscribers.len();
+        if dropped > 0 {
+            tracing::trace!(
+                conversation_id = self.conversation_id.get(),
+                dropped,
+                "swept a subscriber whose receiver was dropped without going through Subscription"
+            );
+        }
     }
 
     /// Record the turn's terminal status and close every follower's
@@ -73,6 +91,13 @@ impl Run {
     /// every event before it sees the run end.
     pub(crate) fn finish(&self, status: RunStatus) {
         let mut state = self.state.lock().expect("run state poisoned");
+        let followers = state.subscribers.len();
+        tracing::debug!(
+            conversation_id = self.conversation_id.get(),
+            followers,
+            status = ?status,
+            "run settled; closing every follower's channel"
+        );
         state.finished = Some(status);
         state.subscribers.clear();
     }
@@ -85,7 +110,11 @@ impl Run {
     /// A snapshot of everything published so far, plus a live subscription
     /// for what comes next — both taken under one lock, so nothing
     /// published between the snapshot and the subscription taking effect is
-    /// ever lost or duplicated.
+    /// ever lost or duplicated. Logged at `trace`: this is the "a new
+    /// subscriber showed up" event a client's `attach_conversation` produces
+    /// on every mount (including a mere probe that finds nothing running),
+    /// so it isn't rare, but it's exactly what pins a client-reported "stuck
+    /// on load" down to whether a follower ever actually attached.
     fn subscribe(self: &Arc<Self>) -> (Vec<AgentEvent>, Subscription) {
         let mut state = self.state.lock().expect("run state poisoned");
         let events = state.events.clone();
@@ -93,6 +122,14 @@ impl Run {
         let slot = state.next_slot;
         state.next_slot += 1;
         state.subscribers.insert(slot, tx);
+        let subscriber_count = state.subscribers.len();
+        tracing::trace!(
+            conversation_id = self.conversation_id.get(),
+            slot,
+            backlog = events.len(),
+            subscriber_count,
+            "subscriber attached"
+        );
         (
             events,
             Subscription {
@@ -133,6 +170,13 @@ impl Drop for Subscription {
     fn drop(&mut self) {
         let mut state = self.run.state.lock().expect("run state poisoned");
         state.subscribers.remove(&self.slot);
+        let subscriber_count = state.subscribers.len();
+        tracing::trace!(
+            conversation_id = self.run.conversation_id.get(),
+            slot = self.slot,
+            subscriber_count,
+            "subscriber detached"
+        );
     }
 }
 
@@ -159,10 +203,15 @@ impl Runs {
     pub(crate) fn begin(&self, id: ConversationId) -> Result<Arc<Run>, ServiceError> {
         let mut inner = self.inner.lock().expect("runs map poisoned");
         if inner.contains_key(&id.get()) {
+            tracing::debug!(
+                conversation_id = id.get(),
+                "refusing to start a run: this conversation already has one registered"
+            );
             return Err(ServiceError::ConversationBusy { conversation_id: id.get() });
         }
-        let run = Run::new();
+        let run = Run::new(id);
         inner.insert(id.get(), Arc::clone(&run));
+        tracing::debug!(conversation_id = id.get(), "run registered");
         Ok(run)
     }
 
@@ -172,6 +221,7 @@ impl Runs {
 
     pub(crate) fn end(&self, id: ConversationId) {
         self.inner.lock().expect("runs map poisoned").remove(&id.get());
+        tracing::debug!(conversation_id = id.get(), "run deregistered");
     }
 }
 
@@ -186,14 +236,17 @@ impl Runs {
 /// terminal status (the caller's channel is gone; there is nothing left to
 /// deliver a status to); `Some(status)` once the run actually settles.
 pub(crate) async fn follow(run: Arc<Run>, mut emit: impl FnMut(&AgentEvent) -> bool) -> Option<RunStatus> {
+    let conversation_id = run.conversation_id.get();
     let (backlog, mut subscription) = run.subscribe();
     for event in &backlog {
         if !emit(event) {
+            tracing::debug!(conversation_id, "follower's sink declined during backlog replay; detaching");
             return None;
         }
     }
     while let Some(event) = subscription.recv().await {
         if !emit(&event) {
+            tracing::debug!(conversation_id, "follower's sink declined a live event; detaching");
             return None;
         }
     }
@@ -201,7 +254,9 @@ pub(crate) async fn follow(run: Arc<Run>, mut emit: impl FnMut(&AgentEvent) -> b
     // settled — drop the subscription first so `run` is the only handle
     // left, then read the status it just recorded.
     drop(subscription);
-    run.status()
+    let status = run.status();
+    tracing::debug!(conversation_id, status = ?status, "follower observed the run settle");
+    status
 }
 
 #[cfg(test)]
@@ -245,7 +300,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_subscriber_sees_the_backlog_then_live_events_with_no_gap_or_duplicate() {
-        let run = Run::new();
+        let run = Run::new(ConversationId(1));
         run.publish(step_start(0));
 
         // `AgentEvent` derives no `PartialEq` (it carries `AgentTurn`, which
@@ -261,7 +316,7 @@ mod tests {
 
     #[tokio::test]
     async fn finish_closes_every_subscriber_and_exposes_the_status() {
-        let run = Run::new();
+        let run = Run::new(ConversationId(1));
         let (_backlog, mut sub) = run.subscribe();
         run.finish(done_status());
         assert!(sub.recv().await.is_none());
@@ -270,7 +325,7 @@ mod tests {
 
     #[tokio::test]
     async fn dropping_a_subscription_deregisters_its_slot() {
-        let run = Run::new();
+        let run = Run::new(ConversationId(1));
         let (_backlog, sub) = run.subscribe();
         assert_eq!(run.state.lock().unwrap().subscribers.len(), 1);
         drop(sub);
@@ -282,7 +337,7 @@ mod tests {
 
     #[tokio::test]
     async fn two_concurrent_followers_both_see_every_event_independently() {
-        let run = Run::new();
+        let run = Run::new(ConversationId(1));
         let (_b1, sub1) = run.subscribe();
         let (_b2, mut sub2) = run.subscribe();
 
@@ -296,7 +351,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_subscriber_whose_receiver_was_dropped_without_its_subscription_is_swept_on_publish() {
-        let run = Run::new();
+        let run = Run::new(ConversationId(1));
         let mut state = run.state.lock().unwrap();
         let (tx, rx) = mpsc::unbounded_channel::<AgentEvent>();
         let slot = state.next_slot;
@@ -312,7 +367,7 @@ mod tests {
 
     #[tokio::test]
     async fn follow_replays_the_backlog_then_the_live_tail_and_returns_the_terminal_status() {
-        let run = Run::new();
+        let run = Run::new(ConversationId(1));
         run.publish(step_start(0));
 
         let run_for_publisher = Arc::clone(&run);
@@ -337,7 +392,7 @@ mod tests {
 
     #[tokio::test]
     async fn follow_stops_and_returns_none_as_soon_as_emit_declines() {
-        let run = Run::new();
+        let run = Run::new(ConversationId(1));
         run.publish(step_start(0));
         run.publish(step_start(1));
 

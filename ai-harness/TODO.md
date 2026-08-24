@@ -1,12 +1,7 @@
 in flight:
 
 
-
 todos:
-
-start a conversation
-click away to new conversation, then click back
-server aborts
 
 merge db migrations back into one
 
@@ -14,12 +9,9 @@ ctrl+enter should submit
 
 cost estimates? token estimates?
 
-left sidebar is list of conversations
-search box on top
+search box for conversations
 
-main content is the conversation
-markdown
-images
+supper images in output
 
 tools, web search, bash?
 
