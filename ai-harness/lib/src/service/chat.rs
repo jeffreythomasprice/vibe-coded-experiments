@@ -108,14 +108,19 @@ impl Service {
     pub fn start_message(self: &Arc<Self>, conversation_id: ConversationId, text: String) -> Result<(), ServiceError> {
         let run = self.runs.begin(conversation_id)?;
         let this = Arc::clone(self);
-        tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             let status = match this.send_message(conversation_id, text, run.as_ref()).await {
                 Ok(outcome) => RunStatus::Finished { outcome },
                 Err(err) => RunStatus::Failed { error: (&err).into() },
             };
+            // `Run::finish` is idempotent — a no-op if `Runs::cancel` beat
+            // this task to it — and `Runs::end` on an already-removed id is
+            // a harmless no-op too, so this races safely against a
+            // concurrent cancel either way.
             run.finish(status);
             this.runs.end(conversation_id);
         });
+        self.runs.attach_task(conversation_id, task);
         Ok(())
     }
 
@@ -128,7 +133,7 @@ impl Service {
     ) -> Result<(), ServiceError> {
         let run = self.runs.begin(conversation_id)?;
         let this = Arc::clone(self);
-        tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             let status = match this.approve_tools(conversation_id, decisions, run.as_ref()).await {
                 Ok(outcome) => RunStatus::Finished { outcome },
                 Err(err) => RunStatus::Failed { error: (&err).into() },
@@ -136,6 +141,7 @@ impl Service {
             run.finish(status);
             this.runs.end(conversation_id);
         });
+        self.runs.attach_task(conversation_id, task);
         Ok(())
     }
 
@@ -572,6 +578,25 @@ mod tests {
         service.start_message(conv, "hello".to_string()).unwrap();
         let err = service.start_message(conv, "again".to_string()).unwrap_err();
         assert!(matches!(err, ServiceError::ConversationBusy { .. }));
+    }
+
+    #[tokio::test]
+    async fn deleting_a_conversation_with_a_started_run_cancels_it() {
+        let service = Arc::new(service_with_script(vec![text_response("hi there")], false).await);
+        let conv = seed_conversation(&service, vec![]).await;
+
+        service.start_message(conv, "hello".to_string()).unwrap();
+        // No `.await` between `start_message` returning and the delete
+        // below, so — on this test's single-threaded runtime — the task it
+        // spawned has not been polled yet, only registered via
+        // `Runs::attach_task`. This is the same synchronous-registration
+        // guarantee `a_second_start_message_while_one_is_registered_is_conversation_busy`
+        // relies on; it's what proves `start_message` really does wire the
+        // real spawned task into `Runs`, not just `Runs::begin`'s
+        // `Arc<Run>`.
+        service.delete_conversation(conv).await.unwrap();
+
+        assert_eq!(service.attach(conv, |_event| true).await, Some(RunStatus::Idle));
     }
 
     #[tokio::test]

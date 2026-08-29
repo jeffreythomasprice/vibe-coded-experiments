@@ -1,6 +1,7 @@
 mod app;
 mod commands;
 mod composer;
+mod confirm;
 mod icons;
 mod ipc;
 mod logging;

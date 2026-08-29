@@ -83,7 +83,19 @@ async fn run_bash(ctx: ToolContext, args: BashArgs) -> anyhow::Result<ToolOutput
 
     let std_command = ctx.sandbox().command(&spec)?;
     let mut command = tokio::process::Command::from(std_command);
-    command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    // Without this, dropping `child` (a timeout above, or the driving
+    // future being aborted out from under this call — see
+    // `Service::delete_conversation`) leaves the process running instead of
+    // killing it. With the sandbox enabled, `bwrap`'s `--unshare-all` puts
+    // it in its own PID namespace, so killing it tears down the whole
+    // sandboxed tree; with the sandbox disabled there's no PID namespace, so
+    // only this direct child is killed and a backgrounded grandchild can
+    // still survive.
+    command
+        .kill_on_drop(true)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
     let mut child = command.spawn().context("spawning the sandboxed shell")?;
     let stdout = child.stdout.take().expect("stdout was requested piped");

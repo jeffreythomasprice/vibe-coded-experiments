@@ -16,3 +16,7 @@ dotenvy.workspace = true
 
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
+
+[dev-dependencies]
+fantoccini = "0.22"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

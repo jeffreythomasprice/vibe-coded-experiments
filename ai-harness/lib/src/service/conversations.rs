@@ -3,7 +3,7 @@
 //! call lives in [`super::chat`].
 
 use shared::agent::TurnStop;
-use shared::conversation::{ConversationSummary, ConversationView, ListConversations, PendingApproval};
+use shared::conversation::{ConversationSummary, ConversationView, ListConversations, PendingApproval, RunStatus};
 use shared::ids::{AgentConfigId, ConversationId};
 use shared::project::ProjectRef;
 
@@ -67,8 +67,24 @@ impl Service {
         Ok(db::conversations::rename(&self.db, id, &title).await?)
     }
 
-    /// Cascades to that conversation's turns, messages, and tool calls.
+    /// Cascades to that conversation's turns, messages, and tool calls. A
+    /// turn still in flight is cancelled first: it holds this conversation's
+    /// lock for its whole span, and its tools would otherwise keep running
+    /// against a row that no longer exists.
     pub async fn delete_conversation(&self, id: ConversationId) -> Result<(), ServiceError> {
+        if let Some(task) = self.runs.cancel(id, RunStatus::Cancelled) {
+            // `abort` only schedules the driving future for dropping;
+            // awaiting the handle (which resolves `Err(JoinError::is_cancelled)`)
+            // is what makes that drop — and with it, the conversation lock
+            // the turn was holding being released — observable here instead
+            // of at some later, unknown point.
+            let _ = task.await;
+        }
+        let _guard = self.try_lock_conversation(id)?;
+        // Holding the guard across the delete is what guarantees the `runs`
+        // and `locks` entries for `id` are gone before the row — and
+        // therefore the rowid, since `conversations.id` has no
+        // `AUTOINCREMENT` (see `shared::ids`) — is freed for reuse.
         Ok(db::conversations::delete(&self.db, id).await?)
     }
 }
@@ -134,6 +150,54 @@ mod tests {
         service.delete_conversation(created.id).await.unwrap();
         let listed = service.list_conversations(ListConversations::default()).await.unwrap();
         assert!(listed.is_empty());
+    }
+
+    #[tokio::test]
+    async fn delete_conversation_cancels_an_in_flight_run() {
+        let service = service().await;
+        let agent = service.create_agent(input("ops")).await.unwrap();
+        let created = service.create_conversation(agent.id, ProjectRef::Default, None).await.unwrap();
+
+        // Register a run "by hand," the same way `Service::start_message`
+        // does, without a real provider round trip: a task that never
+        // resolves on its own stands in for a turn still streaming.
+        let _run = service.runs.begin(created.id).unwrap();
+        let task = tokio::spawn(std::future::pending::<()>());
+        service.runs.attach_task(created.id, task);
+
+        service.delete_conversation(created.id).await.unwrap();
+
+        assert!(service.runs.get(created.id).is_none(), "the run must be deregistered");
+        let listed = service.list_conversations(ListConversations::default()).await.unwrap();
+        assert!(listed.is_empty());
+    }
+
+    #[tokio::test]
+    async fn delete_conversation_awaits_the_cancelled_task_before_taking_the_lock() {
+        let service = service().await;
+        let agent = service.create_agent(input("ops")).await.unwrap();
+        let created = service.create_conversation(agent.id, ProjectRef::Default, None).await.unwrap();
+
+        // A real in-flight turn holds this guard for its whole span (see
+        // `chat::Service::send_message`). Move it into a task that never
+        // resolves, so the guard is released only when that task's future
+        // is actually dropped.
+        let _run = service.runs.begin(created.id).unwrap();
+        let guard = service.try_lock_conversation(created.id).unwrap();
+        let task = tokio::spawn(async move {
+            let _guard = guard;
+            std::future::pending::<()>().await
+        });
+        service.runs.attach_task(created.id, task);
+
+        // If `delete_conversation` tried to acquire the lock before the
+        // cancelled task's future actually finished dropping (releasing the
+        // guard), this would fail with `ConversationBusy` instead.
+        service.delete_conversation(created.id).await.unwrap();
+
+        // The lock is free again — nothing left over that could confuse the
+        // next conversation to reuse this rowid.
+        let _guard = service.try_lock_conversation(created.id).unwrap();
     }
 
     #[tokio::test]

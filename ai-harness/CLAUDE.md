@@ -37,6 +37,60 @@ The model each live test calls is a `const` at the top of its own
 something cheaper (`claude-haiku-4-5`, `gpt-image-1-mini`) by editing that
 constant.
 
+## UI / end-to-end tests
+
+`server/tests/webdriver_ui.rs` drives the actual compiled `server` binary
+through a real webview via [`tauri-driver`](https://github.com/tauri-apps/tauri-driver)
+— Tauri's answer to "what does Cypress look like for a native app," since
+Cypress itself can't drive an arbitrary WebKitGTK/WRY window. On Linux,
+`tauri-driver` shells out to `WebKitWebDriver` (from the `webkit2gtk-driver`
+apt package) and speaks the standard WebDriver protocol, so a Rust client
+(`fantoccini`) can click real elements and pull back real PNG screenshots —
+no OS-level screenshot tool or window-manager cooperation required, which is
+what made every prior ad hoc "run it and screenshot the window" attempt
+unreliable. This is also the layer no unit test can reach: it's the only
+place that exercises real Tauri IPC dispatch, a real (temp, isolated)
+SQLite db through `lib::service`, and the real Leptos wasm bundle in one
+pass, the way a user's click actually does.
+
+One-time setup (Linux):
+
+```sh
+sudo apt-get install -y webkit2gtk-driver   # provides WebKitWebDriver
+cargo install tauri-driver
+```
+
+To run:
+
+```sh
+Xvfb :99 -screen 0 1280x800x24 &            # keeps the real webview off your actual desktop
+DISPLAY=:99 tauri-driver &
+(cd client && trunk serve &)                # see the gotcha below — needed regardless of profile
+AI_HARNESS_E2E=1 cargo test -p server --test webdriver_ui -- --nocapture --test-threads=1
+```
+
+Like the live tests, a plain `cargo test` compiles this file but every test
+returns immediately unless `AI_HARNESS_E2E=1` is set, and each one also
+skips (rather than fails) if `tauri-driver` isn't reachable or the app never
+renders its shell (most likely cause: `trunk serve` isn't running) — so a
+misconfigured run reads as "skipped," not as a broken build. Use
+`--test-threads=1`: each test spawns its own real app process and webview
+window, and there's no reason to make that race.
+
+Gotcha: the compiled `server` binary always points its window at
+`tauri.conf.json`'s `devUrl` (`http://localhost:1420`) — true for `cargo
+build` **and** `cargo build --release` alike. Only a full `cargo tauri
+build` (the CLI's own bundling pipeline) embeds `frontendDist` instead. So
+`trunk serve` has to be running for these tests no matter the profile —
+exactly what `cargo tauri dev` already arranges for you.
+
+Each test gets its own throwaway `--config` (temp dir: db, cache, logs,
+sandbox disabled) via `server/tests/common::launch`, so these never touch a
+real `~/.config/ai-harness` database. `App::screenshot(name)` saves a PNG to
+`target/e2e-screenshots/<name>.png` (gitignored) — reach for it from a
+one-off `#[tokio::test]` for ad hoc visual inspection of a view, not only
+from a committed assertion.
+
 ## Environment variables
 
 Copy `.env.example` to `.env` in the repo root and fill in the keys for

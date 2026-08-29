@@ -7,6 +7,7 @@ use shared::ids::AgentConfigId;
 use wasm_bindgen_futures::spawn_local;
 
 use crate::commands;
+use crate::confirm::ConfirmDelete;
 use crate::spinner::LoadingPanel;
 use crate::views::AgentForm;
 
@@ -55,9 +56,25 @@ pub fn Agents() -> impl IntoView {
                         {move || error.get().map(|message| view! { <p class="error">{message}</p> })}
                         <ul class="agent-list">
                             <For each=move || agents.get() key=|a| a.id.get() let:agent>
-                                <AgentRow agent=agent confirming_delete=confirming_delete on_delete=delete />
+                                <AgentRow agent=agent confirming_delete=confirming_delete />
                             </For>
                         </ul>
+                        {move || {
+                            confirming_delete
+                                .get()
+                                .map(|id| {
+                                    view! {
+                                        <ConfirmDelete
+                                            title="Delete this agent?"
+                                            on_confirm=move |()| {
+                                                confirming_delete.set(None);
+                                                delete(id);
+                                            }
+                                            on_cancel=move |()| confirming_delete.set(None)
+                                        />
+                                    }
+                                })
+                        }}
                         {move || {
                             if creating.get() {
                                 view! {
@@ -88,11 +105,7 @@ pub fn Agents() -> impl IntoView {
 }
 
 #[component]
-fn AgentRow(
-    agent: AgentConfig,
-    confirming_delete: RwSignal<Option<AgentConfigId>>,
-    on_delete: impl Fn(AgentConfigId) + Copy + Send + Sync + 'static,
-) -> impl IntoView {
+fn AgentRow(agent: AgentConfig, confirming_delete: RwSignal<Option<AgentConfigId>>) -> impl IntoView {
     let id = agent.id;
     let name = agent.input.name.clone();
     let model = format!("{} / {}", agent.input.model.provider, agent.input.model.model);
@@ -103,26 +116,7 @@ fn AgentRow(
                 <strong>{name}</strong>
                 <span class="muted">{model}</span>
             </div>
-            {move || {
-                if confirming_delete.get() == Some(id) {
-                    view! {
-                        <span class="confirm-delete">
-                            "Delete this agent?"
-                            <button on:click=move |_| {
-                                confirming_delete.set(None);
-                                on_delete(id);
-                            }>"Yes"</button>
-                            <button on:click=move |_| confirming_delete.set(None)>"No"</button>
-                        </span>
-                    }
-                        .into_any()
-                } else {
-                    view! {
-                        <button on:click=move |_| confirming_delete.set(Some(id))>"Delete"</button>
-                    }
-                        .into_any()
-                }
-            }}
+            <button on:click=move |_| confirming_delete.set(Some(id))>"Delete"</button>
         </li>
     }
 }

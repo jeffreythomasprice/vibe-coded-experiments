@@ -8,6 +8,7 @@ use shared::project::Project;
 use wasm_bindgen_futures::spawn_local;
 
 use crate::commands;
+use crate::confirm::ConfirmDelete;
 use crate::spinner::LoadingPanel;
 use crate::views::{ProjectForm, ProjectFormMode};
 
@@ -78,11 +79,26 @@ pub fn Projects() -> impl IntoView {
                                             <ProjectRow
                                                 project=project
                                                 confirming_delete=confirming_delete
-                                                on_delete=delete
                                                 on_edit=move |p| body.set(Body::Edit(p))
                                             />
                                         </For>
                                     </ul>
+                                    {move || {
+                                        confirming_delete
+                                            .get()
+                                            .map(|id| {
+                                                view! {
+                                                    <ConfirmDelete
+                                                        title="Delete this project?"
+                                                        on_confirm=move |()| {
+                                                            confirming_delete.set(None);
+                                                            delete(id);
+                                                        }
+                                                        on_cancel=move |()| confirming_delete.set(None)
+                                                    />
+                                                }
+                                            })
+                                    }}
                                     <button class="new-project-button" on:click=move |_| body.set(Body::Create)>
                                         "New"
                                     </button>
@@ -118,7 +134,6 @@ pub fn Projects() -> impl IntoView {
 fn ProjectRow(
     project: Project,
     confirming_delete: RwSignal<Option<shared::ids::ProjectId>>,
-    on_delete: impl Fn(shared::ids::ProjectId) + Copy + Send + Sync + 'static,
     on_edit: impl Fn(Project) + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
     let id = project.id;
@@ -140,26 +155,7 @@ fn ProjectRow(
                 <span class="muted">{summary}</span>
             </div>
             <button on:click=move |_| on_edit(for_edit.clone())>"Edit"</button>
-            {move || {
-                if confirming_delete.get() == Some(id) {
-                    view! {
-                        <span class="confirm-delete">
-                            "Delete this project?"
-                            <button on:click=move |_| {
-                                confirming_delete.set(None);
-                                on_delete(id);
-                            }>"Yes"</button>
-                            <button on:click=move |_| confirming_delete.set(None)>"No"</button>
-                        </span>
-                    }
-                        .into_any()
-                } else {
-                    view! {
-                        <button on:click=move |_| confirming_delete.set(Some(id))>"Delete"</button>
-                    }
-                        .into_any()
-                }
-            }}
+            <button on:click=move |_| confirming_delete.set(Some(id))>"Delete"</button>
         </li>
     }
 }

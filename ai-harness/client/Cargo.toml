@@ -26,21 +26,25 @@ pulldown-cmark = { version = "0.13", default-features = false, features = ["html
 # Only `MediaQueryList` is actually missing from what `leptos`/`tachys` already
 # enable (checked with `cargo tree -p client --target wasm32-unknown-unknown -e
 # features -i web-sys`) — `Window::match_media` is gated on it. The rest,
-# including `HtmlTextAreaElement` and `KeyboardEvent` (used by `composer.rs`),
-# are named anyway so a future `tachys` release dropping one becomes a compile
-# error in `theme.rs`/`composer.rs`, not a mystery. Features are additive
-# across the dependency graph, so this only adds to what's already enabled.
+# including `HtmlTextAreaElement` and `KeyboardEvent` (used by `composer.rs`)
+# and `MouseEvent`/`HtmlDivElement` (used by `confirm.rs`/`sidebar.rs`'s
+# context menu), are named anyway so a future `tachys` release dropping one
+# becomes a compile error in the file that uses it, not a mystery. Features
+# are additive across the dependency graph, so this only adds to what's
+# already enabled.
 web-sys = { version = "0.3", features = [
     "CssStyleDeclaration",
     "Document",
     "Element",
     "EventTarget",
     "HtmlCollection",
+    "HtmlDivElement",
     "HtmlElement",
     "HtmlOptionElement",
     "HtmlSelectElement",
     "HtmlTextAreaElement",
     "KeyboardEvent",
     "MediaQueryList",
+    "MouseEvent",
     "Window",
 ] }

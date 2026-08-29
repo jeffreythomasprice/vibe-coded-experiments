@@ -165,6 +165,10 @@ pub enum RunStatus {
     Idle,
     Finished { outcome: TurnOutcome },
     Failed { error: ErrorReport },
+    /// The run was cancelled out from under its follower — today only by
+    /// `Service::delete_conversation`. Distinct from `Failed`: nothing went
+    /// wrong, and there is no error worth showing anyone.
+    Cancelled,
 }
 
 /// Query parameters for listing conversations.
@@ -365,6 +369,12 @@ mod tests {
         assert_eq!(json["error"]["kind"], serde_json::json!("server"));
         let back: RunStatus = serde_json::from_value(json).unwrap();
         assert_eq!(back, failed);
+
+        let cancelled = RunStatus::Cancelled;
+        let json = serde_json::to_value(&cancelled).unwrap();
+        assert_eq!(json, serde_json::json!({"type": "cancelled"}));
+        let back: RunStatus = serde_json::from_value(json).unwrap();
+        assert_eq!(back, cancelled);
     }
 
     #[test]

@@ -73,6 +73,17 @@ pub async fn get_conversation(id: ConversationId) -> Result<ConversationView, Er
     ipc::call("get_conversation", &Args { id }).await
 }
 
+/// Deletes a conversation and everything under it (its turns, messages, and
+/// tool calls). If a turn is still streaming, the backend cancels it first —
+/// see `lib::service::conversations::Service::delete_conversation`.
+pub async fn delete_conversation(id: ConversationId) -> Result<(), ErrorReport> {
+    #[derive(Serialize)]
+    struct Args {
+        id: ConversationId,
+    }
+    ipc::call("delete_conversation", &Args { id }).await
+}
+
 /// Reserves `conversation_id`'s run and drives the turn on the backend,
 /// detached from this call — it returns as soon as the turn is accepted, not
 /// once it finishes. Watch it happen with [`attach_conversation`].

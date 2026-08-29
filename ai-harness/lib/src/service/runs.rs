@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
 use shared::agent::AgentEvent;
 use shared::conversation::RunStatus;
@@ -89,8 +90,22 @@ impl Run {
     /// channel. Each follower's `recv` loop drains whatever was already
     /// queued before its channel reports closed, so every follower sees
     /// every event before it sees the run end.
+    ///
+    /// Idempotent: a no-op if a status was already recorded. That guards the
+    /// race between [`Runs::cancel`] (which records `Cancelled` itself,
+    /// since the task it aborts never reaches its own `finish` call) and the
+    /// driving task settling normally at almost the same moment — whichever
+    /// gets here first wins, and the other's status is silently discarded
+    /// rather than clobbering it.
     pub(crate) fn finish(&self, status: RunStatus) {
         let mut state = self.state.lock().expect("run state poisoned");
+        if state.finished.is_some() {
+            tracing::debug!(
+                conversation_id = self.conversation_id.get(),
+                "finish called on an already-finished run; ignoring"
+            );
+            return;
+        }
         let followers = state.subscribers.len();
         tracing::debug!(
             conversation_id = self.conversation_id.get(),
@@ -180,14 +195,27 @@ impl Drop for Subscription {
     }
 }
 
+/// One registered run: its event history plus the task actually driving it.
+struct Entry {
+    run: Arc<Run>,
+    /// The task spawned by `start_message`/`start_approve_tools`. `None`
+    /// between `Runs::begin` and the caller's `Runs::attach_task` — `begin`
+    /// has to return before `tokio::spawn` is even called, so the handle can
+    /// only be recorded a moment later. A run that settles in that narrow
+    /// window (vanishingly unlikely, but not impossible for an instant
+    /// response) is simply not cancellable; [`Runs::cancel`] treats that the
+    /// same as "already gone."
+    task: Option<JoinHandle<()>>,
+}
+
 /// The registry of conversations with a turn currently in flight. Lives on
 /// [`super::Service`] alongside (not instead of) its existing
 /// `try_lock_conversation` map — that lock stays the fine-grained backstop
 /// against a bypass of this registry; this registry is what makes a run
-/// followable and replayable.
+/// followable, replayable, and (via [`Runs::cancel`]) stoppable.
 #[derive(Default)]
 pub(crate) struct Runs {
-    inner: Mutex<HashMap<i64, Arc<Run>>>,
+    inner: Mutex<HashMap<i64, Entry>>,
 }
 
 impl Runs {
@@ -210,18 +238,49 @@ impl Runs {
             return Err(ServiceError::ConversationBusy { conversation_id: id.get() });
         }
         let run = Run::new(id);
-        inner.insert(id.get(), Arc::clone(&run));
+        inner.insert(id.get(), Entry { run: Arc::clone(&run), task: None });
         tracing::debug!(conversation_id = id.get(), "run registered");
         Ok(run)
     }
 
+    /// Record the task driving `id`'s run, so [`Runs::cancel`] has something
+    /// to abort. A no-op if the run already ended (settled and was `end`ed)
+    /// before its starter got back from `tokio::spawn` — see [`Entry::task`].
+    pub(crate) fn attach_task(&self, id: ConversationId, task: JoinHandle<()>) {
+        let mut inner = self.inner.lock().expect("runs map poisoned");
+        if let Some(entry) = inner.get_mut(&id.get()) {
+            entry.task = Some(task);
+        }
+    }
+
     pub(crate) fn get(&self, id: ConversationId) -> Option<Arc<Run>> {
-        self.inner.lock().expect("runs map poisoned").get(&id.get()).cloned()
+        self.inner
+            .lock()
+            .expect("runs map poisoned")
+            .get(&id.get())
+            .map(|entry| Arc::clone(&entry.run))
     }
 
     pub(crate) fn end(&self, id: ConversationId) {
         self.inner.lock().expect("runs map poisoned").remove(&id.get());
         tracing::debug!(conversation_id = id.get(), "run deregistered");
+    }
+
+    /// Cancel `id`'s run if one is registered: deregister it, record
+    /// `status` on the [`Run`] so every follower's channel closes instead of
+    /// hanging (the aborted task never reaches its own `Run::finish`), and
+    /// abort the driving task. Returns the aborted handle — awaiting it is
+    /// the only way to observe the driving future actually being dropped,
+    /// which is when the conversation lock its turn holds is finally
+    /// released; `None` if nothing was registered for `id`.
+    pub(crate) fn cancel(&self, id: ConversationId, status: RunStatus) -> Option<JoinHandle<()>> {
+        let entry = self.inner.lock().expect("runs map poisoned").remove(&id.get())?;
+        tracing::debug!(conversation_id = id.get(), status = ?status, "cancelling run");
+        entry.run.finish(status);
+        if let Some(task) = &entry.task {
+            task.abort();
+        }
+        entry.task
     }
 }
 
@@ -295,6 +354,64 @@ mod tests {
         let id = ConversationId(1);
         let _run = runs.begin(id).unwrap();
         runs.end(id);
+        assert!(runs.begin(id).is_ok());
+    }
+
+    #[tokio::test]
+    async fn cancel_on_an_unregistered_conversation_is_none() {
+        let runs = Runs::new();
+        assert!(runs.cancel(ConversationId(1), RunStatus::Cancelled).is_none());
+    }
+
+    #[tokio::test]
+    async fn cancel_records_the_status_and_closes_every_follower() {
+        let runs = Runs::new();
+        let id = ConversationId(1);
+        let run = runs.begin(id).unwrap();
+        let (_backlog, mut sub) = run.subscribe();
+
+        let task = runs.cancel(id, RunStatus::Cancelled);
+        assert!(task.is_none(), "no task was ever attached to this run");
+        assert!(sub.recv().await.is_none(), "the follower's channel must close");
+        assert_eq!(run.status(), Some(RunStatus::Cancelled));
+    }
+
+    #[tokio::test]
+    async fn finish_after_cancel_does_not_clobber_the_recorded_status() {
+        let run = Run::new(ConversationId(1));
+        run.finish(RunStatus::Cancelled);
+        run.finish(done_status());
+        assert_eq!(run.status(), Some(RunStatus::Cancelled));
+    }
+
+    #[tokio::test]
+    async fn attach_task_after_the_run_ended_is_a_no_op() {
+        let runs = Runs::new();
+        let id = ConversationId(1);
+        let _run = runs.begin(id).unwrap();
+        runs.end(id);
+
+        // Nothing to attach to any more — must not panic, and must not
+        // resurrect the entry.
+        runs.attach_task(id, tokio::spawn(async {}));
+        assert!(runs.get(id).is_none());
+    }
+
+    #[tokio::test]
+    async fn cancel_aborts_the_attached_task_and_deregisters_the_run() {
+        let runs = Runs::new();
+        let id = ConversationId(1);
+        let _run = runs.begin(id).unwrap();
+        let task = tokio::spawn(std::future::pending::<()>());
+        runs.attach_task(id, task);
+
+        let task = runs.cancel(id, RunStatus::Cancelled).expect("a task was attached");
+        let result = task.await;
+        assert!(result.unwrap_err().is_cancelled());
+
+        // The id is free again immediately — no lingering entry blocking a
+        // fresh `begin`.
+        assert!(runs.get(id).is_none());
         assert!(runs.begin(id).is_ok());
     }
 

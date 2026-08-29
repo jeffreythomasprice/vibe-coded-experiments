@@ -216,6 +216,14 @@ impl Runs {
                     });
                     reload.update(|n| *n += 1);
                 }
+                // Nothing went wrong — this conversation (or the app) was
+                // deleted out from under the run. No error to show; the
+                // reload is what makes a still-open sidebar/list stop
+                // showing it.
+                Ok(RunStatus::Cancelled) => {
+                    state.update(|s| s.phase = Phase::Idle);
+                    reload.update(|n| *n += 1);
+                }
                 Err(err) => state.update(|s| {
                     s.phase = Phase::Idle;
                     s.error = Some(err.message);

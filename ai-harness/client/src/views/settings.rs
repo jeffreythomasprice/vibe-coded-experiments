@@ -10,6 +10,7 @@ use shared::theme::{BuiltIn, Theme, ThemeChoice, ThemeField, UserTheme};
 use wasm_bindgen_futures::spawn_local;
 
 use crate::commands;
+use crate::confirm::ConfirmDelete;
 use crate::theme::{use_theme, ThemeContext};
 use crate::views::{ThemeForm, ThemeFormMode};
 
@@ -236,28 +237,26 @@ fn ThemePalette(
                         <button type="button" on:click=move |_| on_edit.run(for_edit.clone())>
                             "Edit"
                         </button>
-                        {move || {
-                            if confirming_delete.get() {
-                                view! {
-                                    <span class="confirm-delete">
-                                        "Delete this theme?"
-                                        <button on:click=move |_| on_delete.run(())>"Yes"</button>
-                                        <button on:click=move |_| confirming_delete.set(false)>"No"</button>
-                                    </span>
-                                }
-                                    .into_any()
-                            } else {
-                                view! {
-                                    <button type="button" on:click=move |_| confirming_delete.set(true)>
-                                        "Delete"
-                                    </button>
-                                }
-                                    .into_any()
-                            }
-                        }}
+                        <button type="button" on:click=move |_| confirming_delete.set(true)>
+                            "Delete"
+                        </button>
                     }
                 })}
         </div>
+
+        {move || {
+            confirming_delete
+                .get()
+                .then(|| {
+                    view! {
+                        <ConfirmDelete
+                            title="Delete this theme?"
+                            on_confirm=move |()| on_delete.run(())
+                            on_cancel=move |()| confirming_delete.set(false)
+                        />
+                    }
+                })
+        }}
 
         {move || delete_error.get().map(|message| view! { <p class="error">{message}</p> })}
     }

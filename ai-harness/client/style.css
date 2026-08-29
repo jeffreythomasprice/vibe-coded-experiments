@@ -498,6 +498,20 @@ input[type="color"] {
   color: var(--error);
 }
 
+/* A destructive confirmation, e.g. `confirm::ConfirmDelete`'s "Delete"
+button — same red tint `.tool-approval .deny:hover` above uses, but
+committed rather than only on hover, so it reads as the dangerous choice at
+a glance. */
+button.danger {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+button.danger:hover {
+  background: var(--error);
+  color: var(--bg);
+}
+
 .bubble-image img {
   max-width: 100%;
   border-radius: 6px;
@@ -682,14 +696,6 @@ input[type="color"] {
   gap: 0.1rem;
 }
 
-.confirm-delete {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
-  color: var(--error);
-}
-
 .conversation-row {
   display: flex;
   align-items: center;
@@ -701,7 +707,104 @@ input[type="color"] {
   border-radius: 8px;
 }
 
+/* The "All conversations" list: each `<li>` holds the open button
+   (`.conversation-open`, which is what `.conversation-row` above used to
+   style directly, back when the whole row was one button) beside a separate
+   Delete button — see `views::conversations_list::ConversationRow`'s doc for
+   why they're siblings, not nested. */
+.conversation-list-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.conversation-open {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
 .conversation-meta {
   color: var(--muted);
   font-size: 0.8rem;
+}
+
+/* ---- Shared confirm modal (confirm::ConfirmDelete) ---- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  z-index: 20;
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 20rem;
+  max-width: 28rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.25rem;
+}
+
+.modal h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.modal-subject {
+  margin: 0;
+  font-weight: 600;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* ---- Sidebar right-click menu (sidebar::Sidebar) ---- */
+
+/* Transparent, full-viewport click-catcher: any click outside the menu
+itself lands here and closes it, so dismissal needs no document-level
+listener — see `sidebar::Sidebar`'s doc. */
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  min-width: 8rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.25rem;
+}
+
+.context-menu button {
+  border: none;
+  background: transparent;
+  text-align: left;
+  border-radius: 4px;
+}
+
+.context-menu button:hover {
+  background: var(--bg);
 }
