@@ -25,6 +25,9 @@ use shared::llm::stream::{Delta, StreamEvent};
 /// One bubble's content, independent of how it's laid out on screen.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Bubble {
+    /// Raw markdown source — the view runs this through
+    /// `markdown::render_with_breaks`, so a composer newline lands as a
+    /// line break rather than CommonMark's soft-break reflow.
     Human { text: String },
     /// Raw markdown source — the view runs this through `markdown::render`.
     Assistant { markdown: String },

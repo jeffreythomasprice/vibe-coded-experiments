@@ -1,5 +1,6 @@
 mod app;
 mod commands;
+mod composer;
 mod icons;
 mod ipc;
 mod logging;

@@ -357,6 +357,10 @@ input[type="color"] {
   margin: 0 0 0.6rem;
 }
 
+.bubble-markdown > :last-child {
+  margin-bottom: 0;
+}
+
 .bubble-markdown pre {
   background: var(--bg-raised);
   border: 1px solid var(--border);
@@ -386,6 +390,51 @@ input[type="color"] {
   border-left: 3px solid var(--border);
   padding-left: 0.75rem;
   color: var(--muted);
+}
+
+/* `.bubble-markdown`'s defaults above (pre/code background, blockquote and
+   border colors, list indent, heading size, link color) are tuned for
+   `.bubble-assistant`, which is transparent, full-width and unpadded.
+   `.bubble-human` paints `var(--bubble-human-bg)`, a saturated accent in
+   every theme (see `shared::theme`), and is capped at `max-width: 80%` with
+   its own padding, so those defaults are either low-contrast or too roomy
+   there — scoped overrides below, tinted relative to the bubble's own
+   foreground/background rather than a theme token, so they track whichever
+   theme is active. Assistant rendering is deliberately untouched. */
+.bubble-human .bubble-markdown {
+  overflow-wrap: anywhere;
+}
+
+.bubble-human .bubble-markdown ul,
+.bubble-human .bubble-markdown ol {
+  padding-left: 1.25rem;
+}
+
+.bubble-human .bubble-markdown :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0 0 0.4rem;
+  font-size: 1em;
+  font-weight: 600;
+}
+
+.bubble-human .bubble-markdown pre {
+  background: rgba(0, 0, 0, 0.18);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.bubble-human .bubble-markdown blockquote {
+  color: inherit;
+  opacity: 0.85;
+  border-left-color: rgba(255, 255, 255, 0.4);
+}
+
+.bubble-human .bubble-markdown th,
+.bubble-human .bubble-markdown td {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.bubble-human .bubble-markdown a {
+  color: inherit;
+  text-decoration: underline;
 }
 
 .bubble-thinking,

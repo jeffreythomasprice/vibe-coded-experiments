@@ -9,6 +9,7 @@ use shared::llm::message::ToolResultContent;
 use wasm_bindgen_futures::spawn_local;
 
 use crate::commands;
+use crate::composer;
 use crate::markdown;
 use crate::runs::{Phase, Runs};
 use crate::spinner::{LoadingPanel, Spinner};
@@ -180,6 +181,16 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
                                         placeholder="Message…"
                                         prop:value=move || message.get()
                                         on:input=move |ev| message.set(event_target_value(&ev))
+                                        on:keydown={
+                                            // Cloned for the same reason the
+                                            // sibling `on:submit` above
+                                            // clones: this arm is rebuilt on
+                                            // every reactive re-render, and
+                                            // `submit` captures a non-`Copy`
+                                            // `ArcRwSignal`.
+                                            let submit = submit.clone();
+                                            move |ev| composer::keydown(ev, message, || submit(()))
+                                        }
                                     ></textarea>
                                     {move || error.get().map(|m| view! { <p class="error">{m}</p> })}
                                     {
@@ -243,13 +254,16 @@ fn BubbleView(rendered: Rendered) -> impl IntoView {
     let timestamp_label = timestamp.unwrap_or_else(|| "streaming…".to_string());
 
     match rendered.bubble {
-        Bubble::Human { text } => view! {
-            <div class="bubble bubble-human">
-                <div class="bubble-timestamp">{timestamp_label}</div>
-                <div class="bubble-text">{text}</div>
-            </div>
+        Bubble::Human { text } => {
+            let html = markdown::render_with_breaks(&text);
+            view! {
+                <div class="bubble bubble-human">
+                    <div class="bubble-timestamp">{timestamp_label}</div>
+                    <div class="bubble-markdown" inner_html=html></div>
+                </div>
+            }
+                .into_any()
         }
-            .into_any(),
         Bubble::Assistant { markdown: source } => {
             let html = markdown::render(&source);
             view! {

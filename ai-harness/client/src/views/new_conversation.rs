@@ -9,6 +9,7 @@ use wasm_bindgen_futures::spawn_local;
 
 use crate::app::Route;
 use crate::commands;
+use crate::composer;
 use crate::runs::Runs;
 use crate::spinner::BusyOverlay;
 use crate::views::AgentForm;
@@ -140,11 +141,12 @@ pub fn NewConversation() -> impl IntoView {
                                 placeholder="Say something to start the conversation…"
                                 prop:value=move || message.get()
                                 on:input=move |ev| message.set(event_target_value(&ev))
+                                on:keydown=move |ev| composer::keydown(ev, message, || submit(()))
                             ></textarea>
 
                             {move || error.get().map(|message| view! { <p class="error">{message}</p> })}
 
-                            <button on:click=submit>"Send"</button>
+                            <button on:click=move |_| submit(())>"Send"</button>
                         </fieldset>
                     }
                         .into_any()
