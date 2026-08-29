@@ -45,6 +45,18 @@ pub struct ConversationSummary {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_config_id: Option<crate::ids::AgentConfigId>,
     pub agent_name: String,
+    /// The project this conversation runs under, if any — unlike
+    /// `agent_config_id`/`agent_name`, resolved *live* every time this
+    /// summary is built, not frozen at creation (see
+    /// `lib::db::projects`'s module doc for why). `None` covers both "the
+    /// default project" and "its project was since deleted" — both mean no
+    /// filesystem access, so the ambiguity is harmless.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<crate::ids::ProjectId>,
+    /// The project's current name, alongside `project_id` for display —
+    /// `None` exactly when `project_id` is `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_name: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -177,6 +189,8 @@ mod tests {
             title: None,
             agent_config_id: None,
             agent_name: "assistant".to_string(),
+            project_id: None,
+            project_name: None,
             created_at: "2026-08-22T00:00:00.000Z".to_string(),
             updated_at: "2026-08-22T00:00:00.000Z".to_string(),
             last_message_at: None,
@@ -186,6 +200,8 @@ mod tests {
         assert!(json.get("agent_config_id").is_none());
         assert!(json.get("title").is_none());
         assert!(json.get("last_message_at").is_none());
+        assert!(json.get("project_id").is_none());
+        assert!(json.get("project_name").is_none());
         let back: ConversationSummary = serde_json::from_value(json).unwrap();
         assert_eq!(back, summary);
     }
@@ -198,6 +214,8 @@ mod tests {
                 title: Some("Deploy".to_string()),
                 agent_config_id: Some(AgentConfigId(1)),
                 agent_name: "assistant".to_string(),
+                project_id: None,
+                project_name: None,
                 created_at: "2026-08-22T00:00:00.000Z".to_string(),
                 updated_at: "2026-08-22T00:00:01.000Z".to_string(),
                 last_message_at: Some("2026-08-22T00:00:01.000Z".to_string()),

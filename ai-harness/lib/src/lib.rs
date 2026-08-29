@@ -10,4 +10,6 @@ pub mod config;
 pub mod db;
 pub mod llm;
 pub mod logging;
+pub mod sandbox;
 pub mod service;
+pub mod vfs;

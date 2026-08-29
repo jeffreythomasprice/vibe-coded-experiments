@@ -4,6 +4,7 @@ use thiserror::Error;
 
 use crate::agent::AgentError;
 use crate::db::DbError;
+use crate::vfs::VfsError;
 
 #[derive(Debug, Error)]
 pub enum ServiceError {
@@ -48,6 +49,30 @@ pub enum ServiceError {
     /// A theme's name was empty or all whitespace.
     #[error("a theme's name can't be empty")]
     EmptyThemeName,
+
+    /// A project name matches the default project's reserved name
+    /// (`shared::project::DEFAULT_PROJECT_NAME`), case-insensitively — the
+    /// default is never a `projects` row, so the database's unique index
+    /// can't see this half of the rule. Same pattern as
+    /// [`ServiceError::ThemeNameConflict`].
+    #[error("a project named {name:?} already exists")]
+    ProjectNameConflict { name: String },
+
+    /// A project's name was empty or all whitespace.
+    #[error("a project's name can't be empty")]
+    EmptyProjectName,
+
+    /// A project directory failed one of the rules the database can't
+    /// express: not absolute, doesn't exist, isn't a directory, or repeats
+    /// another entry in the same project.
+    #[error("invalid project directory {path:?}: {reason}")]
+    InvalidProjectDir { path: String, reason: String },
+
+    /// A project's directories failed to resolve into a `lib::vfs::MountTable`
+    /// — surfaces as this rather than a bare `Vfs` variant name so a caller
+    /// building a sandboxed run sees why in one place.
+    #[error(transparent)]
+    Vfs(#[from] VfsError),
 }
 
 impl ServiceError {
@@ -60,6 +85,10 @@ impl ServiceError {
             ServiceError::ThemeNameConflict { .. }
             | ServiceError::InvalidThemeColor { .. }
             | ServiceError::EmptyThemeName => false,
+            ServiceError::ProjectNameConflict { .. }
+            | ServiceError::EmptyProjectName
+            | ServiceError::InvalidProjectDir { .. } => false,
+            ServiceError::Vfs(_) => false,
         }
     }
 }
@@ -101,6 +130,24 @@ impl From<&ServiceError> for shared::error::ErrorReport {
                 retryable: false,
             },
             ServiceError::InvalidThemeColor { .. } | ServiceError::EmptyThemeName => ErrorReport {
+                kind: ErrorKind::InvalidRequest,
+                provider: None,
+                message: err.to_string(),
+                retryable: false,
+            },
+            ServiceError::ProjectNameConflict { .. } => ErrorReport {
+                kind: ErrorKind::Conflict,
+                provider: None,
+                message: err.to_string(),
+                retryable: false,
+            },
+            ServiceError::EmptyProjectName | ServiceError::InvalidProjectDir { .. } => ErrorReport {
+                kind: ErrorKind::InvalidRequest,
+                provider: None,
+                message: err.to_string(),
+                retryable: false,
+            },
+            ServiceError::Vfs(_) => ErrorReport {
                 kind: ErrorKind::InvalidRequest,
                 provider: None,
                 message: err.to_string(),

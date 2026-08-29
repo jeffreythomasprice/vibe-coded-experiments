@@ -360,7 +360,11 @@ mod tests {
             })
             .await
             .unwrap();
-        service.create_conversation(agent.id, None).await.unwrap().id
+        service
+            .create_conversation(agent.id, shared::project::ProjectRef::Default, None)
+            .await
+            .unwrap()
+            .id
     }
 
     #[tokio::test]

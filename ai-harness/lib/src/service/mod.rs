@@ -7,6 +7,7 @@ pub mod chat;
 pub mod conversations;
 pub mod error;
 pub mod preferences;
+pub mod projects;
 mod runs;
 pub mod themes;
 
@@ -24,6 +25,7 @@ use crate::agent::ToolRegistry;
 use crate::config::Config;
 use crate::db::Db;
 use crate::llm::router::Router;
+use crate::sandbox::{Availability, SandboxBackend};
 use runs::Runs;
 
 /// Where a turn's `AgentEvent`s go while it streams. `server` implements
@@ -60,16 +62,27 @@ pub struct Service {
     /// backstop against a second concurrent turn on the same conversation,
     /// `runs` is what makes a turn followable and replayable.
     runs: Runs,
+    /// The confinement backend for a project's subprocesses — see
+    /// `lib::sandbox`. Detected once, in [`Service::from_config`]: the
+    /// probe execs a real (harmless) process, so [`Service::new`] —
+    /// used by every other unit test in this workspace — deliberately does
+    /// *not* run it, and starts with a placeholder that reports itself
+    /// unavailable instead. See [`Service::sandbox_status`].
+    sandbox: Arc<dyn SandboxBackend>,
+    sandbox_availability: Availability,
 }
 
 impl Service {
     pub fn new(db: Db, router: Arc<Router>, tools: Arc<ToolRegistry>) -> Self {
+        let reason = "Service::new does not probe for a sandbox backend; use Service::from_config".to_string();
         Self {
             db,
             router,
             tools,
             locks: std::sync::Mutex::new(HashMap::new()),
             runs: Runs::new(),
+            sandbox: Arc::new(crate::sandbox::Disabled::new(reason.clone())),
+            sandbox_availability: Availability::Unavailable { reason },
         }
     }
 
@@ -80,7 +93,16 @@ impl Service {
         let db = Db::open(&config.database).await?;
         let router = Arc::new(Router::from_config(&config.llm));
         let tools = Arc::new(ToolRegistry::new());
-        Ok(Self::new(db, router, tools))
+        let (sandbox, sandbox_availability) = crate::sandbox::detect(&config.sandbox);
+        Ok(Self {
+            db,
+            router,
+            tools,
+            locks: std::sync::Mutex::new(HashMap::new()),
+            runs: Runs::new(),
+            sandbox,
+            sandbox_availability,
+        })
     }
 
     /// `try_lock_owned`, not a blocking lock: a second turn on a

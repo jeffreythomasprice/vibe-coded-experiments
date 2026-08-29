@@ -12,7 +12,8 @@ use shared::agent::event::AgentEvent;
 use shared::agent::{AgentConfig, AgentConfigInput, ToolSpec};
 use shared::conversation::{ConversationSummary, ConversationView, ListConversations, RunStatus};
 use shared::error::ErrorReport;
-use shared::ids::{AgentConfigId, ConversationId, ThemeId};
+use shared::ids::{AgentConfigId, ConversationId, ProjectId, ThemeId};
+use shared::project::{Project, ProjectInput, ProjectRef, ProjectSnapshot, SandboxStatus};
 use shared::theme::{UserTheme, UserThemeInput};
 
 use crate::ipc;
@@ -51,15 +52,17 @@ pub async fn list_conversations(query: ListConversations) -> Result<Vec<Conversa
 
 pub async fn create_conversation(
     agent_config_id: AgentConfigId,
+    project: ProjectRef,
     title: Option<String>,
 ) -> Result<ConversationSummary, ErrorReport> {
     #[derive(Serialize)]
     #[serde(rename_all = "camelCase")]
     struct Args {
         agent_config_id: AgentConfigId,
+        project: ProjectRef,
         title: Option<String>,
     }
-    ipc::call("create_conversation", &Args { agent_config_id, title }).await
+    ipc::call("create_conversation", &Args { agent_config_id, project, title }).await
 }
 
 pub async fn get_conversation(id: ConversationId) -> Result<ConversationView, ErrorReport> {
@@ -147,4 +150,44 @@ pub async fn delete_theme(id: ThemeId) -> Result<(), ErrorReport> {
         id: ThemeId,
     }
     ipc::call("delete_theme", &Args { id }).await
+}
+
+pub async fn list_projects() -> Result<Vec<Project>, ErrorReport> {
+    ipc::call0("list_projects").await
+}
+
+/// Every project in "start a new conversation" order: the default project
+/// first, then user projects by name.
+pub async fn list_projects_for_picker() -> Result<Vec<ProjectSnapshot>, ErrorReport> {
+    ipc::call0("list_projects_for_picker").await
+}
+
+pub async fn create_project(input: ProjectInput) -> Result<Project, ErrorReport> {
+    #[derive(Serialize)]
+    struct Args {
+        input: ProjectInput,
+    }
+    ipc::call("create_project", &Args { input }).await
+}
+
+pub async fn update_project(id: ProjectId, input: ProjectInput) -> Result<Project, ErrorReport> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Args {
+        id: ProjectId,
+        input: ProjectInput,
+    }
+    ipc::call("update_project", &Args { id, input }).await
+}
+
+pub async fn delete_project(id: ProjectId) -> Result<(), ErrorReport> {
+    #[derive(Serialize)]
+    struct Args {
+        id: ProjectId,
+    }
+    ipc::call("delete_project", &Args { id }).await
+}
+
+pub async fn sandbox_status() -> Result<SandboxStatus, ErrorReport> {
+    ipc::call0("sandbox_status").await
 }

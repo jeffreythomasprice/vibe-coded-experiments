@@ -568,7 +568,7 @@ mod tests {
         )
         .await
         .unwrap();
-        super::super::conversations::create(db, &agent, None).await.unwrap().id
+        super::super::conversations::create(db, &agent, None, None).await.unwrap().id
     }
 
     fn user_text(text: &str) -> Message {

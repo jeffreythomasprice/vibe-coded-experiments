@@ -5,7 +5,7 @@
 
 use shared::agent::AgentConfig;
 use shared::conversation::{ConversationSummary, ListConversations, StoredMessage};
-use shared::ids::{AgentConfigId, ConversationId, MessageId, TurnId};
+use shared::ids::{AgentConfigId, ConversationId, MessageId, ProjectId, TurnId};
 use shared::llm::message::{Conversation, ContentBlock, Message, Role};
 use sqlx::sqlite::SqliteRow;
 use sqlx::Row;
@@ -19,39 +19,64 @@ const ENTITY: &str = "conversation";
 // runtime: `sqlx::query` requires a `&'static str` (its SQL-injection lint
 // rejects a `format!`-built `String`), so there is no cheap way to share it
 // without reaching for `QueryBuilder`, which isn't worth it for two queries.
+// `project_id`/`project_name` come from a LEFT JOIN, not a stored column —
+// unlike `agent_config_json`, there is no frozen copy to read back. See
+// `sql/0004_projects.sql`'s doc on `conversations.project_id` for why: a
+// project is a live grant, and a rename or a directory removed from it must
+// show up here immediately, not from a snapshot taken at creation.
 const SUMMARY_BY_ID_SQL: &str = "SELECT c.id, c.title, c.agent_config_id, c.agent_config_json, \
+     c.project_id, p.name AS project_name, \
      c.created_at, c.updated_at, c.last_message_at, \
      EXISTS(SELECT 1 FROM turns t WHERE t.conversation_id = c.id AND t.state = 'awaiting_approval') AS awaiting_approval \
-     FROM conversations c WHERE c.id = ?";
+     FROM conversations c LEFT JOIN projects p ON p.id = c.project_id WHERE c.id = ?";
 
 const LIST_SQL: &str = "SELECT c.id, c.title, c.agent_config_id, c.agent_config_json, \
+     c.project_id, p.name AS project_name, \
      c.created_at, c.updated_at, c.last_message_at, \
      EXISTS(SELECT 1 FROM turns t WHERE t.conversation_id = c.id AND t.state = 'awaiting_approval') AS awaiting_approval \
-     FROM conversations c \
+     FROM conversations c LEFT JOIN projects p ON p.id = c.project_id \
      WHERE (? IS NULL OR c.title LIKE '%' || ? || '%') \
      ORDER BY COALESCE(c.last_message_at, c.updated_at) DESC, c.id DESC LIMIT ? OFFSET ?";
 
-pub async fn create(db: &Db, agent: &AgentConfig, title: Option<&str>) -> Result<ConversationSummary> {
+/// `project_id: None` starts the conversation on the default project (an
+/// empty virtual filesystem) — see `shared::project`'s module doc.
+pub async fn create(
+    db: &Db,
+    agent: &AgentConfig,
+    project_id: Option<ProjectId>,
+    title: Option<&str>,
+) -> Result<ConversationSummary> {
     let now = now_iso8601();
     let agent_config_json = serde_json::to_string(agent).expect("AgentConfig always serializes");
     let id: i64 = sqlx::query_scalar(
-        "INSERT INTO conversations (title, agent_config_id, agent_config_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)
+        "INSERT INTO conversations (title, agent_config_id, agent_config_json, project_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
          RETURNING id",
     )
     .bind(title.map(str::to_string))
     .bind(agent.id.get())
     .bind(agent_config_json)
+    .bind(project_id.map(ProjectId::get))
     .bind(now.clone())
     .bind(now.clone())
     .fetch_one(db.pool())
     .await?;
+
+    // Re-read rather than trust the caller's own copy of the project's
+    // name: keeps this in lockstep with `decode_summary`/`summary`/`list`,
+    // all of which read it live too.
+    let project_name = match project_id {
+        Some(project_id) => super::projects::find(db, project_id).await?.map(|p| p.input.name),
+        None => None,
+    };
 
     Ok(ConversationSummary {
         id: ConversationId(id),
         title: title.map(str::to_string),
         agent_config_id: Some(agent.id),
         agent_name: agent.input.name.clone(),
+        project_id,
+        project_name,
         created_at: now.clone(),
         updated_at: now,
         last_message_at: None,
@@ -170,6 +195,8 @@ fn decode_summary(row: SqliteRow) -> Result<ConversationSummary> {
     let title: Option<String> = row.try_get("title")?;
     let agent_config_id: Option<i64> = row.try_get("agent_config_id")?;
     let agent_config_json: String = row.try_get("agent_config_json")?;
+    let project_id: Option<i64> = row.try_get("project_id")?;
+    let project_name: Option<String> = row.try_get("project_name")?;
     let created_at: String = row.try_get("created_at")?;
     let updated_at: String = row.try_get("updated_at")?;
     let last_message_at: Option<String> = row.try_get("last_message_at")?;
@@ -188,6 +215,8 @@ fn decode_summary(row: SqliteRow) -> Result<ConversationSummary> {
         title,
         agent_config_id: agent_config_id.map(AgentConfigId),
         agent_name: agent.input.name,
+        project_id: project_id.map(ProjectId),
+        project_name,
         created_at,
         updated_at,
         last_message_at,
@@ -261,7 +290,7 @@ mod tests {
     async fn create_then_summary_round_trips() {
         let db = Db::in_memory().await.unwrap();
         let agent = seed_agent(&db).await;
-        let created = create(&db, &agent, Some("Deploy chat")).await.unwrap();
+        let created = create(&db, &agent, None, Some("Deploy chat")).await.unwrap();
         let fetched = summary(&db, created.id).await.unwrap();
         assert_eq!(fetched, created);
         assert_eq!(fetched.agent_name, "assistant");
@@ -271,7 +300,7 @@ mod tests {
     async fn agent_config_returns_the_frozen_snapshot_even_after_the_live_config_changes() {
         let db = Db::in_memory().await.unwrap();
         let agent = seed_agent(&db).await;
-        let conv = create(&db, &agent, None).await.unwrap();
+        let conv = create(&db, &agent, None, None).await.unwrap();
 
         let mut edited = agent.input.clone();
         edited.max_tokens = 4096;
@@ -285,7 +314,7 @@ mod tests {
     async fn load_conversation_leaves_system_none() {
         let db = Db::in_memory().await.unwrap();
         let agent = seed_agent(&db).await;
-        let conv = create(&db, &agent, None).await.unwrap();
+        let conv = create(&db, &agent, None, None).await.unwrap();
         let conversation = load_conversation(&db, conv.id).await.unwrap();
         assert!(conversation.system.is_none());
         assert!(conversation.messages.is_empty());
@@ -295,7 +324,7 @@ mod tests {
     async fn delete_cascades_to_messages_and_turns() {
         let db = Db::in_memory().await.unwrap();
         let agent = seed_agent(&db).await;
-        let conv = create(&db, &agent, None).await.unwrap();
+        let conv = create(&db, &agent, None, None).await.unwrap();
 
         let user_message = Message::user(vec![ContentBlock::Text {
             text: "hi".to_string(),
@@ -332,9 +361,9 @@ mod tests {
         let db = Db::in_memory().await.unwrap();
         let agent = seed_agent(&db).await;
 
-        let a = create(&db, &agent, Some("a")).await.unwrap();
-        let b = create(&db, &agent, Some("b")).await.unwrap();
-        let c = create(&db, &agent, Some("c")).await.unwrap();
+        let a = create(&db, &agent, None, Some("a")).await.unwrap();
+        let b = create(&db, &agent, None, Some("b")).await.unwrap();
+        let c = create(&db, &agent, None, Some("c")).await.unwrap();
 
         // a: updated long ago, never messaged.
         sqlx::query("UPDATE conversations SET updated_at = ? WHERE id = ?")
@@ -370,8 +399,8 @@ mod tests {
     async fn list_filters_by_title_search() {
         let db = Db::in_memory().await.unwrap();
         let agent = seed_agent(&db).await;
-        create(&db, &agent, Some("Deploy prod")).await.unwrap();
-        create(&db, &agent, Some("Chat about cats")).await.unwrap();
+        create(&db, &agent, None, Some("Deploy prod")).await.unwrap();
+        create(&db, &agent, None, Some("Chat about cats")).await.unwrap();
 
         let results = list(
             &db,

@@ -86,6 +86,20 @@ fn run() -> anyhow::Result<()> {
             .context("starting the local database and LLM router")?,
     );
 
+    // Logged once at startup so "is the sandbox actually working" is a log
+    // grep, not a guess — `Service::from_config` already ran the real probe
+    // (see `lib::sandbox::detect`); this just reports what it found.
+    let sandbox_status = service.sandbox_status();
+    if sandbox_status.available {
+        tracing::info!(backend = %sandbox_status.backend, "sandbox backend is available");
+    } else {
+        tracing::warn!(
+            backend = %sandbox_status.backend,
+            reason = sandbox_status.reason.as_deref().unwrap_or("unknown"),
+            "sandbox backend is unavailable; sandboxed commands will fail"
+        );
+    }
+
     tracing::info!("starting tauri");
     tauri::Builder::default()
         .manage(config.clone())
@@ -114,6 +128,12 @@ fn run() -> anyhow::Result<()> {
             commands::themes::create_theme,
             commands::themes::update_theme,
             commands::themes::delete_theme,
+            commands::projects::list_projects,
+            commands::projects::list_projects_for_picker,
+            commands::projects::create_project,
+            commands::projects::update_project,
+            commands::projects::delete_project,
+            commands::projects::sandbox_status,
         ])
         .run(tauri::generate_context!())?;
     Ok(())

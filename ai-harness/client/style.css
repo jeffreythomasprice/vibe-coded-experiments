@@ -499,8 +499,10 @@ input[type="color"] {
 
 .agent-form,
 .theme-form,
+.project-form,
 .new-conversation,
 .agents-view,
+.projects-view,
 .all-conversations,
 .settings-view {
   display: flex;
@@ -514,6 +516,7 @@ input[type="color"] {
 
 .agent-form-field,
 .theme-form-field,
+.project-form-field,
 .settings-field {
   display: flex;
   flex-direction: column;
@@ -553,9 +556,26 @@ input[type="color"] {
 }
 
 .agent-form-actions,
-.theme-form-actions {
+.theme-form-actions,
+.project-form-actions {
   display: flex;
   gap: 0.5rem;
+}
+
+.project-form-dirs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.project-dir-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.project-dir-path {
+  flex: 1;
 }
 
 .theme-palette {
@@ -591,6 +611,7 @@ input[type="color"] {
 }
 
 .agent-list,
+.project-list,
 .conversation-list {
   list-style: none;
   margin: 0;
@@ -600,7 +621,8 @@ input[type="color"] {
   gap: 0.4rem;
 }
 
-.agent-row {
+.agent-row,
+.project-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -610,7 +632,8 @@ input[type="color"] {
   padding: 0.5rem 0.75rem;
 }
 
-.agent-row-info {
+.agent-row-info,
+.project-row-info {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;

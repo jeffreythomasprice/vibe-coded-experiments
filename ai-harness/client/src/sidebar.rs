@@ -43,6 +43,9 @@ pub fn Sidebar() -> impl IntoView {
             <button class="sidebar-item" on:click=move |_| route.set(Route::Agents)>
                 "Agents"
             </button>
+            <button class="sidebar-item" on:click=move |_| route.set(Route::Projects)>
+                "Projects"
+            </button>
             <div class="sidebar-recent">
                 <For each=move || recent.get() key=|c| c.id.get() let:conv>
                     <ConversationRow conv=conv route=route />

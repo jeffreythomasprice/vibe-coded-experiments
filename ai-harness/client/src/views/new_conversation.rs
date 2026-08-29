@@ -1,10 +1,12 @@
-//! The "New" flow: pick (or create) an agent, write the first message, send.
-//! Once sent, the agent and conversation are locked in — this view hands off
-//! to [`crate::views::Conversation`] and never comes back.
+//! The "New" flow: pick (or create) an agent and a project, write the first
+//! message, send. Once sent, the agent, project, and conversation are locked
+//! in — this view hands off to [`crate::views::Conversation`] and never
+//! comes back.
 
 use leptos::prelude::*;
 use shared::agent::AgentConfig;
 use shared::ids::AgentConfigId;
+use shared::project::{Project, ProjectRef, ProjectSnapshot};
 use wasm_bindgen_futures::spawn_local;
 
 use crate::app::Route;
@@ -12,7 +14,7 @@ use crate::commands;
 use crate::composer;
 use crate::runs::Runs;
 use crate::spinner::BusyOverlay;
-use crate::views::AgentForm;
+use crate::views::{AgentForm, ProjectForm, ProjectFormMode};
 
 #[component]
 pub fn NewConversation() -> impl IntoView {
@@ -23,6 +25,12 @@ pub fn NewConversation() -> impl IntoView {
     let agents = RwSignal::new(Vec::<AgentConfig>::new());
     let selected_agent = RwSignal::new(None::<AgentConfigId>);
     let creating_agent = RwSignal::new(false);
+    let projects = RwSignal::new(Vec::<ProjectSnapshot>::new());
+    // `ProjectRef::Default` until the user (or a saved project's own
+    // arrival) picks otherwise — the picker's own listing always puts the
+    // default project first, so this matches what row 0 shows.
+    let selected_project = RwSignal::new(ProjectRef::Default);
+    let creating_project = RwSignal::new(false);
     let message = RwSignal::new(String::new());
     let error = RwSignal::new(None::<String>);
     // Only covers the brief create-conversation + start-message handoff
@@ -40,7 +48,15 @@ pub fn NewConversation() -> impl IntoView {
             }
         });
     };
+    let load_projects = move || {
+        spawn_local(async move {
+            if let Ok(list) = commands::list_projects_for_picker().await {
+                projects.set(list);
+            }
+        });
+    };
     Effect::new(move |_| load_agents());
+    Effect::new(move |_| load_projects());
 
     let submit = move |_| {
         let Some(agent_id) = selected_agent.get() else {
@@ -54,8 +70,9 @@ pub fn NewConversation() -> impl IntoView {
         }
         error.set(None);
         sending.set(true);
+        let project = selected_project.get();
         spawn_local(async move {
-            let created = match commands::create_conversation(agent_id, None).await {
+            let created = match commands::create_conversation(agent_id, project, None).await {
                 Ok(created) => created,
                 Err(err) => {
                     sending.set(false);
@@ -90,6 +107,20 @@ pub fn NewConversation() -> impl IntoView {
                                 load_agents();
                             }
                             on_cancel=move |_| creating_agent.set(false)
+                        />
+                    }
+                        .into_any()
+                } else if creating_project.get() {
+                    view! {
+                        <h1>"New project"</h1>
+                        <ProjectForm
+                            mode=ProjectFormMode::Create
+                            on_saved=move |project: Project| {
+                                creating_project.set(false);
+                                selected_project.set(ProjectRef::User(project.id));
+                                load_projects();
+                            }
+                            on_cancel=move |_| creating_project.set(false)
                         />
                     }
                         .into_any()
@@ -134,6 +165,65 @@ pub fn NewConversation() -> impl IntoView {
                                 }
                             >
                                 "New agent"
+                            </button>
+
+                            <label class="project-picker">
+                                <span>"Project"</span>
+                                <select
+                                    prop:value=move || {
+                                        match selected_project.get() {
+                                            ProjectRef::Default => String::new(),
+                                            ProjectRef::User(id) => id.get().to_string(),
+                                        }
+                                    }
+                                    on:change=move |ev| {
+                                        let value = event_target_value(&ev);
+                                        selected_project
+                                            .set(
+                                                if value.is_empty() {
+                                                    ProjectRef::Default
+                                                } else {
+                                                    match value.parse::<i64>() {
+                                                        Ok(id) => ProjectRef::User(shared::ids::ProjectId(id)),
+                                                        Err(_) => ProjectRef::Default,
+                                                    }
+                                                },
+                                            );
+                                    }
+                                >
+                                    <For
+                                        each=move || projects.get()
+                                        key=|p| p.project_id.map(|id| id.get())
+                                        let:project
+                                    >
+                                        {
+                                            let value = project.project_id.map(|id| id.get().to_string()).unwrap_or_default();
+                                            let matches = move || {
+                                                match (selected_project.get(), project.project_id) {
+                                                    (ProjectRef::Default, None) => true,
+                                                    (ProjectRef::User(a), Some(b)) => a == b,
+                                                    _ => false,
+                                                }
+                                            };
+                                            view! {
+                                                <option value=value selected=matches>
+                                                    {project.name.clone()}
+                                                </option>
+                                            }
+                                        }
+                                    </For>
+                                </select>
+                            </label>
+
+                            <button
+                                type="button"
+                                class="new-project-button"
+                                on:click=move |_| {
+                                    error.set(None);
+                                    creating_project.set(true);
+                                }
+                            >
+                                "New project"
                             </button>
 
                             <textarea

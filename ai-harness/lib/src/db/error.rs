@@ -59,6 +59,13 @@ pub enum DbError {
     /// `themes_name` unique index — see `lib::db::themes`'s doc.
     #[error("a theme named {name:?} already exists")]
     ThemeNameTaken { name: String },
+
+    /// A project named `name` already exists (case-insensitively), either as
+    /// another row in `projects` or as the default project's reserved name
+    /// (`shared::project::DEFAULT_PROJECT_NAME`). Same pattern as
+    /// [`DbError::ThemeNameTaken`] — see `lib::db::projects`'s doc.
+    #[error("a project named {name:?} already exists")]
+    ProjectNameTaken { name: String },
 }
 
 pub type Result<T> = std::result::Result<T, DbError>;
@@ -97,6 +104,12 @@ impl From<&DbError> for shared::error::ErrorReport {
                 retryable: true,
             },
             DbError::ThemeNameTaken { .. } => ErrorReport {
+                kind: ErrorKind::Conflict,
+                provider: None,
+                message: err.to_string(),
+                retryable: false,
+            },
+            DbError::ProjectNameTaken { .. } => ErrorReport {
                 kind: ErrorKind::Conflict,
                 provider: None,
                 message: err.to_string(),

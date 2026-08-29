@@ -153,6 +153,44 @@ every pending call has an `Approve` or `Deny` decision. `Agent::stream_turn`
 `max_steps` (default 8) is the control for a multi-step turn's total
 cost/runaway risk.
 
+## Projects
+
+`shared::project` defines a **project**: a name plus zero or more real
+directories, each read-only or read-write, that becomes an agent's sandbox.
+Directories are never remapped — `lib::vfs::MountTable` is a *filter* over the
+real filesystem, so a project's configured directories appear at their real
+absolute paths and nothing else exists (a synthetic ancestor directory lists
+only the path down to a mounted one). The **default project** (zero
+directories, no filesystem access at all) is never a database row — it's
+synthesized, the same way `shared::theme::BuiltIn` themes are compiled in and
+never rows in `themes`.
+
+`lib::vfs` is the pure, unit-tested resolver (`MountTable::resolve`) plus the
+in-process file primitives (`Vfs`), using `openat2(RESOLVE_IN_ROOT |
+RESOLVE_NO_MAGICLINKS)` for symlink-safe, race-free containment. `lib::sandbox`
+builds the confined `bwrap` (bubblewrap) command a subprocess runs under,
+layering a read-only system image (`/usr`, `/bin`, minimal `/etc` —
+`[sandbox] system_paths`) under the project's own mounts so a shell has an OS
+to run in. Both consume the same `MountTable`, so an in-process file tool and
+a sandboxed shell can never disagree about what exists. See `lib::sandbox`'s
+module doc for the empirical basis (checked against a real unprivileged
+`bwrap` run) and `lib/tests/sandbox_bwrap.rs` for the end-to-end proof — that
+test isn't gated behind `AI_HARNESS_LIVE` since `bwrap` is a free local binary.
+
+**Agent configs are frozen into a conversation; projects are not — this is
+deliberate, not an inconsistency.** `conversations.agent_config_json` copies
+the whole `AgentConfig` verbatim at creation time, because a system prompt is
+a *premise*: editing the saved agent later must not rewrite the premise of
+history that already ran (see `sql/0001_init.sql`). `conversations.project_id`
+is a soft link with no frozen counterpart — `Service::conversation_mounts`
+re-resolves it from the `projects` table on every use. A project is a *live
+grant*, not a premise: narrowing it (removing a directory, or deleting the
+project outright) must take effect immediately for every conversation open on
+it, not just new ones, or the sandbox boundary isn't actually a boundary.
+`project_id: NULL` means "the default project," covering both "never assigned
+one" and "assigned project since deleted" — both resolve to the same empty,
+safe virtual filesystem, so that ambiguity is harmless by construction.
+
 ## Persistence
 
 Agent configs and conversations are stored in one SQLite file, at the path

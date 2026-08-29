@@ -31,6 +31,7 @@ pub mod conversations;
 pub mod error;
 pub mod migrate;
 pub mod preferences;
+pub mod projects;
 #[cfg(test)]
 pub(crate) mod testing;
 pub mod themes;

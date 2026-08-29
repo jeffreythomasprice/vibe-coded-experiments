@@ -27,6 +27,8 @@ pub struct Config {
     pub cache: CacheConfig,
     #[serde(default)]
     pub database: DatabaseConfig,
+    #[serde(default)]
+    pub sandbox: SandboxConfig,
 }
 
 /// The `[database]` table: the local SQLite file `lib::db::Db::open` reads
@@ -95,6 +97,80 @@ fn default_cache_dir() -> PathBuf {
 
 fn default_cache_ttl_secs() -> u64 {
     6 * 3_600
+}
+
+/// The `[sandbox]` table: how `lib::sandbox` confines a project's
+/// subprocesses. See that module's doc for the argv this builds.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SandboxConfig {
+    /// `false` disables sandboxing outright — `lib::sandbox::detect` then
+    /// never probes for `bwrap` and every sandboxed command is a hard error,
+    /// never a silent unconfined run. The explicit, logged opt-out.
+    #[serde(default = "default_sandbox_enabled")]
+    pub enabled: bool,
+    /// The `bwrap` binary: a bare name is looked up on `PATH`, or an
+    /// absolute path pins a specific one. A leading `~` is expanded (see
+    /// [`Config::expand_paths`]).
+    #[serde(default = "default_bwrap_path")]
+    pub bwrap_path: PathBuf,
+    /// Whether a sandboxed subprocess can reach the network. On by default;
+    /// this is the whole policy today, and the knob is here so a future
+    /// per-command policy has somewhere to live.
+    #[serde(default = "default_sandbox_network")]
+    pub network: bool,
+    /// Read-only paths layered under every sandbox so a shell has an OS to
+    /// run in — `/usr`, `/bin`, and enough of `/etc` for name resolution and
+    /// TLS. **Not** part of a project's virtual filesystem; see
+    /// `lib::sandbox`'s module doc for why the sandbox's filesystem and
+    /// `lib::vfs`'s in-process one deliberately differ by exactly this
+    /// layer. An entry that doesn't exist on this machine is skipped rather
+    /// than failing the sandbox.
+    #[serde(default = "default_system_paths")]
+    pub system_paths: Vec<PathBuf>,
+}
+
+impl Default for SandboxConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_sandbox_enabled(),
+            bwrap_path: default_bwrap_path(),
+            network: default_sandbox_network(),
+            system_paths: default_system_paths(),
+        }
+    }
+}
+
+fn default_sandbox_enabled() -> bool {
+    true
+}
+
+fn default_bwrap_path() -> PathBuf {
+    PathBuf::from("bwrap")
+}
+
+fn default_sandbox_network() -> bool {
+    true
+}
+
+fn default_system_paths() -> Vec<PathBuf> {
+    [
+        "/usr",
+        "/bin",
+        "/sbin",
+        "/lib",
+        "/lib64",
+        "/etc/ssl",
+        "/etc/ca-certificates",
+        "/etc/resolv.conf",
+        "/etc/passwd",
+        "/etc/group",
+        "/etc/nsswitch.conf",
+        "/etc/alternatives",
+    ]
+    .into_iter()
+    .map(PathBuf::from)
+    .collect()
 }
 
 /// The `[log]` table.
@@ -202,6 +278,7 @@ impl Config {
         self.log.dir = expand_tilde(&self.log.dir)?;
         self.cache.dir = expand_tilde(&self.cache.dir)?;
         self.database.path = expand_tilde(&self.database.path)?;
+        self.sandbox.bwrap_path = expand_tilde(&self.sandbox.bwrap_path)?;
         Ok(())
     }
 }
@@ -457,5 +534,43 @@ mod tests {
         assert_eq!(parsed.cache.dir, defaults.cache.dir);
         assert_eq!(parsed.cache.ttl_secs, defaults.cache.ttl_secs);
         assert_eq!(parsed.database.path, defaults.database.path);
+        assert_eq!(parsed.sandbox.enabled, defaults.sandbox.enabled);
+        assert_eq!(parsed.sandbox.bwrap_path, defaults.sandbox.bwrap_path);
+        assert_eq!(parsed.sandbox.network, defaults.sandbox.network);
+        assert_eq!(parsed.sandbox.system_paths, defaults.sandbox.system_paths);
+    }
+
+    #[test]
+    fn parses_a_sandbox_table() {
+        let parsed: Config = toml::from_str(
+            r#"
+            [sandbox]
+            enabled = false
+            bwrap_path = "/usr/bin/bwrap"
+            network = false
+            system_paths = ["/usr", "/bin"]
+            "#,
+        )
+        .unwrap();
+        assert!(!parsed.sandbox.enabled);
+        assert_eq!(parsed.sandbox.bwrap_path, PathBuf::from("/usr/bin/bwrap"));
+        assert!(!parsed.sandbox.network);
+        assert_eq!(
+            parsed.sandbox.system_paths,
+            vec![PathBuf::from("/usr"), PathBuf::from("/bin")]
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_sandbox_keys() {
+        assert!(toml::from_str::<Config>("[sandbox]\nnope = 1\n").is_err());
+    }
+
+    #[test]
+    fn sandbox_defaults_are_enabled_with_network() {
+        let defaults = SandboxConfig::default();
+        assert!(defaults.enabled);
+        assert!(defaults.network);
+        assert!(!defaults.system_paths.is_empty());
     }
 }

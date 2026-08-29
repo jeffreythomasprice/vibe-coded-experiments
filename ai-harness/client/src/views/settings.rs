@@ -5,6 +5,7 @@
 //! `views::Agents` uses for its `AgentForm`.
 
 use leptos::prelude::*;
+use shared::project::SandboxStatus;
 use shared::theme::{BuiltIn, Theme, ThemeChoice, ThemeField, UserTheme};
 use wasm_bindgen_futures::spawn_local;
 
@@ -39,6 +40,15 @@ pub fn Settings() -> impl IntoView {
     let body = RwSignal::new(Body::View);
     let confirming_delete = RwSignal::new(false);
     let delete_error = RwSignal::new(None::<String>);
+    let sandbox = RwSignal::new(None::<SandboxStatus>);
+
+    Effect::new(move |_| {
+        spawn_local(async move {
+            if let Ok(status) = commands::sandbox_status().await {
+                sandbox.set(Some(status));
+            }
+        });
+    });
 
     let on_change = move |ev: leptos::ev::Event| {
         theme.set_choice(ThemeChoice::from_stored(Some(&event_target_value(&ev))));
@@ -152,6 +162,30 @@ pub fn Settings() -> impl IntoView {
                 Body::Edit(existing) => {
                     view! {
                         <ThemeForm mode=ThemeFormMode::Edit { existing } on_saved=on_saved on_cancel=on_cancel />
+                    }
+                        .into_any()
+                }
+            }}
+
+            <h2>"Sandbox"</h2>
+            {move || match sandbox.get() {
+                None => view! { <p class="muted">"Checking…"</p> }.into_any(),
+                Some(status) if status.available => {
+                    view! {
+                        <p>
+                            "Backend " <code>{status.backend}</code> " is available — "
+                            "a project's directories are confined to sandboxed subprocesses through it."
+                        </p>
+                    }
+                        .into_any()
+                }
+                Some(status) => {
+                    view! {
+                        <p class="error">
+                            "Backend " <code>{status.backend}</code> " is unavailable"
+                            {status.reason.map(|reason| format!(": {reason}"))}
+                            ". Sandboxed commands will fail until this is fixed."
+                        </p>
                     }
                         .into_any()
                 }

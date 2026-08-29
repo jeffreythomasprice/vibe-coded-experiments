@@ -5,6 +5,7 @@
 use shared::agent::TurnStop;
 use shared::conversation::{ConversationSummary, ConversationView, ListConversations, PendingApproval};
 use shared::ids::{AgentConfigId, ConversationId};
+use shared::project::ProjectRef;
 
 use crate::db;
 
@@ -21,10 +22,12 @@ impl Service {
     pub async fn create_conversation(
         &self,
         agent_config_id: AgentConfigId,
+        project: ProjectRef,
         title: Option<String>,
     ) -> Result<ConversationSummary, ServiceError> {
         let agent = db::agents::get(&self.db, agent_config_id).await?;
-        Ok(db::conversations::create(&self.db, &agent, title.as_deref()).await?)
+        let project_id = self.resolve_project_id(project).await?;
+        Ok(db::conversations::create(&self.db, &agent, project_id, title.as_deref()).await?)
     }
 
     pub async fn get_conversation(&self, id: ConversationId) -> Result<ConversationView, ServiceError> {
@@ -102,7 +105,7 @@ mod tests {
     async fn create_then_get_conversation_has_no_pending_approval() {
         let service = service().await;
         let agent = service.create_agent(input("ops")).await.unwrap();
-        let created = service.create_conversation(agent.id, Some("Deploy".to_string())).await.unwrap();
+        let created = service.create_conversation(agent.id, ProjectRef::Default, Some("Deploy".to_string())).await.unwrap();
 
         let view = service.get_conversation(created.id).await.unwrap();
         assert_eq!(view.summary, created);
@@ -115,7 +118,7 @@ mod tests {
     async fn rename_then_get_shows_the_new_title() {
         let service = service().await;
         let agent = service.create_agent(input("ops")).await.unwrap();
-        let created = service.create_conversation(agent.id, None).await.unwrap();
+        let created = service.create_conversation(agent.id, ProjectRef::Default, None).await.unwrap();
         service.rename_conversation(created.id, "Renamed".to_string()).await.unwrap();
         let view = service.get_conversation(created.id).await.unwrap();
         assert_eq!(view.summary.title.as_deref(), Some("Renamed"));
@@ -125,7 +128,7 @@ mod tests {
     async fn delete_conversation_removes_it_from_the_list() {
         let service = service().await;
         let agent = service.create_agent(input("ops")).await.unwrap();
-        let created = service.create_conversation(agent.id, None).await.unwrap();
+        let created = service.create_conversation(agent.id, ProjectRef::Default, None).await.unwrap();
         service.delete_conversation(created.id).await.unwrap();
         let listed = service.list_conversations(ListConversations::default()).await.unwrap();
         assert!(listed.is_empty());

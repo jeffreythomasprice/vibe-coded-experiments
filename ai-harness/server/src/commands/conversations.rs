@@ -7,6 +7,7 @@ use shared::agent::{AgentEvent, ToolDecision};
 use shared::conversation::{ConversationSummary, ConversationView, ListConversations, RunStatus};
 use shared::error::ErrorReport;
 use shared::ids::{AgentConfigId, ConversationId};
+use shared::project::ProjectRef;
 
 #[tauri::command]
 pub async fn list_conversations(
@@ -20,10 +21,11 @@ pub async fn list_conversations(
 pub async fn create_conversation(
     service: tauri::State<'_, Arc<Service>>,
     agent_config_id: AgentConfigId,
+    project: ProjectRef,
     title: Option<String>,
 ) -> Result<ConversationSummary, ErrorReport> {
     service
-        .create_conversation(agent_config_id, title)
+        .create_conversation(agent_config_id, project, title)
         .await
         .map_err(|err| (&err).into())
 }

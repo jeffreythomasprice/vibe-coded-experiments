@@ -117,3 +117,35 @@ ttl_secs = "6h"
 # expanded. Deliberately the only key in this table — pool size and busy
 # timeout are constants in `lib::db`, not deployment settings.
 path = "/tmp/ai-harness/ai-harness.db"
+
+[sandbox]
+# Confines a project's subprocesses to its configured directories via
+# `bwrap` (bubblewrap). `false` disables sandboxing outright; every
+# sandboxed command then fails loudly rather than running unconfined.
+enabled = true
+
+# The `bwrap` binary. A bare name is looked up on `PATH`; a leading `~` is
+# expanded.
+bwrap_path = "bwrap"
+
+# Whether a sandboxed subprocess can reach the network.
+network = true
+
+# Read-only paths layered under every sandbox so a shell has an OS to run
+# in — not part of a project's own virtual filesystem (see
+# `lib::sandbox`'s module doc). An entry missing on this machine is
+# skipped rather than failing the sandbox.
+system_paths = [
+    "/usr",
+    "/bin",
+    "/sbin",
+    "/lib",
+    "/lib64",
+    "/etc/ssl",
+    "/etc/ca-certificates",
+    "/etc/resolv.conf",
+    "/etc/passwd",
+    "/etc/group",
+    "/etc/nsswitch.conf",
+    "/etc/alternatives",
+]

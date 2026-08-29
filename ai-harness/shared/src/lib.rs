@@ -12,6 +12,7 @@ pub mod conversation;
 pub mod error;
 pub mod ids;
 pub mod llm;
+pub mod project;
 pub mod theme;
 
 /// Severity of a forwarded client log event, mirroring `tracing::Level`.

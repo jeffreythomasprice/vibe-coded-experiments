@@ -30,3 +30,4 @@ async-trait = "0.1"
 thiserror = "2"
 base64 = "0.22"
 schemars = "1"
+rustix = { version = "1", features = ["fs"] }

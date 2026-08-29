@@ -44,6 +44,7 @@ id_type!(ConversationId, "Primary key of `conversations`.");
 id_type!(TurnId, "Primary key of `turns`.");
 id_type!(MessageId, "Primary key of `messages`.");
 id_type!(ThemeId, "Primary key of `themes`.");
+id_type!(ProjectId, "Primary key of `projects`.");
 
 #[cfg(test)]
 mod tests {
