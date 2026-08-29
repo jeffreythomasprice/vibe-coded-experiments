@@ -25,8 +25,105 @@ use shared::llm::{ImageSource, ToolDef, ToolResultContent};
 pub use schemars::JsonSchema;
 
 use crate::agent::error::AgentError;
+use crate::sandbox::SandboxBackend;
+use crate::vfs::{MountTable, Vfs};
 
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+/// Tunable limits a tool consults at call time — how long a `bash` call may
+/// run, how much of its output to keep, how large a file `read_file` will
+/// read. Populated from `[tools]` in `lib::config` (see `lib::agent::builtin`);
+/// `Default` gives every existing test fixture and `ToolContext::default()`
+/// caller a sensible value with no config in scope.
+#[derive(Debug, Clone, Copy)]
+pub struct ToolLimits {
+    pub bash_timeout_secs: u64,
+    pub max_output_bytes: usize,
+    pub max_read_bytes: usize,
+    /// Whether a sandboxed subprocess may reach the network — plumbed from
+    /// `config.sandbox.network`, which nothing reads today; see
+    /// `lib::agent::builtin::bash`'s module doc.
+    pub network: bool,
+}
+
+impl Default for ToolLimits {
+    fn default() -> Self {
+        Self {
+            bash_timeout_secs: 120,
+            max_output_bytes: 30_000,
+            max_read_bytes: 262_144,
+            network: true,
+        }
+    }
+}
+
+struct ToolContextInner {
+    vfs: Vfs,
+    sandbox: Arc<dyn SandboxBackend>,
+    sandbox_available: bool,
+    limits: ToolLimits,
+}
+
+/// What a tool needs to actually do its work: the calling conversation's
+/// virtual filesystem, the sandbox backend to run a confined subprocess
+/// under, and the configured limits — everything a process-wide
+/// [`ToolRegistry`](super::registry::ToolRegistry) entry can't carry itself,
+/// because mounts are per-conversation and re-resolved live on every use
+/// (see `shared::project`'s module doc: a project is a *grant*, not a
+/// premise). Built once per turn by `lib::service::chat`, not once per call.
+///
+/// Cheap to clone — one `Arc` — so a handler that outlives the call that
+/// created it (an `FnTool`'s `'static` future) can own one.
+#[derive(Clone)]
+pub struct ToolContext(Arc<ToolContextInner>);
+
+impl ToolContext {
+    pub fn new(vfs: Vfs, sandbox: Arc<dyn SandboxBackend>, sandbox_available: bool, limits: ToolLimits) -> Self {
+        Self(Arc::new(ToolContextInner {
+            vfs,
+            sandbox,
+            sandbox_available,
+            limits,
+        }))
+    }
+
+    pub fn vfs(&self) -> &Vfs {
+        &self.0.vfs
+    }
+
+    pub fn sandbox(&self) -> &Arc<dyn SandboxBackend> {
+        &self.0.sandbox
+    }
+
+    /// Whether the sandbox backend actually works on this machine — see
+    /// `lib::sandbox::Availability`. A tool that needs to run a subprocess
+    /// must check this and fail closed (an `is_error` result, never an
+    /// unconfined run) rather than trusting `sandbox()` alone; `Disabled`
+    /// already refuses every call, but checking here gives a clearer message.
+    pub fn sandbox_available(&self) -> bool {
+        self.0.sandbox_available
+    }
+
+    pub fn limits(&self) -> ToolLimits {
+        self.0.limits
+    }
+}
+
+impl Default for ToolContext {
+    /// An empty, no-access `MountTable` and a `Disabled` sandbox — what every
+    /// existing test fixture and `AgentBuilder` gets until a caller supplies
+    /// a real one via `AgentBuilder::context`.
+    fn default() -> Self {
+        Self::new(
+            Vfs::new(MountTable::default()),
+            Arc::new(crate::sandbox::Disabled::new(
+                "no ToolContext configured for this agent".to_string(),
+            )),
+            false,
+            ToolLimits::default(),
+        )
+    }
+}
 
 /// Something an agent can call by name with JSON input.
 #[async_trait]
@@ -39,6 +136,13 @@ pub trait Tool: Send + Sync {
         Approval::Automatic
     }
 
+    /// Guidance this tool contributes to its agent's system prompt — how and
+    /// when to use it. `None` (the default) contributes nothing; see
+    /// [`ToolBox::system_section`] for how these are assembled.
+    fn system_prompt(&self) -> Option<String> {
+        None
+    }
+
     /// `Err` is *not* an agent failure — the loop turns it into a
     /// `tool_result` with `is_error: true` that the model gets to see and
     /// react to, the same as a malformed name or malformed input. `anyhow`,
@@ -46,7 +150,7 @@ pub trait Tool: Send + Sync {
     /// specific failure, only on whether there was one — see
     /// `lib::llm::error`'s module doc for when this repo reaches for
     /// `thiserror` instead.
-    async fn call(&self, input: serde_json::Value) -> anyhow::Result<ToolOutput>;
+    async fn call(&self, ctx: &ToolContext, input: serde_json::Value) -> anyhow::Result<ToolOutput>;
 }
 
 /// What a tool call produced, on success.
@@ -104,13 +208,17 @@ pub fn schema_for<T: JsonSchema>() -> serde_json::Value {
     value
 }
 
-/// A [`Tool`] built from a plain async closure, via [`tool`] or [`json_tool`].
+/// A [`Tool`] built from a plain async closure, via [`tool`], [`json_tool`],
+/// or [`ctx_tool`].
 pub struct FnTool {
     def: ToolDef,
     approval: Approval,
+    system_prompt: Option<String>,
     #[allow(clippy::type_complexity)]
     handler: Box<
-        dyn Fn(serde_json::Value) -> BoxFuture<'static, anyhow::Result<ToolOutput>> + Send + Sync,
+        dyn Fn(ToolContext, serde_json::Value) -> BoxFuture<'static, anyhow::Result<ToolOutput>>
+            + Send
+            + Sync,
     >,
 }
 
@@ -120,6 +228,13 @@ impl FnTool {
     /// otherwise.
     pub fn requiring_approval(mut self) -> Self {
         self.approval = Approval::RequiresApproval;
+        self
+    }
+
+    /// Guidance this tool contributes to its agent's system prompt — see
+    /// [`Tool::system_prompt`].
+    pub fn with_system_prompt(mut self, text: impl Into<String>) -> Self {
+        self.system_prompt = Some(text.into());
         self
     }
 }
@@ -134,16 +249,20 @@ impl Tool for FnTool {
         self.approval
     }
 
-    async fn call(&self, input: serde_json::Value) -> anyhow::Result<ToolOutput> {
-        (self.handler)(input).await
+    fn system_prompt(&self) -> Option<String> {
+        self.system_prompt.clone()
+    }
+
+    async fn call(&self, ctx: &ToolContext, input: serde_json::Value) -> anyhow::Result<ToolOutput> {
+        (self.handler)(ctx.clone(), input).await
     }
 }
 
-/// Build a tool from a plain Rust fn. `A`'s JSON Schema is generated by
-/// [`schema_for`]; the model's raw JSON input is deserialized into `A` before
-/// `handler` ever sees it — a deserialize failure becomes an ordinary `Err`,
-/// which the agent loop turns into an `is_error` tool result rather than
-/// aborting the turn.
+/// Build a tool from a plain Rust fn that doesn't need a [`ToolContext`]. `A`'s
+/// JSON Schema is generated by [`schema_for`]; the model's raw JSON input is
+/// deserialized into `A` before `handler` ever sees it — a deserialize
+/// failure becomes an ordinary `Err`, which the agent loop turns into an
+/// `is_error` tool result rather than aborting the turn.
 pub fn tool<A, F, Fut, R>(
     name: impl Into<String>,
     description: impl Into<String>,
@@ -155,27 +274,15 @@ where
     Fut: Future<Output = anyhow::Result<R>> + Send + 'static,
     R: Into<ToolOutput>,
 {
-    let handler = Arc::new(handler);
-    FnTool {
-        def: ToolDef {
-            name: name.into(),
-            description: description.into(),
-            input_schema: schema_for::<A>(),
-        },
-        approval: Approval::Automatic,
-        handler: Box::new(move |value| {
-            let handler = handler.clone();
-            Box::pin(async move {
-                let args: A = serde_json::from_value(value)?;
-                Ok(handler(args).await?.into())
-            })
-        }),
-    }
+    ctx_tool(name, description, move |_ctx, args| handler(args))
 }
 
 /// Build a tool from a hand-written JSON Schema, for a tool assembled at
 /// runtime with no Rust type to derive one from. `handler` receives the raw
-/// `serde_json::Value` — nothing is deserialized on its behalf.
+/// `serde_json::Value` — nothing is deserialized on its behalf. Doesn't take
+/// a [`ToolContext`] either, for the same reason [`tool`] doesn't — a
+/// context-needing runtime-schema tool has no constructor yet, since none of
+/// this crate's tools need both at once.
 pub fn json_tool<F, Fut, R>(
     name: impl Into<String>,
     description: impl Into<String>,
@@ -195,9 +302,43 @@ where
             input_schema,
         },
         approval: Approval::Automatic,
-        handler: Box::new(move |value| {
+        system_prompt: None,
+        handler: Box::new(move |_ctx, value| {
             let handler = handler.clone();
             Box::pin(async move { Ok(handler(value).await?.into()) })
+        }),
+    }
+}
+
+/// Build a tool from a plain Rust fn that needs the calling conversation's
+/// [`ToolContext`] — a filesystem or sandbox tool, for instance. Otherwise
+/// identical to [`tool`]; see that function's doc.
+pub fn ctx_tool<A, F, Fut, R>(
+    name: impl Into<String>,
+    description: impl Into<String>,
+    handler: F,
+) -> FnTool
+where
+    A: DeserializeOwned + JsonSchema + Send + 'static,
+    F: Fn(ToolContext, A) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = anyhow::Result<R>> + Send + 'static,
+    R: Into<ToolOutput>,
+{
+    let handler = Arc::new(handler);
+    FnTool {
+        def: ToolDef {
+            name: name.into(),
+            description: description.into(),
+            input_schema: schema_for::<A>(),
+        },
+        approval: Approval::Automatic,
+        system_prompt: None,
+        handler: Box::new(move |ctx, value| {
+            let handler = handler.clone();
+            Box::pin(async move {
+                let args: A = serde_json::from_value(value)?;
+                Ok(handler(ctx, args).await?.into())
+            })
         }),
     }
 }
@@ -264,6 +405,32 @@ impl ToolBox {
             })
             .collect()
     }
+
+    /// One system-prompt block covering every tool that contributes
+    /// [`Tool::system_prompt`] guidance, under a header that makes it
+    /// unambiguous to the model that this section is about *how* to use its
+    /// tools, not part of the agent's own persona. `None` when no tool has
+    /// anything to say — an agent with no tools, or only ones with no
+    /// guidance of their own, gets no such section at all.
+    pub fn system_section(&self) -> Option<String> {
+        let sections: Vec<(String, String)> = self
+            .tools
+            .values()
+            .filter_map(|t| t.system_prompt().map(|prompt| (t.def().name.clone(), prompt)))
+            .collect();
+        if sections.is_empty() {
+            return None;
+        }
+        let mut text = String::from(
+            "# Tools\n\nYou have access to the tools below. Use them when they help you \
+             answer the request; a tool marked as requiring approval will pause your turn \
+             until the user approves or denies it — that is expected, not an error.",
+        );
+        for (name, prompt) in sections {
+            text.push_str(&format!("\n\n## {name}\n{prompt}"));
+        }
+        Some(text)
+    }
 }
 
 #[cfg(test)]
@@ -323,7 +490,7 @@ mod tests {
             |args: WeatherArgs| async move { Ok(format!("72F and sunny in {}", args.city)) },
         );
         let output = weather
-            .call(serde_json::json!({"city": "Paris"}))
+            .call(&ToolContext::default(), serde_json::json!({"city": "Paris"}))
             .await
             .unwrap();
         match &output.content[0] {
@@ -340,7 +507,7 @@ mod tests {
             |args: WeatherArgs| async move { Ok(format!("72F in {}", args.city)) },
         );
         let err = weather
-            .call(serde_json::json!({"not_city": "Paris"}))
+            .call(&ToolContext::default(), serde_json::json!({"not_city": "Paris"}))
             .await
             .unwrap_err();
         assert!(
@@ -373,7 +540,10 @@ mod tests {
             serde_json::json!({"type": "object"}),
             |value: serde_json::Value| async move { Ok(value.to_string()) },
         );
-        let output = echo.call(serde_json::json!({"a": 1})).await.unwrap();
+        let output = echo
+            .call(&ToolContext::default(), serde_json::json!({"a": 1}))
+            .await
+            .unwrap();
         match &output.content[0] {
             ToolResultContent::Text { text } => assert_eq!(text, r#"{"a":1}"#),
             other => panic!("expected Text, got {other:?}"),
@@ -446,5 +616,76 @@ mod tests {
             .unwrap();
         assert!(tools.get("ping").is_some());
         assert!(tools.get("missing").is_none());
+    }
+
+    #[test]
+    fn tool_context_default_has_no_filesystem_access_and_reports_the_sandbox_unavailable() {
+        let ctx = ToolContext::default();
+        assert!(ctx.vfs().table().is_empty());
+        assert!(!ctx.sandbox_available());
+    }
+
+    #[tokio::test]
+    async fn ctx_tool_hands_the_handler_the_calling_context() {
+        let echo = ctx_tool(
+            "context_probe",
+            "reports whether the sandbox looked available",
+            |ctx: ToolContext, _args: WeatherArgs| async move {
+                Ok::<_, anyhow::Error>(ctx.sandbox_available().to_string())
+            },
+        );
+        let output = echo
+            .call(&ToolContext::default(), serde_json::json!({"city": "Paris"}))
+            .await
+            .unwrap();
+        match &output.content[0] {
+            ToolResultContent::Text { text } => assert_eq!(text, "false"),
+            other => panic!("expected Text, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn with_system_prompt_is_reported_by_the_tool_and_absent_by_default() {
+        let plain = tool("noop", "does nothing", |_: WeatherArgs| async move { Ok("ok") });
+        assert!(plain.system_prompt().is_none());
+
+        let documented = tool("noop", "does nothing", |_: WeatherArgs| async move { Ok("ok") })
+            .with_system_prompt("Call this whenever you need to do nothing.");
+        assert_eq!(
+            documented.system_prompt().as_deref(),
+            Some("Call this whenever you need to do nothing.")
+        );
+    }
+
+    #[test]
+    fn tool_box_system_section_is_none_when_no_tool_contributes_one() {
+        let mut tools = ToolBox::new();
+        tools
+            .add(tool("ping", "ping", |_: WeatherArgs| async move { Ok("pong") }))
+            .unwrap();
+        assert!(tools.system_section().is_none());
+    }
+
+    #[test]
+    fn tool_box_system_section_assembles_a_header_and_one_block_per_documented_tool() {
+        let mut tools = ToolBox::new();
+        tools
+            .add(tool("ping", "ping", |_: WeatherArgs| async move { Ok("pong") }))
+            .unwrap();
+        tools
+            .add(
+                tool("bash", "run a shell command", |_: WeatherArgs| async move { Ok("ok") })
+                    .with_system_prompt("Runs a command in a sandbox."),
+            )
+            .unwrap();
+
+        let section = tools.system_section().expect("expected a tools section");
+        assert!(section.starts_with("# Tools"));
+        assert!(section.contains("## bash"));
+        assert!(section.contains("Runs a command in a sandbox."));
+        assert!(
+            !section.contains("## ping"),
+            "a tool with no system_prompt must not get its own subsection: {section}"
+        );
     }
 }

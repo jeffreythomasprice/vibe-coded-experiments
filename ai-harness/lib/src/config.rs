@@ -29,6 +29,8 @@ pub struct Config {
     pub database: DatabaseConfig,
     #[serde(default)]
     pub sandbox: SandboxConfig,
+    #[serde(default)]
+    pub tools: ToolsConfig,
 }
 
 /// The `[database]` table: the local SQLite file `lib::db::Db::open` reads
@@ -171,6 +173,50 @@ fn default_system_paths() -> Vec<PathBuf> {
     .into_iter()
     .map(PathBuf::from)
     .collect()
+}
+
+/// The `[tools]` table: limits the built-in filesystem/bash tools consult at
+/// call time — see `lib::agent::builtin`. Not a tool *selection* (that's
+/// per-agent, in `AgentConfigInput.tools`) — this is the resource budget
+/// every agent's tools share.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolsConfig {
+    /// How long `bash` lets a command run before killing it.
+    #[serde(default = "default_bash_timeout_secs")]
+    pub bash_timeout_secs: u64,
+    /// `bash` caps its captured stdout+stderr at this many bytes, appending
+    /// an explicit truncation marker rather than silently dropping the rest
+    /// — read while the child is still running, not after, so an unbounded
+    /// command can never exhaust memory before the cap applies.
+    #[serde(default = "default_max_output_bytes")]
+    pub max_output_bytes: usize,
+    /// `read_file` refuses a file larger than this rather than reading it
+    /// into memory first and truncating after.
+    #[serde(default = "default_max_read_bytes")]
+    pub max_read_bytes: usize,
+}
+
+impl Default for ToolsConfig {
+    fn default() -> Self {
+        Self {
+            bash_timeout_secs: default_bash_timeout_secs(),
+            max_output_bytes: default_max_output_bytes(),
+            max_read_bytes: default_max_read_bytes(),
+        }
+    }
+}
+
+fn default_bash_timeout_secs() -> u64 {
+    120
+}
+
+fn default_max_output_bytes() -> usize {
+    30_000
+}
+
+fn default_max_read_bytes() -> usize {
+    262_144
 }
 
 /// The `[log]` table.
@@ -538,6 +584,9 @@ mod tests {
         assert_eq!(parsed.sandbox.bwrap_path, defaults.sandbox.bwrap_path);
         assert_eq!(parsed.sandbox.network, defaults.sandbox.network);
         assert_eq!(parsed.sandbox.system_paths, defaults.sandbox.system_paths);
+        assert_eq!(parsed.tools.bash_timeout_secs, defaults.tools.bash_timeout_secs);
+        assert_eq!(parsed.tools.max_output_bytes, defaults.tools.max_output_bytes);
+        assert_eq!(parsed.tools.max_read_bytes, defaults.tools.max_read_bytes);
     }
 
     #[test]
@@ -572,5 +621,34 @@ mod tests {
         assert!(defaults.enabled);
         assert!(defaults.network);
         assert!(!defaults.system_paths.is_empty());
+    }
+
+    #[test]
+    fn parses_a_tools_table() {
+        let parsed: Config = toml::from_str(
+            r#"
+            [tools]
+            bash_timeout_secs = 30
+            max_output_bytes = 1000
+            max_read_bytes = 2000
+            "#,
+        )
+        .unwrap();
+        assert_eq!(parsed.tools.bash_timeout_secs, 30);
+        assert_eq!(parsed.tools.max_output_bytes, 1000);
+        assert_eq!(parsed.tools.max_read_bytes, 2000);
+    }
+
+    #[test]
+    fn rejects_unknown_tools_keys() {
+        assert!(toml::from_str::<Config>("[tools]\nnope = 1\n").is_err());
+    }
+
+    #[test]
+    fn tools_defaults_are_sane() {
+        let defaults = ToolsConfig::default();
+        assert_eq!(defaults.bash_timeout_secs, 120);
+        assert_eq!(defaults.max_output_bytes, 30_000);
+        assert_eq!(defaults.max_read_bytes, 262_144);
     }
 }

@@ -470,6 +470,34 @@ input[type="color"] {
   word-break: break-word;
 }
 
+/* A gated call still waiting on the user — the dashed accent border marks
+   it out from an ordinary settled/in-flight tool bubble at a glance. */
+.bubble-tool-pending {
+  border: 1px dashed var(--accent);
+}
+
+.tool-decision {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.tool-approval {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.tool-approval .approve:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tool-approval .deny:hover {
+  border-color: var(--error);
+  color: var(--error);
+}
+
 .bubble-image img {
   max-width: 100%;
   border-radius: 6px;
@@ -549,10 +577,25 @@ input[type="color"] {
   margin-top: 0.6rem;
 }
 
-.tool-checklist {
-  list-style: none;
-  margin: 0.4rem 0 0;
-  padding: 0;
+.tool-transfer {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.4rem;
+}
+
+.tool-transfer-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.tool-transfer-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 .agent-form-actions,

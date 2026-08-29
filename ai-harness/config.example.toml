@@ -149,3 +149,22 @@ system_paths = [
     "/etc/nsswitch.conf",
     "/etc/alternatives",
 ]
+
+[tools]
+# Limits the built-in filesystem/bash tools consult at call time (see
+# `lib::agent::builtin`). Not a tool *selection* — which tools an agent has
+# is a per-agent choice, made in its own config — this is the resource
+# budget every agent's tools share.
+
+# How long `bash` lets a command run before killing it.
+bash_timeout_secs = 120
+
+# `bash` caps its captured stdout+stderr at this many bytes, appending an
+# explicit truncation marker rather than silently dropping the rest — read
+# while the child is still running, not after, so an unbounded command can
+# never exhaust memory before the cap applies.
+max_output_bytes = 30000
+
+# `read_file` refuses a file larger than this rather than reading it into
+# memory first and truncating after.
+max_read_bytes = 262144

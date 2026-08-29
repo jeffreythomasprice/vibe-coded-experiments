@@ -53,11 +53,13 @@ impl Service {
             }
             None => None,
         };
+        let decisions = db::turns::decisions_for_conversation(&self.db, id).await?;
         Ok(ConversationView {
             summary,
             agent,
             messages,
             pending,
+            decisions,
         })
     }
 

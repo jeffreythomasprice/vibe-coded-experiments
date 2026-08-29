@@ -49,7 +49,8 @@ impl Service {
         db::reap_orphaned(self.db.pool(), Some(conversation_id)).await?;
 
         let agent_config = db::conversations::agent_config(&self.db, conversation_id).await?;
-        let agent = Arc::new(build_agent(&agent_config, &self.tools, &self.router)?);
+        let ctx = self.tool_context(conversation_id).await?;
+        let agent = Arc::new(build_agent(&agent_config, &self.tools, &self.router, ctx)?);
 
         let mut conversation = db::conversations::load_conversation(&self.db, conversation_id).await?;
         let user_message = Message::user(vec![ContentBlock::Text { text }]);
@@ -73,7 +74,8 @@ impl Service {
         db::reap_orphaned(self.db.pool(), Some(conversation_id)).await?;
 
         let agent_config = db::conversations::agent_config(&self.db, conversation_id).await?;
-        let agent = Arc::new(build_agent(&agent_config, &self.tools, &self.router)?);
+        let ctx = self.tool_context(conversation_id).await?;
+        let agent = Arc::new(build_agent(&agent_config, &self.tools, &self.router, ctx)?);
 
         let (turn_id, turn) = reopen(&self.db, conversation_id, &decisions).await?;
 
@@ -282,7 +284,7 @@ mod tests {
     use crate::llm::router::{ProviderEntry, Router};
     use crate::llm::testing::ScriptedProvider;
     use serde::Deserialize;
-    use shared::agent::{AgentConfigInput, Decision, ToolSelection};
+    use shared::agent::{AgentConfigInput, Decision};
     use shared::llm::message::{CompletedMessage, Role, StopReason};
     use shared::llm::model::ModelRef;
     use shared::llm::tool::Thinking;
@@ -344,7 +346,7 @@ mod tests {
         Service::new(db, Arc::new(router), Arc::new(registry))
     }
 
-    async fn seed_conversation(service: &Service, tools: Vec<ToolSelection>) -> ConversationId {
+    async fn seed_conversation(service: &Service, tools: Vec<String>) -> ConversationId {
         let agent = service
             .create_agent(AgentConfigInput {
                 name: "ops".to_string(),
@@ -423,14 +425,7 @@ mod tests {
             true,
         )
         .await;
-        let conv = seed_conversation(
-            &service,
-            vec![ToolSelection {
-                name: "deploy".to_string(),
-                approval: None,
-            }],
-        )
-        .await;
+        let conv = seed_conversation(&service, vec!["deploy".to_string()]).await;
 
         let sink = CollectingSink::new();
         let outcome = service
@@ -446,13 +441,17 @@ mod tests {
         let view = service.get_conversation(conv).await.unwrap();
         assert!(view.pending.is_some());
         assert_eq!(view.messages.len(), 1, "only the user message is persisted while suspended");
+        assert!(
+            view.decisions.is_empty(),
+            "nothing has been decided yet — the user hasn't answered"
+        );
 
         let sink2 = CollectingSink::new();
         let outcome2 = service
             .approve_tools(
                 conv,
                 vec![ToolDecision {
-                    tool_use_id,
+                    tool_use_id: tool_use_id.clone(),
                     decision: Decision::Approve,
                 }],
                 &sink2,
@@ -467,6 +466,12 @@ mod tests {
         let view = service.get_conversation(conv).await.unwrap();
         assert!(view.pending.is_none());
         assert_eq!(view.messages.len(), 4, "user, tool_use, tool_result, final text");
+
+        assert_eq!(view.decisions.len(), 1);
+        assert_eq!(view.decisions[0].turn_id, turn_id);
+        assert_eq!(view.decisions[0].tool_use_id, tool_use_id);
+        assert_eq!(view.decisions[0].decision, shared::agent::Decision::Approve);
+        assert_eq!(view.decisions[0].decided_by, Some(shared::agent::DecidedBy::User));
     }
 
     #[tokio::test]

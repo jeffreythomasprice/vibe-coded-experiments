@@ -45,9 +45,13 @@ use shared::error::{ErrorKind, ErrorReport};
 use shared::ids::ConversationId;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::{Sqlite, SqlitePool, Transaction};
-use time::macros::format_description;
 
 use crate::config::DatabaseConfig;
+
+/// Re-exported for every existing call site in this module — the formatting
+/// itself lives in `lib::clock` (used by `lib::agent` too, which has no
+/// business depending on `lib::db`).
+pub use crate::clock::now_iso8601;
 
 /// A single-user desktop file has no deployment tuning story worth exposing —
 /// see `DatabaseConfig`'s doc — so pool size and busy timeout are constants,
@@ -110,17 +114,6 @@ impl Db {
     pub async fn close(&self) {
         self.pool.close().await;
     }
-}
-
-/// ISO8601 UTC, millisecond precision — the same shape the log files and
-/// `shared::ClientLogRecord::timestamp` use, so a row and a log line about it
-/// sort together.
-pub fn now_iso8601() -> String {
-    let format =
-        format_description!("[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z");
-    time::OffsetDateTime::now_utc()
-        .format(&format)
-        .expect("a static ISO8601 format description never fails to apply")
 }
 
 /// `BEGIN IMMEDIATE`, not the deferred `BEGIN` `Pool::begin` issues. Every
@@ -191,16 +184,6 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(count, 0);
-    }
-
-    #[test]
-    fn now_iso8601_has_the_expected_shape() {
-        let ts = now_iso8601();
-        // "2026-08-22T00:47:03.955Z" — 24 characters, fixed width.
-        assert_eq!(ts.len(), 24, "timestamp was {ts:?}");
-        assert!(ts.ends_with('Z'), "timestamp was {ts:?}");
-        assert_eq!(ts.chars().nth(4), Some('-'));
-        assert_eq!(ts.chars().nth(10), Some('T'));
     }
 
     #[tokio::test]

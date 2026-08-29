@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 use serde::Deserialize;
 
+use super::policy::{ApprovalPolicy, PolicyOutcome};
 use super::tool::{tool, JsonSchema, Tool, ToolOutput};
 use super::*;
 use crate::llm::error::LlmError;
@@ -108,9 +109,20 @@ impl Tool for CountingTool {
         self.approval
     }
 
-    async fn call(&self, _input: serde_json::Value) -> anyhow::Result<ToolOutput> {
+    async fn call(&self, _ctx: &ToolContext, _input: serde_json::Value) -> anyhow::Result<ToolOutput> {
         *self.calls.lock().unwrap() += 1;
         Ok(ToolOutput::text(self.result.clone()))
+    }
+}
+
+/// An [`ApprovalPolicy`] that returns the same outcome for every request —
+/// enough to drive the policy seam in `run_loop`/`run_stream` without a real
+/// rule.
+struct FixedPolicy(PolicyOutcome);
+
+impl ApprovalPolicy for FixedPolicy {
+    fn evaluate(&self, _request: &ToolApprovalRequest) -> PolicyOutcome {
+        self.0.clone()
     }
 }
 
@@ -232,7 +244,7 @@ async fn a_tool_returning_err_becomes_an_is_error_result_and_the_loop_continues(
         fn def(&self) -> &ToolDef {
             &self.0
         }
-        async fn call(&self, _input: serde_json::Value) -> anyhow::Result<ToolOutput> {
+        async fn call(&self, _ctx: &ToolContext, _input: serde_json::Value) -> anyhow::Result<ToolOutput> {
             Err(anyhow::anyhow!("connection refused"))
         }
     }
@@ -461,6 +473,139 @@ async fn mixed_automatic_and_gated_only_the_gated_one_is_pending() {
         0,
         "the gated call must not have run yet"
     );
+}
+
+// ---------------------------------------------------------------------
+// The approval policy seam
+// ---------------------------------------------------------------------
+
+#[tokio::test]
+async fn a_policy_that_approves_runs_the_tool_immediately_and_never_suspends() {
+    let (deploy, calls) = counting_tool("deploy", Approval::RequiresApproval, "deployed");
+    let provider = Arc::new(ScriptedProvider::new(vec![
+        Ok(tool_call_message("raw", "deploy", serde_json::json!({}))),
+        Ok(text_message("done")),
+    ]));
+    let agent = Agent::builder(model_ref(), 1024)
+        .tool(deploy)
+        .approval_policy(FixedPolicy(PolicyOutcome::Approve {
+            reason: "matches auto-approve rule".to_string(),
+        }))
+        .build_with(provider)
+        .unwrap();
+
+    let turn = agent.next_turn(Conversation::default()).await.unwrap();
+
+    assert!(matches!(turn.stop, TurnStop::Done { .. }));
+    assert_eq!(*calls.lock().unwrap(), 1, "the policy-approved call must have run");
+    assert_eq!(turn.decisions.len(), 1);
+    assert_eq!(turn.decisions[0].decision, Decision::Approve);
+    match &turn.decisions[0].decided_by {
+        DecidedBy::Policy { reason } => assert_eq!(reason, "matches auto-approve rule"),
+        other => panic!("expected DecidedBy::Policy, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn a_policy_that_denies_never_runs_the_tool_and_never_suspends() {
+    let (deploy, calls) = counting_tool("deploy", Approval::RequiresApproval, "deployed");
+    let provider = Arc::new(ScriptedProvider::new(vec![
+        Ok(tool_call_message("raw", "deploy", serde_json::json!({}))),
+        Ok(text_message("done")),
+    ]));
+    let agent = Agent::builder(model_ref(), 1024)
+        .tool(deploy)
+        .approval_policy(FixedPolicy(PolicyOutcome::Deny {
+            reason: "matches auto-deny rule".to_string(),
+        }))
+        .build_with(provider)
+        .unwrap();
+
+    let turn = agent.next_turn(Conversation::default()).await.unwrap();
+
+    assert!(matches!(turn.stop, TurnStop::Done { .. }));
+    assert_eq!(*calls.lock().unwrap(), 0, "a policy-denied call must never run");
+    assert_eq!(turn.decisions.len(), 1);
+    assert_eq!(
+        turn.decisions[0].decision,
+        Decision::Deny {
+            reason: Some("matches auto-deny rule".to_string())
+        }
+    );
+    let denial_text = turn
+        .conversation
+        .messages
+        .iter()
+        .flat_map(|m| m.content.iter())
+        .find_map(|b| match b {
+            ContentBlock::ToolResult { content, is_error: true, .. } => match content.first() {
+                Some(shared::llm::ToolResultContent::Text { text }) => Some(text.clone()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .expect("expected an is_error tool result");
+    assert!(
+        denial_text.contains("a policy denied this tool call"),
+        "denial text was {denial_text:?} — must not claim the user denied it"
+    );
+    assert!(denial_text.contains("matches auto-deny rule"));
+}
+
+#[tokio::test]
+async fn a_policy_that_asks_the_user_still_suspends_and_records_nothing_yet() {
+    let (deploy, calls) = counting_tool("deploy", Approval::RequiresApproval, "deployed");
+    let provider = Arc::new(ScriptedProvider::new(vec![Ok(tool_call_message(
+        "raw",
+        "deploy",
+        serde_json::json!({}),
+    ))]));
+    let agent = Agent::builder(model_ref(), 1024)
+        .tool(deploy)
+        .approval_policy(FixedPolicy(PolicyOutcome::AskUser))
+        .build_with(provider)
+        .unwrap();
+
+    let turn = agent.next_turn(Conversation::default()).await.unwrap();
+
+    assert!(matches!(turn.stop, TurnStop::AwaitingApproval { .. }));
+    assert_eq!(*calls.lock().unwrap(), 0);
+    assert!(
+        turn.decisions.is_empty(),
+        "nothing has been decided yet — the user hasn't answered"
+    );
+}
+
+#[tokio::test]
+async fn the_default_policy_is_ask_user_with_no_explicit_configuration() {
+    // `awaiting_turn_with_one_gated_call` never calls `.approval_policy(..)`
+    // — this is the "no rule configured" behavior every existing caller
+    // gets, unchanged by this feature.
+    let (_agent, turn, calls) = awaiting_turn_with_one_gated_call().await;
+    assert!(matches!(turn.stop, TurnStop::AwaitingApproval { .. }));
+    assert_eq!(*calls.lock().unwrap(), 0);
+}
+
+#[tokio::test]
+async fn resume_approve_records_a_user_decision() {
+    let (agent, turn, _calls) = awaiting_turn_with_one_gated_call().await;
+    let id = first_pending_id(&turn);
+
+    let resumed = agent
+        .resume(
+            turn,
+            &[ToolDecision {
+                tool_use_id: id.clone(),
+                decision: Decision::Approve,
+            }],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resumed.decisions.len(), 1);
+    assert_eq!(resumed.decisions[0].tool_use_id, id);
+    assert_eq!(resumed.decisions[0].decision, Decision::Approve);
+    assert_eq!(resumed.decisions[0].decided_by, DecidedBy::User);
 }
 
 #[tokio::test]
@@ -769,6 +914,26 @@ async fn the_provider_receives_the_joined_system_prompt_and_every_tool_def() {
 }
 
 #[tokio::test]
+async fn a_tool_with_system_prompt_guidance_gets_a_tools_section_appended_after_the_agents_own_prompt() {
+    let deploy = tool("deploy", "ship to prod", |_: WeatherArgs| async move { Ok("ok") })
+        .with_system_prompt("Only deploy when the user explicitly asks for it.");
+    let provider = Arc::new(ScriptedProvider::new(vec![Ok(text_message("ok"))]));
+    let agent = Agent::builder(model_ref(), 1024)
+        .system("You are a helpful assistant.")
+        .tool(deploy)
+        .build_with(provider.clone())
+        .unwrap();
+
+    agent.next_turn(Conversation::default()).await.unwrap();
+
+    let calls = provider.calls.lock().unwrap();
+    let system = calls[0].0.system.as_deref().unwrap();
+    assert!(system.starts_with("You are a helpful assistant.\n\n# Tools"));
+    assert!(system.contains("## deploy"));
+    assert!(system.contains("Only deploy when the user explicitly asks for it."));
+}
+
+#[tokio::test]
 async fn a_forced_tool_choice_is_relaxed_to_auto_after_the_first_step() {
     let (weather, _) = counting_tool("get_weather", Approval::Automatic, "sunny");
     let provider = Arc::new(ScriptedProvider::new(vec![
@@ -954,4 +1119,84 @@ async fn resume_stream_emits_tool_events_and_terminates_with_the_turn_resume_wou
     };
     assert!(matches!(final_turn.stop, TurnStop::Done { .. }));
     assert_eq!(*calls.lock().unwrap(), 1);
+}
+
+#[tokio::test]
+async fn resume_stream_emits_tool_decided_before_the_tool_start_it_explains() {
+    let (agent, turn, _calls) = awaiting_turn_with_one_gated_call().await;
+    let agent = Arc::new(agent);
+    let id = first_pending_id(&turn);
+    let decisions = vec![ToolDecision {
+        tool_use_id: id.clone(),
+        decision: Decision::Approve,
+    }];
+
+    let mut stream = agent.clone().resume_stream(turn, decisions);
+    let mut events = Vec::new();
+    while let Some(event) = stream.next().await {
+        events.push(event.unwrap());
+    }
+
+    let decided_at = events
+        .iter()
+        .position(|e| matches!(e, AgentEvent::ToolDecided { tool_use_id, .. } if *tool_use_id == id))
+        .expect("expected a ToolDecided event");
+    let started_at = events
+        .iter()
+        .position(|e| matches!(e, AgentEvent::ToolStart { tool_use_id, .. } if *tool_use_id == id))
+        .expect("expected a ToolStart event");
+    assert!(decided_at < started_at, "ToolDecided must precede the ToolStart it explains");
+    match &events[decided_at] {
+        AgentEvent::ToolDecided { decided_by, .. } => assert_eq!(*decided_by, DecidedBy::User),
+        _ => unreachable!(),
+    }
+}
+
+#[tokio::test]
+async fn a_policy_deny_in_the_stream_still_closes_its_tool_bubble() {
+    // Regression test: a policy denial must yield ToolStart/ToolEnd exactly
+    // like an automatic call does, or a client that opens a bubble on
+    // ToolStart and only closes it on ToolEnd would show the denied call as
+    // "running…" forever.
+    let (deploy, calls) = counting_tool("deploy", Approval::RequiresApproval, "deployed");
+    let provider = Arc::new(ScriptedProvider::new(vec![
+        Ok(tool_call_message("raw", "deploy", serde_json::json!({}))),
+        Ok(text_message("done")),
+    ]));
+    let agent = Arc::new(
+        Agent::builder(model_ref(), 1024)
+            .tool(deploy)
+            .approval_policy(FixedPolicy(PolicyOutcome::Deny {
+                reason: "matches auto-deny rule".to_string(),
+            }))
+            .build_with(provider)
+            .unwrap(),
+    );
+
+    let mut stream = agent.stream_turn(Conversation::default());
+    let mut events = Vec::new();
+    while let Some(event) = stream.next().await {
+        events.push(event.unwrap());
+    }
+
+    assert!(
+        events.iter().any(|e| matches!(e, AgentEvent::ToolDecided { .. })),
+        "expected a ToolDecided event for the policy's denial"
+    );
+    assert!(events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::ToolStart { name, .. } if name == "deploy")));
+    assert!(
+        events.iter().any(
+            |e| matches!(e, AgentEvent::ToolEnd { name, result: ContentBlock::ToolResult { is_error: true, .. }, .. } if name == "deploy")
+        ),
+        "expected a ToolEnd carrying the deny result, exactly like the automatic path"
+    );
+    assert_eq!(*calls.lock().unwrap(), 0);
+
+    let final_turn = match events.pop() {
+        Some(AgentEvent::Turn(turn)) => turn,
+        other => panic!("expected the stream to end with Turn, got {other:?}"),
+    };
+    assert_eq!(final_turn.decisions.len(), 1);
 }

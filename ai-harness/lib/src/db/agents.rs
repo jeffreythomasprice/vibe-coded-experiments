@@ -131,8 +131,6 @@ fn decode(row: SqliteRow) -> Result<AgentConfig> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shared::agent::spec::Approval;
-    use shared::agent::ToolSelection;
     use shared::llm::model::ModelRef;
     use shared::llm::tool::Thinking;
 
@@ -143,10 +141,7 @@ mod tests {
             model: ModelRef::new("anthropic", "claude-opus-5"),
             system: vec!["Be helpful.".to_string()],
             max_tokens: 1024,
-            tools: vec![ToolSelection {
-                name: "deploy".to_string(),
-                approval: Some(Approval::RequiresApproval),
-            }],
+            tools: vec!["deploy".to_string()],
             tool_choice: None,
             thinking: Thinking::default(),
             stop_sequences: vec![],
@@ -160,7 +155,7 @@ mod tests {
         let created = create(&db, &input("ops")).await.unwrap();
         let fetched = get(&db, created.id).await.unwrap();
         assert_eq!(fetched, created);
-        assert_eq!(fetched.input.tools[0].approval, Some(Approval::RequiresApproval));
+        assert_eq!(fetched.input.tools, vec!["deploy".to_string()]);
     }
 
     #[tokio::test]

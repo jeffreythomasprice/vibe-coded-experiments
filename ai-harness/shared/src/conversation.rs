@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::agent::config::AgentConfig;
-use crate::agent::turn::ToolApprovalRequest;
+use crate::agent::turn::{DecidedBy, Decision, ToolApprovalRequest};
 use crate::error::ErrorReport;
 use crate::ids::{ConversationId, MessageId, TurnId};
 use crate::llm::message::{ContentBlock, Role, StopReason, Usage};
@@ -81,6 +81,28 @@ pub struct PendingApproval {
     pub steps: u32,
 }
 
+/// A permanent record of one gated call's resolution, read back from
+/// `tool_calls` for display — the historical counterpart of
+/// [`crate::agent::turn::ToolDecisionRecord`], which is how it got there.
+///
+/// Keyed by `(turn_id, tool_use_id)`, never `tool_use_id` alone:
+/// `lib::agent::rewrite_tool_use_ids` restarts its counter every turn, so the
+/// same id recurs across a conversation's turns.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ToolDecisionView {
+    pub turn_id: TurnId,
+    pub tool_use_id: String,
+    pub decision: Decision,
+    /// `None` only in the brief window between the user answering (which
+    /// records `decision` immediately) and the turn actually settling
+    /// (which records who/why) — see `lib::db::turns::write_decisions`'s doc.
+    /// Self-heals on the next settle; never means "nobody decided".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decided_by: Option<DecidedBy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decided_at: Option<String>,
+}
+
 /// A full conversation, assembled for display.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConversationView {
@@ -92,6 +114,11 @@ pub struct ConversationView {
     pub messages: Vec<StoredMessage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending: Option<PendingApproval>,
+    /// Every gated call this conversation has ever resolved, across every
+    /// turn — what lets a returning user see whether a past tool bubble was
+    /// approved, denied, and by whom.
+    #[serde(default)]
+    pub decisions: Vec<ToolDecisionView>,
 }
 
 /// What a turn ended as, returned by `send_message`/`approve_tools` once
@@ -235,11 +262,35 @@ mod tests {
                 usage: Usage::default(),
                 steps: 1,
             }),
+            decisions: vec![ToolDecisionView {
+                turn_id: TurnId(1),
+                tool_use_id: "call_1_0".to_string(),
+                decision: Decision::Approve,
+                decided_by: Some(DecidedBy::User),
+                decided_at: Some("2026-08-22T00:00:01.000Z".to_string()),
+            }],
         };
         let json = serde_json::to_string(&view).unwrap();
         let back: ConversationView = serde_json::from_str(&json).unwrap();
         assert_eq!(back, view);
         assert!(back.pending.is_some());
+        assert_eq!(back.decisions.len(), 1);
+    }
+
+    #[test]
+    fn tool_decision_view_omits_decided_by_and_decided_at_when_absent() {
+        let view = ToolDecisionView {
+            turn_id: TurnId(1),
+            tool_use_id: "call_1_0".to_string(),
+            decision: Decision::Approve,
+            decided_by: None,
+            decided_at: None,
+        };
+        let json = serde_json::to_value(&view).unwrap();
+        assert!(json.get("decided_by").is_none());
+        assert!(json.get("decided_at").is_none());
+        let back: ToolDecisionView = serde_json::from_value(json).unwrap();
+        assert_eq!(back, view);
     }
 
     #[test]

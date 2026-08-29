@@ -21,6 +21,7 @@ use tokio::sync::OwnedMutexGuard;
 use shared::agent::AgentEvent;
 use shared::ids::ConversationId;
 
+use crate::agent::tool::{ToolContext, ToolLimits};
 use crate::agent::ToolRegistry;
 use crate::config::Config;
 use crate::db::Db;
@@ -70,6 +71,10 @@ pub struct Service {
     /// unavailable instead. See [`Service::sandbox_status`].
     sandbox: Arc<dyn SandboxBackend>,
     sandbox_availability: Availability,
+    /// Limits `lib::agent::builtin`'s tools consult at call time — see
+    /// `lib::config::ToolsConfig`. `Default` for [`Service::new`] and every
+    /// test that doesn't care about the exact numbers.
+    tool_limits: ToolLimits,
 }
 
 impl Service {
@@ -83,21 +88,31 @@ impl Service {
             runs: Runs::new(),
             sandbox: Arc::new(crate::sandbox::Disabled::new(reason.clone())),
             sandbox_availability: Availability::Unavailable { reason },
+            tool_limits: ToolLimits::default(),
         }
     }
 
     /// Open the configured database, build a `Router` from the configured
-    /// providers, and start with an empty tool registry — callers that ship
-    /// built-in tools register them before handing this to a Tauri command.
+    /// providers, and register every built-in tool (`lib::agent::builtin`) —
+    /// the virtual-filesystem suite and `bash`. [`Service::new`], used by
+    /// every other unit test in this workspace, deliberately keeps starting
+    /// from an empty registry instead.
     pub async fn from_config(config: &Config) -> anyhow::Result<Self> {
         let db = Db::open(&config.database).await?;
         let router = Arc::new(Router::from_config(&config.llm));
-        let tools = Arc::new(ToolRegistry::new());
+        let tools = Arc::new(crate::agent::builtin::registry());
         let (sandbox, sandbox_availability) = crate::sandbox::detect(&config.sandbox);
+        let tool_limits = ToolLimits {
+            bash_timeout_secs: config.tools.bash_timeout_secs,
+            max_output_bytes: config.tools.max_output_bytes,
+            max_read_bytes: config.tools.max_read_bytes,
+            network: config.sandbox.network,
+        };
         Ok(Self {
             db,
             router,
             tools,
+            tool_limits,
             locks: std::sync::Mutex::new(HashMap::new()),
             runs: Runs::new(),
             sandbox,
@@ -123,6 +138,21 @@ impl Service {
         mutex
             .try_lock_owned()
             .map_err(|_| ServiceError::ConversationBusy { conversation_id: id.get() })
+    }
+
+    /// What `conversation_id`'s tools actually run against — built fresh
+    /// every call, from the conversation's *current* project mounts (see
+    /// [`Service::conversation_mounts`]'s doc: a project is a live grant, not
+    /// a premise) and this build's sandbox backend. Callers build one per
+    /// turn, not per tool call.
+    async fn tool_context(&self, conversation_id: ConversationId) -> Result<ToolContext, ServiceError> {
+        let mounts = self.conversation_mounts(conversation_id).await?;
+        Ok(ToolContext::new(
+            crate::vfs::Vfs::new(mounts),
+            Arc::clone(&self.sandbox),
+            self.sandbox_availability.is_available(),
+            self.tool_limits,
+        ))
     }
 }
 

@@ -3,11 +3,14 @@
 
 use std::collections::HashSet;
 
+use leptos::html::Select;
 use leptos::prelude::*;
-use shared::agent::{AgentConfig, AgentConfigInput, ToolSelection, ToolSpec};
+use shared::agent::{AgentConfig, AgentConfigInput, ToolSpec};
 use shared::llm::model::ModelRef;
 use shared::llm::tool::{Effort, Thinking};
+use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
+use web_sys::HtmlOptionElement;
 
 use crate::models::CatalogState;
 use crate::spinner::BusyOverlay;
@@ -32,13 +35,21 @@ pub fn AgentForm(
     let max_steps = RwSignal::new(DEFAULT_MAX_STEPS.to_string());
     let thinking_choice = RwSignal::new("off".to_string());
     let available_tools = RwSignal::new(Vec::<ToolSpec>::new());
-    let selected_tools = RwSignal::new(HashSet::<String>::new());
+    // Which tool names are enabled. Approval isn't represented here at all —
+    // it's the tool's own (`lib::agent::Tool::approval`) and this form has no
+    // way to change it.
+    let enabled = RwSignal::new(HashSet::<String>::new());
     let error = RwSignal::new(None::<String>);
     let saving = RwSignal::new(false);
 
     Effect::new(move |_| {
         spawn_local(async move {
             if let Ok(tools) = commands::tool_catalog().await {
+                // Every tool starts enabled — "by default all tools should
+                // be enabled" — for a *new* agent; this form is create-only
+                // (see `views::Agents`), so there's no existing selection to
+                // preserve instead.
+                enabled.set(tools.iter().map(|t| t.def.name.clone()).collect());
                 available_tools.set(tools);
             }
         });
@@ -95,8 +106,16 @@ pub fn AgentForm(
             "high" => Thinking::Adaptive { effort: Effort::High },
             _ => Thinking::Off,
         };
-        let tools: Vec<ToolSelection> =
-            selected_tools.get().into_iter().map(|name| ToolSelection { name, approval: None }).collect();
+        // Filter the catalog rather than dump the `enabled` set directly, so
+        // the saved order matches the catalog's (alphabetical) rather than
+        // whatever a `HashSet` happens to iterate in.
+        let enabled_now = enabled.get();
+        let tools: Vec<String> = available_tools
+            .get()
+            .iter()
+            .map(|t| t.def.name.clone())
+            .filter(|name| enabled_now.contains(name))
+            .collect();
 
         let input = AgentConfigInput {
             name: trimmed_name,
@@ -229,17 +248,7 @@ pub fn AgentForm(
                                 view! { <p class="muted">"No tools are registered in this build."</p> }
                                     .into_any()
                             } else {
-                                view! {
-                                    <ul class="tool-checklist">
-                                        <For
-                                            each=move || available_tools.get()
-                                            key=|t| t.def.name.clone()
-                                            let:tool
-                                        >
-                                            <ToolCheckbox tool=tool selected_tools=selected_tools />
-                                        </For>
-                                    </ul>
-                                }
+                                view! { <ToolTransfer available_tools=available_tools enabled=enabled /> }
                                     .into_any()
                             }
                         }}
@@ -276,30 +285,115 @@ pub fn AgentForm(
     }
 }
 
+/// The Available / Enabled dual multiselect. Both panes are derived from
+/// `available_tools` (the catalog, in its own fixed order) filtered by
+/// membership in `enabled`, so each pane stays stable and alphabetical
+/// rather than reflecting whatever order a tool was last moved in.
 #[component]
-fn ToolCheckbox(tool: ToolSpec, selected_tools: RwSignal<HashSet<String>>) -> impl IntoView {
-    let name = tool.def.name.clone();
-    let label = tool.def.name.clone();
+fn ToolTransfer(available_tools: RwSignal<Vec<ToolSpec>>, enabled: RwSignal<HashSet<String>>) -> impl IntoView {
+    let available_select: NodeRef<Select> = NodeRef::new();
+    let enabled_select: NodeRef<Select> = NodeRef::new();
+
+    let available_pane = move || {
+        let enabled_now = enabled.get();
+        available_tools.get().into_iter().filter(move |t| !enabled_now.contains(&t.def.name)).collect::<Vec<_>>()
+    };
+    let enabled_pane = move || {
+        let enabled_now = enabled.get();
+        available_tools.get().into_iter().filter(move |t| enabled_now.contains(&t.def.name)).collect::<Vec<_>>()
+    };
+
+    // Reads whichever `<option>`s are currently highlighted in `select`.
+    let selected_names = move |select: &NodeRef<Select>| -> Vec<String> {
+        let Some(select) = select.get() else {
+            return Vec::new();
+        };
+        let options = select.selected_options();
+        (0..options.length())
+            .filter_map(|i| options.item(i))
+            .filter_map(|el| el.dyn_into::<HtmlOptionElement>().ok())
+            .map(|opt| opt.value())
+            .collect()
+    };
+
+    let enable_selected = move |_| {
+        let names = selected_names(&available_select);
+        enabled.update(|set| set.extend(names));
+    };
+    let disable_selected = move |_| {
+        let names = selected_names(&enabled_select);
+        enabled.update(|set| {
+            for name in &names {
+                set.remove(name);
+            }
+        });
+    };
+    let enable_all = move |_| {
+        enabled.set(available_tools.get().iter().map(|t| t.def.name.clone()).collect());
+    };
+    let disable_all = move |_| {
+        enabled.set(HashSet::new());
+    };
+    // A double-click on either side moves just that one tool across —
+    // quicker than select-then-click-the-button for a single item.
+    let toggle = move |name: String| {
+        enabled.update(|set| {
+            if !set.remove(&name) {
+                set.insert(name);
+            }
+        });
+    };
+
     view! {
-        <li>
-            <label>
-                <input
-                    type="checkbox"
-                    on:change=move |ev| {
-                        let checked = event_target_checked(&ev);
-                        let name = name.clone();
-                        selected_tools
-                            .update(|set| {
-                                if checked {
-                                    set.insert(name);
-                                } else {
-                                    set.remove(&name);
-                                }
-                            });
-                    }
-                />
-                {label}
-            </label>
-        </li>
+        <div class="tool-transfer">
+            <div class="tool-transfer-pane">
+                <span class="muted">"Available"</span>
+                <select multiple=true size="8" node_ref=available_select>
+                    <For each=available_pane key=|t| t.def.name.clone() let:tool>
+                        <option
+                            value=tool.def.name.clone()
+                            title=tool.def.description.clone()
+                            on:dblclick={
+                                let name = tool.def.name.clone();
+                                move |_| toggle(name.clone())
+                            }
+                        >
+                            {tool.def.name.clone()}
+                        </option>
+                    </For>
+                </select>
+            </div>
+            <div class="tool-transfer-buttons">
+                <button type="button" on:click=enable_selected>
+                    "Enable →"
+                </button>
+                <button type="button" on:click=enable_all>
+                    "Enable all"
+                </button>
+                <button type="button" on:click=disable_selected>
+                    "← Disable"
+                </button>
+                <button type="button" on:click=disable_all>
+                    "Disable all"
+                </button>
+            </div>
+            <div class="tool-transfer-pane">
+                <span class="muted">"Enabled"</span>
+                <select multiple=true size="8" node_ref=enabled_select>
+                    <For each=enabled_pane key=|t| t.def.name.clone() let:tool>
+                        <option
+                            value=tool.def.name.clone()
+                            title=tool.def.description.clone()
+                            on:dblclick={
+                                let name = tool.def.name.clone();
+                                move |_| toggle(name.clone())
+                            }
+                        >
+                            {tool.def.name.clone()}
+                        </option>
+                    </For>
+                </select>
+            </div>
+        </div>
     }
 }

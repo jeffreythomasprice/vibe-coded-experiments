@@ -20,6 +20,12 @@ pub struct AgentTurn {
     /// How many model calls this turn made.
     pub steps: u32,
     pub stop: TurnStop,
+    /// Every gated tool call this turn resolved, whether by the user or by
+    /// an [`crate::agent::spec::Approval`]-consulting policy — appended to as
+    /// the turn runs, never rewritten. `#[serde(default)]` so a `turn_json`
+    /// row stored before this field existed still deserializes.
+    #[serde(default)]
+    pub decisions: Vec<ToolDecisionRecord>,
 }
 
 /// How a turn ended.
@@ -65,7 +71,7 @@ pub struct ToolDecision {
     pub decision: Decision,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Decision {
     Approve,
@@ -75,6 +81,35 @@ pub enum Decision {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
     },
+}
+
+/// Who resolved a gated tool call — a person, through the approval UI, or an
+/// automatic [`crate::agent::spec::Approval`]-consulting policy (not yet
+/// implemented by any rule; this is the hook for one). Distinct from
+/// [`Decision`], which only says what was decided.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DecidedBy {
+    User,
+    Policy {
+        /// Why the policy ruled the way it did — shown to the user
+        /// alongside the decision, e.g. "matched auto-approve rule for
+        /// read-only paths".
+        reason: String,
+    },
+}
+
+/// A permanent record of one gated call's resolution — appended to
+/// [`AgentTurn::decisions`] as it happens, and eventually mirrored into
+/// `tool_calls.decided_by`/`decision_reason`/`decided_at` by
+/// `lib::db::turns::settle`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ToolDecisionRecord {
+    pub tool_use_id: String,
+    pub decision: Decision,
+    pub decided_by: DecidedBy,
+    /// ISO8601 UTC, millisecond precision.
+    pub decided_at: String,
 }
 
 #[cfg(test)]
@@ -107,12 +142,54 @@ mod tests {
             stop: TurnStop::Done {
                 stop_reason: StopReason::EndTurn,
             },
+            decisions: vec![],
         };
         let json = serde_json::to_string(&turn).unwrap();
         let back: AgentTurn = serde_json::from_str(&json).unwrap();
         assert_eq!(back.steps, 1);
         assert_eq!(back.usage.input_tokens, 10);
         assert!(matches!(back.stop, TurnStop::Done { .. }));
+    }
+
+    /// A `turns.turn_json` row written before `AgentTurn::decisions` existed
+    /// has no `"decisions"` key at all. `#[serde(default)]` is what makes it
+    /// still deserialize after this field ships — without it, every
+    /// conversation with a turn suspended across the upgrade would fail to
+    /// load.
+    #[test]
+    fn agent_turn_without_a_decisions_field_deserializes_with_it_defaulted_empty() {
+        let json = serde_json::json!({
+            "conversation": {"system": null, "messages": []},
+            "added": [],
+            "usage": {"input_tokens": 0, "output_tokens": 0},
+            "steps": 1,
+            "stop": {"type": "done", "stop_reason": "end_turn"},
+        });
+        let turn: AgentTurn = serde_json::from_value(json).unwrap();
+        assert!(turn.decisions.is_empty());
+    }
+
+    #[test]
+    fn tool_decision_record_round_trips_with_a_policy_reason() {
+        let record = ToolDecisionRecord {
+            tool_use_id: "call_1_0".to_string(),
+            decision: Decision::Deny { reason: Some("too risky".to_string()) },
+            decided_by: DecidedBy::Policy { reason: "matched deny rule".to_string() },
+            decided_at: "2026-08-29T00:00:00.000Z".to_string(),
+        };
+        let json = serde_json::to_value(&record).unwrap();
+        assert_eq!(json["decided_by"]["type"], serde_json::json!("policy"));
+        assert_eq!(json["decided_by"]["reason"], serde_json::json!("matched deny rule"));
+        let back: ToolDecisionRecord = serde_json::from_value(json).unwrap();
+        assert_eq!(back, record);
+    }
+
+    #[test]
+    fn decided_by_user_round_trips_with_no_extra_fields() {
+        let json = serde_json::to_value(DecidedBy::User).unwrap();
+        assert_eq!(json, serde_json::json!({"type": "user"}));
+        let back: DecidedBy = serde_json::from_value(json).unwrap();
+        assert_eq!(back, DecidedBy::User);
     }
 
     #[test]
@@ -191,6 +268,7 @@ mod tests {
             stop: TurnStop::Done {
                 stop_reason: StopReason::EndTurn,
             },
+            decisions: vec![],
         };
         assert_eq!(turn.added[0].role, Role::Assistant);
     }

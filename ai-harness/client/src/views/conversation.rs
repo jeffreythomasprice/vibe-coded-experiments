@@ -1,9 +1,13 @@
 //! Reading and continuing one conversation: a bubble per content block, each
 //! kind formatted per its own rule, followed by a composer.
 
+use std::collections::HashMap;
+use std::collections::HashSet;
+
 use leptos::prelude::*;
-use shared::conversation::{ConversationView as ConversationViewDto, StoredMessage};
-use shared::ids::{ConversationId, MessageId};
+use shared::agent::{DecidedBy, Decision, ToolDecision};
+use shared::conversation::ConversationView as ConversationViewDto;
+use shared::ids::ConversationId;
 use shared::llm::image::MediaType;
 use shared::llm::message::ToolResultContent;
 use wasm_bindgen_futures::spawn_local;
@@ -13,7 +17,7 @@ use crate::composer;
 use crate::markdown;
 use crate::runs::{Phase, Runs};
 use crate::spinner::{LoadingPanel, Spinner};
-use crate::transcript::{self, Bubble, Rendered, ToolOutcome};
+use crate::transcript::{self, Bubble, BubbleDecision, Rendered, ToolOutcome};
 
 #[component]
 pub fn Conversation(id: ConversationId) -> impl IntoView {
@@ -76,7 +80,49 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
     // Only recomputed when the persisted view changes — not on every
     // streaming delta, which only touches `run`'s draft.
     let persisted_bubbles = Memo::new(move |_| {
-        view.get().map(|v| transcript::flatten(&v.messages)).unwrap_or_default()
+        view.get()
+            .map(|v| transcript::flatten(&v.messages, &v.decisions, &HashSet::new()))
+            .unwrap_or_default()
+    });
+
+    // The decisions gathered so far for the *current* pending turn, keyed by
+    // `tool_use_id`. Reset whenever the pending turn itself changes — a
+    // fresh suspend, a different turn, or none at all — never partially, so
+    // a decision can't survive from one turn into the next (`tool_use_id`s
+    // recur across turns; see `transcript::flatten`'s doc). Done in an
+    // `Effect`, not inline in the render closure below, so clearing the map
+    // is never itself a render-time side effect on a signal the same render
+    // also reads.
+    let decisions_map = RwSignal::new(HashMap::<String, Decision>::new());
+    let pending_turn_id = Memo::new(move |_| view.get().and_then(|v| v.pending.map(|p| p.turn_id)));
+    Effect::new(move |_| {
+        pending_turn_id.get();
+        decisions_map.set(HashMap::new());
+    });
+
+    // Records one gated call's decision and, once every pending call in this
+    // turn has one, submits them all at once. No separate "already
+    // submitted" guard is needed: `runs.approve` flips this conversation's
+    // `run` phase to `Attaching` synchronously, and the render below
+    // suppresses the whole pending section — buttons included — the instant
+    // it's busy, before Leptos can even schedule another render off a
+    // further click.
+    let on_decide = Callback::new(move |(tool_use_id, decision): (String, Decision)| {
+        decisions_map.update(|m| {
+            m.insert(tool_use_id, decision);
+        });
+        let Some(pending) = view.get_untracked().and_then(|v| v.pending) else {
+            return;
+        };
+        let ready = decisions_map.with_untracked(|m| pending.requests.iter().all(|r| m.contains_key(&r.tool_use_id)));
+        if ready {
+            let decisions: Vec<ToolDecision> = decisions_map
+                .get_untracked()
+                .into_iter()
+                .map(|(tool_use_id, decision)| ToolDecision { tool_use_id, decision })
+                .collect();
+            runs.approve(id, decisions);
+        }
     });
 
     // `run` is `ArcRwSignal`, not `Copy` (see `Runs::state`'s doc), so every
@@ -127,10 +173,18 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
                         bubbles.extend(run_state.draft.bubbles());
                     }
                     let indexed_bubbles: Vec<(usize, Rendered)> = bubbles.into_iter().enumerate().collect();
-                    let pending_indexed: Option<Vec<(usize, Rendered)>> = loaded
-                        .pending
-                        .as_ref()
-                        .map(|p| flatten_pending(&p.added).into_iter().enumerate().collect());
+                    // Suppressed while busy: once `on_decide` submits, the
+                    // live draft (already folded into `bubbles` above) is
+                    // authoritative for this window — rendering the
+                    // persisted pending block alongside it would duplicate
+                    // the just-approved calls and show them out of order,
+                    // and its buttons must vanish anyway so a further click
+                    // can't resubmit.
+                    let pending = loaded.pending.as_ref().filter(|_| !busy);
+                    let pending_indexed: Option<Vec<(usize, Rendered)>> = pending
+                        .map(|p| transcript::flatten_pending(p, &loaded.decisions).into_iter().enumerate().collect());
+                    let decided_count = decisions_map.get().len();
+                    let total_requests = pending.map(|p| p.requests.len()).unwrap_or(0);
                     let title = loaded
                         .summary
                         .title
@@ -152,10 +206,14 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
                                     view! {
                                         <div class="pending-approval">
                                             <p class="notice">
-                                                "A tool call here is awaiting approval — this UI doesn't support approving it yet."
+                                                {if total_requests > 1 {
+                                                    format!("Waiting on your decision — {decided_count} of {total_requests} decided.")
+                                                } else {
+                                                    "Waiting on your decision.".to_string()
+                                                }}
                                             </p>
                                             <For each=move || indexed.clone() key=|(index, _)| *index let:item>
-                                                <BubbleView rendered=item.1 />
+                                                <BubbleView rendered=item.1 on_decide=on_decide />
                                             </For>
                                         </div>
                                     }
@@ -221,35 +279,16 @@ pub fn Conversation(id: ConversationId) -> impl IntoView {
     }
 }
 
-/// Wraps a suspended turn's un-persisted `added` messages into throwaway
-/// `StoredMessage`s so [`transcript::flatten`] can render them too — they
-/// have no row (and so no real id/seq/timestamp) until the turn settles.
-fn flatten_pending(added: &[shared::llm::message::Message]) -> Vec<Rendered> {
-    let fake: Vec<StoredMessage> = added
-        .iter()
-        .enumerate()
-        .map(|(index, message)| StoredMessage {
-            id: MessageId(0),
-            seq: index as u32,
-            turn_id: None,
-            role: message.role,
-            content: message.content.clone(),
-            created_at: String::new(),
-        })
-        .collect();
-    transcript::flatten(&fake)
-        .into_iter()
-        .map(|mut rendered| {
-            // These never had a real timestamp — show them the same way a
-            // still-streaming bubble is shown, rather than a blank string.
-            rendered.timestamp = None;
-            rendered
-        })
-        .collect()
-}
-
 #[component]
-fn BubbleView(rendered: Rendered) -> impl IntoView {
+fn BubbleView(
+    rendered: Rendered,
+    /// Only ever `Some` for a bubble rendered from `PendingApproval::requests`
+    /// (see `views::conversation::Conversation`'s own `pending_indexed`) —
+    /// every other call site passes `None`, and a bubble with `awaiting:
+    /// false` never renders the controls even when it's `Some`.
+    #[prop(optional)]
+    on_decide: Option<Callback<(String, Decision)>>,
+) -> impl IntoView {
     let timestamp = rendered.timestamp.clone();
     let timestamp_label = timestamp.unwrap_or_else(|| "streaming…".to_string());
 
@@ -287,8 +326,8 @@ fn BubbleView(rendered: Rendered) -> impl IntoView {
             }
                 .into_any()
         }
-        Bubble::Tool { name, input, result } => {
-            let summary_text = tool_summary(&name, &input, result.as_ref());
+        Bubble::Tool { tool_use_id, name, input, result, decision, awaiting } => {
+            let summary_text = tool_summary(&name, &input, result.as_ref(), awaiting);
             let input_pretty = serde_json::to_string_pretty(&input).unwrap_or_default();
             let result_section = result.map(|outcome| {
                 let label = if outcome.is_error { "Error" } else { "Result" };
@@ -298,8 +337,31 @@ fn BubbleView(rendered: Rendered) -> impl IntoView {
                     <pre>{text}</pre>
                 }
             });
+            let decision_line = decision.map(|d| view! { <p class="tool-decision">{decision_provenance_text(&d)}</p> });
+            let approval_controls = awaiting.then(|| on_decide).flatten().map(|on_decide| {
+                let approve_id = tool_use_id.clone();
+                let deny_id = tool_use_id.clone();
+                view! {
+                    <div class="tool-approval">
+                        <button
+                            type="button"
+                            class="approve"
+                            on:click=move |_| on_decide.run((approve_id.clone(), Decision::Approve))
+                        >
+                            "Approve"
+                        </button>
+                        <button
+                            type="button"
+                            class="deny"
+                            on:click=move |_| on_decide.run((deny_id.clone(), Decision::Deny { reason: None }))
+                        >
+                            "Deny"
+                        </button>
+                    </div>
+                }
+            });
             view! {
-                <details class="bubble bubble-tool">
+                <details class="bubble bubble-tool" class:bubble-tool-pending=awaiting open=awaiting>
                     <summary>
                         <span class="bubble-timestamp">{timestamp_label}</span>
                         {summary_text}
@@ -308,6 +370,8 @@ fn BubbleView(rendered: Rendered) -> impl IntoView {
                         <h4>"Input"</h4>
                         <pre>{input_pretty}</pre>
                         {result_section}
+                        {decision_line}
+                        {approval_controls}
                     </div>
                 </details>
             }
@@ -328,15 +392,36 @@ fn BubbleView(rendered: Rendered) -> impl IntoView {
 
 /// The always-visible line for a tool bubble — full input/result detail lives
 /// in the `<details>` body around it.
-fn tool_summary(name: &str, input: &serde_json::Value, result: Option<&ToolOutcome>) -> String {
+fn tool_summary(name: &str, input: &serde_json::Value, result: Option<&ToolOutcome>, awaiting: bool) -> String {
     let compact = serde_json::to_string(input).unwrap_or_default();
     let preview: String = compact.chars().take(80).collect();
     let preview = if compact.chars().count() > 80 { format!("{preview}…") } else { preview };
-    match result {
-        None => format!("{name}({preview}) — running…"),
-        Some(outcome) if outcome.is_error => format!("{name}({preview}) — error"),
-        Some(_) => format!("{name}({preview}) — done"),
+    match (awaiting, result) {
+        (true, _) => format!("{name}({preview}) — awaiting your approval"),
+        (false, None) => format!("{name}({preview}) — running…"),
+        (false, Some(outcome)) if outcome.is_error => format!("{name}({preview}) — error"),
+        (false, Some(_)) => format!("{name}({preview}) — done"),
     }
+}
+
+/// A short, human-readable line for a settled gated call: who resolved it,
+/// and when, in the vocabulary the approval history requirement asks for —
+/// "Approved by you · 14:32:07" / "Denied automatically: <reason>".
+fn decision_provenance_text(decision: &BubbleDecision) -> String {
+    let verb = match decision.decision {
+        Decision::Approve => "Approved",
+        Decision::Deny { .. } => "Denied",
+    };
+    let body = match &decision.decided_by {
+        Some(DecidedBy::User) => "by you".to_string(),
+        Some(DecidedBy::Policy { reason }) => format!("automatically: {reason}"),
+        // The decision is recorded (see `shared::conversation::ToolDecisionView`'s
+        // doc), but provenance hasn't settled yet — a brief, self-healing gap
+        // right after answering, before the turn is driven forward again.
+        None => String::new(),
+    };
+    let when = decision.decided_at.as_deref().map(|t| format!(" · {t}")).unwrap_or_default();
+    format!("{verb} {body}{when}").trim().to_string()
 }
 
 fn tool_result_text(outcome: &ToolOutcome) -> String {

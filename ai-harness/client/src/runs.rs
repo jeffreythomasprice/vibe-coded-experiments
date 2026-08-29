@@ -17,6 +17,7 @@
 use std::collections::HashMap;
 
 use leptos::prelude::*;
+use shared::agent::ToolDecision;
 use shared::conversation::RunStatus;
 use shared::ids::ConversationId;
 use wasm_bindgen_futures::spawn_local;
@@ -128,6 +129,30 @@ impl Runs {
         let this = *self;
         spawn_local(async move {
             match commands::start_message(id, text).await {
+                Ok(()) => this.follow(id, Phase::Attaching),
+                Err(err) => state.update(|s| {
+                    s.phase = Phase::Idle;
+                    s.error = Some(err.message);
+                }),
+            }
+        });
+    }
+
+    /// The `approve_tools` counterpart to [`Runs::send`] — resolves this
+    /// conversation's pending tool calls and follows the turn forward from
+    /// there. `start_approve_tools` is the detached counterpart of
+    /// `start_message` (see its own doc), so it registers a run the same
+    /// way and this reuses the identical `follow` machinery.
+    pub fn approve(&self, id: ConversationId, decisions: Vec<ToolDecision>) {
+        let state = self.state(id);
+        state.update(|s| {
+            s.phase = Phase::Attaching;
+            s.draft = Draft::new();
+            s.error = None;
+        });
+        let this = *self;
+        spawn_local(async move {
+            match commands::start_approve_tools(id, decisions).await {
                 Ok(()) => this.follow(id, Phase::Attaching),
                 Err(err) => state.update(|s| {
                     s.phase = Phase::Idle;

@@ -9,13 +9,19 @@
 //! blocking-vs-streaming-equivalence behavior, all exercised against
 //! `lib::llm::testing::ScriptedProvider` — no network involved.
 
+pub mod builtin;
 pub mod error;
+pub mod policy;
 pub mod registry;
 pub mod tool;
 
 pub use error::AgentError;
-pub use registry::{build_agent, with_approval, ToolRegistry};
-pub use tool::{json_tool, schema_for, tool, FnTool, JsonSchema, Tool, ToolBox, ToolOutput};
+pub use policy::{ApprovalPolicy, AskUser, PolicyOutcome};
+pub use registry::{build_agent, ToolRegistry};
+pub use tool::{
+    ctx_tool, json_tool, schema_for, tool, FnTool, JsonSchema, Tool, ToolBox, ToolContext,
+    ToolLimits, ToolOutput,
+};
 
 use std::collections::{BTreeSet, HashMap};
 use std::pin::Pin;
@@ -23,14 +29,15 @@ use std::sync::Arc;
 
 use futures_util::{Stream, StreamExt};
 use shared::agent::{
-    AgentEvent, AgentSpec, AgentTurn, Approval, Decision, ToolApprovalRequest, ToolDecision,
-    TurnStop,
+    AgentEvent, AgentSpec, AgentTurn, Approval, DecidedBy, Decision, ToolApprovalRequest,
+    ToolDecision, ToolDecisionRecord, TurnStop,
 };
 use shared::llm::{
     ChatOptions, ContentBlock, Conversation, Message, ModelRef, StopReason, Thinking, ToolChoice,
     ToolResultContent, Usage,
 };
 
+use crate::clock::now_iso8601;
 use crate::llm::accumulate::MessageAccumulator;
 use crate::llm::router::Router;
 use crate::llm::ChatProvider;
@@ -45,6 +52,8 @@ pub struct Agent {
     provider: Arc<dyn ChatProvider>,
     spec: AgentSpec,
     tools: ToolBox,
+    policy: Arc<dyn ApprovalPolicy>,
+    context: ToolContext,
 }
 
 impl Agent {
@@ -52,6 +61,8 @@ impl Agent {
         AgentBuilder {
             spec: AgentSpec::new(model, max_tokens),
             tools: Vec::new(),
+            policy: Arc::new(AskUser),
+            context: ToolContext::default(),
         }
     }
 
@@ -79,7 +90,7 @@ impl Agent {
     /// tool call needs approval, or `max_steps` is hit. See this module's doc
     /// and the "Loop semantics" section of the design this implements.
     pub async fn next_turn(&self, conversation: Conversation) -> Result<AgentTurn, AgentError> {
-        self.run_loop(conversation, Vec::new(), Usage::default(), 0)
+        self.run_loop(conversation, Vec::new(), Usage::default(), 0, Vec::new())
             .await
     }
 
@@ -100,6 +111,7 @@ impl Agent {
             usage,
             steps,
             stop,
+            decisions: mut decision_log,
         } = turn;
         let TurnStop::AwaitingApproval { pending, completed } = stop else {
             return Err(AgentError::NotAwaitingApproval);
@@ -115,8 +127,11 @@ impl Agent {
                     self.execute_tool_call(&p.tool_use_id, &p.name, &p.input)
                         .await
                 }
-                Decision::Deny { reason } => deny_result(&p.tool_use_id, reason.clone()),
+                Decision::Deny { reason } => {
+                    deny_result(&p.tool_use_id, DenialSource::User, reason.clone())
+                }
             };
+            decision_log.push(decision_record(&p.tool_use_id, decision.clone(), DecidedBy::User));
             by_id.insert(p.tool_use_id.clone(), result);
         }
 
@@ -125,7 +140,7 @@ impl Agent {
         conversation.messages.push(user_message.clone());
         added.push(user_message);
 
-        self.run_loop(conversation, added, usage, steps).await
+        self.run_loop(conversation, added, usage, steps, decision_log).await
     }
 
     /// The streaming equivalent of [`Agent::next_turn`]. Returns the stream
@@ -152,6 +167,7 @@ impl Agent {
             usage,
             steps,
             stop,
+            decisions: decision_log,
         } = turn;
         let TurnStop::AwaitingApproval { pending, completed } = stop else {
             return err_stream(AgentError::NotAwaitingApproval);
@@ -166,6 +182,7 @@ impl Agent {
             added,
             usage,
             steps,
+            decision_log,
             pending,
             completed,
             original_order,
@@ -196,7 +213,7 @@ impl Agent {
         input: &serde_json::Value,
     ) -> ContentBlock {
         match self.tools.get(name) {
-            Some(tool) => match tool.call(input.clone()).await {
+            Some(tool) => match tool.call(&self.context, input.clone()).await {
                 Ok(output) => ContentBlock::ToolResult {
                     tool_use_id: id.to_string(),
                     content: output.content,
@@ -229,6 +246,7 @@ impl Agent {
         mut added: Vec<Message>,
         mut usage: Usage,
         mut steps: u32,
+        mut decisions: Vec<ToolDecisionRecord>,
     ) -> Result<AgentTurn, AgentError> {
         // The agent's spec is authoritative for the system prompt — whatever
         // `conversation.system` the caller passed in (commonly `None`, since
@@ -243,6 +261,7 @@ impl Agent {
                     usage,
                     steps,
                     stop: TurnStop::MaxSteps,
+                    decisions,
                 });
             }
 
@@ -271,6 +290,7 @@ impl Agent {
                     stop: TurnStop::Done {
                         stop_reason: response.stop_reason,
                     },
+                    decisions,
                 });
             }
 
@@ -287,11 +307,34 @@ impl Agent {
                         completed_results.push(self.execute_tool_call(id, name, input).await);
                     }
                     Approval::RequiresApproval => {
-                        pending.push(ToolApprovalRequest {
+                        let request = ToolApprovalRequest {
                             tool_use_id: id.clone(),
                             name: name.clone(),
                             input: input.clone(),
-                        });
+                        };
+                        match self.policy.evaluate(&request) {
+                            PolicyOutcome::Approve { reason } => {
+                                completed_results.push(self.execute_tool_call(id, name, input).await);
+                                decisions.push(decision_record(
+                                    id,
+                                    Decision::Approve,
+                                    DecidedBy::Policy { reason },
+                                ));
+                            }
+                            PolicyOutcome::Deny { reason } => {
+                                completed_results.push(deny_result(
+                                    id,
+                                    DenialSource::Policy,
+                                    Some(reason.clone()),
+                                ));
+                                decisions.push(decision_record(
+                                    id,
+                                    Decision::Deny { reason: Some(reason.clone()) },
+                                    DecidedBy::Policy { reason },
+                                ));
+                            }
+                            PolicyOutcome::AskUser => pending.push(request),
+                        }
                     }
                 }
             }
@@ -306,6 +349,7 @@ impl Agent {
                         pending,
                         completed: completed_results,
                     },
+                    decisions,
                 });
             }
 
@@ -323,13 +367,14 @@ impl Agent {
     fn run_stream(self: Arc<Self>, start: StreamStart) -> AgentStream {
         let this = self;
         let stream = async_stream::try_stream! {
-            let (mut conversation, mut added, mut usage, mut steps) = match start {
-                StreamStart::Fresh(conversation) => (conversation, Vec::new(), Usage::default(), 0),
+            let (mut conversation, mut added, mut usage, mut steps, mut decision_log) = match start {
+                StreamStart::Fresh(conversation) => (conversation, Vec::new(), Usage::default(), 0, Vec::new()),
                 StreamStart::Resumed {
                     mut conversation,
                     mut added,
                     usage,
                     steps,
+                    mut decision_log,
                     pending,
                     completed,
                     original_order,
@@ -338,6 +383,13 @@ impl Agent {
                     let mut by_id = index_by_tool_use_id(completed);
                     for p in &pending {
                         let decision = &decisions[&p.tool_use_id];
+                        yield AgentEvent::ToolDecided {
+                            tool_use_id: p.tool_use_id.clone(),
+                            name: p.name.clone(),
+                            decision: decision.clone(),
+                            decided_by: DecidedBy::User,
+                        };
+                        decision_log.push(decision_record(&p.tool_use_id, decision.clone(), DecidedBy::User));
                         yield AgentEvent::ToolStart {
                             tool_use_id: p.tool_use_id.clone(),
                             name: p.name.clone(),
@@ -345,7 +397,7 @@ impl Agent {
                         };
                         let result = match decision {
                             Decision::Approve => this.execute_tool_call(&p.tool_use_id, &p.name, &p.input).await,
-                            Decision::Deny { reason } => deny_result(&p.tool_use_id, reason.clone()),
+                            Decision::Deny { reason } => deny_result(&p.tool_use_id, DenialSource::User, reason.clone()),
                         };
                         yield AgentEvent::ToolEnd {
                             tool_use_id: p.tool_use_id.clone(),
@@ -358,7 +410,7 @@ impl Agent {
                     let user_message = Message::user(merged);
                     conversation.messages.push(user_message.clone());
                     added.push(user_message);
-                    (conversation, added, usage, steps)
+                    (conversation, added, usage, steps, decision_log)
                 }
             };
             // See `run_loop`'s matching comment: the spec is authoritative.
@@ -366,7 +418,7 @@ impl Agent {
 
             loop {
                 if steps >= this.spec.max_steps {
-                    yield AgentEvent::Turn(AgentTurn { conversation, added, usage, steps, stop: TurnStop::MaxSteps });
+                    yield AgentEvent::Turn(AgentTurn { conversation, added, usage, steps, stop: TurnStop::MaxSteps, decisions: decision_log });
                     return;
                 }
 
@@ -402,6 +454,7 @@ impl Agent {
                     yield AgentEvent::Turn(AgentTurn {
                         conversation, added, usage, steps,
                         stop: TurnStop::Done { stop_reason: response.stop_reason },
+                        decisions: decision_log,
                     });
                     return;
                 }
@@ -417,7 +470,35 @@ impl Agent {
                             completed_results.push(result);
                         }
                         Approval::RequiresApproval => {
-                            pending.push(ToolApprovalRequest { tool_use_id: id.clone(), name: name.clone(), input: input.clone() });
+                            let request = ToolApprovalRequest { tool_use_id: id.clone(), name: name.clone(), input: input.clone() };
+                            match this.policy.evaluate(&request) {
+                                PolicyOutcome::Approve { reason } => {
+                                    yield AgentEvent::ToolDecided {
+                                        tool_use_id: id.clone(), name: name.clone(),
+                                        decision: Decision::Approve,
+                                        decided_by: DecidedBy::Policy { reason: reason.clone() },
+                                    };
+                                    decision_log.push(decision_record(id, Decision::Approve, DecidedBy::Policy { reason }));
+                                    yield AgentEvent::ToolStart { tool_use_id: id.clone(), name: name.clone(), input: input.clone() };
+                                    let result = this.execute_tool_call(id, name, input).await;
+                                    yield AgentEvent::ToolEnd { tool_use_id: id.clone(), name: name.clone(), result: result.clone() };
+                                    completed_results.push(result);
+                                }
+                                PolicyOutcome::Deny { reason } => {
+                                    let decision = Decision::Deny { reason: Some(reason.clone()) };
+                                    yield AgentEvent::ToolDecided {
+                                        tool_use_id: id.clone(), name: name.clone(),
+                                        decision: decision.clone(),
+                                        decided_by: DecidedBy::Policy { reason: reason.clone() },
+                                    };
+                                    decision_log.push(decision_record(id, decision, DecidedBy::Policy { reason: reason.clone() }));
+                                    yield AgentEvent::ToolStart { tool_use_id: id.clone(), name: name.clone(), input: input.clone() };
+                                    let result = deny_result(id, DenialSource::Policy, Some(reason));
+                                    yield AgentEvent::ToolEnd { tool_use_id: id.clone(), name: name.clone(), result: result.clone() };
+                                    completed_results.push(result);
+                                }
+                                PolicyOutcome::AskUser => pending.push(request),
+                            }
                         }
                     }
                 }
@@ -426,6 +507,7 @@ impl Agent {
                     yield AgentEvent::Turn(AgentTurn {
                         conversation, added, usage, steps,
                         stop: TurnStop::AwaitingApproval { pending, completed: completed_results },
+                        decisions: decision_log,
                     });
                     return;
                 }
@@ -446,6 +528,7 @@ enum StreamStart {
         added: Vec<Message>,
         usage: Usage,
         steps: u32,
+        decision_log: Vec<ToolDecisionRecord>,
         pending: Vec<ToolApprovalRequest>,
         completed: Vec<ContentBlock>,
         original_order: Vec<String>,
@@ -514,12 +597,37 @@ fn add_optional(a: Option<u32>, b: Option<u32>) -> Option<u32> {
     }
 }
 
-fn deny_result(tool_use_id: &str, reason: Option<String>) -> ContentBlock {
-    let text = reason.unwrap_or_else(|| "the user denied this tool call".to_string());
+/// Who denied a tool call — decides the wording the model is told, so it
+/// never reads a false "the user denied" for something an automatic policy
+/// actually refused.
+enum DenialSource {
+    User,
+    Policy,
+}
+
+fn deny_result(tool_use_id: &str, by: DenialSource, reason: Option<String>) -> ContentBlock {
+    let text = match by {
+        DenialSource::User => reason.unwrap_or_else(|| "the user denied this tool call".to_string()),
+        DenialSource::Policy => match reason {
+            Some(reason) => format!("a policy denied this tool call: {reason}"),
+            None => "a policy denied this tool call".to_string(),
+        },
+    };
     ContentBlock::ToolResult {
         tool_use_id: tool_use_id.to_string(),
         content: vec![ToolResultContent::Text { text }],
         is_error: true,
+    }
+}
+
+/// Stamps a [`ToolDecisionRecord`] with the current time — the one place
+/// this crate needs a timestamp, hence the small dependency on `lib::clock`.
+fn decision_record(tool_use_id: &str, decision: Decision, decided_by: DecidedBy) -> ToolDecisionRecord {
+    ToolDecisionRecord {
+        tool_use_id: tool_use_id.to_string(),
+        decision,
+        decided_by,
+        decided_at: now_iso8601(),
     }
 }
 
@@ -618,6 +726,8 @@ fn validate_and_index_decisions(
 pub struct AgentBuilder {
     spec: AgentSpec,
     tools: Vec<Arc<dyn Tool>>,
+    policy: Arc<dyn ApprovalPolicy>,
+    context: ToolContext,
 }
 
 impl AgentBuilder {
@@ -625,6 +735,23 @@ impl AgentBuilder {
     /// compose one from several pieces; see `AgentSpec::system_prompt`.
     pub fn system(mut self, text: impl Into<String>) -> Self {
         self.spec.system.push(text.into());
+        self
+    }
+
+    /// The rule that decides a gated tool call without the user — defaults
+    /// to [`AskUser`] (defer every gated call). See `lib::agent::policy`'s
+    /// module doc.
+    pub fn approval_policy(mut self, policy: impl ApprovalPolicy + 'static) -> Self {
+        self.policy = Arc::new(policy);
+        self
+    }
+
+    /// What this agent's tools actually run against — see
+    /// [`ToolContext`]'s doc. Defaults to `ToolContext::default()` (no
+    /// filesystem access, no sandbox), which is fine for an agent with no
+    /// filesystem/sandbox tools and every test fixture that predates this.
+    pub fn context(mut self, context: ToolContext) -> Self {
+        self.context = context;
         self
     }
 
@@ -676,10 +803,17 @@ impl AgentBuilder {
             tool_box.add_arc(tool)?;
         }
         self.spec.tools = tool_box.specs();
+        // Appended last, after every piece of the caller's own system
+        // prompt — see `lib::agent::tool::ToolBox::system_section`'s doc.
+        if let Some(section) = tool_box.system_section() {
+            self.spec.system.push(section);
+        }
         Ok(Agent {
             provider,
             spec: self.spec,
             tools: tool_box,
+            policy: self.policy,
+            context: self.context,
         })
     }
 }

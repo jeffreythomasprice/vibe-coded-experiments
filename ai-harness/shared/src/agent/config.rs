@@ -10,23 +10,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::agent::spec::Approval;
 use crate::ids::AgentConfigId;
 use crate::llm::model::ModelRef;
 use crate::llm::tool::{Thinking, ToolChoice};
-
-/// One tool an agent config selects, and optionally re-gates.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ToolSelection {
-    /// A name registered with `lib::agent::registry::ToolRegistry` — the
-    /// process-wide catalog of tools this build knows how to execute.
-    pub name: String,
-    /// `None` means "whatever `lib::agent::Tool::approval` says for this
-    /// tool" — the config doesn't override it. `Some` wraps the tool in an
-    /// approval override at build time; see `lib::agent::registry`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub approval: Option<Approval>,
-}
 
 /// A saved agent definition, as CRUD returns it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -56,8 +42,12 @@ pub struct AgentConfigInput {
     pub system: Vec<String>,
     /// A token budget for **each** model call — see `AgentSpec::max_tokens`.
     pub max_tokens: u32,
+    /// Names registered with `lib::agent::registry::ToolRegistry` — the
+    /// process-wide catalog of tools this build knows how to execute.
+    /// Approval is entirely the tool's own (`lib::agent::Tool::approval`);
+    /// a config can select a tool or not, but never re-gate it.
     #[serde(default)]
-    pub tools: Vec<ToolSelection>,
+    pub tools: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
     #[serde(default)]
@@ -79,10 +69,7 @@ mod tests {
             model: ModelRef::new("anthropic", "claude-opus-5"),
             system: vec!["You are a helpful ops assistant.".to_string()],
             max_tokens: 1024,
-            tools: vec![ToolSelection {
-                name: "deploy".to_string(),
-                approval: Some(Approval::RequiresApproval),
-            }],
+            tools: vec!["deploy".to_string()],
             tool_choice: None,
             thinking: Thinking::default(),
             stop_sequences: vec![],
@@ -107,23 +94,9 @@ mod tests {
     }
 
     #[test]
-    fn tool_selection_omits_approval_when_deferring_to_the_tool_default() {
-        let json = serde_json::to_value(ToolSelection {
-            name: "get_weather".to_string(),
-            approval: None,
-        })
-        .unwrap();
-        assert!(json.get("approval").is_none());
-    }
-
-    #[test]
-    fn tool_selection_carries_an_override_when_given() {
-        let json = serde_json::to_value(ToolSelection {
-            name: "deploy".to_string(),
-            approval: Some(Approval::RequiresApproval),
-        })
-        .unwrap();
-        assert_eq!(json["approval"], serde_json::json!("requires_approval"));
+    fn tools_serialize_as_a_plain_array_of_names() {
+        let json = serde_json::to_value(input()).unwrap();
+        assert_eq!(json["tools"], serde_json::json!(["deploy"]));
     }
 
     #[test]

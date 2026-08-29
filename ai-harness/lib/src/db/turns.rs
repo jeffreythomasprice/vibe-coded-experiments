@@ -6,7 +6,9 @@
 
 use std::collections::HashMap;
 
-use shared::agent::turn::{AgentTurn, Decision, ToolApprovalRequest, ToolDecision, TurnStop};
+use shared::agent::turn::{
+    AgentTurn, DecidedBy, Decision, ToolApprovalRequest, ToolDecision, ToolDecisionRecord, TurnStop,
+};
 use shared::error::ErrorReport;
 use shared::ids::{ConversationId, MessageId, TurnId};
 use shared::llm::message::{ContentBlock, Message, Role};
@@ -89,12 +91,14 @@ pub async fn settle(db: &Db, turn_id: TurnId, turn: &AgentTurn) -> Result<()> {
             let written = append_new_messages(&mut tx, conversation_id, turn_id, &turn.conversation.messages, &now).await?;
             update_turn_terminal(&mut tx, turn_id, "done", turn, Some(&stop_reason_json), &now).await?;
             rebuild_tool_calls(&mut tx, turn_id, conversation_id, ToolCallSource::Messages(&written)).await?;
+            write_decisions(&mut tx, turn_id, &turn.decisions).await?;
             touch_conversation(&mut tx, conversation_id, &now, true).await?;
         }
         TurnStop::MaxSteps => {
             let written = append_new_messages(&mut tx, conversation_id, turn_id, &turn.conversation.messages, &now).await?;
             update_turn_terminal(&mut tx, turn_id, "max_steps", turn, None, &now).await?;
             rebuild_tool_calls(&mut tx, turn_id, conversation_id, ToolCallSource::Messages(&written)).await?;
+            write_decisions(&mut tx, turn_id, &turn.decisions).await?;
             touch_conversation(&mut tx, conversation_id, &now, true).await?;
         }
         TurnStop::AwaitingApproval { pending, completed } => {
@@ -129,11 +133,64 @@ pub async fn settle(db: &Db, turn_id: TurnId, turn: &AgentTurn) -> Result<()> {
                 },
             )
             .await?;
+            // Only reaches rows `rebuild_tool_calls` above just created or
+            // already had — a decision from an earlier, now-superseded step
+            // may still have no row at all (see this file's module doc);
+            // it's a harmless zero-row UPDATE here and self-heals the next
+            // time `settle` runs over the full decision log, which it
+            // always carries forward in its entirety, never just the delta.
+            write_decisions(&mut tx, turn_id, &turn.decisions).await?;
             touch_conversation(&mut tx, conversation_id, &now, false).await?;
         }
     }
 
     tx.commit().await?;
+    Ok(())
+}
+
+/// Mirrors [`shared::agent::AgentTurn::decisions`] onto `tool_calls`. Also
+/// (re-)writes `decision` itself, not just `decided_by`/`decision_reason`/
+/// `decided_at`: a *policy* decision never goes through [`reopen`] — there is
+/// no suspend/resume for a call the policy resolved on its own — so this is
+/// the only writer `decision` ever gets for one. For a *user* decision,
+/// `reopen` already wrote `decision` the moment they answered; writing it
+/// again here is an idempotent no-op with the same value, not a second
+/// disagreeing writer (see `sql/0005_tool_decisions.sql`'s doc for why the
+/// other three columns stay single-writer, here alone). A decision naming a
+/// call that has no `tool_calls` row yet updates zero rows and is silently
+/// skipped; it is re-applied, from the same still-accumulating `decisions`
+/// list, on every later `settle` for this turn.
+async fn write_decisions(
+    tx: &mut Transaction<'_, Sqlite>,
+    turn_id: TurnId,
+    decisions: &[ToolDecisionRecord],
+) -> Result<()> {
+    for record in decisions {
+        let decision_text = match record.decision {
+            Decision::Approve => "approve",
+            Decision::Deny { .. } => "deny",
+        };
+        let decided_by = match &record.decided_by {
+            DecidedBy::User => "user",
+            DecidedBy::Policy { .. } => "policy",
+        };
+        let reason = match &record.decided_by {
+            DecidedBy::User => None,
+            DecidedBy::Policy { reason } => Some(reason.clone()),
+        };
+        sqlx::query(
+            "UPDATE tool_calls SET decision = ?, decided_by = ?, decision_reason = ?, decided_at = ? \
+             WHERE turn_id = ? AND tool_use_id = ?",
+        )
+        .bind(decision_text)
+        .bind(decided_by)
+        .bind(reason)
+        .bind(record.decided_at.clone())
+        .bind(turn_id.get())
+        .bind(record.tool_use_id.clone())
+        .execute(&mut **tx)
+        .await?;
+    }
     Ok(())
 }
 
@@ -170,6 +227,47 @@ pub async fn load_pending(db: &Db, conversation_id: ConversationId) -> Result<Op
     };
     let turn = decode_turn_json(id, turn_json)?;
     Ok(Some((TurnId(id), turn)))
+}
+
+/// Every gated call this conversation has ever resolved, across every turn —
+/// for display, never for control flow (see `sql/0001_init.sql`'s doc on
+/// `tool_calls`: `ConversationView.pending` alone decides what's still
+/// awaiting approval). Ordered by `created_at` so a turn's calls come back in
+/// the order the model asked for them.
+pub async fn decisions_for_conversation(
+    db: &Db,
+    conversation_id: ConversationId,
+) -> Result<Vec<shared::conversation::ToolDecisionView>> {
+    let rows: Vec<(i64, String, String, Option<String>, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT turn_id, tool_use_id, decision, decided_by, decision_reason, decided_at \
+         FROM tool_calls WHERE conversation_id = ? AND decision IS NOT NULL \
+         ORDER BY turn_id, created_at",
+    )
+    .bind(conversation_id.get())
+    .fetch_all(db.pool())
+    .await?;
+
+    rows.into_iter()
+        .map(|(turn_id, tool_use_id, decision_text, decided_by, decision_reason, decided_at)| {
+            let decision = match decision_text.as_str() {
+                "approve" => Decision::Approve,
+                _ => Decision::Deny { reason: decision_reason.clone() },
+            };
+            let decided_by = decided_by.map(|by| match by.as_str() {
+                "policy" => DecidedBy::Policy {
+                    reason: decision_reason.clone().unwrap_or_default(),
+                },
+                _ => DecidedBy::User,
+            });
+            Ok(shared::conversation::ToolDecisionView {
+                turn_id: TurnId(turn_id),
+                tool_use_id,
+                decision,
+                decided_by,
+                decided_at,
+            })
+        })
+        .collect()
 }
 
 /// Flip a suspended turn back to `running` and record each decision on its
@@ -398,9 +496,14 @@ struct ToolCallEntry {
 
 /// Recompute one turn's `tool_calls` rows from its authoritative sources
 /// (`messages.content` once terminal, `pending`/`completed` while
-/// suspended). Upserts by `(turn_id, tool_use_id)` so `decision` — set only
-/// by [`reopen`] — always survives a rebuild; `created_at` is likewise never
-/// touched on conflict, so the first time a call is seen is when it's dated.
+/// suspended). Upserts by `(turn_id, tool_use_id)`, and its `DO UPDATE SET`
+/// deliberately omits **five** columns so they always survive a rebuild:
+/// `decision` (set only by [`reopen`]), `decided_by`/`decision_reason`/
+/// `decided_at` (set only by [`write_decisions`], called from [`settle`]
+/// right after this function), and `created_at` (so the first time a call is
+/// seen is when it's dated). Completing that `SET` list to "cover every
+/// column" would silently delete every gated call's provenance — see
+/// `sql/0001_init.sql`'s doc on `tool_calls`.
 pub(crate) async fn rebuild_tool_calls(
     tx: &mut Transaction<'_, Sqlite>,
     turn_id: TurnId,
@@ -624,6 +727,7 @@ mod tests {
             usage: Usage { input_tokens: 5, output_tokens: 3, ..Default::default() },
             steps: 1,
             stop: TurnStop::Done { stop_reason: StopReason::EndTurn },
+            decisions: vec![],
         };
         settle(&db, turn_id, &turn).await.unwrap();
 
@@ -665,6 +769,7 @@ mod tests {
                 }],
                 completed: vec![],
             },
+            decisions: vec![],
         };
         settle(&db, turn_id, &turn).await.unwrap();
 
@@ -814,6 +919,7 @@ mod tests {
                 }],
                 completed: vec![],
             },
+            decisions: vec![],
         };
         settle(&db, turn_id, &turn).await.unwrap();
 
@@ -889,6 +995,7 @@ mod tests {
                 usage: Usage::default(),
                 steps: 1,
                 stop: TurnStop::Done { stop_reason: StopReason::EndTurn },
+                decisions: vec![],
             };
             settle(&db, turn_id, &turn).await.unwrap();
         }
@@ -922,6 +1029,7 @@ mod tests {
                 }],
                 completed: vec![],
             },
+            decisions: vec![],
         };
         settle(&db, turn_id, &turn).await.unwrap();
 
@@ -954,5 +1062,230 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(before, after);
+    }
+
+    #[tokio::test]
+    async fn settle_writes_provenance_for_a_policy_decision_and_a_rebuild_does_not_clobber_it() {
+        let db = Db::in_memory().await.unwrap();
+        let conv = seed_conversation(&db).await;
+        let turn_id = begin(&db, conv, Some(&user_text("hi"))).await.unwrap();
+        let conversation = super::super::conversations::load_conversation(&db, conv).await.unwrap();
+        let mut full = conversation.clone();
+        let tool_call = assistant_text_with_tool_use("call_1_0", "deploy", serde_json::json!({}));
+        full.messages.push(tool_call.clone());
+        let result_msg = Message::user(vec![ContentBlock::ToolResult {
+            tool_use_id: "call_1_0".to_string(),
+            content: vec![],
+            is_error: false,
+        }]);
+        full.messages.push(result_msg.clone());
+
+        let turn = AgentTurn {
+            conversation: full,
+            added: vec![tool_call, result_msg],
+            usage: Usage::default(),
+            steps: 1,
+            stop: TurnStop::Done { stop_reason: StopReason::EndTurn },
+            decisions: vec![ToolDecisionRecord {
+                tool_use_id: "call_1_0".to_string(),
+                decision: Decision::Approve,
+                decided_by: DecidedBy::Policy { reason: "matched auto-approve rule".to_string() },
+                decided_at: "2026-08-29T00:00:00.000Z".to_string(),
+            }],
+        };
+        settle(&db, turn_id, &turn).await.unwrap();
+
+        let row: (Option<String>, Option<String>, Option<String>) = sqlx::query_as(
+            "SELECT decided_by, decision_reason, decided_at FROM tool_calls WHERE turn_id = ? AND tool_use_id = 'call_1_0'",
+        )
+        .bind(turn_id.get())
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(row.0.as_deref(), Some("policy"));
+        assert_eq!(row.1.as_deref(), Some("matched auto-approve rule"));
+        assert_eq!(row.2.as_deref(), Some("2026-08-29T00:00:00.000Z"));
+
+        // Re-settling (a rebuild) must not clobber the provenance columns —
+        // exactly the same guarantee `decision` already has.
+        settle(&db, turn_id, &turn).await.unwrap();
+        let row_again: (Option<String>, Option<String>, Option<String>) = sqlx::query_as(
+            "SELECT decided_by, decision_reason, decided_at FROM tool_calls WHERE turn_id = ? AND tool_use_id = 'call_1_0'",
+        )
+        .bind(turn_id.get())
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(row, row_again);
+    }
+
+    #[tokio::test]
+    async fn settle_writes_provenance_for_a_user_decision_after_reopen() {
+        let db = Db::in_memory().await.unwrap();
+        let conv = seed_conversation(&db).await;
+        let turn_id = begin(&db, conv, Some(&user_text("hi"))).await.unwrap();
+        let conversation = super::super::conversations::load_conversation(&db, conv).await.unwrap();
+        let mut full = conversation.clone();
+        let tool_call = assistant_text_with_tool_use("call_1_0", "deploy", serde_json::json!({}));
+        full.messages.push(tool_call.clone());
+        let turn = AgentTurn {
+            conversation: full,
+            added: vec![tool_call],
+            usage: Usage::default(),
+            steps: 1,
+            stop: TurnStop::AwaitingApproval {
+                pending: vec![ToolApprovalRequest {
+                    tool_use_id: "call_1_0".to_string(),
+                    name: "deploy".to_string(),
+                    input: serde_json::json!({}),
+                }],
+                completed: vec![],
+            },
+            decisions: vec![],
+        };
+        settle(&db, turn_id, &turn).await.unwrap();
+
+        // `reopen` writes only `decision` — the provenance columns stay NULL
+        // until the turn is driven forward again and settles.
+        let (_, resumed_turn) = reopen(
+            &db,
+            conv,
+            &[ToolDecision {
+                tool_use_id: "call_1_0".to_string(),
+                decision: Decision::Approve,
+            }],
+        )
+        .await
+        .unwrap();
+
+        let mid: (String, Option<String>) =
+            sqlx::query_as("SELECT decision, decided_by FROM tool_calls WHERE turn_id = ?")
+                .bind(turn_id.get())
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(mid.0, "approve");
+        assert!(mid.1.is_none(), "decided_by must stay NULL until settle writes it");
+
+        let mut done_conversation = resumed_turn.conversation.clone();
+        let result_msg = Message::user(vec![ContentBlock::ToolResult {
+            tool_use_id: "call_1_0".to_string(),
+            content: vec![],
+            is_error: false,
+        }]);
+        done_conversation.messages.push(result_msg.clone());
+        let done_turn = AgentTurn {
+            conversation: done_conversation,
+            added: vec![result_msg],
+            usage: Usage::default(),
+            steps: 1,
+            stop: TurnStop::Done { stop_reason: StopReason::EndTurn },
+            decisions: vec![ToolDecisionRecord {
+                tool_use_id: "call_1_0".to_string(),
+                decision: Decision::Approve,
+                decided_by: DecidedBy::User,
+                decided_at: "2026-08-29T00:00:01.000Z".to_string(),
+            }],
+        };
+        settle(&db, turn_id, &done_turn).await.unwrap();
+
+        let after: (String, Option<String>) =
+            sqlx::query_as("SELECT decision, decided_by FROM tool_calls WHERE turn_id = ?")
+                .bind(turn_id.get())
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(after.0, "approve");
+        assert_eq!(after.1.as_deref(), Some("user"));
+    }
+
+    #[tokio::test]
+    async fn decisions_for_conversation_reports_a_settled_policy_decision_and_omits_never_gated_calls() {
+        let db = Db::in_memory().await.unwrap();
+        let conv = seed_conversation(&db).await;
+        let turn_id = begin(&db, conv, Some(&user_text("hi"))).await.unwrap();
+        let conversation = super::super::conversations::load_conversation(&db, conv).await.unwrap();
+        let mut full = conversation.clone();
+        // A gated call the policy approved, and an ordinary automatic call
+        // beside it (`get_weather`) that was never gated at all.
+        let gated = assistant_text_with_tool_use("call_1_0", "deploy", serde_json::json!({}));
+        full.messages.push(gated.clone());
+        let result_msg = Message::user(vec![ContentBlock::ToolResult {
+            tool_use_id: "call_1_0".to_string(),
+            content: vec![],
+            is_error: false,
+        }]);
+        full.messages.push(result_msg.clone());
+
+        let turn = AgentTurn {
+            conversation: full,
+            added: vec![gated, result_msg],
+            usage: Usage::default(),
+            steps: 1,
+            stop: TurnStop::Done { stop_reason: StopReason::EndTurn },
+            decisions: vec![ToolDecisionRecord {
+                tool_use_id: "call_1_0".to_string(),
+                decision: Decision::Approve,
+                decided_by: DecidedBy::Policy { reason: "matched auto-approve rule".to_string() },
+                decided_at: "2026-08-29T00:00:00.000Z".to_string(),
+            }],
+        };
+        settle(&db, turn_id, &turn).await.unwrap();
+
+        let decisions = decisions_for_conversation(&db, conv).await.unwrap();
+        assert_eq!(decisions.len(), 1, "a never-gated call must not appear");
+        assert_eq!(decisions[0].turn_id, turn_id);
+        assert_eq!(decisions[0].tool_use_id, "call_1_0");
+        assert_eq!(decisions[0].decision, Decision::Approve);
+        assert_eq!(
+            decisions[0].decided_by,
+            Some(DecidedBy::Policy { reason: "matched auto-approve rule".to_string() })
+        );
+        assert_eq!(decisions[0].decided_at.as_deref(), Some("2026-08-29T00:00:00.000Z"));
+    }
+
+    #[tokio::test]
+    async fn decisions_for_conversation_reports_none_pending_provenance_after_reopen_but_before_settle() {
+        let db = Db::in_memory().await.unwrap();
+        let conv = seed_conversation(&db).await;
+        let turn_id = begin(&db, conv, Some(&user_text("hi"))).await.unwrap();
+        let conversation = super::super::conversations::load_conversation(&db, conv).await.unwrap();
+        let mut full = conversation.clone();
+        let tool_call = assistant_text_with_tool_use("call_1_0", "deploy", serde_json::json!({}));
+        full.messages.push(tool_call.clone());
+        let turn = AgentTurn {
+            conversation: full,
+            added: vec![tool_call],
+            usage: Usage::default(),
+            steps: 1,
+            stop: TurnStop::AwaitingApproval {
+                pending: vec![ToolApprovalRequest {
+                    tool_use_id: "call_1_0".to_string(),
+                    name: "deploy".to_string(),
+                    input: serde_json::json!({}),
+                }],
+                completed: vec![],
+            },
+            decisions: vec![],
+        };
+        settle(&db, turn_id, &turn).await.unwrap();
+        reopen(
+            &db,
+            conv,
+            &[ToolDecision {
+                tool_use_id: "call_1_0".to_string(),
+                decision: Decision::Approve,
+            }],
+        )
+        .await
+        .unwrap();
+
+        let decisions = decisions_for_conversation(&db, conv).await.unwrap();
+        assert_eq!(decisions.len(), 1);
+        assert_eq!(decisions[0].decision, Decision::Approve);
+        assert!(
+            decisions[0].decided_by.is_none(),
+            "provenance isn't recorded until the turn settles again"
+        );
     }
 }

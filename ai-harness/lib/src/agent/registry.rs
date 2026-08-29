@@ -9,14 +9,12 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use shared::agent::{AgentConfig, Approval, ToolSelection, ToolSpec};
-use shared::llm::ToolDef;
+use shared::agent::{AgentConfig, ToolSpec};
 
 use crate::llm::router::Router;
 
 use super::error::AgentError;
-use super::tool::{Tool, ToolOutput};
+use super::tool::{Tool, ToolContext};
 use super::Agent;
 
 /// Tools this build can execute, by name.
@@ -58,55 +56,20 @@ impl ToolRegistry {
             .collect()
     }
 
-    /// Resolve a stored config's tool selection into executable tools,
-    /// applying each entry's approval override. Errors on an unknown name
-    /// rather than silently dropping it — a config naming a tool this build
-    /// no longer has would otherwise quietly downgrade the agent, with
-    /// nothing in the UI to explain why.
-    pub fn resolve(&self, selection: &[ToolSelection]) -> Result<Vec<Arc<dyn Tool>>, AgentError> {
+    /// Resolve a stored config's tool selection into executable tools.
+    /// Errors on an unknown name rather than silently dropping it — a config
+    /// naming a tool this build no longer has would otherwise quietly
+    /// downgrade the agent, with nothing in the UI to explain why.
+    pub fn resolve(&self, selection: &[String]) -> Result<Vec<Arc<dyn Tool>>, AgentError> {
         selection
             .iter()
-            .map(|s| {
-                let tool = self.get(&s.name).ok_or_else(|| AgentError::UnknownTool {
-                    name: s.name.clone(),
+            .map(|name| {
+                self.get(name).ok_or_else(|| AgentError::UnknownTool {
+                    name: name.clone(),
                     available: self.names(),
-                })?;
-                Ok(match s.approval {
-                    Some(approval) => with_approval(tool, approval),
-                    None => tool,
                 })
             })
             .collect()
-    }
-}
-
-/// Wraps `tool`, overriding only its approval policy — `def`/`call` delegate
-/// untouched. Returns `tool` unwrapped when it already reports `approval`,
-/// so a config that doesn't actually change anything adds no indirection.
-pub fn with_approval(tool: Arc<dyn Tool>, approval: Approval) -> Arc<dyn Tool> {
-    if tool.approval() == approval {
-        return tool;
-    }
-    Arc::new(ApprovalOverride { inner: tool, approval })
-}
-
-struct ApprovalOverride {
-    inner: Arc<dyn Tool>,
-    approval: Approval,
-}
-
-#[async_trait]
-impl Tool for ApprovalOverride {
-    fn def(&self) -> &ToolDef {
-        self.inner.def()
-    }
-
-    fn approval(&self) -> Approval {
-        self.approval
-    }
-
-    async fn call(&self, input: serde_json::Value) -> anyhow::Result<ToolOutput> {
-        self.inner.call(input).await
     }
 }
 
@@ -114,16 +77,27 @@ impl Tool for ApprovalOverride {
 /// selection through `registry` first.
 ///
 /// `AgentBuilder::build_with` overwrites `AgentSpec::tools` with
-/// `tool_box.specs()` — which is exactly what's wanted here, since
-/// [`ToolRegistry::resolve`] already applied the config's approval
-/// overrides before the tools reached the builder: the `AgentSpec` a caller
-/// reads back off the built `Agent` reports the *effective* approval, not
-/// just each tool's own default.
-pub fn build_agent(config: &AgentConfig, registry: &ToolRegistry, router: &Router) -> Result<Agent, AgentError> {
+/// `tool_box.specs()` — which is exactly what's wanted here, since a config
+/// only ever *selects* tools by name and can't re-gate them: the `AgentSpec`
+/// a caller reads back off the built `Agent` always reports each tool's own
+/// approval.
+///
+/// `ctx` is what every tool call in this agent's turns actually runs
+/// against — its virtual filesystem and sandbox backend — built fresh per
+/// turn by `lib::service::chat` from the conversation's live project mounts,
+/// never cached on the registry (mounts are a live grant, not a premise; see
+/// `shared::project`'s module doc).
+pub fn build_agent(
+    config: &AgentConfig,
+    registry: &ToolRegistry,
+    router: &Router,
+    ctx: ToolContext,
+) -> Result<Agent, AgentError> {
     let tools = registry.resolve(&config.input.tools)?;
     let mut builder = Agent::builder(config.input.model.clone(), config.input.max_tokens)
         .max_steps(config.input.max_steps)
         .thinking(config.input.thinking.clone())
+        .context(ctx)
         .tools(tools);
     for piece in &config.input.system {
         builder = builder.system(piece.clone());
@@ -144,7 +118,7 @@ mod tests {
     use crate::llm::router::{ProviderEntry, Router};
     use crate::llm::testing::ScriptedProvider;
     use serde::Deserialize;
-    use shared::agent::AgentConfigInput;
+    use shared::agent::{AgentConfigInput, Approval};
     use shared::ids::AgentConfigId;
     use shared::llm::message::{CompletedMessage, ContentBlock, Role, StopReason};
     use shared::llm::model::ModelRef;
@@ -155,18 +129,22 @@ mod tests {
 
     fn ping_tool() -> impl Tool {
         tool("ping", "Ping", |_args: PingArgs| async move {
-            Ok::<_, anyhow::Error>(ToolOutput::from("pong"))
+            Ok::<_, anyhow::Error>(crate::agent::tool::ToolOutput::from("pong"))
         })
+    }
+
+    fn gated_ping_tool() -> impl Tool {
+        tool("ping", "Ping", |_args: PingArgs| async move {
+            Ok::<_, anyhow::Error>(crate::agent::tool::ToolOutput::from("pong"))
+        })
+        .requiring_approval()
     }
 
     #[test]
     fn resolve_errors_on_an_unknown_tool_and_lists_whats_available() {
         let mut registry = ToolRegistry::new();
         registry.register(ping_tool());
-        let Err(err) = registry.resolve(&[ToolSelection {
-            name: "deploy".to_string(),
-            approval: None,
-        }]) else {
+        let Err(err) = registry.resolve(&["deploy".to_string()]) else {
             panic!("expected resolve to fail on an unregistered tool name");
         };
         match err {
@@ -179,38 +157,13 @@ mod tests {
     }
 
     #[test]
-    fn resolve_applies_an_approval_override() {
+    fn resolve_reports_each_tools_own_approval_since_a_selection_cant_change_it() {
         let mut registry = ToolRegistry::new();
-        registry.register(ping_tool());
-        let resolved = registry
-            .resolve(&[ToolSelection {
-                name: "ping".to_string(),
-                approval: Some(Approval::RequiresApproval),
-            }])
-            .unwrap();
+        registry.register(gated_ping_tool());
+        let resolved = registry.resolve(&["ping".to_string()]).unwrap();
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].approval(), Approval::RequiresApproval);
         assert_eq!(resolved[0].def().name, "ping");
-    }
-
-    #[test]
-    fn resolve_with_no_override_keeps_the_tools_own_default_approval() {
-        let mut registry = ToolRegistry::new();
-        registry.register(ping_tool());
-        let resolved = registry
-            .resolve(&[ToolSelection {
-                name: "ping".to_string(),
-                approval: None,
-            }])
-            .unwrap();
-        assert_eq!(resolved[0].approval(), Approval::Automatic);
-    }
-
-    #[test]
-    fn with_approval_skips_the_wrapper_when_nothing_changes() {
-        let tool: Arc<dyn Tool> = Arc::new(ping_tool());
-        let same = with_approval(tool.clone(), Approval::Automatic);
-        assert!(Arc::ptr_eq(&tool, &same));
     }
 
     #[test]
@@ -223,7 +176,7 @@ mod tests {
         assert_eq!(catalog[0].approval, Approval::Automatic);
     }
 
-    fn agent_config(tools: Vec<ToolSelection>) -> AgentConfig {
+    fn agent_config(tools: Vec<String>) -> AgentConfig {
         AgentConfig {
             id: AgentConfigId(1),
             input: AgentConfigInput {
@@ -244,9 +197,9 @@ mod tests {
     }
 
     #[test]
-    fn build_agent_applies_the_config_override_so_the_effective_spec_shows_it() {
+    fn build_agent_reports_the_tools_own_approval_a_selection_cant_downgrade_it() {
         let mut registry = ToolRegistry::new();
-        registry.register(ping_tool());
+        registry.register(gated_ping_tool());
 
         let scripted = ScriptedProvider::new(vec![Ok(CompletedMessage {
             role: Role::Assistant,
@@ -266,11 +219,10 @@ mod tests {
             },
         );
 
-        let config = agent_config(vec![ToolSelection {
-            name: "ping".to_string(),
-            approval: Some(Approval::RequiresApproval),
-        }]);
-        let agent = build_agent(&config, &registry, &router).unwrap();
+        // The config names the tool, nothing more — there's no way for it to
+        // ask for anything but the tool's own approval.
+        let config = agent_config(vec!["ping".to_string()]);
+        let agent = build_agent(&config, &registry, &router, ToolContext::default()).unwrap();
         assert_eq!(agent.spec().tools.len(), 1);
         assert_eq!(agent.spec().tools[0].approval, Approval::RequiresApproval);
         assert_eq!(agent.spec().max_steps, 4);
@@ -281,11 +233,8 @@ mod tests {
     fn build_agent_errors_on_an_unknown_tool_before_touching_the_router() {
         let registry = ToolRegistry::new();
         let router = Router::new();
-        let config = agent_config(vec![ToolSelection {
-            name: "does-not-exist".to_string(),
-            approval: None,
-        }]);
-        let Err(err) = build_agent(&config, &registry, &router) else {
+        let config = agent_config(vec!["does-not-exist".to_string()]);
+        let Err(err) = build_agent(&config, &registry, &router, ToolContext::default()) else {
             panic!("expected build_agent to fail on an unregistered tool name");
         };
         assert!(matches!(err, AgentError::UnknownTool { .. }));

@@ -12,7 +12,7 @@ pub mod event;
 pub mod spec;
 pub mod turn;
 
-pub use config::{AgentConfig, AgentConfigInput, ToolSelection};
+pub use config::{AgentConfig, AgentConfigInput};
 pub use event::AgentEvent;
 pub use spec::{AgentSpec, Approval, ToolSpec};
-pub use turn::{AgentTurn, Decision, ToolApprovalRequest, ToolDecision, TurnStop};
+pub use turn::{AgentTurn, DecidedBy, Decision, ToolApprovalRequest, ToolDecision, ToolDecisionRecord, TurnStop};

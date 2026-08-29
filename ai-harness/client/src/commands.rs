@@ -9,7 +9,7 @@
 
 use serde::Serialize;
 use shared::agent::event::AgentEvent;
-use shared::agent::{AgentConfig, AgentConfigInput, ToolSpec};
+use shared::agent::{AgentConfig, AgentConfigInput, ToolDecision, ToolSpec};
 use shared::conversation::{ConversationSummary, ConversationView, ListConversations, RunStatus};
 use shared::error::ErrorReport;
 use shared::ids::{AgentConfigId, ConversationId, ProjectId, ThemeId};
@@ -84,6 +84,33 @@ pub async fn start_message(conversation_id: ConversationId, text: String) -> Res
         text: String,
     }
     ipc::call("start_message", &Args { conversation_id, text }).await
+}
+
+/// The `approve_tools` counterpart to [`start_message`] — resolves every
+/// pending call in `conversation_id`'s suspended turn and drives it forward,
+/// detached the same way. Watch it happen with [`attach_conversation`].
+pub async fn start_approve_tools(
+    conversation_id: ConversationId,
+    decisions: Vec<ToolDecision>,
+) -> Result<(), ErrorReport> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Args {
+        conversation_id: ConversationId,
+        decisions: Vec<ToolDecision>,
+    }
+    ipc::call("start_approve_tools", &Args { conversation_id, decisions }).await
+}
+
+/// Discards `conversation_id`'s suspended turn without resolving it. The
+/// conversation is left exactly as it was before the turn started.
+pub async fn cancel_pending(conversation_id: ConversationId) -> Result<(), ErrorReport> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Args {
+        conversation_id: ConversationId,
+    }
+    ipc::call("cancel_pending", &Args { conversation_id }).await
 }
 
 /// Replays whatever `conversation_id`'s run has already emitted to

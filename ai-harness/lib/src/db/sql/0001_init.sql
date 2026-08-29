@@ -108,9 +108,13 @@ CREATE TABLE messages (
 CREATE INDEX messages_by_turn ON messages(turn_id);
 
 -- A projection over `messages.content` and `turns.turn_json`, never a source
--- of truth. Rebuilt wholesale per turn by `rebuild_tool_calls`; the one
--- column that is not derivable is `decision`, because `Agent::resume`'s
--- denial placeholder is shape-identical to a tool that failed on its own.
+-- of truth — nothing may infer control-flow state (such as "this call is
+-- still awaiting approval") from a row here; that's `ConversationView.pending`'s
+-- job alone. Rebuilt wholesale per turn by `rebuild_tool_calls`; the columns
+-- that are not derivable, and so must survive every rebuild untouched, are
+-- `decision` (because `Agent::resume`'s denial placeholder is shape-identical
+-- to a tool that failed on its own) and, since migration 0005,
+-- `decided_by`/`decision_reason`/`decided_at` for the same reason.
 CREATE TABLE tool_calls (
     turn_id         INTEGER NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
     -- `call_{step}_{ordinal}`, assigned by `lib::agent::rewrite_tool_use_ids`.

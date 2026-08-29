@@ -68,6 +68,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "projects",
         step: Step::Sql(include_str!("sql/0004_projects.sql")),
     },
+    Migration {
+        version: 5,
+        name: "tool_decisions",
+        step: Step::Sql(include_str!("sql/0005_tool_decisions.sql")),
+    },
 ];
 
 const LEDGER_SQL: &str = "CREATE TABLE IF NOT EXISTS _migrations (\n\
@@ -174,7 +179,7 @@ mod tests {
     async fn a_fresh_database_applies_every_migration() {
         let pool = fresh_pool().await;
         let applied = run(&pool, MIGRATIONS).await.unwrap();
-        assert_eq!(applied, vec![1, 2, 3, 4]);
+        assert_eq!(applied, vec![1, 2, 3, 4, 5]);
 
         let count: i64 = sqlx::query_scalar("SELECT count(*) FROM _migrations")
             .fetch_one(&pool)

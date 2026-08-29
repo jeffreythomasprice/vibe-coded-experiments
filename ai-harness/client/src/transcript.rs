@@ -14,10 +14,12 @@
 //! executed results as `Message::user(completed_results)`), so a renderer
 //! keyed on role alone would draw tool output as a human bubble.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use shared::agent::event::AgentEvent;
-use shared::conversation::StoredMessage;
+use shared::agent::{DecidedBy, Decision};
+use shared::conversation::{StoredMessage, ToolDecisionView};
+use shared::ids::TurnId;
 use shared::llm::image::ImageSource;
 use shared::llm::message::{ContentBlock, Role, ToolResultContent};
 use shared::llm::stream::{Delta, StreamEvent};
@@ -33,12 +35,26 @@ pub enum Bubble {
     Assistant { markdown: String },
     Thinking { text: String, redacted: bool },
     Tool {
+        /// What an Approve/Deny click, or a decision lookup, targets. Not
+        /// present on every historical bubble the same way (a very old
+        /// conversation predates nothing here, but a *replayed* tool result
+        /// with no matching `ToolUse` has no real id to show) — carried
+        /// anyway since every live and stored path this crate builds one
+        /// from does have it.
+        tool_use_id: String,
         name: String,
         input: serde_json::Value,
-        /// `None` while the call hasn't finished (or, for a tool requiring
-        /// approval, may never finish without a decision — approval isn't
-        /// wired into this UI, so such a call just renders as pending).
+        /// `None` while the call hasn't finished — including one still
+        /// awaiting approval (`awaiting` is what distinguishes that case
+        /// from an ordinary in-flight call).
         result: Option<ToolOutcome>,
+        /// Who resolved a gated call, and when — `None` for an automatic
+        /// call, or a gated one nobody has decided yet.
+        decision: Option<BubbleDecision>,
+        /// True for a call from `PendingApproval::requests` with no
+        /// decision yet — the view renders Approve/Deny controls for these
+        /// instead of a settled outcome.
+        awaiting: bool,
     },
     Image { source: ImageSource },
 }
@@ -47,6 +63,28 @@ pub enum Bubble {
 pub struct ToolOutcome {
     pub is_error: bool,
     pub content: Vec<ToolResultContent>,
+}
+
+/// Provenance for one gated call's resolution, attached to its [`Bubble::Tool`]
+/// — the display counterpart of [`ToolDecisionView`], which is where a
+/// settled decision comes from on reload, and of the live
+/// [`AgentEvent::ToolDecided`] event, which is where one comes from while
+/// still streaming (and so carries no `decided_at` yet).
+#[derive(Debug, Clone, PartialEq)]
+pub struct BubbleDecision {
+    pub decision: Decision,
+    pub decided_by: Option<DecidedBy>,
+    pub decided_at: Option<String>,
+}
+
+impl From<&ToolDecisionView> for BubbleDecision {
+    fn from(view: &ToolDecisionView) -> Self {
+        Self {
+            decision: view.decision.clone(),
+            decided_by: view.decided_by.clone(),
+            decided_at: view.decided_at.clone(),
+        }
+    }
 }
 
 /// One bubble plus when it happened.
@@ -66,9 +104,23 @@ pub struct Rendered {
 /// A `ToolResult` is attached to the `Tool` bubble opened by the matching
 /// `ToolUse`'s id; one with no match (truncated history, a decision replayed
 /// without its request) still renders, standalone.
-pub fn flatten(messages: &[StoredMessage]) -> Vec<Rendered> {
+///
+/// `decisions` supplies provenance for gated calls, keyed by
+/// **`(turn_id, tool_use_id)`**, never `tool_use_id` alone —
+/// `lib::agent::rewrite_tool_use_ids` restarts its counter every turn, so
+/// the same id recurs across a conversation's turns and a bare-id lookup
+/// would cross-match a decision from one turn onto an unrelated call in
+/// another. `awaiting` marks the bare `tool_use_id`s (unambiguous here,
+/// since these always come from one specific still-suspended turn) that
+/// have no decision yet — ordinary callers pass an empty set; only
+/// [`flatten_pending`] passes a non-empty one.
+pub fn flatten(messages: &[StoredMessage], decisions: &[ToolDecisionView], awaiting: &HashSet<&str>) -> Vec<Rendered> {
     let mut rendered: Vec<Rendered> = Vec::new();
     let mut tool_positions: HashMap<&str, usize> = HashMap::new();
+    let decision_by_id: HashMap<(Option<TurnId>, &str), BubbleDecision> = decisions
+        .iter()
+        .map(|d| ((Some(d.turn_id), d.tool_use_id.as_str()), BubbleDecision::from(d)))
+        .collect();
 
     for message in messages {
         for block in &message.content {
@@ -109,12 +161,16 @@ pub fn flatten(messages: &[StoredMessage]) -> Vec<Rendered> {
                 }
                 ContentBlock::ToolUse { id, name, input } => {
                     tool_positions.insert(id.as_str(), rendered.len());
+                    let decision = decision_by_id.get(&(message.turn_id, id.as_str())).cloned();
                     rendered.push(Rendered {
                         timestamp: Some(message.created_at.clone()),
                         bubble: Bubble::Tool {
+                            tool_use_id: id.clone(),
                             name: name.clone(),
                             input: input.clone(),
                             result: None,
+                            decision,
+                            awaiting: awaiting.contains(id.as_str()),
                         },
                     });
                 }
@@ -133,14 +189,20 @@ pub fn flatten(messages: &[StoredMessage]) -> Vec<Rendered> {
                                 *result = Some(outcome);
                             }
                         }
-                        None => rendered.push(Rendered {
-                            timestamp: Some(message.created_at.clone()),
-                            bubble: Bubble::Tool {
-                                name: "unknown".to_string(),
-                                input: serde_json::Value::Null,
-                                result: Some(outcome),
-                            },
-                        }),
+                        None => {
+                            let decision = decision_by_id.get(&(message.turn_id, tool_use_id.as_str())).cloned();
+                            rendered.push(Rendered {
+                                timestamp: Some(message.created_at.clone()),
+                                bubble: Bubble::Tool {
+                                    tool_use_id: tool_use_id.clone(),
+                                    name: "unknown".to_string(),
+                                    input: serde_json::Value::Null,
+                                    result: Some(outcome),
+                                    decision,
+                                    awaiting: false,
+                                },
+                            })
+                        }
                     }
                 }
                 ContentBlock::Unknown => {}
@@ -149,6 +211,57 @@ pub fn flatten(messages: &[StoredMessage]) -> Vec<Rendered> {
     }
 
     rendered
+}
+
+/// Renders a suspended turn's tail as the same [`Rendered`] shape [`flatten`]
+/// produces: the same-step calls that already ran (`completed` — shown so
+/// the user can see what happened before deciding on the rest) plus the
+/// call(s) still awaiting a decision (`requests`). Neither has a real row
+/// yet, so every bubble here streams-styled (`timestamp: None`), the same
+/// way a still-streaming [`Draft`] bubble is.
+///
+/// Stamps every synthesized message with `pending.turn_id` — the id
+/// `decisions` (see [`flatten`]'s doc) is keyed by — so a policy decision
+/// made in the very step that suspended the turn (already visible in
+/// `ConversationView.decisions` by the time this renders; `settle` writes
+/// both in the same transaction) attaches correctly.
+pub fn flatten_pending(pending: &shared::conversation::PendingApproval, decisions: &[ToolDecisionView]) -> Vec<Rendered> {
+    let mut fake: Vec<StoredMessage> = pending
+        .added
+        .iter()
+        .enumerate()
+        .map(|(index, message)| StoredMessage {
+            id: shared::ids::MessageId(0),
+            seq: index as u32,
+            turn_id: Some(pending.turn_id),
+            role: message.role,
+            content: message.content.clone(),
+            created_at: String::new(),
+        })
+        .collect();
+    if !pending.completed.is_empty() {
+        fake.push(StoredMessage {
+            id: shared::ids::MessageId(0),
+            seq: fake.len() as u32,
+            turn_id: Some(pending.turn_id),
+            role: Role::User,
+            content: pending.completed.clone(),
+            created_at: String::new(),
+        });
+    }
+
+    let awaiting: HashSet<&str> = pending.requests.iter().map(|r| r.tool_use_id.as_str()).collect();
+    flatten(&fake, decisions, &awaiting)
+        .into_iter()
+        .map(|mut rendered| {
+            // These never had a real timestamp (`created_at: String::new()`
+            // above) — show them the same way a still-streaming `Draft`
+            // bubble is shown, rather than the empty string `flatten` would
+            // otherwise carry through.
+            rendered.timestamp = None;
+            rendered
+        })
+        .collect()
 }
 
 /// Folds an in-flight turn's `AgentEvent`s into the same [`Rendered`] shape
@@ -167,6 +280,11 @@ pub struct Draft {
     /// (keyed by id, not stream index) can find the bubble the model's own
     /// `ToolUse` block already opened.
     tool_positions: HashMap<String, usize>,
+    /// A `ToolDecided` event's decision, held here when it arrives — as it
+    /// always does on the policy and resumed-user paths — *before* the
+    /// `ToolStart` that opens the bubble it's about. Consumed (and removed)
+    /// the moment that `ToolStart` arrives.
+    pending_decisions: HashMap<String, BubbleDecision>,
 }
 
 #[derive(Debug, Clone)]
@@ -189,12 +307,38 @@ impl Draft {
         match event {
             AgentEvent::StepStart { .. } => self.open.clear(),
             AgentEvent::Model { event, .. } => self.apply_stream_event(event),
+            // Always precedes the `ToolStart`/`ToolEnd` pair it explains
+            // (both the policy and resumed-user paths yield it first — see
+            // `lib::agent::mod`'s `run_stream`) — so the bubble it's about
+            // doesn't exist yet. Held in `pending_decisions` until that
+            // `ToolStart` arrives and claims it.
+            AgentEvent::ToolDecided { tool_use_id, decision, decided_by, .. } => {
+                let bubble_decision = BubbleDecision {
+                    decision: decision.clone(),
+                    decided_by: Some(decided_by.clone()),
+                    decided_at: None,
+                };
+                match self.tool_positions.get(tool_use_id) {
+                    Some(&position) => {
+                        if let Bubble::Tool { decision, .. } = &mut self.bubbles[position].bubble {
+                            *decision = Some(bubble_decision);
+                        }
+                    }
+                    None => {
+                        self.pending_decisions.insert(tool_use_id.clone(), bubble_decision);
+                    }
+                }
+            }
             AgentEvent::ToolStart { tool_use_id, name, input } => {
                 if !self.tool_positions.contains_key(tool_use_id) {
+                    let decision = self.pending_decisions.remove(tool_use_id);
                     let position = self.push(Bubble::Tool {
+                        tool_use_id: tool_use_id.clone(),
                         name: name.clone(),
                         input: input.clone(),
                         result: None,
+                        decision,
+                        awaiting: false,
                     });
                     self.tool_positions.insert(tool_use_id.clone(), position);
                 }
@@ -212,10 +356,14 @@ impl Draft {
                         }
                     }
                     None => {
+                        let decision = self.pending_decisions.remove(tool_use_id);
                         let position = self.push(Bubble::Tool {
+                            tool_use_id: tool_use_id.clone(),
                             name: name.clone(),
                             input: serde_json::Value::Null,
                             result: Some(outcome),
+                            decision,
+                            awaiting: false,
                         });
                         self.tool_positions.insert(tool_use_id.clone(), position);
                     }
@@ -249,10 +397,14 @@ impl Draft {
                         OpenBlock::Opaque
                     }
                     ContentBlock::ToolUse { id, name, input } => {
+                        let decision = self.pending_decisions.remove(id);
                         let position = self.push(Bubble::Tool {
+                            tool_use_id: id.clone(),
                             name: name.clone(),
                             input: input.clone(),
                             result: None,
+                            decision,
+                            awaiting: false,
                         });
                         self.tool_positions.insert(id.clone(), position);
                         OpenBlock::Tool {
@@ -357,6 +509,11 @@ mod tests {
         }
     }
 
+    /// No decisions, nothing awaiting — what most tests below want.
+    fn flatten_plain(messages: &[StoredMessage]) -> Vec<Rendered> {
+        flatten(messages, &[], &HashSet::new())
+    }
+
     #[test]
     fn flatten_orders_and_shapes_every_block_kind() {
         let messages = vec![
@@ -401,7 +558,7 @@ mod tests {
             ),
         ];
 
-        let bubbles = flatten(&messages);
+        let bubbles = flatten_plain(&messages);
         assert_eq!(bubbles.len(), 4, "{bubbles:?}");
 
         assert_eq!(
@@ -421,9 +578,12 @@ mod tests {
             }
         );
         match &bubbles[3].bubble {
-            Bubble::Tool { name, input, result } => {
+            Bubble::Tool { tool_use_id, name, input, result, decision, awaiting } => {
+                assert_eq!(tool_use_id, "call_1_0");
                 assert_eq!(name, "deploy");
                 assert_eq!(input["env"], serde_json::json!("prod"));
+                assert!(decision.is_none());
+                assert!(!awaiting);
                 let outcome = result.as_ref().expect("the tool result should have attached");
                 assert!(!outcome.is_error);
                 assert_eq!(
@@ -450,7 +610,7 @@ mod tests {
             "2026-08-22T00:00:00.000Z",
         )];
 
-        let bubbles = flatten(&messages);
+        let bubbles = flatten_plain(&messages);
         assert_eq!(bubbles.len(), 1);
         match &bubbles[0].bubble {
             Bubble::Tool { name, result, .. } => {
@@ -458,6 +618,228 @@ mod tests {
                 assert!(result.as_ref().unwrap().is_error);
             }
             other => panic!("expected a standalone Tool bubble, got {other:?}"),
+        }
+    }
+
+    fn decision_view(turn_id: i64, tool_use_id: &str, decision: Decision, decided_by: Option<DecidedBy>) -> ToolDecisionView {
+        ToolDecisionView {
+            turn_id: TurnId(turn_id),
+            tool_use_id: tool_use_id.to_string(),
+            decision,
+            decided_by,
+            decided_at: Some("2026-08-29T00:00:00.000Z".to_string()),
+        }
+    }
+
+    #[test]
+    fn flatten_attaches_a_decision_matching_both_turn_id_and_tool_use_id() {
+        let messages = vec![message(
+            0,
+            Role::Assistant,
+            vec![ContentBlock::ToolUse {
+                id: "call_1_0".to_string(),
+                name: "deploy".to_string(),
+                input: serde_json::json!({}),
+            }],
+            "2026-08-22T00:00:00.000Z",
+        )];
+        let decisions = vec![decision_view(1, "call_1_0", Decision::Approve, Some(DecidedBy::User))];
+
+        let bubbles = flatten(&messages, &decisions, &HashSet::new());
+        match &bubbles[0].bubble {
+            Bubble::Tool { decision, .. } => {
+                let decision = decision.as_ref().expect("expected a decision to attach");
+                assert_eq!(decision.decision, Decision::Approve);
+                assert_eq!(decision.decided_by, Some(DecidedBy::User));
+            }
+            other => panic!("expected a Tool bubble, got {other:?}"),
+        }
+    }
+
+    /// The regression test for the exact hazard `lib::agent::rewrite_tool_use_ids`
+    /// creates: `call_1_0` recurs in every turn, so a decision from one turn
+    /// must never attach to another turn's call sharing that bare id.
+    #[test]
+    fn flatten_does_not_cross_match_a_decision_from_a_different_turn() {
+        let messages = vec![message(
+            0,
+            Role::Assistant,
+            vec![ContentBlock::ToolUse {
+                id: "call_1_0".to_string(),
+                name: "deploy".to_string(),
+                input: serde_json::json!({}),
+            }],
+            "2026-08-22T00:00:00.000Z",
+        )];
+        // A decision for the *same* tool_use_id, but a different turn.
+        let decisions = vec![decision_view(999, "call_1_0", Decision::Approve, Some(DecidedBy::User))];
+
+        let bubbles = flatten(&messages, &decisions, &HashSet::new());
+        match &bubbles[0].bubble {
+            Bubble::Tool { decision, .. } => {
+                assert!(decision.is_none(), "must not cross-match a decision from an unrelated turn");
+            }
+            other => panic!("expected a Tool bubble, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn flatten_marks_a_bubble_awaiting_when_its_id_is_in_the_awaiting_set() {
+        let messages = vec![message(
+            0,
+            Role::Assistant,
+            vec![ContentBlock::ToolUse {
+                id: "call_1_0".to_string(),
+                name: "deploy".to_string(),
+                input: serde_json::json!({}),
+            }],
+            "2026-08-22T00:00:00.000Z",
+        )];
+        let awaiting: HashSet<&str> = ["call_1_0"].into_iter().collect();
+
+        let bubbles = flatten(&messages, &[], &awaiting);
+        match &bubbles[0].bubble {
+            Bubble::Tool { awaiting, result, .. } => {
+                assert!(*awaiting);
+                assert!(result.is_none());
+            }
+            other => panic!("expected a Tool bubble, got {other:?}"),
+        }
+    }
+
+    fn pending_approval(turn_id: i64, added: Vec<shared::llm::message::Message>, completed: Vec<ContentBlock>, requests: Vec<shared::agent::ToolApprovalRequest>) -> shared::conversation::PendingApproval {
+        shared::conversation::PendingApproval {
+            turn_id: TurnId(turn_id),
+            added,
+            requests,
+            completed,
+            usage: Default::default(),
+            steps: 1,
+        }
+    }
+
+    #[test]
+    fn flatten_pending_renders_the_still_pending_call_as_awaiting_with_no_result() {
+        use shared::agent::ToolApprovalRequest;
+        use shared::llm::message::Message;
+
+        let assistant = Message::assistant(vec![ContentBlock::ToolUse {
+            id: "call_1_0".to_string(),
+            name: "deploy".to_string(),
+            input: serde_json::json!({"env": "prod"}),
+        }]);
+        let pending = pending_approval(
+            1,
+            vec![assistant],
+            vec![],
+            vec![ToolApprovalRequest {
+                tool_use_id: "call_1_0".to_string(),
+                name: "deploy".to_string(),
+                input: serde_json::json!({"env": "prod"}),
+            }],
+        );
+
+        let bubbles = flatten_pending(&pending, &[]);
+        assert_eq!(bubbles.len(), 1);
+        assert!(bubbles[0].timestamp.is_none(), "a pending bubble has no real row yet");
+        match &bubbles[0].bubble {
+            Bubble::Tool { tool_use_id, awaiting, result, .. } => {
+                assert_eq!(tool_use_id, "call_1_0");
+                assert!(*awaiting);
+                assert!(result.is_none());
+            }
+            other => panic!("expected a Tool bubble, got {other:?}"),
+        }
+    }
+
+    /// `completed` is exactly the same-step calls that already ran
+    /// automatically alongside the still-gated one(s) — it must render too,
+    /// with its outcome, not just the still-pending request.
+    #[test]
+    fn flatten_pending_renders_completed_calls_alongside_the_still_awaiting_one() {
+        use shared::agent::ToolApprovalRequest;
+        use shared::llm::message::Message;
+
+        let assistant = Message::assistant(vec![
+            ContentBlock::ToolUse {
+                id: "call_1_0".to_string(),
+                name: "get_weather".to_string(),
+                input: serde_json::json!({}),
+            },
+            ContentBlock::ToolUse {
+                id: "call_1_1".to_string(),
+                name: "deploy".to_string(),
+                input: serde_json::json!({}),
+            },
+        ]);
+        let completed = vec![ContentBlock::ToolResult {
+            tool_use_id: "call_1_0".to_string(),
+            content: vec![ToolResultContent::Text { text: "sunny".to_string() }],
+            is_error: false,
+        }];
+        let requests = vec![ToolApprovalRequest {
+            tool_use_id: "call_1_1".to_string(),
+            name: "deploy".to_string(),
+            input: serde_json::json!({}),
+        }];
+        let pending = pending_approval(1, vec![assistant], completed, requests);
+
+        let bubbles = flatten_pending(&pending, &[]);
+        assert_eq!(bubbles.len(), 2, "{bubbles:?}");
+        match &bubbles[0].bubble {
+            Bubble::Tool { name, result, awaiting, .. } => {
+                assert_eq!(name, "get_weather");
+                assert!(result.is_some(), "the automatic call already ran and must show its outcome");
+                assert!(!awaiting);
+            }
+            other => panic!("expected the completed call's bubble, got {other:?}"),
+        }
+        match &bubbles[1].bubble {
+            Bubble::Tool { name, result, awaiting, .. } => {
+                assert_eq!(name, "deploy");
+                assert!(result.is_none());
+                assert!(*awaiting);
+            }
+            other => panic!("expected the still-pending call's bubble, got {other:?}"),
+        }
+    }
+
+    /// A policy decision made in the very step that suspended the turn is
+    /// already visible in `ConversationView.decisions` by the time this
+    /// renders (`settle` writes both in the same transaction) — so a
+    /// `completed` call decided by policy shows its provenance too.
+    #[test]
+    fn flatten_pending_attaches_provenance_to_a_policy_decided_completed_call() {
+        use shared::llm::message::Message;
+
+        let assistant = Message::assistant(vec![ContentBlock::ToolUse {
+            id: "call_1_0".to_string(),
+            name: "deploy".to_string(),
+            input: serde_json::json!({}),
+        }]);
+        let completed = vec![ContentBlock::ToolResult {
+            tool_use_id: "call_1_0".to_string(),
+            content: vec![ToolResultContent::Text { text: "deployed".to_string() }],
+            is_error: false,
+        }];
+        let pending = pending_approval(1, vec![assistant], completed, vec![]);
+        let decisions = vec![decision_view(
+            1,
+            "call_1_0",
+            Decision::Approve,
+            Some(DecidedBy::Policy { reason: "matched auto-approve rule".to_string() }),
+        )];
+
+        let bubbles = flatten_pending(&pending, &decisions);
+        match &bubbles[0].bubble {
+            Bubble::Tool { decision, .. } => {
+                let decision = decision.as_ref().expect("expected the policy decision to attach");
+                match &decision.decided_by {
+                    Some(DecidedBy::Policy { reason }) => assert_eq!(reason, "matched auto-approve rule"),
+                    other => panic!("expected DecidedBy::Policy, got {other:?}"),
+                }
+            }
+            other => panic!("expected a Tool bubble, got {other:?}"),
         }
     }
 
@@ -471,7 +853,7 @@ mod tests {
             }],
             "2026-08-22T00:00:00.000Z",
         )];
-        let bubbles = flatten(&messages);
+        let bubbles = flatten_plain(&messages);
         assert_eq!(
             bubbles[0].bubble,
             Bubble::Thinking {
@@ -636,6 +1018,58 @@ mod tests {
         }
     }
 
+    /// `ToolDecided` always precedes the `ToolStart` it explains (both the
+    /// policy and resumed-user paths yield it first) — so the bubble it's
+    /// about doesn't exist yet when it arrives. Regression test for the
+    /// hazard that would otherwise leave a policy-denied call spinning
+    /// "running…" forever: `ToolStart`/`ToolEnd` must still follow, exactly
+    /// as the automatic path does.
+    #[test]
+    fn tool_decided_before_tool_start_still_attaches_once_the_bubble_opens() {
+        let mut draft = Draft::new();
+        draft.apply(&AgentEvent::ToolDecided {
+            tool_use_id: "call_1_0".to_string(),
+            name: "deploy".to_string(),
+            decision: Decision::Deny { reason: Some("matches auto-deny rule".to_string()) },
+            decided_by: DecidedBy::Policy { reason: "matches auto-deny rule".to_string() },
+        });
+        assert!(draft.is_empty(), "no bubble exists yet — the decision is held, not lost");
+
+        draft.apply(&AgentEvent::ToolStart {
+            tool_use_id: "call_1_0".to_string(),
+            name: "deploy".to_string(),
+            input: serde_json::json!({}),
+        });
+        let bubbles = draft.bubbles();
+        assert_eq!(bubbles.len(), 1);
+        match &bubbles[0].bubble {
+            Bubble::Tool { decision: Some(d), result, .. } => {
+                assert_eq!(d.decision, Decision::Deny { reason: Some("matches auto-deny rule".to_string()) });
+                assert!(matches!(&d.decided_by, Some(DecidedBy::Policy { .. })));
+                assert!(result.is_none(), "ToolStart alone must not fill in a result");
+            }
+            other => panic!("expected a Tool bubble carrying the decision, got {other:?}"),
+        }
+
+        draft.apply(&AgentEvent::ToolEnd {
+            tool_use_id: "call_1_0".to_string(),
+            name: "deploy".to_string(),
+            result: ContentBlock::ToolResult {
+                tool_use_id: "call_1_0".to_string(),
+                content: vec![ToolResultContent::Text {
+                    text: "a policy denied this tool call: matches auto-deny rule".to_string(),
+                }],
+                is_error: true,
+            },
+        });
+        let bubbles = draft.bubbles();
+        assert_eq!(bubbles.len(), 1, "ToolEnd must reuse the same bubble ToolDecided/ToolStart opened");
+        match &bubbles[0].bubble {
+            Bubble::Tool { result: Some(outcome), decision: Some(_), .. } => assert!(outcome.is_error),
+            other => panic!("expected the bubble to now carry both its decision and its result, got {other:?}"),
+        }
+    }
+
     #[test]
     fn turn_event_is_a_no_op_on_the_draft() {
         let mut draft = Draft::new();
@@ -647,6 +1081,7 @@ mod tests {
             stop: shared::agent::TurnStop::Done {
                 stop_reason: StopReason::EndTurn,
             },
+            decisions: vec![],
         }));
         assert!(draft.is_empty());
     }

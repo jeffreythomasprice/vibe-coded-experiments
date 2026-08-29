@@ -50,7 +50,6 @@ mod tests {
     use crate::db::Db;
     use crate::llm::router::Router;
     use serde::Deserialize;
-    use shared::agent::{Approval, ToolSelection};
     use shared::llm::model::ModelRef;
     use shared::llm::tool::Thinking;
     use std::sync::Arc;
@@ -67,7 +66,7 @@ mod tests {
         Service::new(db, Arc::new(Router::new()), Arc::new(registry))
     }
 
-    fn input(name: &str, tools: Vec<ToolSelection>) -> AgentConfigInput {
+    fn input(name: &str, tools: Vec<String>) -> AgentConfigInput {
         AgentConfigInput {
             name: name.to_string(),
             description: None,
@@ -95,13 +94,7 @@ mod tests {
     async fn create_rejects_an_unknown_tool_before_saving_anything() {
         let service = service_with_ping_tool().await;
         let err = service
-            .create_agent(input(
-                "ops",
-                vec![ToolSelection {
-                    name: "does-not-exist".to_string(),
-                    approval: None,
-                }],
-            ))
+            .create_agent(input("ops", vec!["does-not-exist".to_string()]))
             .await
             .unwrap_err();
         assert!(matches!(err, ServiceError::Agent(_)));
@@ -109,19 +102,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_accepts_a_known_tool_with_an_override() {
+    async fn create_accepts_a_known_tool() {
         let service = service_with_ping_tool().await;
         let created = service
-            .create_agent(input(
-                "ops",
-                vec![ToolSelection {
-                    name: "ping".to_string(),
-                    approval: Some(Approval::RequiresApproval),
-                }],
-            ))
+            .create_agent(input("ops", vec!["ping".to_string()]))
             .await
             .unwrap();
-        assert_eq!(created.input.tools[0].approval, Some(Approval::RequiresApproval));
+        assert_eq!(created.input.tools, vec!["ping".to_string()]);
     }
 
     #[tokio::test]
