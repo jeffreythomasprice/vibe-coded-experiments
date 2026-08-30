@@ -38,3 +38,5 @@ MCP tools
 
 we should be able to define tools that call out to other agents
 e.g. anthropic model doing the main text of the conversation, but then it has a gemeni image tool
+
+skills
