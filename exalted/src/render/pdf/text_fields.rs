@@ -14,7 +14,8 @@ use crate::character::xp::total_xp_spent;
 use crate::character::{BackgroundRef, Character, KnownLanguage, LanguageFamily, Weapon};
 use crate::rules::database::{RulesDatabase, database};
 use crate::rules::defense::{
-    dodge_dv, join_battle, mdv_dodge, parry_dv, soak_aggravated, soak_bashing, soak_lethal,
+    best_parry_weapon, dodge_dv, join_battle, mdv_dodge, parry_dv, soak_aggravated, soak_bashing,
+    soak_lethal,
 };
 use crate::rules::derived::{lift_lbs, movement};
 use crate::rules::essence::{peripheral_essence_max, personal_essence_max};
@@ -241,17 +242,11 @@ fn fill_armor_and_defense(
     write(doc, index, "soak2", &soak_lethal(c).to_string())?;
     write(doc, index, "soak3", &soak_aggravated(c).to_string())?;
 
-    // dv1=Dodge DV, dv2=parry DV (best melee weapon), dv3=mental dodge DV.
+    // dv1=Dodge DV, dv2=Parry DV (best Melee/Martial Arts weapon), dv3=mental dodge DV.
     write(doc, index, "dv1", &dodge_dv(c).to_string())?;
-    let parry = c
-        .equipment
-        .weapons
-        .iter()
-        .map(|w| parry_dv(c, w))
-        .max()
-        .unwrap_or(0);
+    let parry = best_parry_weapon(c).map(|w| parry_dv(c, w)).unwrap_or(0);
     write(doc, index, "dv2", &parry.to_string())?;
-    write(doc, index, "dv3", &mdv_dodge(c).to_string())?;
+    write(doc, index, "dv3", &mdv_dodge(c, None).to_string())?;
 
     if index.has("armor") {
         if let Some(a) = &c.equipment.armor {

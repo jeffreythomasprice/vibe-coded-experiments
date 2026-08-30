@@ -24,13 +24,13 @@ pub use database::{
     ability_kebab_name, database, init_database,
 };
 pub use defense::{
-    dodge_dv, join_battle, mdv_dodge, mdv_parry, parry_dv, soak_aggravated, soak_bashing,
-    soak_lethal, willpower_from_virtues,
+    best_parry_weapon, dodge_dv, join_battle, mdv_dodge, mdv_parry, parry_dv, soak_aggravated,
+    soak_bashing, soak_lethal, willpower_from_virtues,
 };
 pub use derived::{
     EXALT_HEALING_TABLE, HealingRow, Knockdown, Movement, Stunning, knockdown, movement, stunning,
 };
-pub use dice::dice_pool;
+pub use dice::{dice_pool, specialty_bonus};
 pub use equipment::{validate_artifacts, validate_hearthstones};
 pub use essence::{
     essence_peripheral_available, essence_personal_available, peripheral_essence_max,

@@ -65,8 +65,18 @@ inferior.
 
 | DV | Formula |
 |---|---|
-| **Dodge DV** | `⌊(Dex + Dodge + Essence) / 2⌋ + 2` (subtract Mobility Penalty; War caps Dodge in mass combat) |
-| **Parry DV** | `⌊(Dex + Ability + weapon Defense) / 2⌋ + 2` — Ability is almost always Martial Arts or Melee |
+| **Dodge DV** | `⌊(Dex + Dodge + Essence) / 2⌋` (subtract Mobility Penalty; War caps Dodge in mass combat) |
+| **Parry DV** | `⌊(Dex + Ability + weapon Defense) / 2⌋` — Ability is almost always Martial Arts or Melee |
+
+> **Implementation note.** The book's worked examples (p.147–148) confirm
+> there is no flat `+2` in either formula — it's a straight halving of the
+> trait sum: mortal soldier (Dex 2, Dodge 3, Essence 1) → Dodge DV 2 =
+> `⌊5/2⌋`; Anoria the Solar (Dex 4, Dodge 4, Essence 5) → Dodge DV 7 =
+> `⌈13/2⌉`; the Immaculate monk (Dex 3, Martial Arts 4, fist Defense +2) →
+> Parry DV 5 = `⌈9/2⌉`. This codebase deliberately uses **floor for every
+> DV, mortal or Exalted**, as a house rule rather than the book's
+> round-up-for-Exalted / round-down-for-mortals split — don't "correct" the
+> code back to book rounding.
 
 **Weapon Defense column.** Adds inside the parry formula *before* halving. A
 staff (+2 Def) raises PDV; a sledge (−3 Def) drags it; unwieldy weapons can
@@ -95,7 +105,12 @@ Standard rounding: Exalted/divine round up, mortals/heroic mortals round down.
 | MDV | Formula |
 |---|---|
 | **Dodge MDV** | `⌊(Willpower + Integrity + pertinent specialty + Essence) / 2⌋` |
-| **Parry MDV** | `⌊((Charisma or Manipulation) + Ability + pertinent specialty) / 2⌋ + 2`, where Ability is Investigation, Performance, or Presence |
+| **Parry MDV** | `⌊((Charisma or Manipulation) + Ability + pertinent specialty) / 2⌋`, where Ability is Investigation, Performance, or Presence |
+
+> **Implementation note.** As with physical DV above, the book has Exalted
+> round up here (`+2` is not a flat bonus, it's shorthand for "round the
+> half up"); this codebase floors Parry MDV too, for the same
+> house-rule-consistency reason.
 
 **Charisma vs. Manipulation.** The *attacker* declares one in Step 1: Charisma
 for honest persuasion, Manipulation for guile. The defender's Parry MDV uses

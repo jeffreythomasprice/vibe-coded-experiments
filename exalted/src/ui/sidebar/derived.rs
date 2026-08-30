@@ -38,14 +38,17 @@ pub fn render_body(ui: &mut egui::Ui, character: &Character) {
 
     section(ui, "Defense values", |ui| {
         ui.label(format!("Dodge DV:    {}", defense::dodge_dv(character)));
-        if let Some(weapon) = character.equipment.weapons.first() {
+        if let Some(weapon) = defense::best_parry_weapon(character) {
             ui.label(format!(
                 "Parry DV ({}): {}",
                 weapon.name,
                 defense::parry_dv(character, weapon),
             ));
         }
-        ui.label(format!("MDV (dodge): {}", defense::mdv_dodge(character)));
+        ui.label(format!(
+            "MDV (dodge): {}",
+            defense::mdv_dodge(character, None)
+        ));
     });
 
     section(ui, "Soak", |ui| {

@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::character::Character;
 use crate::character::traits::{AbilityKind, AttributeKind};
+use crate::rules::defense::mobility_penalty;
 use crate::rules::health::wound_penalty;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,14 +24,6 @@ pub struct Movement {
     pub jump_horizontal: u8,
 }
 
-fn armor_mobility_penalty(c: &Character) -> u8 {
-    c.equipment
-        .armor
-        .as_ref()
-        .map(|a| a.mobility_penalty)
-        .unwrap_or(0)
-}
-
 /// Per-tick Move/Dash and per-jump vertical/horizontal yardage
 /// (`game_rules.md` §5, pp.127-128, 144-145).
 pub fn movement(c: &Character) -> Movement {
@@ -38,7 +31,7 @@ pub fn movement(c: &Character) -> Movement {
     let str_ = c.attribute(AttributeKind::Strength);
     let ath = c.ability(AbilityKind::Athletics);
     let wound = wound_penalty(c).unsigned_abs();
-    let mob = armor_mobility_penalty(c);
+    let mob = mobility_penalty(c);
 
     // Move = max(Dex - wound - mob, 1).
     let move_ = (dex as i16 - wound as i16 - mob as i16).max(1) as u8;
