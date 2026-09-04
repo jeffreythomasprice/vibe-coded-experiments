@@ -1,11 +1,8 @@
 in-flight:
 
-I'd like to design a basic combat tick system. My goal is to have an interface that allows me to enter the people fighting, determine what order they start in by soliciting a minimal set of stats for each combatant, and then have them trigger actions on their turn. We should support multi-turn actions like spells. We should be able to cancel or undo such an action, e.g. something interrupts that spell before it triggers.
-
-My goal is a pretty display for the actual turn, i.e. the "battle wheel" concept that lets me visually see how many ticks we have to turn the wheel before we get to each event. Mousing over elements on the wheel should give the full info for that event and who triggered it.
-
-
 todo:
+
+review all the documentation tooltips for accuracy
 
 dice roller
 
@@ -19,4 +16,4 @@ keep track of more stuff:
 undo stack visibility
 event log
 
-tooltips or tutorials on page to describe wtf all this means
+hosting, script that deploys somewhere

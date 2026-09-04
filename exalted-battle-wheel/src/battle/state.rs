@@ -42,7 +42,7 @@ impl Battle {
     /// The scene's reaction count (RULES.md §2.2, p. 141): a scene constant once the battle
     /// starts, but derived live from the highest Join Battle successes while still in Setup so
     /// the roster preview updates as combatants are added.
-    fn reaction_count(&self) -> u32 {
+    pub fn reaction_count(&self) -> u32 {
         match self.phase {
             Phase::Running { reaction_count } => reaction_count,
             Phase::Setup => self

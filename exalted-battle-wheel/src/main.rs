@@ -1,4 +1,6 @@
 mod app;
+mod prefs;
+mod storage;
 mod ui;
 
 use app::App;

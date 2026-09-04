@@ -1,3 +1,5 @@
+use crate::ui::glossary::Topic;
+use crate::ui::Tip;
 use exalted_battle_wheel::battle::{Battle, BattleEvent, BattleLog, CombatantId, JoinBattleResult, Phase, Side};
 use leptos::prelude::*;
 
@@ -49,42 +51,59 @@ pub fn Roster() -> impl IntoView {
 
     view! {
         <div class="roster">
-            <h2>"Combatants"</h2>
+            <Tip topic=Topic::Roster>
+                <h2>"Combatants"</h2>
+            </Tip>
             <div class="roster-form">
-                <input
-                    placeholder="Name"
-                    prop:value=move || name.get()
-                    on:input=move |ev| name.set(event_target_value(&ev))
-                />
-                <input
-                    placeholder="Side"
-                    prop:value=move || side.get()
-                    on:input=move |ev| side.set(event_target_value(&ev))
-                />
-                <input
-                    type="number"
-                    prop:value=move || successes.get().to_string()
-                    on:input=move |ev| successes.set(event_target_value(&ev).parse().unwrap_or(0))
-                    disabled=move || botch.get()
-                />
-                <label>
+                <Tip topic=Topic::CombatantName>
                     <input
-                        type="checkbox"
-                        prop:checked=move || botch.get()
-                        on:change=move |ev| botch.set(event_target_checked(&ev))
+                        placeholder="Name"
+                        prop:value=move || name.get()
+                        on:input=move |ev| name.set(event_target_value(&ev))
                     />
-                    "Botch"
-                </label>
-                <button on:click=add_combatant>"Add"</button>
+                </Tip>
+                <Tip topic=Topic::Side>
+                    <input
+                        placeholder="Side"
+                        prop:value=move || side.get()
+                        on:input=move |ev| side.set(event_target_value(&ev))
+                    />
+                </Tip>
+                <Tip topic=Topic::JoinBattleSuccesses>
+                    <label class="join-battle-successes-label">
+                        "Join Battle successes"
+                        <input
+                            type="number"
+                            prop:value=move || successes.get().to_string()
+                            on:input=move |ev| successes.set(event_target_value(&ev).parse().unwrap_or(0))
+                            disabled=move || botch.get()
+                        />
+                    </label>
+                </Tip>
+                <Tip topic=Topic::Botch>
+                    <label>
+                        <input
+                            type="checkbox"
+                            prop:checked=move || botch.get()
+                            on:change=move |ev| botch.set(event_target_checked(&ev))
+                        />
+                        "Botch"
+                    </label>
+                </Tip>
+                <Tip topic=Topic::AddCombatant>
+                    <button on:click=add_combatant>"Add"</button>
+                </Tip>
             </div>
             <ul class="roster-list">
                 <For each=combatant_ids key=|id| *id let:id>
                     <RosterRow id=id battle=battle log=log />
                 </For>
             </ul>
-            <button on:click=start_battle disabled=move || !matches!(battle.read().phase, Phase::Setup)>
-                "Start Battle"
-            </button>
+            <Tip topic=Topic::StartBattle>
+                <button on:click=start_battle disabled=move || !matches!(battle.read().phase, Phase::Setup)>
+                    "Start Battle"
+                </button>
+            </Tip>
         </div>
     }
 }
@@ -94,6 +113,10 @@ fn RosterRow(id: CombatantId, battle: Memo<Battle>, log: RwSignal<BattleLog>) ->
     let name = move || battle.read().find(id).map(|c| c.name.clone()).unwrap_or_default();
     let side = move || battle.read().find(id).map(|c| c.side.0.clone()).unwrap_or_default();
     let tick = move || battle.read().find(id).map(|c| c.next_action_tick);
+    let tick_topic = move || match battle.read().phase {
+        Phase::Setup => Topic::FirstAction,
+        Phase::Running { .. } => Topic::NextActionTick,
+    };
 
     let remove = move |_| {
         log.update(|log| {
@@ -105,10 +128,23 @@ fn RosterRow(id: CombatantId, battle: Memo<Battle>, log: RwSignal<BattleLog>) ->
 
     view! {
         <li>
-            <span class="name">{name}</span>
-            <span class="side">{side}</span>
-            <span class="tick">"tick " {tick}</span>
-            <button on:click=remove>"Remove"</button>
+            <Tip topic=Topic::CombatantName>
+                <span class="name">{name}</span>
+            </Tip>
+            <Tip topic=Topic::Side>
+                <span class="side">{side}</span>
+            </Tip>
+            {move || {
+                let topic = tick_topic();
+                view! {
+                    <Tip topic=topic>
+                        <span class="tick">"tick " {tick}</span>
+                    </Tip>
+                }
+            }}
+            <Tip topic=Topic::RemoveCombatant>
+                <button on:click=remove>"Remove"</button>
+            </Tip>
         </li>
     }
 }

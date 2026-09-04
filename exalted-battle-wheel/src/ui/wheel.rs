@@ -1,4 +1,6 @@
-use crate::ui::Hovered;
+use crate::ui::glossary::Topic;
+use crate::ui::tip::{on_focus_in, on_focus_out, on_pointer_enter, on_pointer_leave};
+use crate::ui::{Hovered, Tip};
 use exalted_battle_wheel::battle::{Battle, Combatant, Tick};
 use leptos::prelude::*;
 
@@ -80,23 +82,56 @@ pub fn Wheel() -> impl IntoView {
     view! {
         <div class="wheel-panel">
             <svg viewBox=format!("0 0 {VIEW_SIZE} {VIEW_SIZE}") class="wheel">
-                <circle cx=CENTER cy=CENTER r=RING_RADIUS class="wheel-ring" />
+                <circle
+                    cx=CENTER
+                    cy=CENTER
+                    r=RING_RADIUS
+                    class="wheel-ring"
+                    tabindex="0"
+                    on:pointerenter=on_pointer_enter(Topic::TickWheel)
+                    on:pointerleave=on_pointer_leave(Topic::TickWheel)
+                    on:focusin=on_focus_in(Topic::TickWheel)
+                    on:focusout=on_focus_out(Topic::TickWheel)
+                />
                 <g style=group_rotation class="wheel-ring-group">
                     <For each=slots key=|slot| *slot let:slot>
                         <WheelSlot slot_index=slot battle=battle />
                     </For>
                 </g>
-                <path d=now_marker class="now-marker" />
-                <text x=CENTER y=CENTER class="center-tick">
+                <path
+                    d=now_marker
+                    class="now-marker"
+                    tabindex="0"
+                    on:pointerenter=on_pointer_enter(Topic::NowMarker)
+                    on:pointerleave=on_pointer_leave(Topic::NowMarker)
+                    on:focusin=on_focus_in(Topic::NowMarker)
+                    on:focusout=on_focus_out(Topic::NowMarker)
+                />
+                <text
+                    x=CENTER
+                    y=CENTER
+                    class="center-tick"
+                    tabindex="0"
+                    on:pointerenter=on_pointer_enter(Topic::CurrentTick)
+                    on:pointerleave=on_pointer_leave(Topic::CurrentTick)
+                    on:focusin=on_focus_in(Topic::CurrentTick)
+                    on:focusout=on_focus_out(Topic::CurrentTick)
+                >
                     {move || battle.read().current_tick}
                 </text>
             </svg>
             <div class="over-horizon">
-                <h3>"Beyond the horizon"</h3>
+                <Tip topic=Topic::BeyondHorizon>
+                    <h3>"Beyond the horizon"</h3>
+                </Tip>
                 <For each=over_horizon key=|c| c.id let:combatant>
                     <div class="over-horizon-entry">
-                        <span class="name">{combatant.name.clone()}</span>
-                        <span class="tick">"tick " {combatant.next_action_tick}</span>
+                        <Tip topic=Topic::CombatantName>
+                            <span class="name">{combatant.name.clone()}</span>
+                        </Tip>
+                        <Tip topic=Topic::NextActionTick>
+                            <span class="tick">"tick " {combatant.next_action_tick}</span>
+                        </Tip>
                     </div>
                 </For>
             </div>
@@ -134,7 +169,17 @@ fn WheelSlot(slot_index: i64, battle: Memo<Battle>) -> impl IntoView {
 
     view! {
         <g class="wheel-slot">
-            <text x=label_x y=label_y style=counter_rotation_style class="slot-label">
+            <text
+                x=label_x
+                y=label_y
+                style=counter_rotation_style
+                class="slot-label"
+                tabindex="0"
+                on:pointerenter=on_pointer_enter(Topic::TickSlot)
+                on:pointerleave=on_pointer_leave(Topic::TickSlot)
+                on:focusin=on_focus_in(Topic::TickSlot)
+                on:focusout=on_focus_out(Topic::TickSlot)
+            >
                 {label}
             </text>
             <For each=tokens key=|(_, _, c)| c.id let:entry>
@@ -163,12 +208,19 @@ fn WheelToken(slot_index: i64, index: usize, total: usize, combatant: Combatant)
         )
     };
 
+    // Deliberately sticky: leaving or blurring the token does not clear `hovered`, so the hover
+    // card stays up and its own rows (DV penalty, state, ...) can in turn be hovered for their
+    // tooltips. HoverCard carries the dismiss control.
+    let show_on_hover = move |_: leptos::ev::PointerEvent| hovered.set(Some(id));
+    let show_on_focus = move |_: leptos::ev::FocusEvent| hovered.set(Some(id));
+
     view! {
         <g
             style=counter_rotation_style
             class="wheel-token"
-            on:pointerenter=move |_| hovered.set(Some(id))
-            on:pointerleave=move |_| hovered.set(None)
+            tabindex="0"
+            on:pointerenter=show_on_hover
+            on:focusin=show_on_focus
         >
             <circle cx=x cy=y r=TOKEN_R style:fill=color />
             <text x=x y=y>

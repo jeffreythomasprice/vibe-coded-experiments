@@ -1,6 +1,8 @@
+use crate::ui::glossary::{action_topic, Topic};
+use crate::ui::Tip;
 use exalted_battle_wheel::battle::{
-    Battle, BattleEvent, BattleLog, CombatantId, CombatantState, InterruptReason, JoinBattleResult, Phase,
-    Sequence, CATALOG,
+    ActionTemplate, Battle, BattleEvent, BattleLog, CombatantId, CombatantState, DvPenaltySpec, InterruptReason,
+    JoinBattleResult, Phase, Sequence, SpeedSpec, CATALOG,
 };
 use leptos::prelude::*;
 
@@ -35,11 +37,15 @@ pub fn ActionPanel() -> impl IntoView {
 
     view! {
         <div class="action-panel">
-            <h2>"Up now"</h2>
+            <Tip topic=Topic::UpNow>
+                <h2>"Up now"</h2>
+            </Tip>
             <For each=up_now key=|id| *id let:actor_id>
                 <ActorRow actor_id=actor_id log=log battle=battle />
             </For>
-            <h2>"Shaping (can be interrupted anytime)"</h2>
+            <Tip topic=Topic::ShapingSection>
+                <h2>"Shaping (can be interrupted anytime)"</h2>
+            </Tip>
             <For each=shaping_but_not_up key=|id| *id let:actor_id>
                 <div class="actor-row">
                     <InterruptControls actor_id=actor_id log=log battle=battle />
@@ -75,14 +81,29 @@ fn ActorRow(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Memo<Battle
     }
 }
 
+fn format_speed(spec: SpeedSpec) -> String {
+    match spec {
+        SpeedSpec::Fixed(speed) => speed.to_string(),
+        SpeedSpec::Variable { default } => format!("varies (default {default})"),
+    }
+}
+
+fn format_dv_penalty(spec: DvPenaltySpec) -> String {
+    match spec {
+        DvPenaltySpec::Fixed(penalty) => penalty.to_string(),
+        DvPenaltySpec::Variable { default } => format!("varies (default {default})"),
+    }
+}
+
 #[component]
 fn NormalControls(actor_id: CombatantId, log: RwSignal<BattleLog>) -> impl IntoView {
     let speed_override = RwSignal::new(String::new());
     let dv_override = RwSignal::new(String::new());
     let selected_kind = RwSignal::new(0usize);
+    let selected_template = move || -> Option<&'static ActionTemplate> { CATALOG.get(selected_kind.get()) };
 
     let declare = move |_| {
-        let Some(template) = CATALOG.get(selected_kind.get()) else { return };
+        let Some(template) = selected_template() else { return };
         let speed = speed_override.get().parse().ok();
         let dv = dv_override.get().parse().ok();
         let action = template.declare(speed, dv, None, String::new());
@@ -104,20 +125,72 @@ fn NormalControls(actor_id: CombatantId, log: RwSignal<BattleLog>) -> impl IntoV
     };
 
     view! {
-        <select on:change=move |ev| {
-            selected_kind.set(event_target_value(&ev).parse().unwrap_or(0));
-        }>
-            <For each=|| CATALOG.iter().enumerate() key=|(i, _)| *i let:entry>
-                <option value=entry.0.to_string()>{entry.1.name}</option>
-            </For>
-        </select>
-        <input placeholder="speed override" prop:value=move || speed_override.get() on:input=move |ev| speed_override.set(event_target_value(&ev)) />
-        <input placeholder="DV override" prop:value=move || dv_override.get() on:input=move |ev| dv_override.set(event_target_value(&ev)) />
-        <button on:click=declare>"Declare"</button>
+        <Tip topic=Topic::ActionSelect>
+            <select on:change=move |ev| {
+                selected_kind.set(event_target_value(&ev).parse().unwrap_or(0));
+            }>
+                <For each=|| CATALOG.iter().enumerate() key=|(i, _)| *i let:entry>
+                    <option value=entry.0.to_string()>{entry.1.name}</option>
+                </For>
+            </select>
+        </Tip>
+        {move || {
+            selected_template()
+                .map(|template| {
+                    let kind_topic = action_topic(template.kind);
+                    let kind_entry = kind_topic.entry();
+                    view! {
+                        <div class="action-summary">
+                            <Tip topic=Topic::Speed>
+                                <span class="action-summary-chip">"Speed " {format_speed(template.speed)}</span>
+                            </Tip>
+                            <Tip topic=Topic::DvPenalty>
+                                <span class="action-summary-chip">"DV " {format_dv_penalty(template.dv_penalty)}</span>
+                            </Tip>
+                            <Tip topic=Topic::Reflexive>
+                                <span class="action-summary-chip">
+                                    "Reflexive: " {if template.reflexive { "yes" } else { "no" }}
+                                </span>
+                            </Tip>
+                            <Tip topic=Topic::Flurryable>
+                                <span class="action-summary-chip">
+                                    "Flurryable: " {if template.flurryable { "yes" } else { "no" }}
+                                </span>
+                            </Tip>
+                            <Tip topic=kind_topic>
+                                <span class="action-summary-note">{kind_entry.what}</span>
+                            </Tip>
+                        </div>
+                    }
+                })
+        }}
+        <Tip topic=Topic::SpeedOverride>
+            <input
+                placeholder="speed override"
+                prop:value=move || speed_override.get()
+                on:input=move |ev| speed_override.set(event_target_value(&ev))
+            />
+        </Tip>
+        <Tip topic=Topic::DvOverride>
+            <input
+                placeholder="DV override"
+                prop:value=move || dv_override.get()
+                on:input=move |ev| dv_override.set(event_target_value(&ev))
+            />
+        </Tip>
+        <Tip topic=Topic::Declare>
+            <button on:click=declare>"Declare"</button>
+        </Tip>
         <span class="sorcery-buttons">
-            <button on:click=start_sequence(Sequence::shape_terrestrial)>"Shape Terrestrial"</button>
-            <button on:click=start_sequence(Sequence::shape_celestial)>"Shape Celestial"</button>
-            <button on:click=start_sequence(Sequence::shape_solar)>"Shape Solar"</button>
+            <Tip topic=Topic::ShapeTerrestrial>
+                <button on:click=start_sequence(Sequence::shape_terrestrial)>"Shape Terrestrial"</button>
+            </Tip>
+            <Tip topic=Topic::ShapeCelestial>
+                <button on:click=start_sequence(Sequence::shape_celestial)>"Shape Celestial"</button>
+            </Tip>
+            <Tip topic=Topic::ShapeSolar>
+                <button on:click=start_sequence(Sequence::shape_solar)>"Shape Solar"</button>
+            </Tip>
         </span>
     }
 }
@@ -137,12 +210,16 @@ fn SequenceControls(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Mem
 
     view! {
         <InterruptControls actor_id=actor_id log=log battle=battle />
-        <input
-            placeholder="speed override (Cast)"
-            prop:value=move || speed_override.get()
-            on:input=move |ev| speed_override.set(event_target_value(&ev))
-        />
-        <button on:click=advance>"Advance"</button>
+        <Tip topic=Topic::CastSpeedOverride>
+            <input
+                placeholder="speed override (Cast)"
+                prop:value=move || speed_override.get()
+                on:input=move |ev| speed_override.set(event_target_value(&ev))
+            />
+        </Tip>
+        <Tip topic=Topic::AdvanceSequence>
+            <button on:click=advance>"Advance"</button>
+        </Tip>
     }
 }
 
@@ -181,12 +258,18 @@ fn InterruptControls(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Me
     };
 
     view! {
-        <span class="sequence-description">{description}</span>
-        <input
-            placeholder="rejoin successes"
-            prop:value=move || rejoin_successes.get()
-            on:input=move |ev| rejoin_successes.set(event_target_value(&ev))
-        />
-        <button on:click=interrupt class="interrupt-button">"Interrupt"</button>
+        <Tip topic=Topic::SequenceStep>
+            <span class="sequence-description">{description}</span>
+        </Tip>
+        <Tip topic=Topic::RejoinSuccesses>
+            <input
+                placeholder="rejoin successes"
+                prop:value=move || rejoin_successes.get()
+                on:input=move |ev| rejoin_successes.set(event_target_value(&ev))
+            />
+        </Tip>
+        <Tip topic=Topic::InterruptSequence>
+            <button on:click=interrupt class="interrupt-button">"Interrupt"</button>
+        </Tip>
     }
 }

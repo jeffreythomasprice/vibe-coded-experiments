@@ -342,11 +342,14 @@ version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
  "leptos",
+ "serde",
+ "serde_json",
  "thiserror 2.0.20",
  "tracing",
  "tracing-subscriber",
  "tracing-web",
  "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
