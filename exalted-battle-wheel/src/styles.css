@@ -1,0 +1,351 @@
+:root {
+  color-scheme: dark;
+  --bg: #14161c;
+  --panel: #1c1f27;
+  --panel-border: #2c303c;
+  --text: #e6e6ea;
+  --text-dim: #9498a3;
+  --accent: #d8a34a;
+  --side-a: #4a90d8;
+  --side-b: #d84a5c;
+  --side-c: #4ad885;
+  --side-d: #b34ad8;
+  --danger: #d8574a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.app-header h1 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+.tick-readout {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-left: auto;
+  padding: 0 0.5rem;
+}
+
+.app-header button {
+  background: var(--panel-border);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.app-header button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.app-header button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.app-body {
+  flex: 1;
+  display: flex;
+  gap: 2rem;
+  padding: 1rem 1.25rem;
+  align-items: flex-start;
+}
+
+.roster,
+.action-panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 1rem;
+  min-width: 320px;
+}
+
+.roster h2,
+.action-panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.roster-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.roster-form input[type="text"],
+.roster-form input:not([type]),
+.roster-form input[type="number"] {
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+  width: 6rem;
+}
+
+.roster-form label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text-dim);
+}
+
+.roster-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.roster-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg);
+  border-radius: 4px;
+}
+
+.roster-list .name {
+  font-weight: 600;
+  min-width: 6rem;
+}
+
+.roster-list .side {
+  color: var(--text-dim);
+  min-width: 2rem;
+}
+
+.roster-list .tick {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  margin-left: auto;
+}
+
+button {
+  font-family: inherit;
+}
+
+.roster button,
+.action-panel button {
+  background: var(--panel-border);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.roster button:hover:not(:disabled),
+.action-panel button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.roster button:disabled,
+.action-panel button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.actor-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: var(--bg);
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.actor-row .name {
+  font-weight: 600;
+  min-width: 5rem;
+}
+
+.actor-row select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 0.25rem;
+}
+
+.actor-row input {
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 0.25rem 0.4rem;
+  width: 7rem;
+}
+
+.wheel-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.wheel {
+  width: 340px;
+  height: 340px;
+}
+
+.wheel-ring {
+  fill: none;
+  stroke: var(--panel-border);
+  stroke-width: 1.5;
+}
+
+.wheel-ring-group {
+  transition: transform 220ms ease;
+}
+
+.slot-label {
+  fill: var(--text-dim);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+.wheel-token {
+  transition: transform 220ms ease;
+}
+
+.wheel-token circle {
+  stroke: var(--bg);
+  stroke-width: 2;
+}
+
+.wheel-token text {
+  fill: #14161c;
+  font-size: 13px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+.now-marker {
+  fill: var(--accent);
+}
+
+.center-tick {
+  fill: var(--text);
+  font-size: 28px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+.over-horizon {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.over-horizon h3 {
+  margin: 0 0 0.3rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.over-horizon-entry {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.wheel-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.hover-card {
+  visibility: hidden;
+  min-width: 220px;
+  min-height: 84px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+.hover-card-visible {
+  visibility: visible;
+}
+
+.hover-card-title {
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 0.3rem;
+}
+
+.hover-card-row {
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.wheel-token {
+  cursor: pointer;
+}
+
+.sorcery-buttons {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.sequence-description {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.interrupt-button {
+  background: var(--danger) !important;
+  border-color: var(--danger) !important;
+  color: #14161c !important;
+}
