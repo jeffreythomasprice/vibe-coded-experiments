@@ -241,16 +241,29 @@ fn InterruptControls(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Me
         )
     };
 
-    let interrupt = move |_| {
-        let rejoin = match rejoin_successes.get().parse::<u32>() {
+    let rejoin = move || -> JoinBattleResult {
+        match rejoin_successes.get().parse::<u32>() {
             Ok(successes) => JoinBattleResult::Successes(successes),
             Err(_) => JoinBattleResult::Botch,
-        };
+        }
+    };
+
+    let interrupt_voluntary = move |_| {
+        log.update(|log| {
+            if let Err(error) =
+                log.push(BattleEvent::InterruptSequence { actor: actor_id, reason: InterruptReason::Voluntary, rejoin: rejoin() })
+            {
+                tracing::warn!(%error, "could not interrupt sequence");
+            }
+        });
+    };
+
+    let interrupt_distracted = move |_| {
         log.update(|log| {
             if let Err(error) = log.push(BattleEvent::InterruptSequence {
                 actor: actor_id,
-                reason: InterruptReason::Voluntary,
-                rejoin,
+                reason: InterruptReason::FailedOccultCheck,
+                rejoin: rejoin(),
             }) {
                 tracing::warn!(%error, "could not interrupt sequence");
             }
@@ -269,7 +282,10 @@ fn InterruptControls(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Me
             />
         </Tip>
         <Tip topic=Topic::InterruptSequence>
-            <button on:click=interrupt class="interrupt-button">"Interrupt"</button>
+            <button on:click=interrupt_voluntary class="interrupt-button">"Interrupt"</button>
+        </Tip>
+        <Tip topic=Topic::InterruptDistracted>
+            <button on:click=interrupt_distracted class="interrupt-button">"Distracted"</button>
         </Tip>
     }
 }

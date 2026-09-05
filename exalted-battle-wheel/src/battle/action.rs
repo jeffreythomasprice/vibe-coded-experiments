@@ -43,7 +43,6 @@ pub enum ActionKind {
     ActivateCharm,
     Clinch,
     JoinBattleInProgress,
-    Sorcery,
     Custom,
 }
 

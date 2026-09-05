@@ -138,6 +138,7 @@ pub enum Topic {
     AdvanceSequence,
     RejoinSuccesses,
     InterruptSequence,
+    InterruptDistracted,
 
     // One per ActionKind, via action_topic()
     ActionAim,
@@ -151,7 +152,6 @@ pub enum Topic {
     ActionActivateCharm,
     ActionClinch,
     ActionJoinBattleInProgress,
-    ActionSorcery,
     ActionCustom,
 }
 
@@ -169,7 +169,6 @@ pub fn action_topic(kind: ActionKind) -> Topic {
         ActionKind::ActivateCharm => Topic::ActionActivateCharm,
         ActionKind::Clinch => Topic::ActionClinch,
         ActionKind::JoinBattleInProgress => Topic::ActionJoinBattleInProgress,
-        ActionKind::Sorcery => Topic::ActionSorcery,
         ActionKind::Custom => Topic::ActionCustom,
     }
 }
@@ -265,7 +264,7 @@ impl Topic {
             Topic::RemoveCombatant => Entry {
                 term: "Remove",
                 what: "Removes this combatant from the battle entirely.",
-                interacts: "Does not affect anyone else's next action tick or the reaction count.",
+                interacts: "During Setup, removing the roster's fastest joiner can lower the reaction count and reschedule everyone else's previewed First Action; once the battle has started the reaction count is frozen, so removing a combatant never touches anyone else's next action tick.",
                 source: Source::AppConvention,
             },
             Topic::StartBattle => Entry {
@@ -276,8 +275,8 @@ impl Topic {
             },
             Topic::FirstAction => Entry {
                 term: "First Action",
-                what: "The tick on which a combatant acts for the first time in this battle.",
-                interacts: "Derived once, at Start Battle, from the reaction count and this combatant's Join Battle successes. The fastest character (or characters, on ties) gets First Action on tick 0 and acts immediately.",
+                what: "The tick on which this combatant is currently projected to act first, if the battle started right now.",
+                interacts: "This is a live preview: it's recomputed from the current reaction count and this combatant's Join Battle successes every time the roster changes, and only becomes permanent when Start Battle locks in the reaction count. The fastest character (or characters, on ties) gets First Action on tick 0 and acts immediately.",
                 source: book_unquoted(141),
             },
             Topic::NextActionTick => Entry {
@@ -322,7 +321,7 @@ impl Topic {
                 term: "DV refresh",
                 what: "The tick on which this combatant's DV penalty clears.",
                 interacts: "Refresh happens at the very start of the tick she's next permitted to act, before any new action's penalty is applied — so a Speed 5 action taken on tick 3 leaves her penalized for ticks 3–7 and clear again at the top of tick 8. Aborting out of Guard or Aim is the exception: the follow-up action does not refresh DV, it only reschedules the next action.",
-                source: book(147, "This penalty disappears on the tick the character is next permitted to act."),
+                source: book(172, "this penalty vanishes when DV refreshes immediately before the character's next action."),
             },
             Topic::StateNormal => Entry {
                 term: "Normal",
@@ -340,7 +339,7 @@ impl Topic {
                 term: "Aiming",
                 what: "Studying a specific target, building toward a bonus on the attack.",
                 interacts: "Completing the full Speed 3 grants +3 bonus dice on the next attack against that target; aborting early to attack instead grants +1 die per tick spent aiming. Either way the attack does not refresh DV. Re-entering aiming instead of attacking banks the bonus for later without dropping DV any further.",
-                source: book(143, "the attack does not refresh DV, even though it counts as a normal action in all other respects."),
+                source: book(142, "the attack does not refresh DV, even though it counts as a normal action in all other respects."),
             },
             Topic::StateInactive => Entry {
                 term: "Inactive",
@@ -350,7 +349,7 @@ impl Topic {
             },
             Topic::StateInSequence => Entry {
                 term: "In a sorcery sequence",
-                what: "Partway through shaping a spell: a chain of Speed 5 actions that must complete unbroken before casting.",
+                what: "Partway through shaping a spell: one to three Speed 5 shaping actions followed by a Cast whose Speed is set by a Join Battle roll (0–6), all of which must complete unbroken.",
                 interacts: "While shaping she cannot use Charms or Combos (including reflexive ones) or take voluntary reflexive actions such as speech, Move, or Dash. If the sequence is broken, the spell is lost and she must make an immediate Join Battle roll to re-enter combat.",
                 source: book(251, "cannot use Charms or Combos, including reflexive Charms. He cannot take voluntary reflexive actions, such as speech, Move or Dash."),
             },
@@ -434,10 +433,10 @@ impl Topic {
                 source: book_range_unquoted(251, 253),
             },
             Topic::CastSpeedOverride => Entry {
-                term: "Cast speed",
-                what: "The Speed of the final Cast Sorcery step, determined by a Join Battle roll rather than a fixed number.",
-                interacts: "Unlike every other action's Speed, this one is rolled, not looked up — enter the result of that roll here to schedule when the sorcerer next acts.",
-                source: book_unquoted(253),
+                term: "Sequence speed override",
+                what: "Overrides the Speed of this combatant's next sorcery step. Only meaningful on the final Cast Sorcery step, where the Speed is rolled via Join Battle rather than fixed.",
+                interacts: "On the Cast step, enter the result of that Join Battle roll here to schedule when the sorcerer next acts. On any earlier Shape step this field does nothing — Shape's Speed is always a fixed 5, so whatever is typed here is ignored.",
+                source: book_unquoted(252),
             },
             Topic::AdvanceSequence => Entry {
                 term: "Advance",
@@ -449,12 +448,18 @@ impl Topic {
                 term: "Rejoin successes",
                 what: "Successes on the immediate Join Battle roll made after a sorcery sequence is interrupted and the spell is lost.",
                 interacts: "This new Join Battle roll works exactly like joining a fight already in progress: it schedules a fresh next action tick from the frozen reaction count, same as any other combatant re-entering the fray.",
-                source: book(144, "the character proceeds immediately to declare another action for that tick as if Join Battle was a reflexive action"),
+                source: book(252, "If the character loses the spell due to distraction, he refocuses on the world, and the player makes an immediate Join Battle roll."),
             },
             Topic::InterruptSequence => Entry {
                 term: "Interrupt",
-                what: "Breaks this combatant out of her sorcery sequence before it completes.",
-                interacts: "Losing the spell mid-shape forces an immediate Join Battle roll to re-enter combat, using the successes entered above.",
+                what: "Voluntarily breaks this combatant out of her sorcery sequence before it completes.",
+                interacts: "Use this when the player is choosing to abandon the spell rather than continue the sequence. Either way, losing the spell forces an immediate Join Battle roll to re-enter combat, using the successes entered above. If a distraction — not a choice — broke her concentration, use Distracted instead.",
+                source: book(252, "If the character does not do so, consider the spell interrupted."),
+            },
+            Topic::InterruptDistracted => Entry {
+                term: "Distracted",
+                what: "Records that this combatant was distracted while shaping and failed the roll to keep her concentration, losing the spell.",
+                interacts: "The book models a distraction as a reflexive Wits + Occult roll at difficulty 1 to keep concentration; only a failed roll belongs here — a success means the sequence continues uninterrupted and there's nothing to declare. Losing the spell this way still forces an immediate Join Battle roll to re-enter combat, using the successes entered above.",
                 source: book(251, "If the character is distracted, then his player must make a reflexive (Wits + Occult) roll for the Exalt to keep his concentration. This roll is difficulty 1."),
             },
 
@@ -462,7 +467,7 @@ impl Topic {
                 term: "Aim (3/-1)",
                 what: "Study a declared target to line up a better attack.",
                 interacts: "Completing the full Speed 3 grants +3 bonus dice on the next attack against that target; aborting early instead grants +1 die per tick already spent aiming. Either way the eventual attack does not refresh DV. Cannot be part of a flurry.",
-                source: book_unquoted(143),
+                source: book_unquoted(142),
             },
             Topic::ActionAttack => Entry {
                 term: "Attack (weapon Speed/-1)",
@@ -516,19 +521,13 @@ impl Topic {
                 term: "Clinch (6/-1)",
                 what: "A grapple attempt: Speed 6, Rate 1, no damage on the initial hit.",
                 interacts: "On a hit the attacker controls the clinch and the victim's action shifts immediately to Inactive. Maintaining the clinch requires using every subsequent action to renew it; the controller cannot block or dodge without a stunt or magic while doing so.",
-                source: book(158, "If a character held in a clinch turns the tables on his opponent, then his action immediately switches to attacking and the former aggressor switches to inactive, resetting the appropriate speed of each from that tick."),
+                source: book(157, "The maneuver has Speed 6, Accuracy +0 and Rate 1. This attack can be dodged or parried normally, and it inflicts no damage if it hits."),
             },
             Topic::ActionJoinBattleInProgress => Entry {
                 term: "Join Battle, in progress (Varies/-0)",
                 what: "How a combatant joins a fight that has already started.",
                 interacts: "Speed is (the scene's frozen reaction count − her Wits + Awareness successes), clamped to 0–6 — the same formula used for everyone's original First Action, reusing the reaction count set when the battle began. On Speed 0 she isn't held back to a future tick at all: she proceeds immediately to declare another action for that tick, as if Join Battle itself had been reflexive.",
                 source: book(144, "the character proceeds immediately to declare another action for that tick as if Join Battle was a reflexive action"),
-            },
-            Topic::ActionSorcery => Entry {
-                term: "Sorcery",
-                what: "A multi-tick Shape-then-Cast sequence: 1, 2, or 3 Speed 5 shaping actions (Terrestrial, Celestial, or Solar Circle) followed by a Cast Sorcery action.",
-                interacts: "The sequence must run unbroken or the spell is lost; while shaping, no Charms, Combos, or voluntary reflexive actions are allowed. Cast Sorcery's own Speed isn't fixed — it's set by rolling Join Battle.",
-                source: book_range_unquoted(251, 253),
             },
             Topic::ActionCustom => Entry {
                 term: "Custom",
@@ -591,6 +590,7 @@ mod tests {
         Topic::AdvanceSequence,
         Topic::RejoinSuccesses,
         Topic::InterruptSequence,
+        Topic::InterruptDistracted,
         Topic::ActionAim,
         Topic::ActionAttack,
         Topic::ActionDash,
@@ -602,7 +602,6 @@ mod tests {
         Topic::ActionActivateCharm,
         Topic::ActionClinch,
         Topic::ActionJoinBattleInProgress,
-        Topic::ActionSorcery,
         Topic::ActionCustom,
     ];
 
@@ -647,7 +646,6 @@ mod tests {
             ActionKind::ActivateCharm,
             ActionKind::Clinch,
             ActionKind::JoinBattleInProgress,
-            ActionKind::Sorcery,
             ActionKind::Custom,
         ] {
             // Panics via the exhaustive match in `action_topic` if a variant is ever unhandled.

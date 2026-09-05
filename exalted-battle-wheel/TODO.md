@@ -1,8 +1,9 @@
 in-flight:
 
+
 todo:
 
-review all the documentation tooltips for accuracy
+I'd like to review all the teaching tooltips for accuracy. Look them up in the book by the reference pages, check for accuracy, and verify that they make sense for that wigdet. Split off as many subagents as necessary.
 
 dice roller
 
