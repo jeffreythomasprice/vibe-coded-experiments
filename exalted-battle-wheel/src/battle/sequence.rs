@@ -58,6 +58,52 @@ impl Sequence {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SequenceKind {
+    ShapeTerrestrial,
+    ShapeCelestial,
+    ShapeSolar,
+}
+
+pub struct SequenceTemplate {
+    pub kind: SequenceKind,
+    pub name: &'static str,
+    pub circle: &'static str,
+    pub shape_actions: usize,
+    pub shape_dv: i32,
+}
+
+impl SequenceTemplate {
+    pub fn build(&self) -> Sequence {
+        Sequence::shape_and_cast(self.circle, self.shape_actions, self.shape_dv)
+    }
+}
+
+/// RULES.md §5.1, Exalted 2E p. 252: the three Shape-then-Cast sorcery sequences.
+pub const SEQUENCE_CATALOG: &[SequenceTemplate] = &[
+    SequenceTemplate {
+        kind: SequenceKind::ShapeTerrestrial,
+        name: "Shape Terrestrial Circle Sorcery",
+        circle: "Terrestrial",
+        shape_actions: 1,
+        shape_dv: -2,
+    },
+    SequenceTemplate {
+        kind: SequenceKind::ShapeCelestial,
+        name: "Shape Celestial Circle Sorcery",
+        circle: "Celestial",
+        shape_actions: 2,
+        shape_dv: -3,
+    },
+    SequenceTemplate {
+        kind: SequenceKind::ShapeSolar,
+        name: "Shape Solar Circle Sorcery",
+        circle: "Solar",
+        shape_actions: 3,
+        shape_dv: -4,
+    },
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -77,5 +123,31 @@ mod tests {
         let sequence = Sequence::shape_terrestrial();
         assert_eq!(sequence.steps.len(), 2);
         assert_eq!(sequence.steps[0].dv_penalty, -2);
+    }
+
+    #[test]
+    fn solar_sorcery_is_three_shapes_then_a_cast() {
+        let sequence = Sequence::shape_solar();
+        assert_eq!(sequence.steps.len(), 4);
+        for step in &sequence.steps[..3] {
+            assert_eq!(step.dv_penalty, -4);
+        }
+        assert_eq!(sequence.steps[3].label, "Cast Sorcery");
+    }
+
+    #[test]
+    fn sequence_catalog_covers_every_kind() {
+        let kinds: Vec<SequenceKind> = SEQUENCE_CATALOG.iter().map(|t| t.kind).collect();
+        assert_eq!(kinds, [SequenceKind::ShapeTerrestrial, SequenceKind::ShapeCelestial, SequenceKind::ShapeSolar]);
+    }
+
+    #[test]
+    fn sequence_catalog_entries_match_legacy_constructors() {
+        let terrestrial = SEQUENCE_CATALOG.iter().find(|t| t.kind == SequenceKind::ShapeTerrestrial).unwrap();
+        assert_eq!(terrestrial.build(), Sequence::shape_terrestrial());
+        let celestial = SEQUENCE_CATALOG.iter().find(|t| t.kind == SequenceKind::ShapeCelestial).unwrap();
+        assert_eq!(celestial.build(), Sequence::shape_celestial());
+        let solar = SEQUENCE_CATALOG.iter().find(|t| t.kind == SequenceKind::ShapeSolar).unwrap();
+        assert_eq!(solar.build(), Sequence::shape_solar());
     }
 }

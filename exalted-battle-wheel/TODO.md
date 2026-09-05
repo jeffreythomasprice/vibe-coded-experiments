@@ -3,7 +3,13 @@ in-flight:
 
 todo:
 
-I'd like to review all the teaching tooltips for accuracy. Look them up in the book by the reference pages, check for accuracy, and verify that they make sense for that wigdet. Split off as many subagents as necessary.
+preserve total state (current state + event log) in local storage
+reset button to clear state
+
+custom actions should be nameable
+save custom actions, e.g. specific sorceries that will have specific effects over multiple ticks
+
+be able to wake up a player early or late, e.g. to recover from a mistake and they should be able to take action earlier or later than expected
 
 dice roller
 
@@ -14,7 +20,6 @@ keep track of more stuff:
      Full Chapter Four loop: weapons, accuracy, soak, damage, health track and wound penalties. Much larger; the weapon tables in RULES.md are OCR-damaged and would need verification
      against the books first.
 
-undo stack visibility
-event log
-
 hosting, script that deploys somewhere
+
+I'd like to review all the teaching tooltips for accuracy. Look them up in the book by the reference pages, check for accuracy, and verify that they make sense for that wigdet. Split off as many subagents as necessary.

@@ -3,7 +3,7 @@
 //! accuracy. Citations are printed book page numbers (see RULES.md's citation convention);
 //! `document-search text --pages <printed + 2> <printed + 2> <pdf>` reproduces the source text.
 
-use exalted_battle_wheel::battle::ActionKind;
+use exalted_battle_wheel::battle::{ActionKind, SequenceKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Book {
@@ -73,10 +73,6 @@ fn book_unquoted(page: u16) -> Source {
     Source::Book { quote: None, cite: Citation::page(Book::Core, page) }
 }
 
-fn book_range(first: u16, last: u16, quote: &'static str) -> Source {
-    Source::Book { quote: Some(quote), cite: Citation::range(Book::Core, first, last) }
-}
-
 fn book_range_unquoted(first: u16, last: u16) -> Source {
     Source::Book { quote: None, cite: Citation::range(Book::Core, first, last) }
 }
@@ -87,6 +83,7 @@ pub enum Topic {
     AppOverview,
     Undo,
     Redo,
+    EventLog,
     CurrentTick,
     AdvanceTick,
     TeachingMode,
@@ -130,6 +127,7 @@ pub enum Topic {
     SpeedOverride,
     DvOverride,
     Declare,
+    DeclareSequence,
     ShapeTerrestrial,
     ShapeCelestial,
     ShapeSolar,
@@ -173,6 +171,15 @@ pub fn action_topic(kind: ActionKind) -> Topic {
     }
 }
 
+/// Exhaustive over `SequenceKind` so a new sorcery Circle cannot compile without a matching entry.
+pub fn sequence_topic(kind: SequenceKind) -> Topic {
+    match kind {
+        SequenceKind::ShapeTerrestrial => Topic::ShapeTerrestrial,
+        SequenceKind::ShapeCelestial => Topic::ShapeCelestial,
+        SequenceKind::ShapeSolar => Topic::ShapeSolar,
+    }
+}
+
 impl Topic {
     pub fn entry(self) -> Entry {
         match self {
@@ -192,6 +199,12 @@ impl Topic {
                 term: "Redo",
                 what: "Steps the battle log forward one event, reversing the last Undo.",
                 interacts: "Only available immediately after an Undo; declaring any new event clears the redo history.",
+                source: Source::AppConvention,
+            },
+            Topic::EventLog => Entry {
+                term: "Event Log",
+                what: "Lists every logged battle event and jumps the battle to any point in the log.",
+                interacts: "The battle is event-sourced, so the state you see is always a replay of the log from the start; jumping just moves the replay cursor. Events after the current position stay listed but dimmed and can be jumped back into, until you push a new event, which discards them.",
                 source: Source::AppConvention,
             },
             Topic::CurrentTick => Entry {
@@ -258,7 +271,7 @@ impl Topic {
             Topic::AddCombatant => Entry {
                 term: "Add",
                 what: "Adds this combatant to the roster with the entered name, side, and Join Battle result.",
-                interacts: "Can be done before or during Setup; once the battle is started the reaction count is frozen and new arrivals join using the Join Battle (in progress) action instead.",
+                interacts: "Works during Setup or after Start Battle. Once the battle is started, the reaction count is frozen, so a newly-added combatant's First Action is scheduled straight from that frozen count instead of the live preview shown during Setup. A roster member who's present but hasn't formally engaged yet can also declare \"Join Battle, in progress\" from the action panel when she chooses to act instead.",
                 source: Source::AppConvention,
             },
             Topic::RemoveCombatant => Entry {
@@ -321,7 +334,7 @@ impl Topic {
                 term: "DV refresh",
                 what: "The tick on which this combatant's DV penalty clears.",
                 interacts: "Refresh happens at the very start of the tick she's next permitted to act, before any new action's penalty is applied — so a Speed 5 action taken on tick 3 leaves her penalized for ticks 3–7 and clear again at the top of tick 8. Aborting out of Guard or Aim is the exception: the follow-up action does not refresh DV, it only reschedules the next action.",
-                source: book(172, "this penalty vanishes when DV refreshes immediately before the character's next action."),
+                source: book(141, "most actions also have a defense penalty, determining how much the action reduces the character's Defense Value … until her next action refreshes this trait."),
             },
             Topic::StateNormal => Entry {
                 term: "Normal",
@@ -357,14 +370,14 @@ impl Topic {
             Topic::UpNow => Entry {
                 term: "Up now",
                 what: "Everyone whose next action tick has arrived and who must declare an action before the tick can advance.",
-                interacts: "There is no passing: doing nothing is itself an action (Guard, or standing Inactive), so everyone listed here needs a declared action before Advance Tick will proceed.",
+                interacts: "There is no passing: doing nothing is itself an action (typically Guard), so everyone listed here needs a declared action before Advance Tick will proceed. A combatant who is Inactive is the one exception — she isn't choosing her actions at all, so she's left off this list and never blocks the tick from advancing.",
                 source: book(141, "Doing nothing is itself an action, whether a character is waiting in a guard position or paralyzed."),
             },
             Topic::ShapingSection => Entry {
                 term: "Shaping",
                 what: "Combatants partway through a sorcery sequence, even on ticks where they aren't otherwise due to act.",
                 interacts: "A shaping sorcerer can be interrupted at any time by a distraction, not only on her own tick — so she's listed here for the whole shaping sequence, separately from the Up now list.",
-                source: book_range_unquoted(251, 253),
+                source: book_range_unquoted(251, 252),
             },
             Topic::ActionSelect => Entry {
                 term: "Action",
@@ -393,49 +406,55 @@ impl Topic {
             Topic::SpeedOverride => Entry {
                 term: "Speed override",
                 what: "Lets you enter a Speed other than this action's default — needed whenever the actual Speed isn't fixed.",
-                interacts: "An Attack's real Speed is the Speed of the weapon or maneuver used, not a flat default; a weapon missing any of its trait minimums adds one to its Speed per missing dot, up to a ceiling of 6.",
+                interacts: "What it means depends on the action selected: for Attack, the weapon or maneuver's own Speed (a weapon missing any of its trait minimums adds one to its Speed per missing dot, up to a ceiling of 6); for Flurry, the highest Speed among the flurried actions; for Activate Charm, whatever Speed the Charm specifies; for Join Battle in progress, the roll result. Ignored for any action whose Speed is fixed.",
                 source: book(373, "For each dot the character is missing from any minimum, subtract one from the Accuracy and Defense of the weapon, and add one to its Speed (to a maximum total of Speed rating 6)."),
             },
             Topic::DvOverride => Entry {
                 term: "DV override",
                 what: "Lets you enter a DV penalty other than this action's default.",
-                interacts: "Miscellaneous actions let the player choose: forfeit all DV for full concentration, or take only -1 (and -2 dice on the task) by keeping one eye on the battle.",
+                interacts: "What it means depends on the action selected: for Miscellaneous, the player's choice of forfeiting all DV for full concentration or taking only -1 (and -2 dice on the task) by keeping one eye on the battle; for Activate Charm, whatever penalty the Charm specifies. Ignored for any action whose DV penalty is fixed.",
                 source: book_unquoted(143),
             },
             Topic::Declare => Entry {
                 term: "Declare",
-                what: "Commits this action for the combatant, scheduling her next action tick and applying her DV penalty.",
-                interacts: "Only available once her next action tick has arrived.",
+                what: "Resolves this action on the current tick: schedules her next action tick and applies her DV penalty right now.",
+                interacts: "Only available once her next action tick has arrived. Contrast a sorcery selection, which instead starts a multi-tick sequence — see Declare (sorcery).",
                 source: Source::AppConvention,
+            },
+            Topic::DeclareSequence => Entry {
+                term: "Declare (sorcery)",
+                what: "Starts a multi-tick sorcery sequence instead of resolving on this tick.",
+                interacts: "Each Shape action is Speed 5 at the Circle's DV penalty; the closing Cast Sorcery action is DV -0 and its Speed is whatever you roll for Join Battle, not fixed. The whole sequence must run unbroken or the spell is interrupted.",
+                source: book(252, "CAST SORCERY (VARIES, DV -0) … Determine the Speed of this action by making a Join Battle roll."),
             },
             Topic::ShapeTerrestrial => Entry {
                 term: "Shape Terrestrial Circle Sorcery",
                 what: "Begins shaping a Terrestrial Circle spell: one Speed 5 action at DV -2.",
-                interacts: "Must be followed, unbroken, by a Cast Sorcery action or the spell is lost. While shaping, no Charms, Combos, or voluntary reflexive actions are allowed.",
-                source: book_range(251, 253, "SHAPE TERRESTRIAL CIRCLE SORCERY (SPEED 5, DV -2)"),
+                interacts: "Must be followed, unbroken, by a Cast Sorcery action or the spell is interrupted. While shaping, no Charms, Combos, or voluntary reflexive actions are allowed.",
+                source: book(252, "SHAPE TERRESTRIAL CIRCLE SORCERY (SPEED 5, DV -2)"),
             },
             Topic::ShapeCelestial => Entry {
                 term: "Shape Celestial Circle Sorcery",
                 what: "Begins shaping a Celestial Circle spell: two consecutive Speed 5 actions at DV -3.",
-                interacts: "Both shaping actions must complete unbroken before Cast Sorcery, or the spell is lost.",
-                source: book_range_unquoted(251, 253),
+                interacts: "Both shaping actions must complete unbroken before Cast Sorcery, or the spell is interrupted.",
+                source: book(252, "SHAPE CELESTIAL CIRCLE SORCERY (TWO ACTIONS—EACH SPEED 5, DV -3)"),
             },
             Topic::ShapeSolar => Entry {
                 term: "Shape Solar Circle Sorcery",
                 what: "Begins shaping a Solar Circle spell: three consecutive Speed 5 actions at DV -4.",
-                interacts: "All three shaping actions must complete unbroken before Cast Sorcery, or the spell is lost.",
-                source: book_range_unquoted(251, 253),
+                interacts: "All three shaping actions must complete unbroken before Cast Sorcery, or the spell is interrupted.",
+                source: book(252, "SHAPE SOLAR CIRCLE SORCERY (THREE ACTIONS—EACH SPEED 5, DV -4)"),
             },
             Topic::SequenceStep => Entry {
                 term: "Sequence step",
                 what: "Where this combatant is within her shape-then-cast sorcery sequence.",
                 interacts: "The whole sequence must run unbroken: each Shape step is Speed 5, and the final Cast Sorcery step's Speed isn't fixed — it's determined by rolling Join Battle.",
-                source: book_range_unquoted(251, 253),
+                source: book_range_unquoted(251, 252),
             },
             Topic::CastSpeedOverride => Entry {
                 term: "Sequence speed override",
                 what: "Overrides the Speed of this combatant's next sorcery step. Only meaningful on the final Cast Sorcery step, where the Speed is rolled via Join Battle rather than fixed.",
-                interacts: "On the Cast step, enter the result of that Join Battle roll here to schedule when the sorcerer next acts. On any earlier Shape step this field does nothing — Shape's Speed is always a fixed 5, so whatever is typed here is ignored.",
+                interacts: "Enter the result of the Cast step's Join Battle roll while the display still shows the last Shape step, then click Advance — that click both moves the sorcerer onto Cast Sorcery and consumes this value to schedule it. Once the display already reads \"Cast Sorcery,\" this field no longer does anything; on any earlier Shape step it's likewise ignored, since Shape's Speed is always a fixed 5.",
                 source: book_unquoted(252),
             },
             Topic::AdvanceSequence => Entry {
@@ -453,7 +472,7 @@ impl Topic {
             Topic::InterruptSequence => Entry {
                 term: "Interrupt",
                 what: "Voluntarily breaks this combatant out of her sorcery sequence before it completes.",
-                interacts: "Use this when the player is choosing to abandon the spell rather than continue the sequence. Either way, losing the spell forces an immediate Join Battle roll to re-enter combat, using the successes entered above. If a distraction — not a choice — broke her concentration, use Distracted instead.",
+                interacts: "Use this when the player is choosing to abandon the spell rather than continue the sequence. The app rules this the same as a failed distraction check: losing the spell either way forces an immediate Join Battle roll to re-enter combat, using the successes entered above — though the book only spells out that consequence explicitly for the distraction case. If a distraction — not a choice — broke her concentration, use Distracted instead.",
                 source: book(252, "If the character does not do so, consider the spell interrupted."),
             },
             Topic::InterruptDistracted => Entry {
@@ -520,7 +539,7 @@ impl Topic {
             Topic::ActionClinch => Entry {
                 term: "Clinch (6/-1)",
                 what: "A grapple attempt: Speed 6, Rate 1, no damage on the initial hit.",
-                interacts: "On a hit the attacker controls the clinch and the victim's action shifts immediately to Inactive. Maintaining the clinch requires using every subsequent action to renew it; the controller cannot block or dodge without a stunt or magic while doing so.",
+                interacts: "On a hit the attacker controls the clinch and the victim's action shifts immediately to Inactive. Maintaining the clinch requires using every subsequent action to renew it; the controller cannot block or dodge without a stunt or magic while doing so. The -1 DV is the standard Attack penalty (p.143), not something specific to grappling — the maneuver's own rules (cited below) only fix its Speed, Accuracy, and Rate.",
                 source: book(157, "The maneuver has Speed 6, Accuracy +0 and Rate 1. This attack can be dodged or parried normally, and it inflicts no damage if it hits."),
             },
             Topic::ActionJoinBattleInProgress => Entry {
@@ -547,6 +566,7 @@ mod tests {
         Topic::AppOverview,
         Topic::Undo,
         Topic::Redo,
+        Topic::EventLog,
         Topic::CurrentTick,
         Topic::AdvanceTick,
         Topic::TeachingMode,
@@ -582,6 +602,7 @@ mod tests {
         Topic::SpeedOverride,
         Topic::DvOverride,
         Topic::Declare,
+        Topic::DeclareSequence,
         Topic::ShapeTerrestrial,
         Topic::ShapeCelestial,
         Topic::ShapeSolar,
@@ -650,6 +671,14 @@ mod tests {
         ] {
             // Panics via the exhaustive match in `action_topic` if a variant is ever unhandled.
             let _ = action_topic(kind).entry();
+        }
+    }
+
+    #[test]
+    fn every_sequence_kind_has_a_topic() {
+        for kind in [SequenceKind::ShapeTerrestrial, SequenceKind::ShapeCelestial, SequenceKind::ShapeSolar] {
+            // Panics via the exhaustive match in `sequence_topic` if a variant is ever unhandled.
+            let _ = sequence_topic(kind).entry();
         }
     }
 }

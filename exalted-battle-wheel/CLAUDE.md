@@ -13,3 +13,5 @@ RULES.md is research notes on Exalted 2E combat: the tick system, action Speeds 
 It is a summary, not a substitute for the sources. Go back to the rule books whenever RULES.md is unclear, doesn't cover the question, or flags something as uncertain (its weapon tables in particular are OCR-damaged and marked as such). Supplementing or correcting RULES.md from the sources is fine and encouraged.
 
 To look things up, use the `document-search` skill. Always pass `--tag exalted` so the search is scoped to the Exalted 2E books (as opposed to unrelated documents in the corpus). Note that the PDF page index is the printed page number + 2.
+
+When a new feature is backed by a rule from the sources, add a teaching tooltip to its UI widget explaining how it works and citing the page number it comes from. Before shipping the tooltip, double-check the cited content and page number against the actual rule book (not just RULES.md) for accuracy.

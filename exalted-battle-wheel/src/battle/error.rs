@@ -22,4 +22,6 @@ pub enum BattleError {
     NothingToUndo,
     #[error("nothing to redo")]
     NothingToRedo,
+    #[error("cannot seek to {requested}: the log has {len} events")]
+    CursorOutOfRange { requested: usize, len: usize },
 }

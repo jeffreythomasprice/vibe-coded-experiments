@@ -13,5 +13,5 @@ pub use error::BattleError;
 pub use event::{BattleEvent, InterruptReason};
 pub use ids::{CombatantId, MarkerId, Tick};
 pub use log::BattleLog;
-pub use sequence::{Sequence, SequenceStep};
+pub use sequence::{Sequence, SequenceKind, SequenceStep, SequenceTemplate, SEQUENCE_CATALOG};
 pub use state::{apply, Battle, Marker, Phase};

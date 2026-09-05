@@ -61,8 +61,20 @@ impl BattleLog {
         self.cursor < self.events.len()
     }
 
-    pub fn history(&self) -> &[BattleEvent] {
-        &self.events[..self.cursor]
+    pub fn events(&self) -> &[BattleEvent] {
+        &self.events
+    }
+
+    pub fn cursor(&self) -> usize {
+        self.cursor
+    }
+
+    pub fn seek(&mut self, cursor: usize) -> Result<(), BattleError> {
+        if cursor > self.events.len() {
+            return Err(BattleError::CursorOutOfRange { requested: cursor, len: self.events.len() });
+        }
+        self.cursor = cursor;
+        Ok(())
     }
 
     pub fn alloc_combatant_id(&mut self) -> CombatantId {
@@ -139,13 +151,13 @@ mod tests {
     #[test]
     fn invalid_event_is_rejected_without_mutating_the_log() {
         let mut log = BattleLog::new();
-        let history_len_before = log.history().len();
+        let events_len_before = log.events().len();
         let err = log.push(BattleEvent::StartSequence {
             actor: CombatantId(999),
             sequence: crate::battle::sequence::Sequence::shape_terrestrial(),
         });
         assert!(err.is_err());
-        assert_eq!(log.history().len(), history_len_before);
+        assert_eq!(log.events().len(), events_len_before);
     }
 
     #[test]
@@ -155,5 +167,54 @@ mod tests {
         log.undo().unwrap_err();
         let second = log.alloc_combatant_id();
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn seek_moves_the_cursor_in_both_directions() {
+        let mut log = BattleLog::new();
+        add_event(&mut log, 5);
+        add_event(&mut log, 2);
+        log.push(BattleEvent::StartBattle).unwrap();
+
+        log.seek(1).unwrap();
+        assert_eq!(log.battle().combatants.len(), 1);
+
+        log.seek(3).unwrap();
+        assert_eq!(log.battle().combatants.len(), 2);
+        assert!(matches!(log.battle().phase, crate::battle::state::Phase::Running { .. }));
+    }
+
+    #[test]
+    fn seek_past_the_end_is_rejected() {
+        let mut log = BattleLog::new();
+        add_event(&mut log, 5);
+        let err = log.seek(5);
+        assert_eq!(err, Err(BattleError::CursorOutOfRange { requested: 5, len: 1 }));
+        assert_eq!(log.cursor(), 1);
+    }
+
+    #[test]
+    fn seek_preserves_the_redo_tail() {
+        let mut log = BattleLog::new();
+        add_event(&mut log, 5);
+        add_event(&mut log, 2);
+        add_event(&mut log, 9);
+
+        log.seek(1).unwrap();
+        assert!(log.can_redo());
+        assert_eq!(log.events().len(), 3);
+    }
+
+    #[test]
+    fn pushing_after_seek_truncates_the_tail() {
+        let mut log = BattleLog::new();
+        add_event(&mut log, 5);
+        add_event(&mut log, 2);
+
+        log.seek(1).unwrap();
+        add_event(&mut log, 9);
+
+        assert_eq!(log.events().len(), 2);
+        assert!(!log.can_redo());
     }
 }

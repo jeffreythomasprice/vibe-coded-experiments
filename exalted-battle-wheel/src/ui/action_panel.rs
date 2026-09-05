@@ -1,8 +1,8 @@
-use crate::ui::glossary::{action_topic, Topic};
-use crate::ui::Tip;
+use crate::ui::glossary::{action_topic, sequence_topic, Topic};
+use crate::ui::{DetailTip, Tip};
 use exalted_battle_wheel::battle::{
     ActionTemplate, Battle, BattleEvent, BattleLog, CombatantId, CombatantState, DvPenaltySpec, InterruptReason,
-    JoinBattleResult, Phase, Sequence, SpeedSpec, CATALOG,
+    JoinBattleResult, Phase, Sequence, SequenceTemplate, SpeedSpec, Tick, CATALOG, SEQUENCE_CATALOG,
 };
 use leptos::prelude::*;
 
@@ -74,7 +74,7 @@ fn ActorRow(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Memo<Battle
                 if in_sequence() {
                     view! { <SequenceControls actor_id=actor_id log=log battle=battle /> }.into_any()
                 } else {
-                    view! { <NormalControls actor_id=actor_id log=log /> }.into_any()
+                    view! { <NormalControls actor_id=actor_id log=log battle=battle /> }.into_any()
                 }
             }}
         </div>
@@ -95,48 +95,93 @@ fn format_dv_penalty(spec: DvPenaltySpec) -> String {
     }
 }
 
+#[derive(Clone, Copy)]
+enum Choice {
+    Action(&'static ActionTemplate),
+    Sequence(&'static SequenceTemplate),
+}
+
+/// `CATALOG` occupies indices `0..CATALOG.len()`; `SEQUENCE_CATALOG` follows immediately after.
+fn choice_at(index: usize) -> Option<Choice> {
+    if let Some(template) = CATALOG.get(index) {
+        return Some(Choice::Action(template));
+    }
+    SEQUENCE_CATALOG.get(index - CATALOG.len()).map(Choice::Sequence)
+}
+
+/// Projects the tick each step of `sequence` is taken on, starting from `current_tick`. The final
+/// step's own Speed is rolled via Join Battle rather than fixed, so it's flagged rather than timed.
+fn sequence_timing(sequence: &Sequence, current_tick: Tick) -> String {
+    let mut tick = current_tick;
+    let last_index = sequence.steps.len() - 1;
+    let mut parts = Vec::with_capacity(sequence.steps.len());
+    for (i, step) in sequence.steps.iter().enumerate() {
+        let is_cast = i == last_index;
+        let label = if is_cast { "Cast" } else { "Shape" };
+        let when = if i == 0 { format!("{label} now (tick {tick})") } else { format!("{label} on tick {tick}") };
+        parts.push(if is_cast { format!("{when}, Speed rolled via Join Battle") } else { when });
+        tick += step.speed.resolve(None);
+    }
+    parts.join(" → ")
+}
+
 #[component]
-fn NormalControls(actor_id: CombatantId, log: RwSignal<BattleLog>) -> impl IntoView {
+fn NormalControls(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Memo<Battle>) -> impl IntoView {
     let speed_override = RwSignal::new(String::new());
     let dv_override = RwSignal::new(String::new());
     let selected_kind = RwSignal::new(0usize);
-    let selected_template = move || -> Option<&'static ActionTemplate> { CATALOG.get(selected_kind.get()) };
 
-    let declare = move |_| {
-        let Some(template) = selected_template() else { return };
-        let speed = speed_override.get().parse().ok();
-        let dv = dv_override.get().parse().ok();
-        let action = template.declare(speed, dv, None, String::new());
-        log.update(|log| {
-            if let Err(error) = log.push(BattleEvent::DeclareAction { actor: actor_id, action }) {
-                tracing::warn!(%error, "could not declare action");
-            }
-        });
-    };
+    let declare_topic = Signal::derive(move || match choice_at(selected_kind.get()) {
+        Some(Choice::Sequence(_)) => Topic::DeclareSequence,
+        _ => Topic::Declare,
+    });
+    let declare_detail = Signal::derive(move || match choice_at(selected_kind.get()) {
+        Some(Choice::Sequence(template)) => sequence_timing(&template.build(), battle.read().current_tick),
+        _ => String::new(),
+    });
 
-    let start_sequence = move |sequence: fn() -> Sequence| {
-        move |_| {
+    let declare = move |_| match choice_at(selected_kind.get()) {
+        Some(Choice::Action(template)) => {
+            let speed = speed_override.get().parse().ok();
+            let dv = dv_override.get().parse().ok();
+            let action = template.declare(speed, dv, None, String::new());
             log.update(|log| {
-                if let Err(error) = log.push(BattleEvent::StartSequence { actor: actor_id, sequence: sequence() }) {
+                if let Err(error) = log.push(BattleEvent::DeclareAction { actor: actor_id, action }) {
+                    tracing::warn!(%error, "could not declare action");
+                }
+            });
+        }
+        Some(Choice::Sequence(template)) => {
+            let sequence = template.build();
+            log.update(|log| {
+                if let Err(error) = log.push(BattleEvent::StartSequence { actor: actor_id, sequence }) {
                     tracing::warn!(%error, "could not start sequence");
                 }
             });
         }
+        None => {}
     };
 
     view! {
         <Tip topic=Topic::ActionSelect>
             <select on:change=move |ev| {
                 selected_kind.set(event_target_value(&ev).parse().unwrap_or(0));
+                speed_override.set(String::new());
+                dv_override.set(String::new());
             }>
-                <For each=|| CATALOG.iter().enumerate() key=|(i, _)| *i let:entry>
-                    <option value=entry.0.to_string()>{entry.1.name}</option>
-                </For>
+                {CATALOG.iter().enumerate().map(|(i, template)| view! {
+                    <option value=i.to_string()>{template.name}</option>
+                }).collect_view()}
+                <optgroup label="Sorcery">
+                    {SEQUENCE_CATALOG.iter().enumerate().map(|(i, template)| view! {
+                        <option value=(CATALOG.len() + i).to_string()>{template.name}</option>
+                    }).collect_view()}
+                </optgroup>
             </select>
         </Tip>
         {move || {
-            selected_template()
-                .map(|template| {
+            choice_at(selected_kind.get()).map(|choice| match choice {
+                Choice::Action(template) => {
                     let kind_topic = action_topic(template.kind);
                     let kind_entry = kind_topic.entry();
                     view! {
@@ -162,36 +207,55 @@ fn NormalControls(actor_id: CombatantId, log: RwSignal<BattleLog>) -> impl IntoV
                             </Tip>
                         </div>
                     }
-                })
+                        .into_any()
+                }
+                Choice::Sequence(template) => {
+                    let kind_topic = sequence_topic(template.kind);
+                    let kind_entry = kind_topic.entry();
+                    view! {
+                        <div class="action-summary">
+                            <Tip topic=Topic::SequenceStep>
+                                <span class="action-summary-chip">"Steps " {template.shape_actions + 1}</span>
+                            </Tip>
+                            <Tip topic=Topic::Speed>
+                                <span class="action-summary-chip">"Shape Speed 5"</span>
+                            </Tip>
+                            <Tip topic=Topic::DvPenalty>
+                                <span class="action-summary-chip">"DV " {template.shape_dv}</span>
+                            </Tip>
+                            <Tip topic=Topic::SequenceStep>
+                                <span class="action-summary-chip">"Cast Speed varies"</span>
+                            </Tip>
+                            <Tip topic=kind_topic>
+                                <span class="action-summary-note">{kind_entry.what}</span>
+                            </Tip>
+                        </div>
+                    }
+                        .into_any()
+                }
+            })
         }}
-        <Tip topic=Topic::SpeedOverride>
-            <input
-                placeholder="speed override"
-                prop:value=move || speed_override.get()
-                on:input=move |ev| speed_override.set(event_target_value(&ev))
-            />
-        </Tip>
-        <Tip topic=Topic::DvOverride>
-            <input
-                placeholder="DV override"
-                prop:value=move || dv_override.get()
-                on:input=move |ev| dv_override.set(event_target_value(&ev))
-            />
-        </Tip>
-        <Tip topic=Topic::Declare>
+        {move || {
+            matches!(choice_at(selected_kind.get()), Some(Choice::Action(_))).then(|| view! {
+                <Tip topic=Topic::SpeedOverride>
+                    <input
+                        placeholder="speed override"
+                        prop:value=move || speed_override.get()
+                        on:input=move |ev| speed_override.set(event_target_value(&ev))
+                    />
+                </Tip>
+                <Tip topic=Topic::DvOverride>
+                    <input
+                        placeholder="DV override"
+                        prop:value=move || dv_override.get()
+                        on:input=move |ev| dv_override.set(event_target_value(&ev))
+                    />
+                </Tip>
+            })
+        }}
+        <DetailTip topic=declare_topic detail=declare_detail>
             <button on:click=declare>"Declare"</button>
-        </Tip>
-        <span class="sorcery-buttons">
-            <Tip topic=Topic::ShapeTerrestrial>
-                <button on:click=start_sequence(Sequence::shape_terrestrial)>"Shape Terrestrial"</button>
-            </Tip>
-            <Tip topic=Topic::ShapeCelestial>
-                <button on:click=start_sequence(Sequence::shape_celestial)>"Shape Celestial"</button>
-            </Tip>
-            <Tip topic=Topic::ShapeSolar>
-                <button on:click=start_sequence(Sequence::shape_solar)>"Shape Solar"</button>
-            </Tip>
-        </span>
+        </DetailTip>
     }
 }
 
@@ -287,5 +351,44 @@ fn InterruptControls(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Me
         <Tip topic=Topic::InterruptDistracted>
             <button on:click=interrupt_distracted class="interrupt-button">"Distracted"</button>
         </Tip>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use exalted_battle_wheel::battle::SequenceKind;
+
+    #[test]
+    fn choice_at_covers_the_catalog_then_the_sequence_catalog() {
+        assert!(matches!(choice_at(0), Some(Choice::Action(_))));
+        assert!(matches!(choice_at(CATALOG.len() - 1), Some(Choice::Action(_))));
+        assert!(matches!(choice_at(CATALOG.len()), Some(Choice::Sequence(_))));
+        assert!(matches!(
+            choice_at(CATALOG.len() + SEQUENCE_CATALOG.len() - 1),
+            Some(Choice::Sequence(_))
+        ));
+        assert!(choice_at(CATALOG.len() + SEQUENCE_CATALOG.len()).is_none());
+    }
+
+    #[test]
+    fn choice_at_sequence_entries_match_their_catalog_order() {
+        let Some(Choice::Sequence(template)) = choice_at(CATALOG.len()) else { panic!("expected a sequence") };
+        assert_eq!(template.kind, SequenceKind::ShapeTerrestrial);
+    }
+
+    #[test]
+    fn sequence_timing_reports_the_declare_tick_for_every_step() {
+        let sequence = Sequence::shape_celestial();
+        assert_eq!(
+            sequence_timing(&sequence, 7),
+            "Shape now (tick 7) → Shape on tick 12 → Cast on tick 17, Speed rolled via Join Battle"
+        );
+    }
+
+    #[test]
+    fn sequence_timing_for_terrestrial_is_shape_then_cast() {
+        let sequence = Sequence::shape_terrestrial();
+        assert_eq!(sequence_timing(&sequence, 0), "Shape now (tick 0) → Cast on tick 5, Speed rolled via Join Battle");
     }
 }

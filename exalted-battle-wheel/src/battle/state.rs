@@ -241,11 +241,15 @@ fn apply_declare_action(battle: &mut Battle, actor: CombatantId, action: &Declar
         });
     }
 
-    let suppress_refresh = match combatant.state {
-        CombatantState::Guarding => aborting_early,
-        CombatantState::Aiming { .. } => true,
-        _ => false,
-    };
+    // Inactive always forces DV to 0 outright, even mid-Guard/Aim: it isn't a chosen follow-up
+    // action whose penalty should stack onto the suppressed one, it's an involuntary state that
+    // overrides whatever she was doing.
+    let suppress_refresh = action.kind != ActionKind::Inactive
+        && match combatant.state {
+            CombatantState::Guarding => aborting_early,
+            CombatantState::Aiming { .. } => true,
+            _ => false,
+        };
 
     let next_action_tick = current_tick + action.speed;
     combatant.dv = DvState {
@@ -389,6 +393,26 @@ mod tests {
         assert_eq!(combatant.next_action_tick, 1 + 3);
         assert_eq!(combatant.dv.penalty, 0 + -2);
         assert_eq!(combatant.state, CombatantState::Normal);
+    }
+
+    #[test]
+    fn inactive_resets_dv_to_zero_even_when_aborting_early_out_of_aim() {
+        let mut battle = Battle::genesis();
+        let cid = add(&mut battle, 1, 0);
+        apply(&mut battle, &BattleEvent::StartBattle).unwrap();
+
+        let aim = template(ActionKind::Aim).declare(None, None, None, String::new());
+        apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: aim }).unwrap();
+        assert_eq!(battle.find(cid).unwrap().dv.penalty, -1);
+
+        // Abort on tick 1, before Aim's Speed 3 has elapsed.
+        apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
+        let inactive = template(ActionKind::Inactive).declare(None, None, None, String::new());
+        apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: inactive }).unwrap();
+
+        let combatant = battle.find(cid).unwrap();
+        assert_eq!(combatant.dv.penalty, 0);
+        assert_eq!(combatant.state, CombatantState::Inactive);
     }
 
     #[test]

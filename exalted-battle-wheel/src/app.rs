@@ -1,6 +1,6 @@
 use crate::prefs::{Prefs, Theme};
 use crate::ui::glossary::Topic;
-use crate::ui::{ActionPanel, ActiveTip, HoverCard, Hovered, Roster, Tip, TipLayer, Wheel};
+use crate::ui::{ActionPanel, ActiveTip, EventLogButton, HoverCard, Hovered, Roster, Tip, TipLayer, Wheel};
 use exalted_battle_wheel::battle::{BattleEvent, BattleLog, CombatantId, Phase};
 use leptos::prelude::*;
 
@@ -54,6 +54,7 @@ pub fn App() -> impl IntoView {
                         "Redo"
                     </button>
                 </Tip>
+                <EventLogButton />
                 <Tip topic=Topic::CurrentTick>
                     <div class="tick-readout">"Tick " {move || battle.read().current_tick}</div>
                 </Tip>

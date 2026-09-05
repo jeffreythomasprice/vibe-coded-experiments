@@ -18,6 +18,7 @@ web-sys = { version = "0.3.104", features = [
     "DomRect",
     "Document",
     "Element",
+    "KeyboardEvent",
     "MediaQueryList",
     "MediaQueryListEvent",
     "Node",
