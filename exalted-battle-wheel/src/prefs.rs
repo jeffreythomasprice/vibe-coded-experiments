@@ -2,6 +2,7 @@
 //! `Serialize + DeserializeOwned` type — bool, enum, struct — not just the two prefs the app
 //! currently has. Add a preference by adding one field to `Prefs` and one line to `Prefs::load`.
 
+use crate::library::Library;
 use crate::storage::{self, StorageError};
 use leptos::prelude::*;
 use leptos::wasm_bindgen::closure::Closure;
@@ -206,11 +207,16 @@ fn install_theme(theme: Pref<Theme>) {
 pub struct Prefs {
     pub teaching_mode: Pref<bool>,
     pub theme: Pref<Theme>,
+    pub library: Pref<Library>,
 }
 
 impl Prefs {
     pub fn load() -> Self {
-        let prefs = Self { teaching_mode: Pref::new("teaching_mode", || true), theme: Pref::new("theme", Theme::default) };
+        let prefs = Self {
+            teaching_mode: Pref::new("teaching_mode", || true),
+            theme: Pref::new("theme", Theme::default),
+            library: Pref::new("saved_actions", Library::default),
+        };
         install_theme(prefs.theme);
         prefs
     }
@@ -255,5 +261,25 @@ mod tests {
     fn explicit_theme_ignores_the_os_preference() {
         assert_eq!(Theme::Light.resolve(true), Resolved::Light);
         assert_eq!(Theme::Dark.resolve(false), Resolved::Dark);
+    }
+
+    #[test]
+    fn library_namespaces_its_key() {
+        assert_eq!(storage_key("saved_actions"), "ebw.pref.saved_actions");
+    }
+
+    #[test]
+    fn a_library_emptied_by_deletes_encodes_identically_to_its_default() {
+        use crate::library::SavedShape;
+        use exalted_battle_wheel::battle::ActionKind;
+
+        let mut library = Library::default();
+        let id = library
+            .add("Sweeping Blow".to_string(), String::new(), SavedShape::Single { kind: ActionKind::Attack, speed: 4, dv_penalty: -1 }, Vec::new())
+            .unwrap();
+        library.remove(id).unwrap();
+
+        let default_json = encode("saved_actions", &Library::default()).unwrap();
+        assert_eq!(encode("saved_actions", &library).unwrap(), default_json);
     }
 }

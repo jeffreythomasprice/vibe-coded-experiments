@@ -6,6 +6,10 @@ pub enum BattleError {
     UnknownCombatant(CombatantId),
     #[error("no marker with id {0:?}")]
     UnknownMarker(MarkerId),
+    #[error("marker {0:?} must span at least one tick")]
+    MarkerDurationZero(MarkerId),
+    #[error("a marker with id {0:?} already exists")]
+    DuplicateMarker(MarkerId),
     #[error("the battle has not started yet")]
     NotYetStarted,
     #[error("the battle has already started")]
@@ -16,6 +20,8 @@ pub enum BattleError {
     SequenceAlreadyInProgress(CombatantId),
     #[error("{0:?} is not in a sequence")]
     NoSequenceInProgress(CombatantId),
+    #[error("{actor:?}'s revised sequence step {step} is out of range for its {steps}-step sequence")]
+    SequenceStepOutOfRange { actor: CombatantId, step: usize, steps: usize },
     #[error("cannot advance the tick: {0:?} still need to act")]
     CombatantsPendingAction(Vec<CombatantId>),
     #[error("nothing to undo")]

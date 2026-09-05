@@ -105,7 +105,8 @@ body {
 }
 
 .roster,
-.action-panel {
+.action-panel,
+.queue-panel {
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: 8px;
@@ -113,8 +114,15 @@ body {
   min-width: 320px;
 }
 
+.side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 .roster h2,
-.action-panel h2 {
+.action-panel h2,
+.queue-panel h2 {
   margin: 0 0 0.75rem;
   font-size: 1rem;
   color: var(--text-dim);
@@ -187,7 +195,8 @@ button {
 }
 
 .roster button,
-.action-panel button {
+.action-panel button,
+.queue-panel button {
   background: var(--panel-border);
   color: var(--text);
   border: 1px solid var(--panel-border);
@@ -198,12 +207,14 @@ button {
 }
 
 .roster button:hover:not(:disabled),
-.action-panel button:hover:not(:disabled) {
+.action-panel button:hover:not(:disabled),
+.queue-panel button:hover:not(:disabled) {
   border-color: var(--accent);
 }
 
 .roster button:disabled,
-.action-panel button:disabled {
+.action-panel button:disabled,
+.queue-panel button:disabled {
   opacity: 0.4;
   cursor: default;
 }
@@ -296,6 +307,17 @@ button {
   cursor: help;
 }
 
+.wheel-marker {
+  transition: transform 220ms ease;
+  cursor: help;
+}
+
+.wheel-marker circle {
+  fill: var(--danger);
+  stroke: var(--bg);
+  stroke-width: 2;
+}
+
 .center-tick {
   fill: var(--text);
   font-size: 28px;
@@ -328,6 +350,123 @@ button {
   flex-direction: column;
   align-items: center;
   gap: 0.75rem;
+}
+
+.marker-list-form {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.marker-list-form input[type="text"],
+.marker-list-form input:not([type]),
+.marker-list-form input[type="number"] {
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+  width: 6rem;
+}
+
+.marker-list-form input[type="number"] {
+  width: 3.5rem;
+}
+
+.marker-form-field {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text-dim);
+}
+
+.queue-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.queue-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.queue-row:hover {
+  border-color: var(--accent);
+}
+
+.queue-row-ready {
+  border-left: 3px solid var(--accent);
+}
+
+.queue-row-marker {
+  color: var(--danger);
+}
+
+.queue-row-pending {
+  opacity: 0.7;
+}
+
+.queue-row-sub {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.queue-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.queue-editor-hint {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.queue-field {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-dim);
+}
+
+.queue-field input,
+.queue-field select {
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+  width: 8rem;
+}
+
+.queue-commitment {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.queue-editor-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .hover-card {
@@ -604,4 +743,98 @@ button {
 
 .event-log-row-future {
   color: var(--text-dim);
+}
+
+.library-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.library-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg);
+  border-radius: 4px;
+}
+
+.library-list .name {
+  font-weight: 600;
+}
+
+.library-shape {
+  color: var(--text-dim);
+  margin-left: auto;
+}
+
+.library-empty {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.library-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.library-field {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-dim);
+}
+
+.library-editor input[type="text"],
+.library-editor input:not([type]),
+.library-editor input[type="number"] {
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+  width: 8rem;
+}
+
+.library-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.library-row input {
+  width: 6rem;
+}
+
+.library-steps h4,
+.library-effects h4 {
+  margin: 0.4rem 0 0.2rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+
+.library-error {
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+.action-error {
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+.action-status {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.library-save {
+  align-self: flex-start;
 }

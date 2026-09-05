@@ -1,6 +1,7 @@
-use crate::battle::action::SpeedSpec;
+use crate::battle::action::{DeclaredEffect, SpeedSpec};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SequenceStep {
     pub label: String,
     pub speed: SpeedSpec,
@@ -12,11 +13,13 @@ pub struct Sequence {
     pub name: String,
     pub steps: Vec<SequenceStep>,
     pub current: usize,
+    /// Dropped onto the wheel once the sequence's final step (the Cast) resolves.
+    pub effects: Vec<DeclaredEffect>,
 }
 
 impl Sequence {
     pub fn new(name: impl Into<String>, steps: Vec<SequenceStep>) -> Self {
-        Self { name: name.into(), steps, current: 0 }
+        Self { name: name.into(), steps, current: 0, effects: Vec::new() }
     }
 
     /// RULES.md §5.1, pp. 251-253: Shape (N actions, each Speed 5) then Cast (Speed rolled

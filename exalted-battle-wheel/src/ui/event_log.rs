@@ -1,7 +1,7 @@
 use crate::ui::glossary::Topic;
 use crate::ui::{Modal, TextTip, Tip};
 use exalted_battle_wheel::battle::{
-    apply, Battle, BattleEvent, BattleLog, CombatantId, CombatantState, InterruptReason, JoinBattleResult,
+    apply, template, Battle, BattleEvent, BattleLog, CombatantId, CombatantState, InterruptReason, JoinBattleResult, Tick,
 };
 use leptos::prelude::*;
 
@@ -18,6 +18,22 @@ fn join_battle_detail(join_battle: JoinBattleResult) -> String {
     match join_battle {
         JoinBattleResult::Successes(successes) => format!("Join Battle: {successes} successes"),
         JoinBattleResult::Botch => "Join Battle: botch".to_string(),
+    }
+}
+
+fn marker_span(at_tick: Tick, ticks: u32) -> String {
+    if ticks <= 1 { format!("tick {at_tick}") } else { format!("ticks {at_tick}\u{2013}{}", at_tick + ticks - 1) }
+}
+
+fn state_label(state: &CombatantState) -> String {
+    match state {
+        CombatantState::Normal => "Normal".to_string(),
+        CombatantState::Guarding => "Guarding".to_string(),
+        CombatantState::Aiming { .. } => "Aiming".to_string(),
+        CombatantState::Inactive => "Inactive".to_string(),
+        CombatantState::InSequence(sequence) => {
+            format!("{} (step {}/{})", sequence.name, sequence.current + 1, sequence.steps.len())
+        }
     }
 }
 
@@ -45,7 +61,12 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
         },
         BattleEvent::DeclareAction { actor, action } => {
             let target = action.target.map(|id| format!(" on {}", name(battle, id))).unwrap_or_default();
-            let mut detail = format!("Speed {}, DV {}", action.speed, action.dv_penalty);
+            let kind_name = template(action.kind).name;
+            let mut detail = if action.label == kind_name {
+                format!("Speed {}, DV {}", action.speed, action.dv_penalty)
+            } else {
+                format!("{kind_name}, Speed {}, DV {}", action.speed, action.dv_penalty)
+            };
             if action.reflexive {
                 detail.push_str(", reflexive");
             }
@@ -103,10 +124,10 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
         BattleEvent::AdvanceTick => {
             EventLine { text: format!("Tick advanced to {}", battle.current_tick + 1), detail: None }
         }
-        BattleEvent::AddMarker { label, source, at_tick, .. } => EventLine {
-            text: format!("Marker \"{label}\" at tick {at_tick} (from {})", name(battle, *source)),
-            detail: None,
-        },
+        BattleEvent::AddMarker { label, source, at_tick, ticks, .. } => {
+            let span = marker_span(*at_tick, *ticks);
+            EventLine { text: format!("Marker \"{label}\" on {span} (from {})", name(battle, *source)), detail: None }
+        }
         BattleEvent::RemoveMarker { id } => {
             let label = battle.markers.iter().find(|m| m.id == *id).map(|m| m.label.clone());
             let text = match label {
@@ -114,6 +135,51 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
                 None => "Removed marker".to_string(),
             };
             EventLine { text, detail: None }
+        }
+        BattleEvent::ReviseCombatant { actor, next_action_tick, state, dv, commitment, note } => {
+            let before = battle.find(*actor);
+            let mut parts = Vec::new();
+            if let Some(before) = before {
+                if before.next_action_tick != *next_action_tick {
+                    parts.push(format!("tick {} \u{2192} {next_action_tick}", before.next_action_tick));
+                }
+                if before.dv.penalty != dv.penalty {
+                    parts.push(format!("DV {} \u{2192} {}", before.dv.penalty, dv.penalty));
+                }
+                if before.state != *state {
+                    parts.push(format!("{} \u{2192} {}", state_label(&before.state), state_label(state)));
+                }
+                match (&before.commitment, commitment) {
+                    (Some(prev), None) => parts.push(format!("cleared {}", prev.label)),
+                    (None, Some(next)) => parts.push(format!("set {}", next.label)),
+                    (Some(prev), Some(next)) if prev.label != next.label => {
+                        parts.push(format!("{} \u{2192} {}", prev.label, next.label));
+                    }
+                    _ => {}
+                }
+            }
+            if !note.is_empty() {
+                parts.push(note.clone());
+            }
+            let detail = if parts.is_empty() { "No changes".to_string() } else { parts.join("; ") };
+            EventLine { text: format!("Revised {}", name(battle, *actor)), detail: Some(detail) }
+        }
+        BattleEvent::ReviseMarker { id, label, at_tick, ticks } => {
+            let before = battle.markers.iter().find(|m| m.id == *id);
+            let title = before.map(|m| m.label.clone()).unwrap_or_else(|| label.clone());
+            let mut parts = Vec::new();
+            if let Some(before) = before {
+                if before.label != *label {
+                    parts.push(format!("\"{}\" \u{2192} \"{label}\"", before.label));
+                }
+                let before_span = marker_span(before.at_tick, before.ticks);
+                let after_span = marker_span(*at_tick, *ticks);
+                if before_span != after_span {
+                    parts.push(format!("{before_span} \u{2192} {after_span}"));
+                }
+            }
+            let detail = if parts.is_empty() { "No changes".to_string() } else { parts.join("; ") };
+            EventLine { text: format!("Retimed \"{title}\""), detail: Some(detail) }
         }
     }
 }

@@ -107,6 +107,14 @@ pub enum Topic {
     TickSlot,
     NowMarker,
     BeyondHorizon,
+    Markers,
+    MarkerDuration,
+
+    // Queue
+    Queue,
+    ReviseCombatant,
+    PendingMarker,
+    CancelSequenceEarly,
 
     // Hover card / combatant state
     DvPenalty,
@@ -121,6 +129,7 @@ pub enum Topic {
     UpNow,
     ShapingSection,
     ActionSelect,
+    ActionName,
     Speed,
     Reflexive,
     Flurryable,
@@ -137,6 +146,11 @@ pub enum Topic {
     RejoinSuccesses,
     InterruptSequence,
     InterruptDistracted,
+    SaveAction,
+    ManageSavedActions,
+    SavedActions,
+    SavedSequenceStep,
+    ActionEffects,
 
     // One per ActionKind, via action_topic()
     ActionAim,
@@ -323,6 +337,43 @@ impl Topic {
                 interacts: "This shouldn't normally happen for long — the highest fixed Speed in the core action catalog is 6, and even a fully-penalized weapon (missing every trait minimum) is capped at Speed 6, so ordinary actions land within the 12-tick window shown.",
                 source: Source::AppConvention,
             },
+            Topic::Markers => Entry {
+                term: "Markers",
+                what: "A labelled span of ticks you place on the wheel by hand, for anything the app doesn't track on its own.",
+                interacts: "The book has several effects that last from a fixed tick until some future tick rather than following a combatant's own DV-refresh cycle — a coordinated attack's window of opportunity lasts from the moment it succeeds until the tick the commander next acts, and a saved action's effects (see Save) drop markers automatically when they resolve. Use a marker for anything similar: a Stunned penalty, a hazard, a standing order.",
+                source: book(144, "If the roll succeeds, the coordination opens a \u{201c}window of opportunity\u{201d} on the tick when the commander next acts."),
+            },
+            Topic::MarkerDuration => Entry {
+                term: "Duration",
+                what: "How many ticks from now the marker starts, and how many ticks it spans once it starts.",
+                interacts: "A one-tick marker (the default) covers only its starting tick — the shape of a coordinated attack's window of opportunity. A longer span suits an effect the book anchors to a future tick instead of to whoever it affects, such as a Stunned penalty that lasts until the tick when the attacker next acts.",
+                source: book(153, "Failure leaves the victim at -2 dice to all non-reflexive rolls until the tick when the attacker next acts."),
+            },
+
+            Topic::Queue => Entry {
+                term: "Queue",
+                what: "Everything currently in flight, sorted by tick: who's due, who's resolving an action or a sorcery sequence, and every marker, whether it's already started or not.",
+                interacts: "Click any row to open a full editor for it. Every edit there is appended as a new event, so Undo/Redo covers it exactly like any other declared action.",
+                source: Source::AppConvention,
+            },
+            Topic::ReviseCombatant => Entry {
+                term: "Revise combatant",
+                what: "A full-override escape hatch: retime this combatant's next action, adjust her DV, force a state change, or clear what she's committed to.",
+                interacts: "Applying this appends a correction event rather than rewriting history, so Undo reverts exactly this edit and nothing else — retcon an action to resolve in fewer ticks, then undo it, and the original tick comes back.",
+                source: Source::AppConvention,
+            },
+            Topic::PendingMarker => Entry {
+                term: "Pending marker",
+                what: "A marker whose span hasn't started yet.",
+                interacts: "A marker with a delay is invisible on the wheel and in the hover card until its start tick arrives — the queue is the only place to see or edit it before then.",
+                source: Source::AppConvention,
+            },
+            Topic::CancelSequenceEarly => Entry {
+                term: "Cancelling a sequence here",
+                what: "Forcing a shaping combatant into any state other than \u{201c}In sequence (keep)\u{201d} abandons her spell.",
+                interacts: "The book models losing a spell — whether to a failed distraction check or a voluntary choice — as dissipating harmlessly, with an immediate Join Battle roll to re-enter combat. This editor doesn't roll that Join Battle for you: use Interrupt in the action panel for the modeled rejoin, or set her next action tick here by hand.",
+                source: book(251, "If the roll fails, the spell dissipates harmlessly and has no effects."),
+            },
 
             Topic::DvPenalty => Entry {
                 term: "DV penalty",
@@ -384,6 +435,12 @@ impl Topic {
                 what: "The action this combatant is about to declare.",
                 interacts: "Every action carries a Speed (ticks until her next action) and a DV penalty (how much it degrades her Dodge and Parry DV until it refreshes) — shown below once selected.",
                 source: book_unquoted(141),
+            },
+            Topic::ActionName => Entry {
+                term: "Name",
+                what: "What this declared action is called in the event log. Leave blank to use the action's own name.",
+                interacts: "Naming an action doesn't change its mechanics — it's still whatever kind is selected above, with that kind's Speed and DV rules. Use it to record which Attack maneuver, Charm, or house-ruled action this actually is.",
+                source: Source::AppConvention,
             },
             Topic::Speed => Entry {
                 term: "Speed",
@@ -480,6 +537,37 @@ impl Topic {
                 what: "Records that this combatant was distracted while shaping and failed the roll to keep her concentration, losing the spell.",
                 interacts: "The book models a distraction as a reflexive Wits + Occult roll at difficulty 1 to keep concentration; only a failed roll belongs here — a success means the sequence continues uninterrupted and there's nothing to declare. Losing the spell this way still forces an immediate Join Battle roll to re-enter combat, using the successes entered above.",
                 source: book(251, "If the character is distracted, then his player must make a reflexive (Wits + Occult) roll for the Exalt to keep his concentration. This roll is difficulty 1."),
+            },
+
+            Topic::SaveAction => Entry {
+                term: "Save\u{2026}",
+                what: "Saves the currently selected action or sorcery — with its name, Speed, DV, and any effects — to your library for reuse.",
+                interacts: "Starts from whatever is currently selected above: a renamed catalog action keeps its entered name and overrides, a sorcery keeps its Shape/Cast steps. Nothing is declared by saving — use Declare for that, or pick the saved entry later from the Saved group in the list above.",
+                source: Source::AppConvention,
+            },
+            Topic::ManageSavedActions => Entry {
+                term: "Manage\u{2026}",
+                what: "Opens the list of saved actions to edit or delete them.",
+                interacts: "Deleting a saved action only removes it from the library — it doesn't affect anything already declared with it, since a declared action's Speed, DV, and effects were copied in at declare time.",
+                source: Source::AppConvention,
+            },
+            Topic::SavedActions => Entry {
+                term: "Saved action",
+                what: "A named action or sorcery you've saved for reuse, kept in this browser's local storage.",
+                interacts: "Saved the same way across tabs: saving or deleting one here updates the Saved group in every open tab immediately, the same way Teaching mode or Theme does.",
+                source: Source::AppConvention,
+            },
+            Topic::SavedSequenceStep => Entry {
+                term: "Step",
+                what: "One action in a saved sorcery sequence: its label, Speed, and DV penalty.",
+                interacts: "Leave Speed blank to mark a step's Speed as rolled via Join Battle rather than fixed — the shape Cast Sorcery uses (RULES.md §5.1). A saved sequence isn't limited to the book's three Circles: use this to record a Charm or house rule with its own multi-action timing.",
+                source: book(252, "CAST SORCERY (VARIES, DV -0) … Determine the Speed of this action by making a Join Battle roll."),
+            },
+            Topic::ActionEffects => Entry {
+                term: "Effects",
+                what: "Labelled spans this action drops onto the wheel the moment it resolves (or, for a sorcery, the moment its Cast resolves).",
+                interacts: "Each effect gets its own marker, delayed by the ticks you set and lasting the duration you set — the same tick-anchored-span shape as a coordinated attack's window of opportunity. Use this for anything a saved action should leave behind: a hazard, a standing bonus, a Charm's lingering condition.",
+                source: book(144, "If the roll succeeds, the coordination opens a \u{201c}window of opportunity\u{201d} on the tick when the commander next acts."),
             },
 
             Topic::ActionAim => Entry {
@@ -586,6 +674,12 @@ mod tests {
         Topic::TickSlot,
         Topic::NowMarker,
         Topic::BeyondHorizon,
+        Topic::Markers,
+        Topic::MarkerDuration,
+        Topic::Queue,
+        Topic::ReviseCombatant,
+        Topic::PendingMarker,
+        Topic::CancelSequenceEarly,
         Topic::DvPenalty,
         Topic::DvRefresh,
         Topic::StateNormal,
@@ -596,6 +690,7 @@ mod tests {
         Topic::UpNow,
         Topic::ShapingSection,
         Topic::ActionSelect,
+        Topic::ActionName,
         Topic::Speed,
         Topic::Reflexive,
         Topic::Flurryable,
@@ -612,6 +707,11 @@ mod tests {
         Topic::RejoinSuccesses,
         Topic::InterruptSequence,
         Topic::InterruptDistracted,
+        Topic::SaveAction,
+        Topic::ManageSavedActions,
+        Topic::SavedActions,
+        Topic::SavedSequenceStep,
+        Topic::ActionEffects,
         Topic::ActionAim,
         Topic::ActionAttack,
         Topic::ActionDash,

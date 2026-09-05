@@ -6,9 +6,6 @@ todo:
 preserve total state (current state + event log) in local storage
 reset button to clear state
 
-custom actions should be nameable
-save custom actions, e.g. specific sorceries that will have specific effects over multiple ticks
-
 be able to wake up a player early or late, e.g. to recover from a mistake and they should be able to take action earlier or later than expected
 
 dice roller

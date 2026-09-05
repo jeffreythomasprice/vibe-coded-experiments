@@ -170,6 +170,61 @@ mod tests {
     }
 
     #[test]
+    fn revising_an_action_then_undo_restores_the_original_tick_and_redo_reapplies_it() {
+        use crate::battle::action::{template, ActionKind, Declaration};
+        use crate::battle::combatant::{CombatantState, DvState};
+
+        let mut log = BattleLog::new();
+        let id = add_event(&mut log, 5);
+        log.push(BattleEvent::StartBattle).unwrap();
+        let attack = template(ActionKind::Attack).declare(Declaration { speed: Some(5), ..Default::default() });
+        log.push(BattleEvent::DeclareAction { actor: id, action: attack }).unwrap();
+        assert_eq!(log.battle().find(id).unwrap().next_action_tick, 5);
+
+        log.push(BattleEvent::ReviseCombatant {
+            actor: id,
+            next_action_tick: 2,
+            state: CombatantState::Normal,
+            dv: DvState { penalty: -1, refreshes_at: Some(2) },
+            commitment: None,
+            note: "retconned to resolve sooner".to_string(),
+        })
+        .unwrap();
+        assert_eq!(log.battle().find(id).unwrap().next_action_tick, 2);
+
+        log.undo().unwrap();
+        assert_eq!(log.battle().find(id).unwrap().next_action_tick, 5, "undo should restore the pre-revision tick");
+
+        log.redo().unwrap();
+        assert_eq!(log.battle().find(id).unwrap().next_action_tick, 2, "redo should reapply the revision");
+    }
+
+    #[test]
+    fn revising_a_tick_backward_replays_every_prefix_without_panicking() {
+        use crate::battle::combatant::{CombatantState, DvState};
+
+        let mut log = BattleLog::new();
+        let id = add_event(&mut log, 5);
+        log.push(BattleEvent::StartBattle).unwrap();
+        log.push(BattleEvent::ReviseCombatant {
+            actor: id,
+            next_action_tick: 0,
+            state: CombatantState::Normal,
+            dv: DvState::default(),
+            commitment: None,
+            note: String::new(),
+        })
+        .unwrap();
+
+        // `battle()` replays events[..cursor] from genesis on every call and `.expect()`s that
+        // each logged event is still valid; this must not panic at any cursor position.
+        for cursor in 0..=log.events().len() {
+            log.seek(cursor).unwrap();
+            let _ = log.battle();
+        }
+    }
+
+    #[test]
     fn seek_moves_the_cursor_in_both_directions() {
         let mut log = BattleLog::new();
         add_event(&mut log, 5);

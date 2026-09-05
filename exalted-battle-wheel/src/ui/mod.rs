@@ -1,7 +1,10 @@
 pub mod action_panel;
 pub mod event_log;
 pub mod glossary;
+pub mod library;
+pub mod markers;
 pub mod modal;
+pub mod queue;
 pub mod roster;
 pub mod tip;
 pub mod tooltip;
@@ -9,7 +12,10 @@ pub mod wheel;
 
 pub use action_panel::ActionPanel;
 pub use event_log::EventLogButton;
+pub use library::{SavedActionEditor, SavedActionList};
+pub use markers::MarkerForm;
 pub use modal::Modal;
+pub use queue::QueuePanel;
 pub use roster::Roster;
 pub use tip::{ActiveTip, DetailTip, TextTip, Tip, TipLayer};
 pub use tooltip::{HoverCard, Hovered};

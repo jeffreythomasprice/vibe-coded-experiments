@@ -37,6 +37,17 @@ pub struct DvState {
     pub refreshes_at: Option<Tick>,
 }
 
+/// What the combatant is currently committed to: the action whose Speed is holding her off the
+/// wheel until `next_action_tick`. Declaring an action resolves it immediately (state.rs), so
+/// without this the battle keeps only the tick and DV it left behind and cannot say what she's
+/// doing. Sequences don't use this — `CombatantState::InSequence` already carries the step.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Commitment {
+    pub label: String,
+    pub speed: u32,
+    pub declared_at: Tick,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Combatant {
     pub id: CombatantId,
@@ -46,6 +57,7 @@ pub struct Combatant {
     pub next_action_tick: Tick,
     pub state: CombatantState,
     pub dv: DvState,
+    pub commitment: Option<Commitment>,
 }
 
 #[cfg(test)]

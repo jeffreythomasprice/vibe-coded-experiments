@@ -1,4 +1,5 @@
 mod app;
+mod library;
 mod prefs;
 mod storage;
 mod ui;

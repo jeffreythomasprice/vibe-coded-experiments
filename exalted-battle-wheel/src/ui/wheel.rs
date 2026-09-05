@@ -1,7 +1,10 @@
 use crate::ui::glossary::Topic;
-use crate::ui::tip::{on_focus_in, on_focus_out, on_pointer_enter, on_pointer_leave};
+use crate::ui::tip::{
+    on_focus_in, on_focus_in_text, on_focus_out, on_focus_out_text, on_pointer_enter, on_pointer_enter_text,
+    on_pointer_leave, on_pointer_leave_text,
+};
 use crate::ui::{Hovered, Tip};
-use exalted_battle_wheel::battle::{Battle, Combatant, Tick};
+use exalted_battle_wheel::battle::{Battle, Combatant, Marker, Tick};
 use leptos::prelude::*;
 
 const SLOT_COUNT: i64 = 12;
@@ -12,6 +15,9 @@ const LABEL_RADIUS: f64 = 188.0;
 const TOKEN_RADIUS: f64 = 160.0;
 const TOKEN_FAN_DEGREES: f64 = 9.0;
 const TOKEN_R: f64 = 15.0;
+const MARKER_RADIUS: f64 = 130.0;
+const MARKER_FAN_DEGREES: f64 = 9.0;
+const MARKER_R: f64 = 8.0;
 
 fn slot_step() -> f64 {
     360.0 / SLOT_COUNT as f64
@@ -167,6 +173,17 @@ fn WheelSlot(slot_index: i64, battle: Memo<Battle>) -> impl IntoView {
         here.into_iter().enumerate().map(|(i, c)| (i, total, c)).collect()
     };
 
+    let markers = move || -> Vec<(usize, usize, Marker)> {
+        let battle = battle.read();
+        let now = battle.current_tick;
+        let tick = label_for_slot(slot_index, now);
+        let mut here: Vec<Marker> =
+            battle.active_markers().filter(|m| m.covers(tick) && slot_of(tick) == slot_index).cloned().collect();
+        here.sort_by_key(|m| m.id.0);
+        let total = here.len();
+        here.into_iter().enumerate().map(|(i, m)| (i, total, m)).collect()
+    };
+
     view! {
         <g class="wheel-slot">
             <text
@@ -185,6 +202,42 @@ fn WheelSlot(slot_index: i64, battle: Memo<Battle>) -> impl IntoView {
             <For each=tokens key=|(_, _, c)| c.id let:entry>
                 <WheelToken slot_index=slot_index index=entry.0 total=entry.1 combatant=entry.2 />
             </For>
+            <For each=markers key=|(_, _, m)| m.id let:entry>
+                <WheelMarker slot_index=slot_index index=entry.0 total=entry.1 marker=entry.2 />
+            </For>
+        </g>
+    }
+}
+
+#[component]
+fn WheelMarker(slot_index: i64, index: usize, total: usize, marker: Marker) -> impl IntoView {
+    let fan_offset = (index as f64 - (total.saturating_sub(1)) as f64 / 2.0) * MARKER_FAN_DEGREES;
+    let angle = slot_index as f64 * slot_step() + fan_offset;
+    let (x, y) = point_on_circle(MARKER_RADIUS, angle);
+    let battle = expect_context::<Memo<Battle>>();
+
+    let counter_rotation_style = move || {
+        let now = battle.read().current_tick as f64;
+        format!(
+            "transform: rotate({}deg); transform-origin: {x}px {y}px; transform-box: view-box;",
+            now * slot_step()
+        )
+    };
+
+    let span = if marker.ticks <= 1 { format!("tick {}", marker.at_tick) } else { format!("ticks {}\u{2013}{}", marker.at_tick, marker.last_tick()) };
+    let tip_text = format!("{} ({span})", marker.label);
+
+    view! {
+        <g
+            style=counter_rotation_style
+            class="wheel-marker"
+            tabindex="0"
+            on:pointerenter=on_pointer_enter_text(tip_text.clone())
+            on:pointerleave=on_pointer_leave_text(tip_text.clone())
+            on:focusin=on_focus_in_text(tip_text.clone())
+            on:focusout=on_focus_out_text(tip_text)
+        >
+            <circle cx=x cy=y r=MARKER_R />
         </g>
     }
 }

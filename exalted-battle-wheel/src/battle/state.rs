@@ -1,5 +1,5 @@
-use crate::battle::action::{ActionKind, DeclaredAction};
-use crate::battle::combatant::{Combatant, CombatantState, DvState, JoinBattleResult};
+use crate::battle::action::{ActionKind, DeclaredAction, DeclaredEffect};
+use crate::battle::combatant::{Combatant, CombatantState, Commitment, DvState, JoinBattleResult};
 use crate::battle::error::BattleError;
 use crate::battle::event::BattleEvent;
 use crate::battle::ids::{CombatantId, MarkerId, Tick};
@@ -10,12 +10,26 @@ pub enum Phase {
     Running { reaction_count: u32 },
 }
 
+/// A labelled, tick-anchored span (RULES.md §4.7, p. 144: a coordinated attack's "window of
+/// opportunity"; §9.4, p. 153: a Stunned penalty lasting "until the tick when the attacker next
+/// acts"). `ticks` is always at least 1; a one-tick marker still spans exactly `at_tick`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Marker {
     pub id: MarkerId,
     pub label: String,
     pub source: CombatantId,
     pub at_tick: Tick,
+    pub ticks: u32,
+}
+
+impl Marker {
+    pub fn last_tick(&self) -> Tick {
+        self.at_tick + self.ticks - 1
+    }
+
+    pub fn covers(&self, tick: Tick) -> bool {
+        (self.at_tick..=self.last_tick()).contains(&tick)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,6 +78,41 @@ impl Battle {
         combatant.next_action_tick = current_tick + combatant.join_battle.speed(reaction_count);
         Ok(())
     }
+
+    /// Markers past their span stay in `markers` (and so in the event log) but drop out of the
+    /// wheel and marker panel, which only ever look at this.
+    pub fn active_markers(&self) -> impl Iterator<Item = &Marker> {
+        let now = self.current_tick;
+        self.markers.iter().filter(move |marker| marker.covers(now))
+    }
+
+    /// Markers whose span hasn't begun yet: invisible to the wheel and to `active_markers`, but
+    /// queued, and editable from the queue panel.
+    pub fn pending_markers(&self) -> impl Iterator<Item = &Marker> {
+        let now = self.current_tick;
+        self.markers.iter().filter(move |marker| marker.at_tick > now)
+    }
+
+    fn add_marker(&mut self, id: MarkerId, label: String, source: CombatantId, at_tick: Tick, ticks: u32) -> Result<(), BattleError> {
+        if ticks == 0 {
+            return Err(BattleError::MarkerDurationZero(id));
+        }
+        if self.markers.iter().any(|marker| marker.id == id) {
+            return Err(BattleError::DuplicateMarker(id));
+        }
+        self.find(source).ok_or(BattleError::UnknownCombatant(source))?;
+        self.markers.push(Marker { id, label, source, at_tick, ticks });
+        Ok(())
+    }
+}
+
+/// Drops one marker per effect an action or a sequence's Cast carries, anchored to `current_tick`
+/// (the tick the action resolves on) plus each effect's own delay.
+fn spawn_effects(battle: &mut Battle, source: CombatantId, current_tick: Tick, effects: &[DeclaredEffect]) -> Result<(), BattleError> {
+    for effect in effects {
+        battle.add_marker(effect.id, effect.label.clone(), source, current_tick + effect.delay, effect.ticks)?;
+    }
+    Ok(())
 }
 
 pub fn apply(battle: &mut Battle, event: &BattleEvent) -> Result<(), BattleError> {
@@ -77,6 +126,7 @@ pub fn apply(battle: &mut Battle, event: &BattleEvent) -> Result<(), BattleError
                 next_action_tick: 0,
                 state: CombatantState::Normal,
                 dv: DvState::default(),
+                commitment: None,
             });
             match battle.phase {
                 Phase::Setup => {
@@ -139,6 +189,7 @@ pub fn apply(battle: &mut Battle, event: &BattleEvent) -> Result<(), BattleError
             combatant.next_action_tick = next_action_tick;
             combatant.dv = DvState { penalty: step.dv_penalty, refreshes_at: Some(next_action_tick) };
             combatant.state = CombatantState::InSequence(sequence);
+            combatant.commitment = None;
             Ok(())
         }
 
@@ -159,7 +210,9 @@ pub fn apply(battle: &mut Battle, event: &BattleEvent) -> Result<(), BattleError
                 });
             }
             if sequence.is_final_step() {
+                let effects = sequence.effects.clone();
                 combatant.state = CombatantState::Normal;
+                spawn_effects(battle, *actor, current_tick, &effects)?;
                 return Ok(());
             }
             let CombatantState::InSequence(sequence) = &mut combatant.state else {
@@ -184,6 +237,7 @@ pub fn apply(battle: &mut Battle, event: &BattleEvent) -> Result<(), BattleError
             combatant.state = CombatantState::Normal;
             combatant.next_action_tick = next_action_tick;
             combatant.dv = DvState { penalty: 0, refreshes_at: Some(next_action_tick) };
+            combatant.commitment = None;
             Ok(())
         }
 
@@ -204,16 +258,43 @@ pub fn apply(battle: &mut Battle, event: &BattleEvent) -> Result<(), BattleError
             Ok(())
         }
 
-        BattleEvent::AddMarker { id, label, source, at_tick } => {
-            battle.find(*source).ok_or(BattleError::UnknownCombatant(*source))?;
-            battle.markers.push(Marker { id: *id, label: label.clone(), source: *source, at_tick: *at_tick });
-            Ok(())
+        BattleEvent::AddMarker { id, label, source, at_tick, ticks } => {
+            battle.add_marker(*id, label.clone(), *source, *at_tick, *ticks)
         }
 
         BattleEvent::RemoveMarker { id } => {
             let index =
                 battle.markers.iter().position(|m| m.id == *id).ok_or(BattleError::UnknownMarker(*id))?;
             battle.markers.remove(index);
+            Ok(())
+        }
+
+        BattleEvent::ReviseCombatant { actor, next_action_tick, state, dv, commitment, note: _ } => {
+            if let CombatantState::InSequence(sequence) = state
+                && sequence.current >= sequence.steps.len()
+            {
+                return Err(BattleError::SequenceStepOutOfRange {
+                    actor: *actor,
+                    step: sequence.current,
+                    steps: sequence.steps.len(),
+                });
+            }
+            let combatant = battle.find_mut(*actor)?;
+            combatant.next_action_tick = *next_action_tick;
+            combatant.state = state.clone();
+            combatant.dv = *dv;
+            combatant.commitment = commitment.clone();
+            Ok(())
+        }
+
+        BattleEvent::ReviseMarker { id, label, at_tick, ticks } => {
+            if *ticks == 0 {
+                return Err(BattleError::MarkerDurationZero(*id));
+            }
+            let marker = battle.markers.iter_mut().find(|m| m.id == *id).ok_or(BattleError::UnknownMarker(*id))?;
+            marker.label = label.clone();
+            marker.at_tick = *at_tick;
+            marker.ticks = *ticks;
             Ok(())
         }
     }
@@ -227,6 +308,7 @@ fn apply_declare_action(battle: &mut Battle, actor: CombatantId, action: &Declar
     let combatant = battle.find_mut(actor)?;
 
     if action.reflexive {
+        spawn_effects(battle, actor, current_tick, &action.effects)?;
         return Ok(());
     }
 
@@ -263,21 +345,19 @@ fn apply_declare_action(battle: &mut Battle, actor: CombatantId, action: &Declar
         ActionKind::Inactive => CombatantState::Inactive,
         _ => CombatantState::Normal,
     };
+    combatant.commitment = Some(Commitment { label: action.label.clone(), speed: action.speed, declared_at: current_tick });
+    spawn_effects(battle, actor, current_tick, &action.effects)?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::battle::action::CATALOG;
+    use crate::battle::action::{template, Declaration};
     use crate::battle::combatant::Side;
     use crate::battle::event::InterruptReason;
     use crate::battle::ids::CombatantId;
     use crate::battle::sequence::Sequence;
-
-    fn template(kind: ActionKind) -> &'static crate::battle::action::ActionTemplate {
-        CATALOG.iter().find(|t| t.kind == kind).unwrap()
-    }
 
     fn add(battle: &mut Battle, id: u32, successes: u32) -> CombatantId {
         let cid = CombatantId(id);
@@ -332,7 +412,7 @@ mod tests {
         let cid = add(&mut battle, 1, 5);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
 
-        let action = template(ActionKind::Dash).declare(None, None, None, String::new());
+        let action = template(ActionKind::Dash).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action }).unwrap();
         assert_eq!(battle.find(cid).unwrap().next_action_tick, 3);
         assert_eq!(battle.find(cid).unwrap().dv.penalty, -2);
@@ -344,14 +424,14 @@ mod tests {
         let mut battle = Battle::genesis();
         let cid = add(&mut battle, 1, 5);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
-        let guard = template(ActionKind::Guard).declare(None, None, None, String::new());
+        let guard = template(ActionKind::Guard).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
         for _ in 0..3 {
             apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
         }
         assert_eq!(battle.current_tick, 3);
 
-        let action = template(ActionKind::Miscellaneous).declare(None, Some(-1), None, String::new());
+        let action = template(ActionKind::Miscellaneous).declare(Declaration { dv_penalty: Some(-1), ..Default::default() });
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action }).unwrap();
         assert_eq!(battle.find(cid).unwrap().next_action_tick, 8);
         assert_eq!(battle.find(cid).unwrap().dv.refreshes_at, Some(8));
@@ -363,12 +443,12 @@ mod tests {
         let cid = add(&mut battle, 1, 0);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
 
-        let guard = template(ActionKind::Guard).declare(None, None, None, String::new());
+        let guard = template(ActionKind::Guard).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
         assert_eq!(battle.find(cid).unwrap().state, CombatantState::Guarding);
         let next_action_tick_before = battle.find(cid).unwrap().next_action_tick;
 
-        let mv = template(ActionKind::Move).declare(None, None, None, String::new());
+        let mv = template(ActionKind::Move).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: mv }).unwrap();
         assert_eq!(battle.find(cid).unwrap().next_action_tick, next_action_tick_before);
         assert_eq!(battle.find(cid).unwrap().state, CombatantState::Guarding);
@@ -380,13 +460,13 @@ mod tests {
         let cid = add(&mut battle, 1, 0);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
 
-        let guard = template(ActionKind::Guard).declare(None, None, None, String::new());
+        let guard = template(ActionKind::Guard).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
         assert_eq!(battle.find(cid).unwrap().next_action_tick, 3);
 
         // Abort on tick 1, before Guard's Speed 3 has elapsed.
         apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
-        let dash = template(ActionKind::Dash).declare(None, None, None, String::new());
+        let dash = template(ActionKind::Dash).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: dash }).unwrap();
 
         let combatant = battle.find(cid).unwrap();
@@ -401,13 +481,13 @@ mod tests {
         let cid = add(&mut battle, 1, 0);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
 
-        let aim = template(ActionKind::Aim).declare(None, None, None, String::new());
+        let aim = template(ActionKind::Aim).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: aim }).unwrap();
         assert_eq!(battle.find(cid).unwrap().dv.penalty, -1);
 
         // Abort on tick 1, before Aim's Speed 3 has elapsed.
         apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
-        let inactive = template(ActionKind::Inactive).declare(None, None, None, String::new());
+        let inactive = template(ActionKind::Inactive).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: inactive }).unwrap();
 
         let combatant = battle.find(cid).unwrap();
@@ -422,7 +502,7 @@ mod tests {
         let cid = add(&mut battle, 2, 0);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
 
-        let dash = template(ActionKind::Dash).declare(None, None, None, String::new());
+        let dash = template(ActionKind::Dash).declare(Declaration::default());
         let err = apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: dash }).unwrap_err();
         assert_eq!(err, BattleError::NotThisCombatantsTick { actor: cid, next: 5, current: 0 });
     }
@@ -436,7 +516,7 @@ mod tests {
         let err = apply(&mut battle, &BattleEvent::AdvanceTick).unwrap_err();
         assert_eq!(err, BattleError::CombatantsPendingAction(vec![cid]));
 
-        let guard = template(ActionKind::Guard).declare(None, None, None, String::new());
+        let guard = template(ActionKind::Guard).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
         apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
         assert_eq!(battle.current_tick, 1);
@@ -505,7 +585,7 @@ mod tests {
         let mut battle = Battle::genesis();
         let cid = add(&mut battle, 1, 5);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
-        let guard = template(ActionKind::Guard).declare(None, None, None, String::new());
+        let guard = template(ActionKind::Guard).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
         for _ in 0..3 {
             apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
@@ -513,5 +593,262 @@ mod tests {
 
         let latecomer = add(&mut battle, 2, 2);
         assert_eq!(battle.find(latecomer).unwrap().next_action_tick, 3 + 3);
+    }
+
+    #[test]
+    fn marker_covers_its_whole_span_inclusive() {
+        let marker = Marker { id: MarkerId(0), label: "Burning".to_string(), source: CombatantId(0), at_tick: 5, ticks: 3 };
+        assert_eq!(marker.last_tick(), 7);
+        assert!(!marker.covers(4));
+        assert!(marker.covers(5));
+        assert!(marker.covers(6));
+        assert!(marker.covers(7));
+        assert!(!marker.covers(8));
+    }
+
+    #[test]
+    fn one_tick_marker_covers_only_that_tick() {
+        let marker = Marker { id: MarkerId(0), label: "Window".to_string(), source: CombatantId(0), at_tick: 5, ticks: 1 };
+        assert_eq!(marker.last_tick(), 5);
+        assert!(marker.covers(5));
+        assert!(!marker.covers(6));
+    }
+
+    #[test]
+    fn adding_a_marker_rejects_zero_duration() {
+        let mut battle = Battle::genesis();
+        let cid = add(&mut battle, 1, 5);
+        apply(&mut battle, &BattleEvent::StartBattle).unwrap();
+        let err = apply(
+            &mut battle,
+            &BattleEvent::AddMarker { id: MarkerId(0), label: "Bad".to_string(), source: cid, at_tick: 0, ticks: 0 },
+        )
+        .unwrap_err();
+        assert_eq!(err, BattleError::MarkerDurationZero(MarkerId(0)));
+    }
+
+    #[test]
+    fn adding_a_marker_rejects_a_duplicate_id() {
+        let mut battle = Battle::genesis();
+        let cid = add(&mut battle, 1, 5);
+        apply(&mut battle, &BattleEvent::StartBattle).unwrap();
+        apply(
+            &mut battle,
+            &BattleEvent::AddMarker { id: MarkerId(0), label: "First".to_string(), source: cid, at_tick: 0, ticks: 1 },
+        )
+        .unwrap();
+        let err = apply(
+            &mut battle,
+            &BattleEvent::AddMarker { id: MarkerId(0), label: "Second".to_string(), source: cid, at_tick: 1, ticks: 1 },
+        )
+        .unwrap_err();
+        assert_eq!(err, BattleError::DuplicateMarker(MarkerId(0)));
+    }
+
+    #[test]
+    fn declaring_an_action_with_effects_spawns_markers_from_the_declare_tick() {
+        let mut battle = Battle::genesis();
+        let cid = add(&mut battle, 1, 5);
+        apply(&mut battle, &BattleEvent::StartBattle).unwrap();
+
+        let effect = DeclaredEffect { id: MarkerId(0), label: "Butterflies".to_string(), delay: 1, ticks: 3 };
+        let action = crate::battle::action::DeclaredAction { effects: vec![effect], ..template(ActionKind::Attack).declare(Declaration::default()) };
+        apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action }).unwrap();
+
+        let marker = battle.markers.iter().find(|m| m.id == MarkerId(0)).unwrap();
+        assert_eq!(marker.at_tick, 1);
+        assert_eq!(marker.ticks, 3);
+        assert_eq!(marker.source, cid);
+    }
+
+    #[test]
+    fn a_reflexive_action_still_spawns_its_effects() {
+        let mut battle = Battle::genesis();
+        let cid = add(&mut battle, 1, 5);
+        apply(&mut battle, &BattleEvent::StartBattle).unwrap();
+
+        let effect = DeclaredEffect { id: MarkerId(0), label: "Mark".to_string(), delay: 0, ticks: 1 };
+        let action = crate::battle::action::DeclaredAction { effects: vec![effect], ..template(ActionKind::Move).declare(Declaration::default()) };
+        apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action }).unwrap();
+
+        assert!(battle.markers.iter().any(|m| m.id == MarkerId(0)));
+    }
+
+    #[test]
+    fn sequence_effects_spawn_only_when_the_cast_step_completes() {
+        let mut battle = Battle::genesis();
+        let cid = add(&mut battle, 1, 5);
+        apply(&mut battle, &BattleEvent::StartBattle).unwrap();
+
+        let effect = DeclaredEffect { id: MarkerId(0), label: "Butterflies".to_string(), delay: 0, ticks: 3 };
+        let mut sequence = Sequence::shape_terrestrial();
+        sequence.effects = vec![effect];
+        apply(&mut battle, &BattleEvent::StartSequence { actor: cid, sequence }).unwrap();
+        assert!(battle.markers.is_empty(), "Shape should not spawn the Cast's effects yet");
+
+        // Shape resolves on tick 5, transitioning onto the Cast step — still no effects yet.
+        for _ in 0..5 {
+            apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
+        }
+        apply(&mut battle, &BattleEvent::AdvanceSequence { actor: cid, speed_override: Some(3) }).unwrap();
+        assert!(battle.markers.is_empty(), "transitioning onto Cast should not yet spawn effects");
+
+        // Cast resolves on tick 8, completing the sequence — now the effects spawn.
+        for _ in 0..3 {
+            apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
+        }
+        apply(&mut battle, &BattleEvent::AdvanceSequence { actor: cid, speed_override: None }).unwrap();
+        let marker = battle.markers.iter().find(|m| m.id == MarkerId(0)).unwrap();
+        assert_eq!(marker.at_tick, 8);
+        assert_eq!(marker.ticks, 3);
+    }
+
+    #[test]
+    fn revise_combatant_is_not_gated_by_whose_tick_it_is() {
+        let mut battle = Battle::genesis();
+        let fast = add(&mut battle, 1, 5);
+        let cid = add(&mut battle, 2, 0);
+        apply(&mut battle, &BattleEvent::StartBattle).unwrap();
+        let _ = fast;
+
+        // cid's next action isn't until tick 5; a plain DeclareAction would be rejected here.
+        apply(
+            &mut battle,
+            &BattleEvent::ReviseCombatant {
+                actor: cid,
+                next_action_tick: 2,
+                state: CombatantState::Normal,
+                dv: DvState { penalty: -1, refreshes_at: Some(2) },
+                commitment: None,
+                note: "retconned to resolve sooner".to_string(),
+            },
+        )
+        .unwrap();
+        assert_eq!(battle.find(cid).unwrap().next_action_tick, 2);
+        assert_eq!(battle.find(cid).unwrap().dv.penalty, -1);
+    }
+
+    #[test]
+    fn revising_a_tick_backward_reblocks_advance_tick() {
+        let mut battle = Battle::genesis();
+        let cid = add(&mut battle, 1, 5);
+        apply(&mut battle, &BattleEvent::StartBattle).unwrap();
+        let guard = template(ActionKind::Guard).declare(Declaration::default());
+        apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
+        apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
+        assert_eq!(battle.current_tick, 1);
+
+        apply(
+            &mut battle,
+            &BattleEvent::ReviseCombatant {
+                actor: cid,
+                next_action_tick: 0,
+                state: CombatantState::Normal,
+                dv: DvState::default(),
+                commitment: None,
+                note: String::new(),
+            },
+        )
+        .unwrap();
+
+        let err = apply(&mut battle, &BattleEvent::AdvanceTick).unwrap_err();
+        assert_eq!(err, BattleError::CombatantsPendingAction(vec![cid]));
+    }
+
+    #[test]
+    fn revise_combatant_rejects_an_out_of_range_sequence_step() {
+        let mut battle = Battle::genesis();
+        let cid = add(&mut battle, 1, 5);
+        apply(&mut battle, &BattleEvent::StartBattle).unwrap();
+        let mut sequence = Sequence::shape_terrestrial();
+        sequence.current = 5;
+
+        let err = apply(
+            &mut battle,
+            &BattleEvent::ReviseCombatant {
+                actor: cid,
+                next_action_tick: 0,
+                state: CombatantState::InSequence(sequence),
+                dv: DvState::default(),
+                commitment: None,
+                note: String::new(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(err, BattleError::SequenceStepOutOfRange { actor: cid, step: 5, steps: 2 });
+    }
+
+    #[test]
+    fn revise_combatant_rejects_an_unknown_actor() {
+        let mut battle = Battle::genesis();
+        let err = apply(
+            &mut battle,
+            &BattleEvent::ReviseCombatant {
+                actor: CombatantId(999),
+                next_action_tick: 0,
+                state: CombatantState::Normal,
+                dv: DvState::default(),
+                commitment: None,
+                note: String::new(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(err, BattleError::UnknownCombatant(CombatantId(999)));
+    }
+
+    #[test]
+    fn revise_marker_updates_its_label_and_span() {
+        let mut battle = Battle::genesis();
+        let cid = add(&mut battle, 1, 5);
+        apply(&mut battle, &BattleEvent::StartBattle).unwrap();
+        apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: "Window".to_string(), source: cid, at_tick: 8, ticks: 3 }).unwrap();
+
+        apply(&mut battle, &BattleEvent::ReviseMarker { id: MarkerId(0), label: "Wider window".to_string(), at_tick: 9, ticks: 4 }).unwrap();
+
+        let marker = battle.markers.iter().find(|m| m.id == MarkerId(0)).unwrap();
+        assert_eq!(marker.label, "Wider window");
+        assert_eq!(marker.at_tick, 9);
+        assert_eq!(marker.ticks, 4);
+    }
+
+    #[test]
+    fn revise_marker_rejects_zero_duration() {
+        let mut battle = Battle::genesis();
+        let cid = add(&mut battle, 1, 5);
+        apply(&mut battle, &BattleEvent::StartBattle).unwrap();
+        apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: "Window".to_string(), source: cid, at_tick: 8, ticks: 3 }).unwrap();
+
+        let err = apply(&mut battle, &BattleEvent::ReviseMarker { id: MarkerId(0), label: "Window".to_string(), at_tick: 8, ticks: 0 }).unwrap_err();
+        assert_eq!(err, BattleError::MarkerDurationZero(MarkerId(0)));
+    }
+
+    #[test]
+    fn revise_marker_rejects_an_unknown_id() {
+        let mut battle = Battle::genesis();
+        let err = apply(&mut battle, &BattleEvent::ReviseMarker { id: MarkerId(999), label: "?".to_string(), at_tick: 0, ticks: 1 }).unwrap_err();
+        assert_eq!(err, BattleError::UnknownMarker(MarkerId(999)));
+    }
+
+    #[test]
+    fn active_markers_drops_expired_ones() {
+        let mut battle = Battle::genesis();
+        let cid = add(&mut battle, 1, 5);
+        apply(&mut battle, &BattleEvent::StartBattle).unwrap();
+        apply(
+            &mut battle,
+            &BattleEvent::AddMarker { id: MarkerId(0), label: "Butterflies".to_string(), source: cid, at_tick: 0, ticks: 2 },
+        )
+        .unwrap();
+        assert_eq!(battle.active_markers().count(), 1);
+
+        let guard = template(ActionKind::Guard).declare(Declaration::default());
+        apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
+        for _ in 0..3 {
+            apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
+        }
+        assert_eq!(battle.current_tick, 3);
+        assert_eq!(battle.active_markers().count(), 0);
+        // Expired markers stay in the log for the event log to describe, just not "active".
+        assert_eq!(battle.markers.len(), 1);
     }
 }

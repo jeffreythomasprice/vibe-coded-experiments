@@ -1,6 +1,6 @@
 use crate::prefs::{Prefs, Theme};
 use crate::ui::glossary::Topic;
-use crate::ui::{ActionPanel, ActiveTip, EventLogButton, HoverCard, Hovered, Roster, Tip, TipLayer, Wheel};
+use crate::ui::{ActionPanel, ActiveTip, EventLogButton, HoverCard, Hovered, QueuePanel, Roster, Tip, TipLayer, Wheel};
 use exalted_battle_wheel::battle::{BattleEvent, BattleLog, CombatantId, Phase};
 use leptos::prelude::*;
 
@@ -25,7 +25,7 @@ pub fn App() -> impl IntoView {
     let advance_tick = move |_| {
         log.update(|log| {
             if let Err(error) = log.push(BattleEvent::AdvanceTick) {
-                tracing::warn!(%error, "could not advance tick");
+                tracing::error!(%error, "could not advance tick");
             }
         });
     };
@@ -106,7 +106,10 @@ pub fn App() -> impl IntoView {
                 </Tip>
             </header>
             <div class="app-body">
-                <Roster />
+                <div class="side-column">
+                    <Roster />
+                    <QueuePanel />
+                </div>
                 <div class="wheel-column">
                     <Wheel />
                     <HoverCard />

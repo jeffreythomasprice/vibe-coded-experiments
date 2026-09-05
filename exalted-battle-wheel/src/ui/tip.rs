@@ -101,6 +101,32 @@ pub fn on_focus_out(topic: Topic) -> impl Fn(FocusEvent) + Clone {
     move |_: FocusEvent| hide(TipContent::Topic(topic))
 }
 
+/// Free-text counterparts of `on_pointer_*`/`on_focus_*`, for SVG nodes that need `TextTip`'s
+/// free-form, non-teaching-gated content but — like the `Topic` variants above — cannot host a
+/// wrapping `<span>`.
+pub fn on_pointer_enter_text(text: impl Into<String>) -> impl Fn(PointerEvent) + Clone {
+    let text = text.into();
+    move |ev: PointerEvent| show(TipContent::Text(text.clone()), ev.client_x() as f64, ev.client_y() as f64)
+}
+
+pub fn on_pointer_leave_text(text: impl Into<String>) -> impl Fn(PointerEvent) + Clone {
+    let text = text.into();
+    move |_: PointerEvent| hide(TipContent::Text(text.clone()))
+}
+
+pub fn on_focus_in_text(text: impl Into<String>) -> impl Fn(FocusEvent) + Clone {
+    let text = text.into();
+    move |ev: FocusEvent| {
+        let (x, y) = element_anchor(ev.target());
+        show(TipContent::Text(text.clone()), x, y);
+    }
+}
+
+pub fn on_focus_out_text(text: impl Into<String>) -> impl Fn(FocusEvent) + Clone {
+    let text = text.into();
+    move |_: FocusEvent| hide(TipContent::Text(text.clone()))
+}
+
 /// Wraps HTML content so hovering or focusing it shows `topic`'s glossary entry.
 #[component]
 pub fn Tip(topic: Topic, children: Children) -> impl IntoView {

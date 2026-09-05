@@ -31,7 +31,7 @@ pub fn Roster() -> impl IntoView {
                 side: Side(side.get()),
                 join_battle,
             }) {
-                tracing::warn!(%error, "could not add combatant");
+                tracing::error!(%error, "could not add combatant");
             }
         });
         name.set(String::new());
@@ -42,7 +42,7 @@ pub fn Roster() -> impl IntoView {
     let start_battle = move |_| {
         log.update(|log| {
             if let Err(error) = log.push(BattleEvent::StartBattle) {
-                tracing::warn!(%error, "could not start battle");
+                tracing::error!(%error, "could not start battle");
             }
         });
     };
@@ -121,7 +121,7 @@ fn RosterRow(id: CombatantId, battle: Memo<Battle>, log: RwSignal<BattleLog>) ->
     let remove = move |_| {
         log.update(|log| {
             if let Err(error) = log.push(BattleEvent::RemoveCombatant { id }) {
-                tracing::warn!(%error, "could not remove combatant");
+                tracing::error!(%error, "could not remove combatant");
             }
         });
     };
