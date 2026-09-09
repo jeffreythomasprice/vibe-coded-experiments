@@ -12,6 +12,7 @@ CLI tool that downloads a YouTube video, transcribes it, and summarizes it using
 bun src/index.ts <youtube-url>              # run directly
 bun src/index.ts summarize <url> -v         # verbose mode
 bun src/index.ts summarize <url> --no-snapshots  # skip frame extraction
+bun src/index.ts summarize <url> --no-pdf   # skip PDF generation
 bun test                                    # run all tests
 bun test src/utils/parse-captions.test.ts   # run a single test file
 ```
@@ -25,6 +26,7 @@ Copy `.env.template` to `.env` and set `ANTHROPIC_API_KEY`. Bun loads `.env` aut
 - **yt-dlp** — video/caption download
 - **ffmpeg** — audio extraction + frame extraction from video
 - **whisper.cpp** — speech-to-text (only needed when no captions available). Set `WHISPER_BINARY` and `WHISPER_MODEL` env vars.
+- **Chromium** — headless PDF rendering (only needed for PDF generation). Detected on PATH as `chromium`, `chromium-browser`, `google-chrome-stable`, or `google-chrome`; override with `CHROMIUM_BINARY`.
 
 ## Architecture
 
@@ -37,6 +39,7 @@ Sequential steps orchestrated by `runPipeline()`. Each step is cached — re-run
 3. **Summarize** (`steps/summarize.ts`) — sends transcript to the Anthropic API via `@anthropic-ai/sdk`, produces markdown with `[HH:MM:SS]` timestamps
 4. **Extract frames** (`steps/extract-frames.ts`) — ffmpeg grabs screenshots at each timestamp from the summary (max 15)
 5. **Enrich** (`steps/enrich-summary.ts`) — inserts markdown image references below timestamp lines in the summary
+6. **Generate PDF** (`steps/generate-pdf.ts`) — converts the (enriched) markdown summary to HTML, inlines snapshot images as base64 data URIs, and renders it to `summary.pdf` via headless Chromium
 
 ### Cache (`src/cache.ts`)
 

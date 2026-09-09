@@ -10,6 +10,11 @@ mkdir -p ~/whisper-cpp/models
 mv ~/downloads/ggml-base.en-q8_0.bin ~/whisper-cpp/models/
 ```
 
+Install Chromium (used to render the PDF summary; skip PDF generation entirely with
+`--no-pdf` if you'd rather not install it). It's detected on PATH as `chromium`,
+`chromium-browser`, `google-chrome-stable`, or `google-chrome` — set `CHROMIUM_BINARY`
+if yours lives elsewhere.
+
 ## Configuration
 
 Copy `.env.template` to `.env` and fill in your `ANTHROPIC_API_KEY`. The
