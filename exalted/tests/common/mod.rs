@@ -174,7 +174,7 @@ pub fn valid_dawn() -> Character {
 /// one Background, one Charm, the spell, the Combo, and a top-level journal.
 /// Existing in-game rules require the sorcery Charm + Essence 3 before a
 /// spell can be learnt; with the Art of Astrology added on top, that is a
-/// 67 XP outlay.
+/// 59 XP outlay against 67 XP earned (8 banked).
 pub fn valid_dawn_with_notes_demo() -> Character {
     exalted::rules::database::init_database().ok();
     let mut c = valid_dawn();
@@ -233,12 +233,13 @@ pub fn valid_dawn_with_notes_demo() -> Character {
         ),
     );
 
-    // Essence 2 → 3 (24 XP), Terrestrial Circle Sorcery (10 XP, Occult is
-    // non-C/F here), Blood Lash spell (10 XP), the Watchful Step Combo
-    // bundling First Awareness + First Dodge (2 XP, sum of member min
-    // Ability ratings), and the Art of Astrology to Adept + one Procedure
-    // (21 XP, added below). 67 XP earned, 0 banked.
-    c.essence.add_xp(24);
+    // Essence 2 → 3 (priced at the current rating 2, per core p.276: 2 * 8 =
+    // 16 XP), Terrestrial Circle Sorcery (10 XP, Occult is non-C/F here),
+    // Blood Lash spell (10 XP), the Watchful Step Combo bundling First
+    // Awareness + First Dodge (2 XP, sum of member min Ability ratings), and
+    // the Art of Astrology to Adept + one Procedure (21 XP, added below).
+    // 16 + 10 + 10 + 2 + 21 = 59 XP spent; 67 XP earned, 8 banked.
+    c.essence.add_xp(16);
     c.charms.push(CharmRef::lookup(
         "terrestrial-circle-sorcery",
         DotSource::Xp { spent: 10 },
@@ -273,7 +274,7 @@ pub fn valid_dawn_with_notes_demo() -> Character {
     // 1 XP. Occult 3 satisfies the Adept ladder (3) and the Master-Procedure
     // floor (3). The Procedure emulates a Degree above the owned Adept, so it
     // is a legitimate rote ritual rather than one the Degree would subsume.
-    // 21 XP, carrying the total from 46 to 67.
+    // 21 XP, carrying the total from 38 to 59.
     let mut astrology = OccultArt::lookup("astrology");
     astrology.rating.add_xp(10); // Initiate
     astrology.rating.add_xp(10); // Adept
@@ -291,7 +292,7 @@ pub fn valid_dawn_with_notes_demo() -> Character {
     c.occult_arts.push(astrology);
 
     c.xp_earned = 67;
-    c.xp_banked = 0;
+    c.xp_banked = 8;
     c.xp_awards = vec![
         fixed_award(
             8,

@@ -800,3 +800,65 @@ success it fell short by**. The Magnitude loss resets the unit's HL track
 to full but may force extra relays back into the rank and file. This is the
 more common way units are ground down in Exalted — not by raw damage but by
 failed hesitation bleeding off Magnitude.
+
+## 11. Experience & Advancement (p.275–276)
+
+Source: Ch. 6 (Storytelling), "Spending Experience" and the Experience
+Costs table, p.276.
+
+**Costs are priced off the CURRENT rating, not the rating being bought.**
+Per the rulebook: "Increasing a trait costs banked experience equal to a
+multiple of its current rating. This is the value of the trait before it
+is raised." The book's own worked example: Marcus raises Jin's Martial
+Arts (a Caste Ability) from 4 to 5. Cost = (4 × 2) − 1 = **7**, evaluated
+at the pre-increase rating of 4 — not 9, which is what plugging in the
+post-increase rating of 5 would (incorrectly) give.
+
+### 11.1 Raising an existing trait
+
+| Trait increase | Cost | Training time |
+|---|---|---|
+| Attribute | current rating × 4 | (rating) months |
+| Favored or Caste Ability | (current rating × 2) − 1 | immediate |
+| Out-of-Caste Ability | current rating × 2 | (rating) weeks |
+| Essence (to 3) | current rating × 8 | immediate |
+| Essence (above 3) | current rating × 8 | (rating) months |
+| Virtue | current rating × 3 | immediate |
+| Willpower | current rating × 2 | immediate |
+
+Virtue increases after chargen do **not** retroactively raise Willpower.
+Essence cannot exceed 5 in a mortal lifetime (see "Elder Exalts", core
+p.277, for raising it further with age).
+
+### 11.2 Buying a brand-new trait
+
+| New trait | Cost | Training time |
+|---|---|---|
+| Ability (from 0) | 3 | 3 weeks |
+| Specialty | 3† | 3 weeks |
+| Favored/Caste Charm | 8 | (Min. Ability) days |
+| Out-of-Caste Charm | 10 | (Min. Ability + Min. Essence) days |
+| Non-Solar Charm (Eclipse only) | 20‡ | (Min. Ability + Min. Essence) weeks |
+| Spell (Occult Favored/Caste) | 8 | (spell circle) weeks |
+| Spell (Out-of-caste Occult) | 10 | (spell circle) weeks |
+| Combo (in play) | sum of member Charms' Min. Ability | 3 × that sum, in days |
+| Thaumaturgy Degree (Occult Favored/Caste) | 8 | — |
+| Thaumaturgy Degree (otherwise) | 10 | — |
+| Thaumaturgy Procedure | 1 | — |
+
+† The rulebook's printed value for Specialty is OCR-corrupted in the
+reference copy used here ("je"); 3 XP is the conventional 2E value.
+‡ The Non-Solar Charm cell is also OCR-corrupted ("Ai pectit"); 20 XP is a
+working estimate (roughly double the out-of-Caste Solar Charm cost, per
+p.100) pending confirmation against a clean PDF or errata.
+
+### 11.3 Backgrounds and Intimacies have no XP price
+
+Backgrounds are not on the Experience Costs table at all — ratings shift
+through play (gaining/losing Allies, rank, Resources, etc., p.112) rather
+than being bought outright with banked experience. Intimacies are built by
+taking commitment actions equal to the character's Conviction (p.174,
+p.202) — again, not purchased. A character sheet that records an XP spend
+against either is Storyteller-discretion homebrew, not a RAW purchase.
+
+Encoded in `src/rules/xp_costs.rs`.

@@ -869,28 +869,32 @@ fn check_bonus_point_total(c: &Character, report: &mut ValidationReport) {
     }
 }
 
-/// Reconstruct the trait rating sequence and recompute the canonical XP cost
-/// of each `Xp` purchase. Returns the total expected XP spent on that trait
-/// + the list of any mismatches.
+/// Reconstruct the trait's rating ladder and recompute the canonical XP cost
+/// of each `Xp` purchase. `cost_for_rating` receives the rating the trait
+/// held *before* the dot was bought — 2E prices an increase off "the value
+/// of the trait before it is raised" (core p.276), e.g. raising a Caste
+/// Ability from 4 to 5 costs (4 × 2) − 1 = 7, priced at 4, not 5. Returns
+/// the `(paid, expected)` pairs for every `Xp` purchase that disagrees.
+///
+/// Note: `purchases` is walked positionally, so an `Xp` dot recorded before
+/// a `ChargenPriority`/`BonusPoints` dot on the same trait is priced at the
+/// wrong rating. Nothing enforces purchase ordering; callers should keep
+/// dots in the order they were actually bought.
 pub fn recompute_xp_for_increases(
     starting_rating: u8,
     purchases: &[crate::character::DotPurchase],
     cost_for_rating: impl Fn(u8) -> u32,
-) -> (u32, Vec<(u32, u32)>) {
-    let mut rating = starting_rating;
-    let mut total = 0u32;
+) -> Vec<(u32, u32)> {
     let mut mismatches = Vec::new();
-    for p in purchases {
-        rating += 1;
+    for (rating, p) in (starting_rating..).zip(purchases.iter()) {
         let canonical = cost_for_rating(rating);
-        if let crate::character::DotSource::Xp { spent } = p.source {
-            total += spent;
-            if spent != canonical {
-                mismatches.push((spent, canonical));
-            }
+        if let crate::character::DotSource::Xp { spent } = p.source
+            && spent != canonical
+        {
+            mismatches.push((spent, canonical));
         }
     }
-    (total, mismatches)
+    mismatches
 }
 
 /// Validate the BP ledger: every `BonusPoints { spent }` purchase costs the
@@ -1207,66 +1211,60 @@ pub fn validate_xp(c: &Character) -> ValidationReport {
 
     // Attributes
     for (attr, t) in &c.attributes {
-        let mut rating = t.base_dots;
-        for p in &t.purchases {
-            rating += 1;
-            if let crate::character::DotSource::Xp { spent } = p.source {
-                let canonical = xp_costs::xp_cost_attribute_increase(rating);
-                if spent != canonical {
-                    report.push(ValidationError::XpCostWrong {
-                        trait_name: format!("Attribute::{attr:?}"),
-                        paid: spent,
-                        expected: canonical,
-                    });
-                }
-            }
+        for (paid, expected) in recompute_xp_for_increases(
+            t.base_dots,
+            &t.purchases,
+            xp_costs::xp_cost_attribute_increase,
+        ) {
+            report.push(ValidationError::XpCostWrong {
+                trait_name: format!("Attribute::{attr:?}"),
+                paid,
+                expected,
+            });
         }
     }
 
-    // Abilities
+    // Abilities. A new Ability (from rating 0) costs the flat new-ability XP;
+    // further dots use the ability-increase table with Caste/Favored status.
     for (ab, t) in &c.abilities {
-        let mut rating = t.base_dots;
         let favored_or_caste = c.is_caste_or_favored_ability(*ab);
-        for p in &t.purchases {
-            rating += 1;
-            if let crate::character::DotSource::Xp { spent } = p.source {
-                let canonical = if rating == 1 {
-                    xp_costs::xp_cost_new_ability()
-                } else {
-                    xp_costs::xp_cost_ability_increase(rating, favored_or_caste)
-                };
-                if spent != canonical {
-                    report.push(ValidationError::XpCostWrong {
-                        trait_name: format!("Ability::{ab:?}"),
-                        paid: spent,
-                        expected: canonical,
-                    });
-                }
+        let cost_for_rating = |from: u8| {
+            if from == 0 {
+                xp_costs::xp_cost_new_ability()
+            } else {
+                xp_costs::xp_cost_ability_increase(from, favored_or_caste)
             }
+        };
+        for (paid, expected) in
+            recompute_xp_for_increases(t.base_dots, &t.purchases, cost_for_rating)
+        {
+            report.push(ValidationError::XpCostWrong {
+                trait_name: format!("Ability::{ab:?}"),
+                paid,
+                expected,
+            });
         }
     }
 
-    // Abilities — crafts. New craft (rating 1) costs new-ability XP; further
-    // dots use the ability-increase table with Craft's Caste/Favored status.
+    // Abilities — crafts. New craft (from rating 0) costs new-ability XP;
+    // further dots use the ability-increase table with Craft's Caste/Favored status.
     let craft_favored_or_caste = c.is_caste_or_favored_ability(AbilityKind::Craft);
     for cr in &c.crafts {
-        let mut rating = cr.rating.base_dots;
-        for p in &cr.rating.purchases {
-            rating += 1;
-            if let crate::character::DotSource::Xp { spent } = p.source {
-                let canonical = if rating == 1 {
-                    xp_costs::xp_cost_new_ability()
-                } else {
-                    xp_costs::xp_cost_ability_increase(rating, craft_favored_or_caste)
-                };
-                if spent != canonical {
-                    report.push(ValidationError::XpCostWrong {
-                        trait_name: format!("Ability::{}", craft_label(cr)),
-                        paid: spent,
-                        expected: canonical,
-                    });
-                }
+        let cost_for_rating = |from: u8| {
+            if from == 0 {
+                xp_costs::xp_cost_new_ability()
+            } else {
+                xp_costs::xp_cost_ability_increase(from, craft_favored_or_caste)
             }
+        };
+        for (paid, expected) in
+            recompute_xp_for_increases(cr.rating.base_dots, &cr.rating.purchases, cost_for_rating)
+        {
+            report.push(ValidationError::XpCostWrong {
+                trait_name: format!("Ability::{}", craft_label(cr)),
+                paid,
+                expected,
+            });
         }
     }
 
@@ -1302,60 +1300,74 @@ pub fn validate_xp(c: &Character) -> ValidationReport {
 
     // Virtues
     for (v, t) in &c.virtues {
-        let mut rating = t.base_dots;
-        for p in &t.purchases {
-            rating += 1;
-            if let crate::character::DotSource::Xp { spent } = p.source {
-                let canonical = xp_costs::xp_cost_virtue_increase(rating);
-                if spent != canonical {
-                    report.push(ValidationError::XpCostWrong {
-                        trait_name: format!("Virtue::{v:?}"),
-                        paid: spent,
-                        expected: canonical,
-                    });
-                }
-            }
+        for (paid, expected) in
+            recompute_xp_for_increases(t.base_dots, &t.purchases, xp_costs::xp_cost_virtue_increase)
+        {
+            report.push(ValidationError::XpCostWrong {
+                trait_name: format!("Virtue::{v:?}"),
+                paid,
+                expected,
+            });
         }
     }
 
     // Willpower
-    {
-        let mut rating = c.willpower.base_dots;
-        for p in &c.willpower.purchases {
-            rating += 1;
+    for (paid, expected) in recompute_xp_for_increases(
+        c.willpower.base_dots,
+        &c.willpower.purchases,
+        xp_costs::xp_cost_willpower_increase,
+    ) {
+        report.push(ValidationError::XpCostWrong {
+            trait_name: "Willpower".to_string(),
+            paid,
+            expected,
+        });
+    }
+
+    // Essence
+    for (paid, expected) in recompute_xp_for_increases(
+        c.essence.base_dots,
+        &c.essence.purchases,
+        xp_costs::xp_cost_essence_increase,
+    ) {
+        report.push(ValidationError::XpCostWrong {
+            trait_name: "Essence".to_string(),
+            paid,
+            expected,
+        });
+    }
+
+    // Backgrounds. Exalted 2E prices no XP purchase for Background dots (no
+    // row on the p.276 table; ratings shift through play per p.112) — note
+    // rather than error, but the spend still counts toward the XP ledger.
+    let db = crate::rules::database::database();
+    for bg in &c.backgrounds {
+        for p in &bg.trait_().purchases {
             if let crate::character::DotSource::Xp { spent } = p.source {
-                let canonical = xp_costs::xp_cost_willpower_increase(rating);
-                if spent != canonical {
-                    report.push(ValidationError::XpCostWrong {
-                        trait_name: "Willpower".to_string(),
-                        paid: spent,
-                        expected: canonical,
-                    });
-                }
+                let name = bg.display_name(db);
+                let trait_name = if bg.label().is_empty() {
+                    format!("Background::{name}")
+                } else {
+                    format!("Background::{name}({})", bg.label())
+                };
+                report.push_note(ValidationError::XpPurchaseNotPriced { trait_name, spent });
             }
         }
     }
 
-    // Essence
-    {
-        let mut rating = c.essence.base_dots;
-        for p in &c.essence.purchases {
-            rating += 1;
-            if let crate::character::DotSource::Xp { spent } = p.source {
-                let canonical = xp_costs::xp_cost_essence_increase(rating);
-                if spent != canonical {
-                    report.push(ValidationError::XpCostWrong {
-                        trait_name: "Essence".to_string(),
-                        paid: spent,
-                        expected: canonical,
-                    });
-                }
-            }
+    // Intimacies. Exalted 2E prices no XP purchase for Intimacies either —
+    // they're built with commitment actions equal to Conviction (p.174,
+    // p.202), not bought outright.
+    for intimacy in &c.intimacies {
+        if let crate::character::DotSource::Xp { spent } = intimacy.source {
+            report.push_note(ValidationError::XpPurchaseNotPriced {
+                trait_name: format!("Intimacy::{}", intimacy.description),
+                spent,
+            });
         }
     }
 
     // Charms (post-chargen XP-bought)
-    let db = crate::rules::database::database();
     for charm in &c.charms {
         if let crate::character::DotSource::Xp { spent } = charm.source() {
             let canonical = if charm.non_solar() {

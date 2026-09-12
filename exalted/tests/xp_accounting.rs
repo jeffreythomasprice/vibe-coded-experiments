@@ -1,7 +1,10 @@
 mod common;
 
 use common::valid_dawn;
-use exalted::character::{AbilityKind, AttributeKind, DotPurchase, DotSource, Specialty};
+use exalted::character::{
+    AbilityKind, AttributeKind, BackgroundKind, BackgroundRef, DotPurchase, DotSource, Intimacy,
+    IntimacyKind, RatedTrait, Specialty,
+};
 use exalted::error::ValidationError;
 use exalted::rules::xp_costs::{
     xp_cost_ability_increase, xp_cost_attribute_increase, xp_cost_specialty,
@@ -16,28 +19,30 @@ fn baseline_xp_validates() {
 
 #[test]
 fn favored_ability_xp_cost_one_less() {
-    // Buying Dodge 4→5 (favored): (5 * 2) - 1 = 9 XP.
-    assert_eq!(xp_cost_ability_increase(5, true), 9);
-    // Buying out-of-caste Lore 3→4: 4*2 = 8 XP.
-    assert_eq!(xp_cost_ability_increase(4, false), 8);
+    // Buying Dodge 4→5 (favored): priced at the *current* rating (4) per
+    // core p.276: (4 * 2) - 1 = 7 XP. This is the book's own worked example
+    // (Marcus raising Jin's Martial Arts from 4 to 5, p.276).
+    assert_eq!(xp_cost_ability_increase(4, true), 7);
+    // Buying out-of-caste Lore 3→4: priced at current rating 3: 3*2 = 6 XP.
+    assert_eq!(xp_cost_ability_increase(3, false), 6);
 }
 
 #[test]
 fn correct_xp_purchase_passes() {
     let mut c = valid_dawn();
     // Three planned purchases:
-    //   - Dodge 4 → 5 (favored): 9 XP
+    //   - Dodge 4 → 5 (favored): (4 * 2) - 1 = 7 XP
     //   - Ride 0 → 1 (new ability): 3 XP
-    //   - Strength 4 → 5: 5*4 = 20 XP
-    let str_increase = xp_cost_attribute_increase(5);
-    let total = 9 + 3 + str_increase;
+    //   - Strength 4 → 5: priced at current rating 4: 4*4 = 16 XP
+    let str_increase = xp_cost_attribute_increase(4);
+    let total = 7 + 3 + str_increase;
     c.xp_earned = total;
     c.xp_banked = 0;
 
     let dodge = c.abilities.get_mut(&AbilityKind::Dodge).unwrap();
     dodge
         .purchases
-        .push(DotPurchase::new(DotSource::Xp { spent: 9 }));
+        .push(DotPurchase::new(DotSource::Xp { spent: 7 }));
 
     let ride = c.abilities.get_mut(&AbilityKind::Ride).unwrap();
     ride.purchases
@@ -59,7 +64,7 @@ fn wrong_xp_cost_caught() {
     c.xp_banked = 92;
 
     let dodge = c.abilities.get_mut(&AbilityKind::Dodge).unwrap();
-    // Dodge 4 → 5 (favored) canonical = 9, but we paid 8.
+    // Dodge 4 → 5 (favored) canonical = (4 * 2) - 1 = 7, but we paid 8.
     dodge
         .purchases
         .push(DotPurchase::new(DotSource::Xp { spent: 8 }));
@@ -68,7 +73,7 @@ fn wrong_xp_cost_caught() {
     assert!(report.errors.iter().any(|e| matches!(
         e,
         ValidationError::XpCostWrong {
-            expected: 9,
+            expected: 7,
             paid: 8,
             ..
         }
@@ -81,17 +86,18 @@ fn overspending_caught() {
     c.xp_earned = 5;
     c.xp_banked = 0;
 
-    // Buy a 9 XP favored ability increase — too expensive.
+    // Buy a correctly-priced 7 XP favored ability increase (Dodge 4 → 5) —
+    // too expensive for the 5 XP earned.
     let dodge = c.abilities.get_mut(&AbilityKind::Dodge).unwrap();
     dodge
         .purchases
-        .push(DotPurchase::new(DotSource::Xp { spent: 9 }));
+        .push(DotPurchase::new(DotSource::Xp { spent: 7 }));
 
     let report = c.validate_xp();
     assert!(report.errors.iter().any(|e| matches!(
         e,
         ValidationError::XpOverspent {
-            spent: 9,
+            spent: 7,
             earned: 5
         }
     )));
@@ -105,7 +111,7 @@ fn banked_total_must_balance() {
     let dodge = c.abilities.get_mut(&AbilityKind::Dodge).unwrap();
     dodge
         .purchases
-        .push(DotPurchase::new(DotSource::Xp { spent: 9 }));
+        .push(DotPurchase::new(DotSource::Xp { spent: 7 }));
     let report = c.validate_xp();
     assert!(
         report
@@ -129,4 +135,43 @@ fn specialty_costs_three_xp() {
     });
     let report = c.validate_xp();
     assert!(report.is_ok(), "{:?}", report.errors);
+}
+
+#[test]
+fn background_and_intimacy_xp_spends_are_noted_not_errors() {
+    // Exalted 2E prices no XP purchase for Background dots or Intimacies
+    // (no row on the p.276 table; Backgrounds shift through play, Intimacies
+    // are built with commitment actions). Recording one as `DotSource::Xp`
+    // should surface as a note, not fail validation, and should still count
+    // toward the XP ledger.
+    let mut c = valid_dawn();
+    c.xp_earned = 8;
+    c.xp_banked = 0;
+
+    let mut backing = RatedTrait::with_base(0);
+    backing
+        .purchases
+        .push(DotPurchase::new(DotSource::Xp { spent: 5 }));
+    c.backgrounds
+        .push(BackgroundRef::lookup_kind(BackgroundKind::Backing, backing));
+
+    c.intimacies.push(Intimacy {
+        description: "A debt of honor".to_string(),
+        kind: IntimacyKind::Cause,
+        source: DotSource::Xp { spent: 3 },
+        rating: 1,
+    });
+
+    let report = c.validate_xp();
+    assert!(report.is_ok(), "{:?}", report.errors);
+    assert!(report.notes.iter().any(|e| matches!(
+        e,
+        ValidationError::XpPurchaseNotPriced { spent: 5, trait_name }
+            if trait_name.starts_with("Background::")
+    )));
+    assert!(report.notes.iter().any(|e| matches!(
+        e,
+        ValidationError::XpPurchaseNotPriced { spent: 3, trait_name }
+            if trait_name == "Intimacy::A debt of honor"
+    )));
 }

@@ -9,7 +9,7 @@ favored_abilities = [
 primary_virtue = "Compassion"
 virtue_flaw = "CompassionateMartyrdom"
 xp_earned = 67
-xp_banked = 0
+xp_banked = 8
 hearthstones = []
 
 [identity]
@@ -503,7 +503,7 @@ specialties = []
 
 [essence.purchases.source]
 kind = "Xp"
-spent = 24
+spent = 16
 
 [[charms]]
 kind = "lookup"

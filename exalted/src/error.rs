@@ -152,6 +152,13 @@ pub enum ValidationError {
     )]
     XpAwardSumMismatch { sum: u32, earned: u32 },
 
+    #[error(
+        "{trait_name} records an XP purchase of {spent}, but Exalted 2E prices no experience \
+         cost for it (no row in the p.276 table; Backgrounds shift through play, Intimacies are \
+         built with commitment actions) — Storyteller discretion"
+    )]
+    XpPurchaseNotPriced { trait_name: String, spent: u32 },
+
     #[error("note: charm {charm} not in rules database; prereqs not checked")]
     UnknownCharm { charm: String },
 
