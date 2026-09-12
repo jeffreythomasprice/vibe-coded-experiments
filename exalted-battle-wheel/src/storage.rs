@@ -1,5 +1,5 @@
-//! Thin, string-only wrapper over `window().local_storage()`. Knows nothing about preferences —
-//! `prefs.rs` builds the typed, reactive layer on top of this.
+//! Thin, string-only wrapper over `window().local_storage()`. Knows nothing about what's stored —
+//! `persist.rs` builds the typed, reactive layer on top of this.
 
 use leptos::wasm_bindgen::{JsCast, JsValue};
 use leptos::web_sys;

@@ -8,7 +8,7 @@ pub struct SequenceStep {
     pub dv_penalty: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Sequence {
     pub name: String,
     pub steps: Vec<SequenceStep>,

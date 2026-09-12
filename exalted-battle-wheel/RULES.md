@@ -146,7 +146,7 @@ DV for ticks 3, 4, 5, 6, 7 and refreshes at the top of tick 8.
 
 | Case | Rule |
 |---|---|
-| Reflexive actions (incl. Move, reflexive Charms) | "Reflexive actions do not refresh a character's DV, nor do they count as true actions for the purposes of effects that last until a character's next action." (p. 142) |
+| Reflexive actions (incl. Move, reflexive Charms) | "Reflexive actions do not refresh a character's DV, nor do they count as true actions for the purposes of effects that last until a character's next action." (p. 141) |
 | Aborting a **Guard** to another action | "This new action does not refresh DV but is a normal action in all other ways. Therefore, the character must wait for a number of ticks to pass according to the Speed of the new action to refresh DV and act again." (p. 143) |
 | Aborting an **Aim** to attack the studied target | "the attack does not refresh DV, even though it counts as a normal action in all other respects." (p. 142) |
 | Completing a **full Aim cycle** | "he still does not refresh DV" (p. 143) |
@@ -536,7 +536,7 @@ Charge: Speed 6, Accuracy 7, Damage 10B, Defense 0, Rate 1
 > "For each dot the character is missing from any minimum, subtract one from the Accuracy and
 > Defense of the weapon, and **add one to its Speed (to a maximum total of Speed rating 6)**.
 > This penalty can cause a weapon's Accuracy and Defense to become negative and can worsen already
-> negative values." (p. 372)
+> negative values." (p. 373)
 
 So effective weapon Speed is `min(6, base_speed + missing_dots)`. **Speed 6 appears to be the
 hard ceiling throughout the system** (simple Charm default, First Action cap, Join-in-progress
@@ -880,12 +880,13 @@ If the app models the tick loop generically, both come nearly free.
 
 - Units, not individuals. **Long ticks ≈ one minute each.** (p. 158)
 - **Join War** replaces Join Battle: first action uses `(Wits + War) − Magnitude` for units;
-  solo units and independently-acting heroes use `Wits + Awareness` as normal. (p. 162)
+  solo units and independently-acting heroes use `Wits + Awareness` as normal. (p. 163)
 - Unit concealment: `(Dexterity + Stealth) − Magnitude`, opposed by the best
   `Perception + Awareness` among the enemy's commander and special characters.
 - **Movement multiplier by formation** — units move at X× their normal rate per long tick:
-  solo ×100, skirmish ×100, relaxed ×70, close ×40, unordered ×30. (p. 162)
-- Mass-combat miscellaneous actions with explicit Speeds (pp. 163–164):
+  solo ×100, skirmish ×100, relaxed ×70, close ×40, unordered ×30. (p. 163)
+- Mass-combat miscellaneous actions with explicit Speeds (pp. 164–165, Change Formation starting
+  on p. 164 and running onto p. 165, everything after it entirely on p. 165):
 
 | Action | Speed | DV |
 |---|---|---|

@@ -2,7 +2,8 @@
 //! preference: JSON in localStorage, kept in sync across tabs by the `storage` event.
 
 use exalted_battle_wheel::battle::{
-    template, ActionKind, Declaration, DeclaredAction, DeclaredEffect, MarkerId, Sequence, SequenceStep,
+    template, ActionError, ActionKind, BattleMode, Declaration, DeclaredAction, DeclaredEffect, MarkerId, Sequence,
+    SequenceStep,
 };
 use serde::{Deserialize, Serialize};
 
@@ -16,6 +17,8 @@ pub enum LibraryError {
     Unnamed,
     #[error("an effect must span at least one tick")]
     ZeroDuration,
+    #[error(transparent)]
+    Action(#[from] ActionError),
 }
 
 /// The saved, editable form of an effect — unlike `DeclaredEffect`, it carries no `MarkerId`: one
@@ -29,7 +32,17 @@ pub struct SavedEffect {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SavedShape {
-    Single { kind: ActionKind, speed: u32, dv_penalty: i32 },
+    Single {
+        /// Defaults to `Personal` so entries saved before modes existed — which were all
+        /// personal-combat actions — keep loading unchanged, with no version field or migration.
+        #[serde(default)]
+        mode: BattleMode,
+        kind: ActionKind,
+        speed: u32,
+        dv_penalty: i32,
+    },
+    /// Deliberately mode-less: a saved sequence is a user-defined multi-step action, not a
+    /// catalog row, so it's offered in every mode.
     Sequence { steps: Vec<SequenceStep> },
 }
 
@@ -49,8 +62,10 @@ pub enum SavedDeclaration {
 
 impl SavedAction {
     /// `ids` must carry one `MarkerId` per entry in `effects`, allocated by the caller so replay
-    /// stays deterministic.
-    pub fn build(&self, ids: &[MarkerId]) -> SavedDeclaration {
+    /// stays deterministic. Fails if a `Single` action's saved `kind` no longer exists in its
+    /// saved `mode` — reachable only from hand-edited localStorage, since the action panel filters
+    /// the Saved list to the active mode before offering an entry.
+    pub fn build(&self, ids: &[MarkerId]) -> Result<SavedDeclaration, LibraryError> {
         let effects: Vec<DeclaredEffect> = self
             .effects
             .iter()
@@ -59,7 +74,7 @@ impl SavedAction {
             .collect();
 
         match &self.shape {
-            SavedShape::Single { kind, speed, dv_penalty } => {
+            SavedShape::Single { mode, kind, speed, dv_penalty } => {
                 let declaration = Declaration {
                     name: Some(self.name.clone()),
                     speed: Some(*speed),
@@ -68,10 +83,10 @@ impl SavedAction {
                     effects,
                     ..Default::default()
                 };
-                SavedDeclaration::Action(template(*kind).declare(declaration))
+                Ok(SavedDeclaration::Action(template(*mode, *kind)?.declare(declaration)))
             }
             SavedShape::Sequence { steps } => {
-                SavedDeclaration::Sequence(Sequence { name: self.name.clone(), steps: steps.clone(), current: 0, effects })
+                Ok(SavedDeclaration::Sequence(Sequence { name: self.name.clone(), steps: steps.clone(), current: 0, effects }))
             }
         }
     }
@@ -137,7 +152,12 @@ mod tests {
     use exalted_battle_wheel::battle::SpeedSpec;
 
     fn single(name: &str) -> (String, String, SavedShape, Vec<SavedEffect>) {
-        (name.to_string(), String::new(), SavedShape::Single { kind: ActionKind::Attack, speed: 4, dv_penalty: -1 }, Vec::new())
+        (
+            name.to_string(),
+            String::new(),
+            SavedShape::Single { mode: BattleMode::Personal, kind: ActionKind::Attack, speed: 4, dv_penalty: -1 },
+            Vec::new(),
+        )
     }
 
     #[test]
@@ -212,6 +232,20 @@ mod tests {
     }
 
     #[test]
+    fn a_library_emptied_by_deletes_encodes_identically_to_its_default() {
+        // Persistence stores nothing for a value that encodes the same as its default (see
+        // `persist::store`), so `next_id`'s reset-on-empty (`remove`, above) is what lets a
+        // library someone filled in and then emptied clean itself out of local storage.
+        let mut library = Library::default();
+        let (name, note, shape, effects) = single("Sweeping Blow");
+        let id = library.add(name, note, shape, effects).unwrap();
+        library.remove(id).unwrap();
+
+        let default_json = serde_json::to_string(&Library::default()).unwrap();
+        assert_eq!(serde_json::to_string(&library).unwrap(), default_json);
+    }
+
+    #[test]
     fn single_action_round_trips_through_json() {
         let mut library = Library::default();
         let effects = vec![SavedEffect { label: "Butterflies".to_string(), delay: 1, ticks: 3 }];
@@ -228,7 +262,7 @@ mod tests {
     fn build_single_uses_the_saved_speed_and_dv_and_name() {
         let (name, note, shape, effects) = single("Sweeping Blow");
         let action = SavedAction { id: 0, name, note, shape, effects };
-        let SavedDeclaration::Action(declared) = action.build(&[]) else { panic!("expected a single action") };
+        let SavedDeclaration::Action(declared) = action.build(&[]).unwrap() else { panic!("expected a single action") };
         assert_eq!(declared.label, "Sweeping Blow");
         assert_eq!(declared.speed, 4);
         assert_eq!(declared.dv_penalty, -1);
@@ -243,7 +277,7 @@ mod tests {
             shape: SavedShape::Sequence { steps: vec![SequenceStep { label: "Cast".to_string(), speed: SpeedSpec::Variable { default: 5 }, dv_penalty: 0 }] },
             effects: vec![SavedEffect { label: "Butterflies".to_string(), delay: 0, ticks: 3 }],
         };
-        let SavedDeclaration::Sequence(sequence) = action.build(&[MarkerId(7)]) else { panic!("expected a sequence") };
+        let SavedDeclaration::Sequence(sequence) = action.build(&[MarkerId(7)]).unwrap() else { panic!("expected a sequence") };
         assert_eq!(sequence.effects.len(), 1);
         assert_eq!(sequence.effects[0].id, MarkerId(7));
         assert_eq!(sequence.effects[0].ticks, 3);

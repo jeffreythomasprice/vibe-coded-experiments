@@ -1,5 +1,5 @@
 use crate::ui::glossary::Topic;
-use crate::ui::Tip;
+use crate::ui::{ticks, Tip};
 use exalted_battle_wheel::battle::{Battle, CombatantId, CombatantState};
 use leptos::prelude::*;
 
@@ -47,6 +47,7 @@ pub fn HoverCard() -> impl IntoView {
         let combatant = battle.find(id)?;
         let ticks_until = combatant.next_action_tick as i64 - battle.current_tick as i64;
         Some((
+            battle.mode,
             combatant.name.clone(),
             combatant.side.0.clone(),
             combatant.next_action_tick,
@@ -64,7 +65,9 @@ pub fn HoverCard() -> impl IntoView {
         <div class="hover-card" class:hover-card-visible=move || content().is_some()>
             {move || {
                 content()
-                    .map(|(name, side, next_tick, ticks_until, dv_penalty, refreshes_at, state, topic)| {
+                    .map(|(mode, name, side, next_tick, ticks_until, dv_penalty, refreshes_at, state, topic)| {
+                        let next_label = ticks::at(mode, next_tick);
+                        let until_label = ticks::count(mode, ticks_until.unsigned_abs() as u32);
                         view! {
                             <button class="hover-card-dismiss" on:click=dismiss>
                                 "\u{2715}"
@@ -74,7 +77,7 @@ pub fn HoverCard() -> impl IntoView {
                             </Tip>
                             <Tip topic=Topic::NextActionTick>
                                 <div class="hover-card-row">
-                                    "Next action: tick " {next_tick} " (in " {ticks_until} " ticks)"
+                                    "Next action: " {next_label} " (in " {until_label} ")"
                                 </div>
                             </Tip>
                             <div class="hover-card-row">
@@ -82,9 +85,10 @@ pub fn HoverCard() -> impl IntoView {
                                     <span>"DV penalty: " {dv_penalty}</span>
                                 </Tip>
                                 {refreshes_at.map(|tick| {
+                                    let refresh_label = ticks::at(mode, tick);
                                     view! {
                                         <Tip topic=Topic::DvRefresh>
-                                            <span>", refreshes at tick " {tick}</span>
+                                            <span>", refreshes at " {refresh_label}</span>
                                         </Tip>
                                     }
                                 })}

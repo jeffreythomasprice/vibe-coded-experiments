@@ -1,9 +1,11 @@
 use crate::battle::action::DeclaredAction;
 use crate::battle::combatant::{Commitment, CombatantState, DvState, JoinBattleResult, Side};
 use crate::battle::ids::{CombatantId, MarkerId, Tick};
+use crate::battle::mode::BattleMode;
 use crate::battle::sequence::Sequence;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InterruptReason {
     FailedOccultCheck,
     WentInactive,
@@ -11,8 +13,14 @@ pub enum InterruptReason {
     Other(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BattleEvent {
+    /// Chosen during Setup and frozen by `StartBattle`, exactly like the reaction count: the mode
+    /// decides which catalog is legal and how long a tick is, so it cannot change once actions are
+    /// already on the wheel (RULES.md §11, pp. 158, 169).
+    SetMode {
+        mode: BattleMode,
+    },
     AddCombatant {
         id: CombatantId,
         name: String,

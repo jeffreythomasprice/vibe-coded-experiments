@@ -1,6 +1,6 @@
 use crate::ui::glossary::Topic;
-use crate::ui::Tip;
-use exalted_battle_wheel::battle::{Battle, BattleEvent, BattleLog, CombatantId, JoinBattleResult, Phase, Side};
+use crate::ui::{Combobox, DetailTip, Tip};
+use exalted_battle_wheel::battle::{Battle, BattleEvent, BattleLog, BattleMode, CombatantId, JoinBattleResult, Phase, Side};
 use leptos::prelude::*;
 
 #[component]
@@ -13,6 +13,17 @@ pub fn Roster() -> impl IntoView {
     let successes = RwSignal::new(0i32);
     let botch = RwSignal::new(false);
 
+    let mode = move || battle.read().mode;
+    let in_setup = move || matches!(battle.read().phase, Phase::Setup);
+    let sides = Signal::derive(move || battle.read().sides());
+    let set_mode = move |mode: BattleMode| {
+        log.update(|log| {
+            if let Err(error) = log.push(BattleEvent::SetMode { mode }) {
+                tracing::error!(%error, "could not set battle mode");
+            }
+        });
+    };
+
     let add_combatant = move |_| {
         let entered_name = name.get();
         if entered_name.trim().is_empty() {
@@ -23,12 +34,19 @@ pub fn Roster() -> impl IntoView {
         } else {
             JoinBattleResult::Successes(successes.get().max(0) as u32)
         };
+        // A typed side that matches an existing faction apart from casing joins that faction
+        // instead of splitting it into a second one.
+        let typed_side = side.get();
+        let entered_side = battle
+            .read_untracked()
+            .canonical_side(typed_side.trim())
+            .unwrap_or_else(|| Side(typed_side.trim().to_string()));
         log.update(|log| {
             let id = log.alloc_combatant_id();
             if let Err(error) = log.push(BattleEvent::AddCombatant {
                 id,
                 name: entered_name,
-                side: Side(side.get()),
+                side: entered_side.clone(),
                 join_battle,
             }) {
                 tracing::error!(%error, "could not add combatant");
@@ -37,6 +55,9 @@ pub fn Roster() -> impl IntoView {
         name.set(String::new());
         successes.set(0);
         botch.set(false);
+        // Side is deliberately not cleared, so adding a group only means retyping the name — but
+        // it's rewritten to the canonical spelling so the field reflects what was just recorded.
+        side.set(entered_side.0);
     };
 
     let start_battle = move |_| {
@@ -54,6 +75,32 @@ pub fn Roster() -> impl IntoView {
             <Tip topic=Topic::Roster>
                 <h2>"Combatants"</h2>
             </Tip>
+            <div class="battle-mode-row">
+                <Tip topic=Topic::BattleModeSelect>
+                    <label class="header-control battle-mode-select">
+                        "Battle mode"
+                        <select
+                            prop:value=move || match mode() {
+                                BattleMode::Personal => "personal",
+                                BattleMode::Mass => "mass",
+                                BattleMode::Social => "social",
+                            }
+                            disabled=move || !in_setup()
+                            on:change=move |ev| {
+                                set_mode(match event_target_value(&ev).as_str() {
+                                    "mass" => BattleMode::Mass,
+                                    "social" => BattleMode::Social,
+                                    _ => BattleMode::Personal,
+                                });
+                            }
+                        >
+                            <option value="personal">"Personal combat"</option>
+                            <option value="mass">"Mass combat"</option>
+                            <option value="social">"Social combat"</option>
+                        </select>
+                    </label>
+                </Tip>
+            </div>
             <div class="roster-form">
                 <Tip topic=Topic::CombatantName>
                     <input
@@ -63,15 +110,18 @@ pub fn Roster() -> impl IntoView {
                     />
                 </Tip>
                 <Tip topic=Topic::Side>
-                    <input
-                        placeholder="Side"
-                        prop:value=move || side.get()
-                        on:input=move |ev| side.set(event_target_value(&ev))
-                    />
+                    <Combobox value=side options=sides list_id="roster-side-options" placeholder="Side" />
                 </Tip>
-                <Tip topic=Topic::JoinBattleSuccesses>
+                <DetailTip
+                    topic=Signal::derive(move || match mode() {
+                        BattleMode::Personal => Topic::JoinBattleSuccesses,
+                        BattleMode::Mass => Topic::JoinWar,
+                        BattleMode::Social => Topic::JoinDebate,
+                    })
+                    detail=Signal::derive(String::new)
+                >
                     <label class="join-battle-successes-label">
-                        "Join Battle successes"
+                        {move || format!("{} successes", mode().join_roll_name())}
                         <input
                             type="number"
                             prop:value=move || successes.get().to_string()
@@ -79,7 +129,7 @@ pub fn Roster() -> impl IntoView {
                             disabled=move || botch.get()
                         />
                     </label>
-                </Tip>
+                </DetailTip>
                 <Tip topic=Topic::Botch>
                     <label>
                         <input
@@ -136,9 +186,11 @@ fn RosterRow(id: CombatantId, battle: Memo<Battle>, log: RwSignal<BattleLog>) ->
             </Tip>
             {move || {
                 let topic = tick_topic();
+                let mode = battle.read().mode;
+                let label = tick().map(|t| crate::ui::ticks::at(mode, t)).unwrap_or_default();
                 view! {
                     <Tip topic=topic>
-                        <span class="tick">"tick " {tick}</span>
+                        <span class="tick">{label}</span>
                     </Tip>
                 }
             }}

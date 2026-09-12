@@ -1,7 +1,8 @@
 use crate::ui::glossary::Topic;
-use crate::ui::{Modal, TextTip, Tip};
+use crate::ui::{ticks, Modal, TextTip, Tip};
 use exalted_battle_wheel::battle::{
-    apply, template, Battle, BattleEvent, BattleLog, CombatantId, CombatantState, InterruptReason, JoinBattleResult, Tick,
+    apply, template, Battle, BattleEvent, BattleLog, BattleMode, CombatantId, CombatantState, InterruptReason,
+    JoinBattleResult,
 };
 use leptos::prelude::*;
 
@@ -21,8 +22,8 @@ fn join_battle_detail(join_battle: JoinBattleResult) -> String {
     }
 }
 
-fn marker_span(at_tick: Tick, ticks: u32) -> String {
-    if ticks <= 1 { format!("tick {at_tick}") } else { format!("ticks {at_tick}\u{2013}{}", at_tick + ticks - 1) }
+fn marker_span(mode: BattleMode, at_tick: exalted_battle_wheel::battle::Tick, span_ticks: u32) -> String {
+    ticks::span(mode, at_tick, span_ticks)
 }
 
 fn state_label(state: &CombatantState) -> String {
@@ -48,6 +49,7 @@ fn interrupt_reason(reason: &InterruptReason) -> String {
 
 fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
     match event {
+        BattleEvent::SetMode { mode } => EventLine { text: format!("Mode set to {}", mode.label()), detail: None },
         BattleEvent::AddCombatant { name, side, join_battle, .. } => EventLine {
             text: format!("Added {name} ({})", side.0),
             detail: Some(join_battle_detail(*join_battle)),
@@ -61,7 +63,9 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
         },
         BattleEvent::DeclareAction { actor, action } => {
             let target = action.target.map(|id| format!(" on {}", name(battle, id))).unwrap_or_default();
-            let kind_name = template(action.kind).name;
+            // Falls back to the action's own stored label if its kind no longer resolves in this
+            // battle's mode (only reachable by replaying a log across a hand-edited mode change).
+            let kind_name = template(battle.mode, action.kind).map(|t| t.name).unwrap_or(action.label.as_str());
             let mut detail = if action.label == kind_name {
                 format!("Speed {}, DV {}", action.speed, action.dv_penalty)
             } else {
@@ -121,11 +125,12 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
             };
             EventLine { text, detail: Some(detail) }
         }
-        BattleEvent::AdvanceTick => {
-            EventLine { text: format!("Tick advanced to {}", battle.current_tick + 1), detail: None }
-        }
-        BattleEvent::AddMarker { label, source, at_tick, ticks, .. } => {
-            let span = marker_span(*at_tick, *ticks);
+        BattleEvent::AdvanceTick => EventLine {
+            text: format!("Advanced to {}", ticks::at(battle.mode, battle.current_tick + 1)),
+            detail: None,
+        },
+        BattleEvent::AddMarker { label, source, at_tick, ticks: span_ticks, .. } => {
+            let span = marker_span(battle.mode, *at_tick, *span_ticks);
             EventLine { text: format!("Marker \"{label}\" on {span} (from {})", name(battle, *source)), detail: None }
         }
         BattleEvent::RemoveMarker { id } => {
@@ -141,7 +146,7 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
             let mut parts = Vec::new();
             if let Some(before) = before {
                 if before.next_action_tick != *next_action_tick {
-                    parts.push(format!("tick {} \u{2192} {next_action_tick}", before.next_action_tick));
+                    parts.push(format!("{} \u{2192} {}", ticks::at(battle.mode, before.next_action_tick), ticks::at(battle.mode, *next_action_tick)));
                 }
                 if before.dv.penalty != dv.penalty {
                     parts.push(format!("DV {} \u{2192} {}", before.dv.penalty, dv.penalty));
@@ -172,8 +177,8 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
                 if before.label != *label {
                     parts.push(format!("\"{}\" \u{2192} \"{label}\"", before.label));
                 }
-                let before_span = marker_span(before.at_tick, before.ticks);
-                let after_span = marker_span(*at_tick, *ticks);
+                let before_span = marker_span(battle.mode, before.at_tick, before.ticks);
+                let after_span = marker_span(battle.mode, *at_tick, *ticks);
                 if before_span != after_span {
                     parts.push(format!("{before_span} \u{2192} {after_span}"));
                 }

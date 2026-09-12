@@ -1,10 +1,11 @@
 use crate::battle::ids::{CombatantId, Tick};
 use crate::battle::sequence::Sequence;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Side(pub String);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum JoinBattleResult {
     Successes(u32),
     Botch,
@@ -22,7 +23,7 @@ impl JoinBattleResult {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CombatantState {
     Normal,
     Guarding,
@@ -31,7 +32,7 @@ pub enum CombatantState {
     InSequence(Sequence),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct DvState {
     pub penalty: i32,
     pub refreshes_at: Option<Tick>,
@@ -41,7 +42,7 @@ pub struct DvState {
 /// wheel until `next_action_tick`. Declaring an action resolves it immediately (state.rs), so
 /// without this the battle keeps only the tick and DV it left behind and cannot say what she's
 /// doing. Sequences don't use this — `CombatantState::InSequence` already carries the step.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Commitment {
     pub label: String,
     pub speed: u32,

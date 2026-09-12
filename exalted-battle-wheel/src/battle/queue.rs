@@ -49,10 +49,15 @@ pub fn queue(battle: &Battle) -> Vec<QueueRow> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::battle::action::{template, ActionKind, Declaration};
+    use crate::battle::action::{template, ActionKind, ActionTemplate, Declaration};
     use crate::battle::combatant::{JoinBattleResult, Side};
     use crate::battle::event::BattleEvent;
+    use crate::battle::mode::BattleMode;
     use crate::battle::state::apply;
+
+    fn personal(kind: ActionKind) -> &'static ActionTemplate {
+        template(BattleMode::Personal, kind).expect("personal catalog")
+    }
 
     fn add(battle: &mut Battle, id: u32, successes: u32) -> CombatantId {
         let cid = CombatantId(id);
@@ -94,7 +99,7 @@ mod tests {
         let mut battle = Battle::genesis();
         let cid = add(&mut battle, 1, 0);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
-        let dash = template(ActionKind::Dash).declare(Declaration::default());
+        let dash = personal(ActionKind::Dash).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: dash }).unwrap();
         apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: "Ambush".to_string(), source: cid, at_tick: 3, ticks: 1 }).unwrap();
 
@@ -120,7 +125,7 @@ mod tests {
         let cid = add(&mut battle, 1, 5);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
         apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: "Gone".to_string(), source: cid, at_tick: 0, ticks: 1 }).unwrap();
-        let guard = template(ActionKind::Guard).declare(Declaration::default());
+        let guard = personal(ActionKind::Guard).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
         apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
 

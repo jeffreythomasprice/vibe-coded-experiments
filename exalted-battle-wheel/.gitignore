@@ -1,2 +1,4 @@
 /target
 /dist
+/terraform/.terraform/
+terraform/*.tfstate*

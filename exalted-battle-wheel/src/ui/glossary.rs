@@ -3,7 +3,7 @@
 //! accuracy. Citations are printed book page numbers (see RULES.md's citation convention);
 //! `document-search text --pages <printed + 2> <printed + 2> <pdf>` reproduces the source text.
 
-use exalted_battle_wheel::battle::{ActionKind, SequenceKind};
+use exalted_battle_wheel::battle::{ActionKind, BattleMode, SequenceKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Book {
@@ -88,6 +88,7 @@ pub enum Topic {
     AdvanceTick,
     TeachingMode,
     Theme,
+    Reset,
     ReactionCount,
 
     // Roster
@@ -107,6 +108,10 @@ pub enum Topic {
     TickSlot,
     NowMarker,
     BeyondHorizon,
+    DvPenaltyRing,
+    DvPenaltyFloor,
+    SectorCountdown,
+    MarkerGutter,
     Markers,
     MarkerDuration,
 
@@ -152,7 +157,11 @@ pub enum Topic {
     SavedSequenceStep,
     ActionEffects,
 
-    // One per ActionKind, via action_topic()
+    // Battle mode
+    BattleModeSelect,
+    LongTick,
+
+    // One per ActionKind, via action_topic() — personal/mass-shared entries
     ActionAim,
     ActionAttack,
     ActionDash,
@@ -165,24 +174,125 @@ pub enum Topic {
     ActionClinch,
     ActionJoinBattleInProgress,
     ActionCustom,
+
+    // Personal-only named miscellaneous actions (RULES.md §4.7, p. 144)
+    ActionCoordinateAttacks,
+    ActionReadyWeapons,
+    ActionRiseFromProne,
+    ActionJump,
+
+    // Mass combat only (RULES.md §11.1, pp. 162-164)
+    JoinWar,
+    ActionChangeFormation,
+    ActionDisengage,
+    ActionTurn,
+    ActionSplitUnit,
+    ActionExpelSpecialCharacter,
+    ActionMergeUnits,
+    ActionSignalUnits,
+    ActionRally,
+
+    // Social combat only (RULES.md §11.2, pp. 169-172) — separate topics because the Speed/DV
+    // differ from the physical-combat entries above, not just the fiction
+    JoinDebate,
+    SocialMonologue,
+    SocialAttack,
+    SocialDash,
+    SocialInactive,
+    SocialMiscellaneous,
+    SocialFlurry,
+    ActionJoinDebateInProgress,
+    ActionReadMotivation,
 }
 
-/// Exhaustive over `ActionKind` so a new action cannot compile without a matching glossary entry.
-pub fn action_topic(kind: ActionKind) -> Topic {
-    match kind {
-        ActionKind::Aim => Topic::ActionAim,
-        ActionKind::Attack => Topic::ActionAttack,
-        ActionKind::Dash => Topic::ActionDash,
-        ActionKind::Guard => Topic::ActionGuard,
-        ActionKind::Inactive => Topic::ActionInactive,
-        ActionKind::Miscellaneous => Topic::ActionMiscellaneous,
-        ActionKind::Move => Topic::ActionMove,
-        ActionKind::Flurry => Topic::ActionFlurry,
-        ActionKind::ActivateCharm => Topic::ActionActivateCharm,
-        ActionKind::Clinch => Topic::ActionClinch,
-        ActionKind::JoinBattleInProgress => Topic::ActionJoinBattleInProgress,
-        ActionKind::Custom => Topic::ActionCustom,
+/// The glossary entries for one `ActionKind` across all three modes. `None` means the kind is
+/// simply not an action in that mode — a unit does not Clinch, a debater does not Rally — rather
+/// than "entry missing"; `every_catalog_action_has_a_topic` checks that against the real catalog.
+#[derive(Debug, Clone, Copy)]
+struct ModeTopics {
+    personal: Option<Topic>,
+    mass: Option<Topic>,
+    social: Option<Topic>,
+}
+
+impl ModeTopics {
+    /// The same topic in all three modes: the action's Speed/DV don't differ between them.
+    const fn shared(topic: Topic) -> Self {
+        Self { personal: Some(topic), mass: Some(topic), social: Some(topic) }
     }
+
+    /// Physical combat only. Mass combat reuses `PERSONAL_CATALOG` verbatim (RULES.md §11.1,
+    /// p. 166: characters there "substitute long ticks for standard ticks"), so a personal-only
+    /// topic still applies there; social combat doesn't have the kind at all.
+    const fn physical(topic: Topic) -> Self {
+        Self { personal: Some(topic), mass: Some(topic), social: None }
+    }
+
+    const fn mass_only(topic: Topic) -> Self {
+        Self { personal: None, mass: Some(topic), social: None }
+    }
+
+    const fn social_only(topic: Topic) -> Self {
+        Self { personal: None, mass: None, social: Some(topic) }
+    }
+
+    /// One topic for both physical modes, a different one for social — used where the Speed
+    /// and/or DV genuinely differ there (RULES.md §11.2, p. 171), not just the fiction.
+    const fn split(physical: Topic, social: Topic) -> Self {
+        Self { personal: Some(physical), mass: Some(physical), social: Some(social) }
+    }
+
+    const fn get(self, mode: BattleMode) -> Option<Topic> {
+        match mode {
+            BattleMode::Personal => self.personal,
+            BattleMode::Mass => self.mass,
+            BattleMode::Social => self.social,
+        }
+    }
+}
+
+/// Exhaustive over `ActionKind` so a new action still cannot compile without a glossary decision
+/// for every mode — the same guarantee the original single-mode mapper gave, extended across the
+/// mode axis with no wildcard arm. See `every_catalog_action_has_a_topic` for the half of the
+/// guarantee this can't give at compile time: whether a topic is actually wired into the mode's
+/// real catalog.
+const fn topics_for(kind: ActionKind) -> ModeTopics {
+    match kind {
+        ActionKind::Aim => ModeTopics::split(Topic::ActionAim, Topic::SocialMonologue),
+        ActionKind::Attack => ModeTopics::split(Topic::ActionAttack, Topic::SocialAttack),
+        ActionKind::Dash => ModeTopics::split(Topic::ActionDash, Topic::SocialDash),
+        ActionKind::Guard => ModeTopics::shared(Topic::ActionGuard),
+        ActionKind::Inactive => ModeTopics::split(Topic::ActionInactive, Topic::SocialInactive),
+        ActionKind::Miscellaneous => ModeTopics::split(Topic::ActionMiscellaneous, Topic::SocialMiscellaneous),
+        ActionKind::Move => ModeTopics::shared(Topic::ActionMove),
+        ActionKind::Flurry => ModeTopics::split(Topic::ActionFlurry, Topic::SocialFlurry),
+        ActionKind::ActivateCharm => ModeTopics::shared(Topic::ActionActivateCharm),
+        ActionKind::JoinBattleInProgress => ModeTopics::split(Topic::ActionJoinBattleInProgress, Topic::ActionJoinDebateInProgress),
+        ActionKind::Clinch => ModeTopics::physical(Topic::ActionClinch),
+        ActionKind::Custom => ModeTopics::shared(Topic::ActionCustom),
+
+        ActionKind::CoordinateAttacks => ModeTopics::physical(Topic::ActionCoordinateAttacks),
+        ActionKind::ReadyWeapons => ModeTopics::physical(Topic::ActionReadyWeapons),
+        ActionKind::RiseFromProne => ModeTopics::physical(Topic::ActionRiseFromProne),
+        ActionKind::Jump => ModeTopics::physical(Topic::ActionJump),
+
+        ActionKind::ChangeFormation => ModeTopics::mass_only(Topic::ActionChangeFormation),
+        ActionKind::Disengage => ModeTopics::mass_only(Topic::ActionDisengage),
+        ActionKind::Turn => ModeTopics::mass_only(Topic::ActionTurn),
+        ActionKind::SplitUnit => ModeTopics::mass_only(Topic::ActionSplitUnit),
+        ActionKind::ExpelSpecialCharacter => ModeTopics::mass_only(Topic::ActionExpelSpecialCharacter),
+        ActionKind::MergeUnits => ModeTopics::mass_only(Topic::ActionMergeUnits),
+        ActionKind::SignalUnits => ModeTopics::mass_only(Topic::ActionSignalUnits),
+        ActionKind::Rally => ModeTopics::mass_only(Topic::ActionRally),
+
+        ActionKind::ReadMotivation => ModeTopics::social_only(Topic::ActionReadMotivation),
+    }
+}
+
+/// `None` means `kind` is not an action in `mode` at all (a unit does not Clinch, a debater does
+/// not Rally) — reachable in the UI only via `Option::map`, never via `.unwrap()`.
+pub fn action_topic(mode: BattleMode, kind: ActionKind) -> Option<Topic> {
+    topics_for(kind).get(mode)
 }
 
 /// Exhaustive over `SequenceKind` so a new sorcery Circle cannot compile without a matching entry.
@@ -245,6 +355,12 @@ impl Topic {
                 interacts: "System matches your OS or browser's light/dark preference and updates live if that preference changes.",
                 source: Source::AppConvention,
             },
+            Topic::Reset => Entry {
+                term: "Reset",
+                what: "Clears the battle and starts a fresh one.",
+                interacts: "The battle is saved to this browser automatically, so it's still here after a refresh — Reset is how you deliberately start over. It discards every combatant, declared action, marker, and undo step, and Undo cannot bring it back. Saved actions, theme, and Teaching mode are untouched.",
+                source: Source::AppConvention,
+            },
             Topic::ReactionCount => Entry {
                 term: "Reaction count",
                 what: "The highest number of successes rolled by anyone who simultaneously joined the fight at its start.",
@@ -267,8 +383,8 @@ impl Topic {
             Topic::Side => Entry {
                 term: "Side",
                 what: "Which faction this combatant fights for.",
-                interacts: "Used to colour tokens on the wheel so allies and enemies are easy to tell apart at a glance. Combatants coordinating an attack together are typically all on the same side.",
-                source: book_unquoted(144),
+                interacts: "Used to colour tokens on the wheel so allies and enemies are easy to tell apart at a glance. Combatants coordinating an attack together are typically all on the same side. Factions already in the battle are offered as you type; picking one — or matching its spelling apart from capitalization — keeps everyone on that faction the same colour.",
+                source: Source::AppConvention,
             },
             Topic::JoinBattleSuccesses => Entry {
                 term: "Join Battle successes",
@@ -315,26 +431,50 @@ impl Topic {
 
             Topic::TickWheel => Entry {
                 term: "The tick wheel",
-                what: "A rotating view of the next 12 ticks, with the current tick always at the top.",
-                interacts: "Each combatant's token sits on the slot matching her next action tick. As the current tick advances, the wheel rotates so “now” stays fixed and everyone's position updates relative to it.",
+                what: "Seven wedges counting down to \u{201c}now\u{201d} at the top, with six rings marking DV penalty from the rim (-0) inward.",
+                interacts: "A token's angular position is when she next acts; its distance from the rim is how badly her last action degraded her DV. As the current tick advances, tokens sweep toward the top wedge and slide outward as their DV penalty refreshes.",
                 source: book(141, "Combat time passes in abstract increments called ticks … Combat always advances from tick 0 forward one tick at a time until the end of battle."),
             },
             Topic::TickSlot => Entry {
-                term: "Tick slot",
-                what: "One absolute tick number, twelve of which are visible at a time.",
-                interacts: "Any combatant whose next action tick matches this slot's number has her token placed here.",
+                term: "Sector",
+                what: "One wedge of the wheel: how many ticks from now, not an absolute tick number.",
+                interacts: "The small number under the big one is the absolute tick this sector currently represents. Any combatant whose next action tick lands this many ticks from now has her token placed somewhere in this wedge.",
                 source: book_unquoted(141),
             },
             Topic::NowMarker => Entry {
                 term: "Now",
-                what: "Marks the current tick at the top of the wheel.",
-                interacts: "Everyone in this slot is eligible to act; the tick cannot advance past them until they declare an action.",
+                what: "Marks the current tick at the top of the wheel \u{2014} the wedge tokens sweep into as ticks advance.",
+                interacts: "Everyone in this wedge is eligible to act; the tick cannot advance past them until they declare an action.",
                 source: book_unquoted(141),
             },
             Topic::BeyondHorizon => Entry {
                 term: "Beyond the horizon",
-                what: "Combatants whose next action is more than 12 ticks away, too far out to place on the wheel.",
-                interacts: "This shouldn't normally happen for long — the highest fixed Speed in the core action catalog is 6, and even a fully-penalized weapon (missing every trait minimum) is capped at Speed 6, so ordinary actions land within the 12-tick window shown.",
+                what: "Combatants whose next action is more than 6 ticks away, too far out to place on the wheel.",
+                interacts: "This shouldn't normally happen for long. RULES.md \u{a7}12.3 is explicit that nothing in the core rules states a global \u{201c}no action exceeds Speed 6\u{201d} \u{2014} it's only that every capped mechanic (First Action, Join-in-progress, the Minimums penalty, a Simple Charm's default Speed) happens to cap there. A hand-typed Speed above 6, or a marker running longer than that, is what lands here.",
+                source: Source::AppConvention,
+            },
+            Topic::DvPenaltyRing => Entry {
+                term: "DV penalty ring",
+                what: "How far a token sits from the rim: its current DV penalty, from -0 at the rim to -5-or-worse at the hub.",
+                interacts: "Refreshes at the very start of the tick a combatant is next permitted to act, before any new action's penalty applies \u{2014} so a token visibly slides back out to the rim the moment her DV clears.",
+                source: book(147, "This penalty disappears on the tick the character is next permitted to act."),
+            },
+            Topic::DvPenaltyFloor => Entry {
+                term: "-5 or worse",
+                what: "The wheel's innermost ring, for any DV penalty of -5 or steeper.",
+                interacts: "The core rules never cap how negative accumulated DV penalties can get, so a ring for every possible value isn't practical \u{2014} the hover card and queue panel always show the exact number.",
+                source: Source::AppConvention,
+            },
+            Topic::SectorCountdown => Entry {
+                term: "Seven sectors",
+                what: "The wheel shows the next 6 ticks plus \u{201c}now,\u{201d} not an ever-growing tick count.",
+                interacts: "Seven, not more, because RULES.md \u{a7}12.3 treats Speed 6 as this app's conventional ceiling for an ordinary action \u{2014} not a rule the book states outright, but the pattern every capped mechanic follows. An action scheduled further out than that shows up in \u{201c}Beyond the horizon\u{201d} instead of on the wheel.",
+                source: Source::AppConvention,
+            },
+            Topic::MarkerGutter => Entry {
+                term: "Marker arc",
+                what: "An arc drawn just outside the rim, spanning the ticks a marker covers.",
+                interacts: "Markers are spans of time, not a single combatant's state, so they sit outside the ring geometry entirely rather than competing with tokens for a ring position.",
                 source: Source::AppConvention,
             },
             Topic::Markers => Entry {
@@ -371,7 +511,7 @@ impl Topic {
             Topic::CancelSequenceEarly => Entry {
                 term: "Cancelling a sequence here",
                 what: "Forcing a shaping combatant into any state other than \u{201c}In sequence (keep)\u{201d} abandons her spell.",
-                interacts: "The book models losing a spell — whether to a failed distraction check or a voluntary choice — as dissipating harmlessly, with an immediate Join Battle roll to re-enter combat. This editor doesn't roll that Join Battle for you: use Interrupt in the action panel for the modeled rejoin, or set her next action tick here by hand.",
+                interacts: "The book spells this out for a failed distraction check: the spell dissipates harmlessly and the player makes an immediate Join Battle roll to re-enter combat. This app treats a voluntary abandonment the same way, though the book doesn't state that explicitly for the voluntary case. This editor doesn't roll that Join Battle for you: use Interrupt in the action panel for the modeled rejoin, or set her next action tick here by hand.",
                 source: book(251, "If the roll fails, the spell dissipates harmlessly and has no effects."),
             },
 
@@ -433,7 +573,7 @@ impl Topic {
             Topic::ActionSelect => Entry {
                 term: "Action",
                 what: "The action this combatant is about to declare.",
-                interacts: "Every action carries a Speed (ticks until her next action) and a DV penalty (how much it degrades her Dodge and Parry DV until it refreshes) — shown below once selected.",
+                interacts: "Every action carries a Speed (ticks until her next action) and a DV penalty (how much it degrades her Dodge and Parry DV until it refreshes) — shown below once selected. Clicking a row in the reference rail selects it here for the highlighted \u{201c}Up now\u{201d} combatant, without declaring it.",
                 source: book_unquoted(141),
             },
             Topic::ActionName => Entry {
@@ -523,7 +663,7 @@ impl Topic {
             Topic::RejoinSuccesses => Entry {
                 term: "Rejoin successes",
                 what: "Successes on the immediate Join Battle roll made after a sorcery sequence is interrupted and the spell is lost.",
-                interacts: "This new Join Battle roll works exactly like joining a fight already in progress: it schedules a fresh next action tick from the frozen reaction count, same as any other combatant re-entering the fray.",
+                interacts: "This new Join Battle roll works exactly like joining a fight already in progress: it schedules a fresh next action tick from the frozen reaction count, same as any other combatant re-entering the fray. The book states this explicitly for a failed distraction check; the app applies the same rejoin roll when the sequence is broken voluntarily too.",
                 source: book(252, "If the character loses the spell due to distraction, he refocuses on the world, and the player makes an immediate Join Battle roll."),
             },
             Topic::InterruptSequence => Entry {
@@ -560,7 +700,7 @@ impl Topic {
             Topic::SavedSequenceStep => Entry {
                 term: "Step",
                 what: "One action in a saved sorcery sequence: its label, Speed, and DV penalty.",
-                interacts: "Leave Speed blank to mark a step's Speed as rolled via Join Battle rather than fixed — the shape Cast Sorcery uses (RULES.md §5.1). A saved sequence isn't limited to the book's three Circles: use this to record a Charm or house rule with its own multi-action timing.",
+                interacts: "Leave Speed blank to mark a step's Speed as rolled via Join Battle rather than fixed — the same convention Cast Sorcery uses. A saved sequence isn't limited to the book's three Circles: use this to record a Charm or house rule with its own multi-action timing.",
                 source: book(252, "CAST SORCERY (VARIES, DV -0) … Determine the Speed of this action by making a Join Battle roll."),
             },
             Topic::ActionEffects => Entry {
@@ -586,7 +726,7 @@ impl Topic {
                 term: "Dash (3/-2)",
                 what: "A full sprint, covering much more ground than a Move.",
                 interacts: "Cannot be parried at all without a stunt or magic, on top of the -2 DV. A combatant can either Move or Dash on a given tick, never both.",
-                source: book_unquoted(143),
+                source: book_range_unquoted(143, 145),
             },
             Topic::ActionGuard => Entry {
                 term: "Guard (3/-0)",
@@ -610,7 +750,7 @@ impl Topic {
                 term: "Move (0/None)",
                 what: "Ordinary movement at Dexterity yards per tick.",
                 interacts: "Reflexive: it never refreshes DV, doesn't count as a true action, and is available even on ticks she couldn't otherwise act. A combatant can either Move or Dash on a given tick, never both.",
-                source: book_unquoted(145),
+                source: book_range_unquoted(141, 145),
             },
             Topic::ActionFlurry => Entry {
                 term: "Flurry (Varies/Varies)",
@@ -642,6 +782,154 @@ impl Topic {
                 interacts: "Use this for house rules, Charms with bespoke timing, or anything else the catalog doesn't name directly.",
                 source: Source::AppConvention,
             },
+
+            Topic::BattleModeSelect => Entry {
+                term: "Battle mode",
+                what: "Which of the three tick-driven combat systems this battle runs: personal, mass, or social combat.",
+                interacts: "All three share the same Speed/DV/refresh machinery; mass and social combat only change the scale of a tick and which actions are on the menu. Fixed before Start Battle, exactly like Join Battle successes \u{2014} it cannot change once actions are already on the wheel.",
+                source: book_range_unquoted(158, 169),
+            },
+            Topic::LongTick => Entry {
+                term: "Long tick",
+                what: "Mass and social combat's unit of time: roughly one minute, not one second.",
+                interacts: "Everything about the tick loop \u{2014} Speed, DV penalties, refresh timing \u{2014} works exactly the same way, just at this coarser scale. A character \u{201c}substitutes long ticks for standard ticks\u{201d} and may still use any reflexive Charm at any point in one.",
+                source: book_range_unquoted(158, 166),
+            },
+
+            Topic::ActionCoordinateAttacks => Entry {
+                term: "Coordinate Attacks (5/varies)",
+                what: "Organizes a group attack: on success it opens a \u{201c}window of opportunity\u{201d} for everyone coordinated.",
+                interacts: "Rolled as Charisma + War, difficulty equal to half the number of participants (round down). The DV choice is the same one Miscellaneous Action offers: forfeit all DV for full concentration, or keep one eye on the battle for -1 DV and -2 dice on the roll.",
+                source: book(144, "The difficulty is half the number of participants in the group, rounded down."),
+            },
+            Topic::ActionReadyWeapons => Entry {
+                term: "Draw / Ready Weapons (5/-1)",
+                what: "Draws or readies as many weapons as the character has hands.",
+                interacts: "Ready is normally automatic and diceless, sized to as many weapons as the character has hands and weapons available — the book gives it this exact -1 DV entry directly. A natural weapon like a punch or kick never needs readying; only the most extreme conditions (numb, frostbitten hands) call for a Dexterity + combat Ability roll at difficulty 1 instead.",
+                source: book(144, "A character may use a miscellaneous action to unsheathe, draw or otherwise ready as many weapons as she has hands and weapons available."),
+            },
+            Topic::ActionRiseFromProne => Entry {
+                term: "Rise From Prone (5/-1)",
+                what: "Stands back up from prone.",
+                interacts: "Being prone otherwise imposes a flat -1 external penalty on all non-reflexive physical actions. Rising is normally automatic; under extreme conditions it becomes a Dexterity + Athletics roll at difficulty 1.",
+                source: book_unquoted(144),
+            },
+            Topic::ActionJump => Entry {
+                term: "Jump (5/-1)",
+                what: "A significant leap, distinct from ordinary movement.",
+                interacts: "Only one jump is allowed per flurry or per action; a character may still Move normally on the same tick. A short jump that doesn't clear an obstacle worth vaulting doesn't need declaring at all \u{2014} it's just part of a normal Move.",
+                source: book_unquoted(144),
+            },
+
+            Topic::JoinWar => Entry {
+                term: "Join War",
+                what: "Mass combat's version of Join Battle: schedules a unit's or solo hero's First Action.",
+                interacts: "The dice pool is (Wits + War) minus the unit's Magnitude; a solo unit or an independently-acting hero instead rolls plain Wits + Awareness, same as personal combat. Either way the app only needs the resulting successes \u{2014} scheduling is the identical (reaction count \u{2212} successes) formula Join Battle uses.",
+                source: book_unquoted(163),
+            },
+            Topic::ActionChangeFormation => Entry {
+                term: "Change Formation (5/-1)",
+                what: "Shifts a unit into a different formation: unordered, skirmish, relaxed, or close.",
+                interacts: "Formation sets how fast a unit moves per long tick, from solo/skirmish at full speed down to unordered at less than a third \u{2014} tracked here only as a note on the combatant, since this app doesn't model position or movement.",
+                source: book_range_unquoted(163, 165),
+            },
+            Topic::ActionDisengage => Entry {
+                term: "Disengage (0/-0)",
+                what: "Reflexively withdraws a unit from combat.",
+                interacts: "Speed 0 and reflexive, like Move in personal combat \u{2014} it never costs a place in the tick cycle and never refreshes DV.",
+                source: book_unquoted(165),
+            },
+            Topic::ActionTurn => Entry {
+                term: "Turn, over 90\u{b0} (3/-1)",
+                what: "Reorients a unit by more than a quarter turn.",
+                interacts: "A turn of 90\u{b0} or less doesn't require this action at all; only the larger reorientation costs a tick's worth of time.",
+                source: book_unquoted(165),
+            },
+            Topic::ActionSplitUnit => Entry {
+                term: "Split Unit (3/-1)",
+                what: "Divides one unit into two smaller ones.",
+                interacts: "Both resulting units act independently afterward, each with its own place in the tick cycle from that point on.",
+                source: book_unquoted(165),
+            },
+            Topic::ActionExpelSpecialCharacter => Entry {
+                term: "Expel a Special Character (0/-0)",
+                what: "Reflexively ejects one special character from the unit so she can act on her own.",
+                interacts: "Speed 0 and reflexive \u{2014} the character cannot resist. Freed this way, she may in turn challenge her former commander to a duel instead of simply leaving.",
+                source: book_unquoted(165),
+            },
+            Topic::ActionMergeUnits => Entry {
+                term: "Merge Units (3/-1)",
+                what: "Combines two units into one.",
+                interacts: "The merged unit takes on a single place in the tick cycle going forward.",
+                source: book_unquoted(165),
+            },
+            Topic::ActionSignalUnits => Entry {
+                term: "Signal Units (3/-0)",
+                what: "Relays an order to other units without breaking formation.",
+                interacts: "No DV penalty \u{2014} signaling doesn't compromise the unit's guard the way most Speed 3 actions do.",
+                source: book_unquoted(165),
+            },
+            Topic::ActionRally => Entry {
+                term: "Rally (4/-1)",
+                what: "A commander steps out to address the troops, with one of three effects: promoting a relay, recovering Magnitude lost to a failed morale check, or restoring Endurance.",
+                interacts: "Each effect has its own Charisma + War/Performance roll; this app doesn't model Valor, morale, or Endurance, so Rally is tracked here only as a scheduled action, Speed 4 at -1 DV.",
+                source: book_unquoted(165),
+            },
+
+            Topic::JoinDebate => Entry {
+                term: "Join Debate",
+                what: "Social combat's version of Join Battle: schedules a debater's First Action.",
+                interacts: "Rolled as plain Wits + Awareness, identical to personal combat's Join Battle \u{2014} only the scale of the resulting ticks (long ticks, roughly a minute each) differs.",
+                source: book(169, "The Join Debate action replaces Join Battle, with the roll using (Wits + Awareness) being made as normal. Time progresses forward in long ticks lasting one minute each, the same time frame used in mass combat."),
+            },
+            Topic::SocialMonologue => Entry {
+                term: "Monologue / Study (3/-2)",
+                what: "Social combat's version of Aim: builds toward a stronger social attack, either as an ongoing speech (Monologue) or aimed at one specific target (Study).",
+                interacts: "Carries a steeper DV penalty than physical Aim (-2, not -1) because a monologue leaves the speaker more exposed than a combat feint does.",
+                source: book_unquoted(171),
+            },
+            Topic::SocialAttack => Entry {
+                term: "Social Attack (by Ability/-2)",
+                what: "A push against someone's Mental Defense Value, using Presence, Investigation, or Performance.",
+                interacts: "Speed and Rate are set by the Ability used: Presence is Speed 4, Rate 2; Investigation is Speed 5, Rate 2; Performance is Speed 6, Rate 1. Presence and Investigation each reach a single target (a person or one organized social unit); Performance reaches everyone who can perceive it, with no way to exclude anyone.",
+                source: book_range_unquoted(171, 172),
+            },
+            Topic::SocialDash => Entry {
+                term: "Dash (3/-3)",
+                what: "A social combat sprint away from the exchange \u{2014} disengaging attention rather than covering ground.",
+                interacts: "Carries a steeper DV penalty than physical Dash (-3, not -2), and like its physical counterpart cannot be parried at all without a stunt or magic.",
+                source: book_unquoted(171),
+            },
+            Topic::SocialInactive => Entry {
+                term: "Inactive (3/Special)",
+                what: "Not participating in the exchange at all \u{2014} distracted, unconscious, or otherwise unable to engage socially.",
+                interacts: "Unlike physical Inactive (DV 0, wide open), the book runs this the other way: being unreachable for conversation makes a character socially invulnerable rather than defenseless, since there's no way to argue with someone who can't hear you. The Speed/refresh shape otherwise follows the standard Inactive action.",
+                source: book(171, "while unconsciousness makes characters physically vulnerable, such a state generally serves to make them socially invulnerable by making it impossible to communicate with them"),
+            },
+            Topic::SocialMiscellaneous => Entry {
+                term: "Miscellaneous Action (5/-2)",
+                what: "Anything social combat's other named actions don't cover.",
+                interacts: "Unlike physical combat, fully concentrating on a miscellaneous action here doesn't zero MDV \u{2014} it grants social invulnerability, as if inactive. The -2 default (rather than physical combat's -1) is one eye on the exchange; the app models only that choice, not full concentration's different effect.",
+                source: book_unquoted(171),
+            },
+            Topic::SocialFlurry => Entry {
+                term: "Flurry (varies/varies)",
+                what: "Several social actions declared together on one tick.",
+                interacts: "The default here (Speed 4, DV -4) models two Presence attacks flurried together \u{2014} an app convention for the common case, not a fixed book value; Speed is still the highest Speed among the flurried actions and each still applies its own DV penalty, cumulatively.",
+                source: Source::AppConvention,
+            },
+            Topic::ActionJoinDebateInProgress => Entry {
+                term: "Join Debate, in progress (varies/-0)",
+                what: "How a debater joins a social exchange that has already started.",
+                interacts: "Same underlying formula as Join Battle in progress \u{2014} (frozen reaction count \u{2212} Wits + Awareness successes), clamped to 0\u{2013}6 \u{2014} just measured in long ticks. The book nests Join Debate under the Speed-5 Miscellaneous Action heading rather than restating the formula, so the app's input defaults to 5, distinct from personal combat's rolled default of 0.",
+                source: book_unquoted(171),
+            },
+            Topic::ActionReadMotivation => Entry {
+                term: "Read Motivation (5/varies)",
+                what: "Studies someone across five long ticks to learn what drives them.",
+                interacts: "The book never states a DV penalty for this action; the app defaults it to 0 rather than inventing one the rules don't specify.",
+                source: book_unquoted(171),
+            },
         }
     }
 }
@@ -649,6 +937,7 @@ impl Topic {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use exalted_battle_wheel::battle::catalog;
 
     const ALL: &[Topic] = &[
         Topic::AppOverview,
@@ -659,6 +948,7 @@ mod tests {
         Topic::AdvanceTick,
         Topic::TeachingMode,
         Topic::Theme,
+        Topic::Reset,
         Topic::ReactionCount,
         Topic::Roster,
         Topic::CombatantName,
@@ -674,6 +964,10 @@ mod tests {
         Topic::TickSlot,
         Topic::NowMarker,
         Topic::BeyondHorizon,
+        Topic::DvPenaltyRing,
+        Topic::DvPenaltyFloor,
+        Topic::SectorCountdown,
+        Topic::MarkerGutter,
         Topic::Markers,
         Topic::MarkerDuration,
         Topic::Queue,
@@ -724,6 +1018,30 @@ mod tests {
         Topic::ActionClinch,
         Topic::ActionJoinBattleInProgress,
         Topic::ActionCustom,
+        Topic::BattleModeSelect,
+        Topic::LongTick,
+        Topic::ActionCoordinateAttacks,
+        Topic::ActionReadyWeapons,
+        Topic::ActionRiseFromProne,
+        Topic::ActionJump,
+        Topic::JoinWar,
+        Topic::ActionChangeFormation,
+        Topic::ActionDisengage,
+        Topic::ActionTurn,
+        Topic::ActionSplitUnit,
+        Topic::ActionExpelSpecialCharacter,
+        Topic::ActionMergeUnits,
+        Topic::ActionSignalUnits,
+        Topic::ActionRally,
+        Topic::JoinDebate,
+        Topic::SocialMonologue,
+        Topic::SocialAttack,
+        Topic::SocialDash,
+        Topic::SocialInactive,
+        Topic::SocialMiscellaneous,
+        Topic::SocialFlurry,
+        Topic::ActionJoinDebateInProgress,
+        Topic::ActionReadMotivation,
     ];
 
     #[test]
@@ -753,24 +1071,19 @@ mod tests {
         }
     }
 
+    /// Closes the half of the guarantee `topics_for`'s exhaustive match can't give at compile
+    /// time: that every action actually wired into a mode's real catalog resolves to a topic.
+    /// Walks `catalog(mode)` rather than a hand-maintained list, so it can't be satisfied by a
+    /// stale or over-broad `ModeTopics` entry.
     #[test]
-    fn every_action_kind_has_a_topic() {
-        for kind in [
-            ActionKind::Aim,
-            ActionKind::Attack,
-            ActionKind::Dash,
-            ActionKind::Guard,
-            ActionKind::Inactive,
-            ActionKind::Miscellaneous,
-            ActionKind::Move,
-            ActionKind::Flurry,
-            ActionKind::ActivateCharm,
-            ActionKind::Clinch,
-            ActionKind::JoinBattleInProgress,
-            ActionKind::Custom,
-        ] {
-            // Panics via the exhaustive match in `action_topic` if a variant is ever unhandled.
-            let _ = action_topic(kind).entry();
+    fn every_catalog_action_has_a_topic() {
+        for mode in BattleMode::ALL {
+            for template in catalog(mode) {
+                let topic = action_topic(mode, template.kind)
+                    .unwrap_or_else(|| panic!("{:?} is in the {mode:?} catalog with no glossary topic", template.kind));
+                let entry = topic.entry();
+                assert!(!entry.what.is_empty(), "{topic:?} has an empty `what`");
+            }
         }
     }
 

@@ -1,8 +1,9 @@
-use crate::battle::action::{ActionKind, DeclaredAction, DeclaredEffect};
-use crate::battle::combatant::{Combatant, CombatantState, Commitment, DvState, JoinBattleResult};
+use crate::battle::action::{template, ActionKind, DeclaredAction, DeclaredEffect};
+use crate::battle::combatant::{Combatant, CombatantState, Commitment, DvState, JoinBattleResult, Side};
 use crate::battle::error::BattleError;
 use crate::battle::event::BattleEvent;
 use crate::battle::ids::{CombatantId, MarkerId, Tick};
+use crate::battle::mode::BattleMode;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Phase {
@@ -34,6 +35,7 @@ impl Marker {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Battle {
+    pub mode: BattleMode,
     pub phase: Phase,
     pub current_tick: Tick,
     pub combatants: Vec<Combatant>,
@@ -42,7 +44,7 @@ pub struct Battle {
 
 impl Battle {
     pub fn genesis() -> Self {
-        Battle { phase: Phase::Setup, current_tick: 0, combatants: Vec::new(), markers: Vec::new() }
+        Battle { mode: BattleMode::default(), phase: Phase::Setup, current_tick: 0, combatants: Vec::new(), markers: Vec::new() }
     }
 
     pub fn find(&self, id: CombatantId) -> Option<&Combatant> {
@@ -93,6 +95,26 @@ impl Battle {
         self.markers.iter().filter(move |marker| marker.at_tick > now)
     }
 
+    /// Every faction currently on the roster, case-insensitively deduped (keeping the casing it
+    /// was first added under) and sorted case-insensitively — feeds the roster's Side combobox.
+    pub fn sides(&self) -> Vec<String> {
+        let mut sides: Vec<String> = Vec::new();
+        for combatant in &self.combatants {
+            let side = &combatant.side.0;
+            if !sides.iter().any(|existing: &String| existing.eq_ignore_ascii_case(side)) {
+                sides.push(side.clone());
+            }
+        }
+        sides.sort_by_key(|side| side.to_lowercase());
+        sides
+    }
+
+    /// The exact spelling a faction is already recorded under, if `typed` names it ignoring case
+    /// — so typing "tepet" joins "Tepet" instead of starting a second faction.
+    pub fn canonical_side(&self, typed: &str) -> Option<Side> {
+        self.combatants.iter().map(|c| &c.side).find(|side| side.0.eq_ignore_ascii_case(typed)).cloned()
+    }
+
     fn add_marker(&mut self, id: MarkerId, label: String, source: CombatantId, at_tick: Tick, ticks: u32) -> Result<(), BattleError> {
         if ticks == 0 {
             return Err(BattleError::MarkerDurationZero(id));
@@ -117,6 +139,14 @@ fn spawn_effects(battle: &mut Battle, source: CombatantId, current_tick: Tick, e
 
 pub fn apply(battle: &mut Battle, event: &BattleEvent) -> Result<(), BattleError> {
     match event {
+        BattleEvent::SetMode { mode } => {
+            if !matches!(battle.phase, Phase::Setup) {
+                return Err(BattleError::AlreadyStarted);
+            }
+            battle.mode = *mode;
+            Ok(())
+        }
+
         BattleEvent::AddCombatant { id, name, side, join_battle } => {
             battle.combatants.push(Combatant {
                 id: *id,
@@ -174,6 +204,9 @@ pub fn apply(battle: &mut Battle, event: &BattleEvent) -> Result<(), BattleError
             let combatant = battle.find_mut(*actor)?;
             if matches!(combatant.state, CombatantState::InSequence(_)) {
                 return Err(BattleError::SequenceAlreadyInProgress(*actor));
+            }
+            if sequence.steps.is_empty() {
+                return Err(BattleError::EmptySequence(*actor));
             }
             if combatant.next_action_tick > current_tick {
                 return Err(BattleError::NotThisCombatantsTick {
@@ -304,6 +337,7 @@ fn apply_declare_action(battle: &mut Battle, actor: CombatantId, action: &Declar
     if !matches!(battle.phase, Phase::Running { .. }) {
         return Err(BattleError::NotYetStarted);
     }
+    template(battle.mode, action.kind)?;
     let current_tick = battle.current_tick;
     let combatant = battle.find_mut(actor)?;
 
@@ -353,11 +387,14 @@ fn apply_declare_action(battle: &mut Battle, actor: CombatantId, action: &Declar
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::battle::action::{template, Declaration};
-    use crate::battle::combatant::Side;
+    use crate::battle::action::{template, ActionTemplate, Declaration};
     use crate::battle::event::InterruptReason;
     use crate::battle::ids::CombatantId;
     use crate::battle::sequence::Sequence;
+
+    fn personal(kind: ActionKind) -> &'static ActionTemplate {
+        template(BattleMode::Personal, kind).expect("personal catalog")
+    }
 
     fn add(battle: &mut Battle, id: u32, successes: u32) -> CombatantId {
         let cid = CombatantId(id);
@@ -368,6 +405,21 @@ mod tests {
                 name: format!("C{id}"),
                 side: Side("A".to_string()),
                 join_battle: JoinBattleResult::Successes(successes),
+            },
+        )
+        .unwrap();
+        cid
+    }
+
+    fn add_side(battle: &mut Battle, id: u32, side: &str) -> CombatantId {
+        let cid = CombatantId(id);
+        apply(
+            battle,
+            &BattleEvent::AddCombatant {
+                id: cid,
+                name: format!("C{id}"),
+                side: Side(side.to_string()),
+                join_battle: JoinBattleResult::Successes(0),
             },
         )
         .unwrap();
@@ -412,7 +464,7 @@ mod tests {
         let cid = add(&mut battle, 1, 5);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
 
-        let action = template(ActionKind::Dash).declare(Declaration::default());
+        let action = personal(ActionKind::Dash).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action }).unwrap();
         assert_eq!(battle.find(cid).unwrap().next_action_tick, 3);
         assert_eq!(battle.find(cid).unwrap().dv.penalty, -2);
@@ -424,14 +476,14 @@ mod tests {
         let mut battle = Battle::genesis();
         let cid = add(&mut battle, 1, 5);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
-        let guard = template(ActionKind::Guard).declare(Declaration::default());
+        let guard = personal(ActionKind::Guard).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
         for _ in 0..3 {
             apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
         }
         assert_eq!(battle.current_tick, 3);
 
-        let action = template(ActionKind::Miscellaneous).declare(Declaration { dv_penalty: Some(-1), ..Default::default() });
+        let action = personal(ActionKind::Miscellaneous).declare(Declaration { dv_penalty: Some(-1), ..Default::default() });
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action }).unwrap();
         assert_eq!(battle.find(cid).unwrap().next_action_tick, 8);
         assert_eq!(battle.find(cid).unwrap().dv.refreshes_at, Some(8));
@@ -443,12 +495,12 @@ mod tests {
         let cid = add(&mut battle, 1, 0);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
 
-        let guard = template(ActionKind::Guard).declare(Declaration::default());
+        let guard = personal(ActionKind::Guard).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
         assert_eq!(battle.find(cid).unwrap().state, CombatantState::Guarding);
         let next_action_tick_before = battle.find(cid).unwrap().next_action_tick;
 
-        let mv = template(ActionKind::Move).declare(Declaration::default());
+        let mv = personal(ActionKind::Move).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: mv }).unwrap();
         assert_eq!(battle.find(cid).unwrap().next_action_tick, next_action_tick_before);
         assert_eq!(battle.find(cid).unwrap().state, CombatantState::Guarding);
@@ -460,13 +512,13 @@ mod tests {
         let cid = add(&mut battle, 1, 0);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
 
-        let guard = template(ActionKind::Guard).declare(Declaration::default());
+        let guard = personal(ActionKind::Guard).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
         assert_eq!(battle.find(cid).unwrap().next_action_tick, 3);
 
         // Abort on tick 1, before Guard's Speed 3 has elapsed.
         apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
-        let dash = template(ActionKind::Dash).declare(Declaration::default());
+        let dash = personal(ActionKind::Dash).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: dash }).unwrap();
 
         let combatant = battle.find(cid).unwrap();
@@ -481,13 +533,13 @@ mod tests {
         let cid = add(&mut battle, 1, 0);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
 
-        let aim = template(ActionKind::Aim).declare(Declaration::default());
+        let aim = personal(ActionKind::Aim).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: aim }).unwrap();
         assert_eq!(battle.find(cid).unwrap().dv.penalty, -1);
 
         // Abort on tick 1, before Aim's Speed 3 has elapsed.
         apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
-        let inactive = template(ActionKind::Inactive).declare(Declaration::default());
+        let inactive = personal(ActionKind::Inactive).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: inactive }).unwrap();
 
         let combatant = battle.find(cid).unwrap();
@@ -502,7 +554,7 @@ mod tests {
         let cid = add(&mut battle, 2, 0);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
 
-        let dash = template(ActionKind::Dash).declare(Declaration::default());
+        let dash = personal(ActionKind::Dash).declare(Declaration::default());
         let err = apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: dash }).unwrap_err();
         assert_eq!(err, BattleError::NotThisCombatantsTick { actor: cid, next: 5, current: 0 });
     }
@@ -516,7 +568,7 @@ mod tests {
         let err = apply(&mut battle, &BattleEvent::AdvanceTick).unwrap_err();
         assert_eq!(err, BattleError::CombatantsPendingAction(vec![cid]));
 
-        let guard = template(ActionKind::Guard).declare(Declaration::default());
+        let guard = personal(ActionKind::Guard).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
         apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
         assert_eq!(battle.current_tick, 1);
@@ -556,6 +608,20 @@ mod tests {
     }
 
     #[test]
+    fn starting_a_sequence_with_no_steps_is_rejected() {
+        // Guards `current_step()`'s unchecked `steps[0]` — reachable in practice only via a
+        // hand-edited or otherwise corrupted saved battle, since every built-in sequence has at
+        // least one step.
+        let mut battle = Battle::genesis();
+        let cid = add(&mut battle, 1, 5);
+        apply(&mut battle, &BattleEvent::StartBattle).unwrap();
+
+        let empty = Sequence::new("Empty", Vec::new());
+        let err = apply(&mut battle, &BattleEvent::StartSequence { actor: cid, sequence: empty }).unwrap_err();
+        assert_eq!(err, BattleError::EmptySequence(cid));
+    }
+
+    #[test]
     fn interrupting_a_sequence_drops_it_and_rejoins_from_frozen_reaction_count() {
         let mut battle = Battle::genesis();
         let cid = add(&mut battle, 1, 5);
@@ -585,7 +651,7 @@ mod tests {
         let mut battle = Battle::genesis();
         let cid = add(&mut battle, 1, 5);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
-        let guard = template(ActionKind::Guard).declare(Declaration::default());
+        let guard = personal(ActionKind::Guard).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
         for _ in 0..3 {
             apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
@@ -652,7 +718,7 @@ mod tests {
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
 
         let effect = DeclaredEffect { id: MarkerId(0), label: "Butterflies".to_string(), delay: 1, ticks: 3 };
-        let action = crate::battle::action::DeclaredAction { effects: vec![effect], ..template(ActionKind::Attack).declare(Declaration::default()) };
+        let action = crate::battle::action::DeclaredAction { effects: vec![effect], ..personal(ActionKind::Attack).declare(Declaration::default()) };
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action }).unwrap();
 
         let marker = battle.markers.iter().find(|m| m.id == MarkerId(0)).unwrap();
@@ -668,7 +734,7 @@ mod tests {
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
 
         let effect = DeclaredEffect { id: MarkerId(0), label: "Mark".to_string(), delay: 0, ticks: 1 };
-        let action = crate::battle::action::DeclaredAction { effects: vec![effect], ..template(ActionKind::Move).declare(Declaration::default()) };
+        let action = crate::battle::action::DeclaredAction { effects: vec![effect], ..personal(ActionKind::Move).declare(Declaration::default()) };
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action }).unwrap();
 
         assert!(battle.markers.iter().any(|m| m.id == MarkerId(0)));
@@ -733,7 +799,7 @@ mod tests {
         let mut battle = Battle::genesis();
         let cid = add(&mut battle, 1, 5);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
-        let guard = template(ActionKind::Guard).declare(Declaration::default());
+        let guard = personal(ActionKind::Guard).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
         apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
         assert_eq!(battle.current_tick, 1);
@@ -841,7 +907,7 @@ mod tests {
         .unwrap();
         assert_eq!(battle.active_markers().count(), 1);
 
-        let guard = template(ActionKind::Guard).declare(Declaration::default());
+        let guard = personal(ActionKind::Guard).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
         for _ in 0..3 {
             apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
@@ -850,5 +916,50 @@ mod tests {
         assert_eq!(battle.active_markers().count(), 0);
         // Expired markers stay in the log for the event log to describe, just not "active".
         assert_eq!(battle.markers.len(), 1);
+    }
+
+    #[test]
+    fn sides_is_empty_before_anyone_joins() {
+        assert_eq!(Battle::genesis().sides(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn sides_are_sorted_case_insensitively() {
+        let mut battle = Battle::genesis();
+        add_side(&mut battle, 1, "Tepet");
+        add_side(&mut battle, 2, "dune people");
+        add_side(&mut battle, 3, "Anathema");
+        assert_eq!(battle.sides(), vec!["Anathema", "dune people", "Tepet"]);
+    }
+
+    #[test]
+    fn sides_dedupe_ignoring_case_keeping_the_first_spelling() {
+        let mut battle = Battle::genesis();
+        add_side(&mut battle, 1, "Tepet");
+        add_side(&mut battle, 2, "tepet");
+        assert_eq!(battle.sides(), vec!["Tepet"]);
+    }
+
+    #[test]
+    fn canonical_side_matches_ignoring_case() {
+        let mut battle = Battle::genesis();
+        add_side(&mut battle, 1, "Tepet");
+        assert_eq!(battle.canonical_side("TEPET"), Some(Side("Tepet".to_string())));
+    }
+
+    #[test]
+    fn canonical_side_is_none_for_a_new_faction() {
+        let mut battle = Battle::genesis();
+        add_side(&mut battle, 1, "Tepet");
+        assert_eq!(battle.canonical_side("Mnemon"), None);
+    }
+
+    #[test]
+    fn sides_drops_a_faction_once_its_last_combatant_leaves() {
+        let mut battle = Battle::genesis();
+        let tepet = add_side(&mut battle, 1, "Tepet");
+        add_side(&mut battle, 2, "Dune People");
+        apply(&mut battle, &BattleEvent::RemoveCombatant { id: tepet }).unwrap();
+        assert_eq!(battle.sides(), vec!["Dune People"]);
     }
 }

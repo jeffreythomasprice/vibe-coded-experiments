@@ -1,42 +1,42 @@
 use crate::ui::glossary::Topic;
-use crate::ui::{DetailTip, MarkerForm, Modal, Tip};
+use crate::ui::{ticks, DetailTip, MarkerForm, Modal, Tip};
 use exalted_battle_wheel::battle::{
-    queue, Battle, BattleEvent, BattleLog, Combatant, CombatantId, CombatantState, DvState, Marker, MarkerId, QueueItem,
-    Tick,
+    queue, Battle, BattleEvent, BattleLog, BattleMode, Combatant, CombatantId, CombatantState, DvState, Marker,
+    MarkerId, QueueItem, Tick,
 };
 use leptos::prelude::*;
 
-pub fn span_label(marker: &Marker) -> String {
-    if marker.ticks <= 1 { format!("tick {}", marker.at_tick) } else { format!("ticks {}\u{2013}{}", marker.at_tick, marker.last_tick()) }
+pub fn span_label(mode: BattleMode, marker: &Marker) -> String {
+    ticks::span(mode, marker.at_tick, marker.ticks)
 }
 
 /// The tick-span half of a marker's queue row: what's shown depends on whether its span has
 /// started yet. `span_label` alone can't say this — it only knows the span, not `now`.
-fn marker_queue_span(marker: &Marker, now: Tick) -> String {
+fn marker_queue_span(mode: BattleMode, marker: &Marker, now: Tick) -> String {
     if marker.at_tick > now {
-        let noun = if marker.ticks == 1 { "tick" } else { "ticks" };
-        format!("starts tick {}, for {} {noun}", marker.at_tick, marker.ticks)
+        format!("starts {}, for {}", ticks::at(mode, marker.at_tick), ticks::count(mode, marker.ticks))
     } else {
-        span_label(marker)
+        span_label(mode, marker)
     }
 }
 
 /// The combatant half of a queue row. Ready-now takes priority over everything else — an
 /// in-sequence combatant who is also due still reads as ready, matching the action panel's "Up
 /// now" section, which shows sequence controls for her rather than a queue-style projection.
-fn combatant_row_text(combatant: &Combatant, now: Tick) -> String {
+fn combatant_row_text(mode: BattleMode, combatant: &Combatant, now: Tick) -> String {
     if combatant.next_action_tick <= now {
         return format!("{} \u{2014} ready now", combatant.name);
     }
-    let until = combatant.next_action_tick - now;
+    let until = ticks::count(mode, combatant.next_action_tick - now);
+    let next = ticks::at(mode, combatant.next_action_tick);
     if let CombatantState::InSequence(sequence) = &combatant.state {
-        return format!("{} will do {} on tick {} (in {until})", combatant.name, sequence.current_step().label, combatant.next_action_tick);
+        return format!("{} will do {} on {next} (in {until})", combatant.name, sequence.current_step().label);
     }
     match &combatant.commitment {
         Some(commitment) => {
-            format!("{} \u{2014} {} resolving, ready tick {} (in {until})", combatant.name, commitment.label, combatant.next_action_tick)
+            format!("{} \u{2014} {} resolving, ready {next} (in {until})", combatant.name, commitment.label)
         }
-        None => format!("{} \u{2014} ready to act on tick {} (in {until})", combatant.name, combatant.next_action_tick),
+        None => format!("{} \u{2014} ready to act on {next} (in {until})", combatant.name),
     }
 }
 
@@ -105,7 +105,7 @@ pub fn QueuePanel() -> impl IntoView {
 fn CombatantQueueRow(id: CombatantId, battle: Memo<Battle>, editing: RwSignal<Option<Editing>>) -> impl IntoView {
     let text = move || {
         let battle = battle.read();
-        battle.find(id).map(|c| combatant_row_text(c, battle.current_tick)).unwrap_or_default()
+        battle.find(id).map(|c| combatant_row_text(battle.mode, c, battle.current_tick)).unwrap_or_default()
     };
     let ready = move || {
         let battle = battle.read();
@@ -114,7 +114,7 @@ fn CombatantQueueRow(id: CombatantId, battle: Memo<Battle>, editing: RwSignal<Op
     let dv_line = move || {
         let battle = battle.read();
         battle.find(id).filter(|c| c.dv.penalty != 0).map(|c| match c.dv.refreshes_at {
-            Some(refresh) => format!("DV {}, refreshes tick {refresh}", c.dv.penalty),
+            Some(refresh) => format!("DV {}, refreshes {}", c.dv.penalty, ticks::at(battle.mode, refresh)),
             None => format!("DV {}", c.dv.penalty),
         })
     };
@@ -135,7 +135,7 @@ fn MarkerQueueRow(id: MarkerId, battle: Memo<Battle>, editing: RwSignal<Option<E
         let battle = battle.read();
         battle.markers.iter().find(|m| m.id == id).map(|marker| {
             let source = battle.find(marker.source).map(|c| c.name.clone()).unwrap_or_else(|| format!("#{}", marker.source.0));
-            format!("{} \u{2014} {}, from {source}", marker.label, marker_queue_span(marker, battle.current_tick))
+            format!("{} \u{2014} {}, from {source}", marker.label, marker_queue_span(battle.mode, marker, battle.current_tick))
         }).unwrap_or_default()
     };
     let pending = move || {
@@ -211,9 +211,23 @@ fn CombatantEditor(
     let note = RwSignal::new(String::new());
 
     let cancel_action = move |_| {
-        next_tick.set(current_tick.to_string());
-        state_kind.set(StateKind::Normal);
-        clear_commitment.set(true);
+        let dv = DvState {
+            penalty: dv_penalty.get().trim().parse().unwrap_or(0),
+            refreshes_at: if no_refresh.get() { None } else { dv_refreshes.get().trim().parse().ok() },
+        };
+        log.update(|log| {
+            if let Err(error) = log.push(BattleEvent::ReviseCombatant {
+                actor: actor_id,
+                next_action_tick: current_tick,
+                state: CombatantState::Normal,
+                dv,
+                commitment: None,
+                note: note.get(),
+            }) {
+                tracing::error!(%error, "could not revise combatant");
+            }
+        });
+        on_close();
     };
 
     let apply = move |_| {
@@ -434,43 +448,52 @@ mod tests {
     fn combatant_row_reports_ready_now_when_due() {
         let mut c = combatant(CombatantState::Normal, None);
         c.next_action_tick = 5;
-        assert_eq!(combatant_row_text(&c, 5), "Rin \u{2014} ready now");
+        assert_eq!(combatant_row_text(BattleMode::Personal, &c, 5), "Rin \u{2014} ready now");
     }
 
     #[test]
     fn combatant_row_reports_the_sequence_step_when_in_sequence() {
         let c = combatant(CombatantState::InSequence(Sequence::shape_terrestrial()), None);
-        assert_eq!(combatant_row_text(&c, 3), "Rin will do Shape Terrestrial Circle Sorcery (1/1) on tick 12 (in 9)");
+        assert_eq!(
+            combatant_row_text(BattleMode::Personal, &c, 3),
+            "Rin will do Shape Terrestrial Circle Sorcery (1/1) on tick 12 (in 9 ticks)"
+        );
     }
 
     #[test]
     fn combatant_row_reports_a_resolving_commitment() {
         let commitment = Commitment { label: "Attack".to_string(), speed: 5, declared_at: 7 };
         let c = combatant(CombatantState::Normal, Some(commitment));
-        assert_eq!(combatant_row_text(&c, 7), "Rin \u{2014} Attack resolving, ready tick 12 (in 5)");
+        assert_eq!(combatant_row_text(BattleMode::Personal, &c, 7), "Rin \u{2014} Attack resolving, ready tick 12 (in 5 ticks)");
     }
 
     #[test]
     fn combatant_row_falls_back_to_a_plain_ready_message() {
         let c = combatant(CombatantState::Normal, None);
-        assert_eq!(combatant_row_text(&c, 7), "Rin \u{2014} ready to act on tick 12 (in 5)");
+        assert_eq!(combatant_row_text(BattleMode::Personal, &c, 7), "Rin \u{2014} ready to act on tick 12 (in 5 ticks)");
+    }
+
+    #[test]
+    fn combatant_row_uses_long_tick_vocabulary_in_mass_combat() {
+        let c = combatant(CombatantState::Normal, None);
+        assert_eq!(combatant_row_text(BattleMode::Mass, &c, 7), "Rin \u{2014} ready to act on long tick 12 (in 5 long ticks)");
     }
 
     #[test]
     fn marker_span_reports_pending_before_it_starts() {
         let marker = Marker { id: MarkerId(0), label: "Ambush".to_string(), source: CombatantId(0), at_tick: 14, ticks: 3 };
-        assert_eq!(marker_queue_span(&marker, 10), "starts tick 14, for 3 ticks");
+        assert_eq!(marker_queue_span(BattleMode::Personal, &marker, 10), "starts tick 14, for 3 ticks");
     }
 
     #[test]
     fn marker_span_reports_the_active_span_once_started() {
         let marker = Marker { id: MarkerId(0), label: "Ambush".to_string(), source: CombatantId(0), at_tick: 8, ticks: 3 };
-        assert_eq!(marker_queue_span(&marker, 9), "ticks 8\u{2013}10");
+        assert_eq!(marker_queue_span(BattleMode::Personal, &marker, 9), "ticks 8\u{2013}10");
     }
 
     #[test]
     fn span_label_covers_a_single_tick() {
         let marker = Marker { id: MarkerId(0), label: "Window".to_string(), source: CombatantId(0), at_tick: 5, ticks: 1 };
-        assert_eq!(span_label(&marker), "tick 5");
+        assert_eq!(span_label(BattleMode::Personal, &marker), "tick 5");
     }
 }

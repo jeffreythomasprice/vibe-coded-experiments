@@ -65,6 +65,12 @@ fn hide_topic(topic: Topic) {
     });
 }
 
+/// Clears whatever tip is showing, unconditionally. For a widget that opens a popup of its own
+/// (e.g. a combobox's suggestion list), which the tip layer would otherwise sit on top of.
+pub fn dismiss() {
+    expect_context::<ActiveTip>().set(None);
+}
+
 fn element_anchor(target: Option<web_sys::EventTarget>) -> (f64, f64) {
     target
         .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
@@ -103,28 +109,35 @@ pub fn on_focus_out(topic: Topic) -> impl Fn(FocusEvent) + Clone {
 
 /// Free-text counterparts of `on_pointer_*`/`on_focus_*`, for SVG nodes that need `TextTip`'s
 /// free-form, non-teaching-gated content but — like the `Topic` variants above — cannot host a
-/// wrapping `<span>`.
-pub fn on_pointer_enter_text(text: impl Into<String>) -> impl Fn(PointerEvent) + Clone {
+/// wrapping `<span>`. Take a `Signal` rather than a plain `String` so a target whose tip text
+/// depends on live state (e.g. a wheel token's occupant list) reads it fresh on every event
+/// instead of baking in whatever it was when the handler was built.
+///
+/// `hide`'s content-equality check (above) means that if the text changes while the pointer is
+/// still resting on the target, the eventual leave reads the new text and won't match the shown
+/// anchor, leaving that tip stranded until the next `show`. Same tradeoff `hide_topic` accepts
+/// below; needs an off-pointer state change to trigger and hasn't been worth more machinery for.
+pub fn on_pointer_enter_text(text: impl Into<Signal<String>>) -> impl Fn(PointerEvent) + Clone {
     let text = text.into();
-    move |ev: PointerEvent| show(TipContent::Text(text.clone()), ev.client_x() as f64, ev.client_y() as f64)
+    move |ev: PointerEvent| show(TipContent::Text(text.get_untracked()), ev.client_x() as f64, ev.client_y() as f64)
 }
 
-pub fn on_pointer_leave_text(text: impl Into<String>) -> impl Fn(PointerEvent) + Clone {
+pub fn on_pointer_leave_text(text: impl Into<Signal<String>>) -> impl Fn(PointerEvent) + Clone {
     let text = text.into();
-    move |_: PointerEvent| hide(TipContent::Text(text.clone()))
+    move |_: PointerEvent| hide(TipContent::Text(text.get_untracked()))
 }
 
-pub fn on_focus_in_text(text: impl Into<String>) -> impl Fn(FocusEvent) + Clone {
+pub fn on_focus_in_text(text: impl Into<Signal<String>>) -> impl Fn(FocusEvent) + Clone {
     let text = text.into();
     move |ev: FocusEvent| {
         let (x, y) = element_anchor(ev.target());
-        show(TipContent::Text(text.clone()), x, y);
+        show(TipContent::Text(text.get_untracked()), x, y);
     }
 }
 
-pub fn on_focus_out_text(text: impl Into<String>) -> impl Fn(FocusEvent) + Clone {
+pub fn on_focus_out_text(text: impl Into<Signal<String>>) -> impl Fn(FocusEvent) + Clone {
     let text = text.into();
-    move |_: FocusEvent| hide(TipContent::Text(text.clone()))
+    move |_: FocusEvent| hide(TipContent::Text(text.get_untracked()))
 }
 
 /// Wraps HTML content so hovering or focusing it shows `topic`'s glossary entry.

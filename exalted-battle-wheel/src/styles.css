@@ -15,6 +15,10 @@
   --danger: #d8574a;
   --ink-on-color: #14161c;
   --shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --wheel-ink: #333a49;
+  --wheel-ink-text: #c9ced9;
+  --wheel-paper: #1a1d24;
+  --wheel-rule: #2c303c;
 }
 
 :root[data-theme="light"] {
@@ -33,6 +37,16 @@
   --danger: #a83a1f;
   --ink-on-color: #14161c;
   --shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+  --wheel-ink: #23221e;
+  --wheel-ink-text: #f7f6f1;
+  --wheel-paper: #fbfaf6;
+  --wheel-rule: #d6d3c8;
+}
+
+/* Georgia-first display serif for the wheel's print-poster voice; every fallback is a
+   widely-available serif so the look survives even where Georgia itself is missing. */
+:root {
+  --font-display: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
 }
 
 * {
@@ -62,11 +76,25 @@ body {
 }
 
 .app-header h1 {
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 700;
+  font-variant-caps: small-caps;
   margin: 0;
   color: var(--accent);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
+}
+
+.battle-mode-row {
+  margin-bottom: 0.75rem;
+}
+
+.battle-mode-select {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-dim);
 }
 
 .tick-readout {
@@ -77,41 +105,68 @@ body {
   padding: 0 0.5rem;
 }
 
-.app-header button {
+.app-header button,
+.btn {
   background: var(--panel-border);
   color: var(--text);
   border: 1px solid var(--panel-border);
-  border-radius: 6px;
-  padding: 0.4rem 0.9rem;
+  border-radius: 8px;
+  padding: 0.5rem 1.1rem;
   font-size: 0.9rem;
   cursor: pointer;
 }
 
-.app-header button:hover:not(:disabled) {
+.app-header button:hover:not(:disabled),
+.btn:hover:not(:disabled) {
   border-color: var(--accent);
 }
 
-.app-header button:disabled {
+.app-header button:disabled,
+.btn:disabled {
   opacity: 0.4;
   cursor: default;
 }
 
 .app-body {
   flex: 1;
-  display: flex;
-  gap: 2rem;
+  display: grid;
+  grid-template-columns: minmax(0, 22rem) minmax(0, 1fr) minmax(0, 22rem) minmax(0, 20rem);
+  gap: 1.5rem;
   padding: 1rem 1.25rem;
-  align-items: flex-start;
+  align-items: start;
+}
+
+/* Below this the four columns can no longer sit side by side without crushing the wheel; the
+   rail moves under it full-width, sharing a row with the action panel. */
+@media (max-width: 1500px) {
+  .app-body {
+    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr) minmax(0, 22rem);
+  }
+
+  .reference-rail {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-body {
+    grid-template-columns: 1fr;
+  }
+
+  .reference-rail {
+    grid-column: auto;
+  }
 }
 
 .roster,
 .action-panel,
-.queue-panel {
+.queue-panel,
+.reference-rail {
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: 8px;
   padding: 1rem;
-  min-width: 320px;
+  min-width: 0;
 }
 
 .side-column {
@@ -122,12 +177,94 @@ body {
 
 .roster h2,
 .action-panel h2,
-.queue-panel h2 {
+.queue-panel h2,
+.reference-rail h2 {
   margin: 0 0 0.75rem;
-  font-size: 1rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-variant-caps: small-caps;
   color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
+}
+
+.reference-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-height: calc(100vh - 6rem);
+  overflow-y: auto;
+  position: sticky;
+  top: 1rem;
+}
+
+.reference-section {
+  opacity: 0.55;
+  transition: opacity 160ms ease;
+}
+
+.reference-section-active {
+  opacity: 1;
+}
+
+.reference-section h3 {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-variant-caps: small-caps;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  border-bottom: 1px solid var(--panel-border);
+  padding-bottom: 0.25rem;
+}
+
+.reference-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+/* Every row is a button so hover/focus still shows its teaching tooltip in every mode; only
+   `.reference-row-clickable` (the section matching the battle's current mode) gets the pointer
+   cursor and accent border that mark it as a shortcut into the action panel. */
+.reference-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.15rem 0.3rem;
+  font-size: 0.82rem;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: default;
+}
+
+.reference-row:hover,
+.reference-row:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.reference-row-clickable {
+  cursor: pointer;
+}
+
+.reference-row-clickable:hover,
+.reference-row-clickable:focus-visible {
+  border-color: var(--accent);
+}
+
+.reference-name {
+  color: var(--text);
+}
+
+.reference-stat {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .roster-form {
@@ -154,6 +291,71 @@ body {
   align-items: center;
   gap: 0.3rem;
   color: var(--text-dim);
+}
+
+/* A custom combobox rather than a native <datalist>, so the suggestion list can use the app's
+   own palette and keyboard handling. The input keeps having no `type` attribute so it still
+   picks up the plain field look above; only its width is widened here. */
+.roster-form .combobox input:not([type]) {
+  width: 8rem;
+}
+
+.combobox {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.combobox-toggle {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 0.2rem 0.25rem;
+}
+
+.combobox-toggle:hover {
+  color: var(--accent);
+}
+
+/* Above ordinary panel content, but well below the modal backdrop (900), toast layer (950) and
+   tip layer (1000) — see the layering note above .toast-layer — so those always win. */
+.combobox-list {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  z-index: 20;
+  min-width: 100%;
+  max-width: 16rem;
+  max-height: 12rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.15rem;
+  list-style: none;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  box-shadow: var(--shadow);
+}
+
+.combobox-option {
+  padding: 0.25rem 0.4rem;
+  border-radius: 3px;
+  color: var(--text);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.combobox-option:hover,
+.combobox-option-active {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .roster-list {
@@ -230,6 +432,13 @@ button {
   flex-wrap: wrap;
 }
 
+/* Where a reference-rail click lands: the "Up now" row last touched, else the topmost. Inset
+   rather than a border so arming a row doesn't shift its contents. */
+.actor-row-targeted {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
 .actor-row .name {
   font-weight: 600;
   min-width: 5rem;
@@ -254,38 +463,110 @@ button {
 
 .wheel-panel {
   display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
+.wheel-column-inner {
+  display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
+}
+
+/* An ink bar with knockout vertical type down the wheel's left edge, echoing the printed
+   poster's title spine. Purely decorative — screen readers get the wheel's own labels. */
+.wheel-spine {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  flex-shrink: 0;
+  background: var(--wheel-ink);
+  border-radius: 4px;
+}
+
+.wheel-spine span {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  color: var(--wheel-ink-text);
+  font-family: var(--font-display);
+  font-variant-caps: small-caps;
+  letter-spacing: 0.08em;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  padding: 0.75rem 0;
 }
 
 .wheel {
-  width: 340px;
-  height: 340px;
+  width: clamp(340px, 42vw, 560px);
+  height: auto;
 }
 
-.wheel-ring {
+.wheel-paper {
+  fill: var(--wheel-paper);
+}
+
+.wheel-rim {
   fill: none;
-  stroke: var(--panel-border);
-  stroke-width: 1.5;
+  stroke: var(--wheel-ink);
+  stroke-width: 3;
   cursor: help;
 }
 
-.wheel-ring-group {
-  transition: transform 220ms ease;
+.wheel-rule {
+  fill: none;
+  stroke: var(--wheel-rule);
+  stroke-width: 1;
 }
 
-.slot-label {
-  fill: var(--text-dim);
-  font-size: 13px;
+.wheel-divider {
+  fill: var(--wheel-ink);
+  cursor: help;
+}
+
+.wheel-rim-arrow {
+  fill: var(--wheel-ink);
+}
+
+.ring-label {
+  fill: var(--wheel-ink-text);
+  font-size: 9px;
+  font-weight: 600;
+  text-anchor: middle;
+  dominant-baseline: central;
+  cursor: help;
+}
+
+.sector-label {
+  fill: var(--text);
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-anchor: middle;
-  dominant-baseline: middle;
+  dominant-baseline: central;
+  cursor: help;
+}
+
+.sector-label-now {
+  fill: var(--accent);
+}
+
+.sector-abs-label {
+  fill: var(--text-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-anchor: middle;
+  dominant-baseline: central;
   cursor: help;
 }
 
 .wheel-token {
   transition: transform 220ms ease;
+  cursor: pointer;
 }
 
 .wheel-token circle {
@@ -293,13 +574,22 @@ button {
   stroke-width: 2;
 }
 
+.wheel-token-overflow circle {
+  fill: var(--panel-border);
+}
+
 .wheel-token text {
   fill: var(--ink-on-color);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
+}
+
+.wheel-token-overflow text {
+  fill: var(--text);
+  font-size: 9px;
 }
 
 .now-marker {
@@ -307,24 +597,54 @@ button {
   cursor: help;
 }
 
-.wheel-marker {
-  transition: transform 220ms ease;
+.wheel-hub {
+  fill: var(--wheel-paper);
+  stroke: var(--wheel-ink);
+  stroke-width: 2;
+}
+
+.wheel-marker-gutter-ring {
+  fill: none;
+  stroke: var(--wheel-rule);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
   cursor: help;
 }
 
-.wheel-marker circle {
+.wheel-marker {
+  cursor: help;
+}
+
+.wheel-marker-dot {
   fill: var(--danger);
   stroke: var(--bg);
   stroke-width: 2;
 }
 
+.wheel-marker-arc {
+  stroke: var(--danger);
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
 .center-tick {
   fill: var(--text);
-  font-size: 28px;
+  font-family: var(--font-display);
+  font-size: 32px;
   font-weight: 700;
   text-anchor: middle;
   dominant-baseline: middle;
   font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+
+.center-tick-noun {
+  fill: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-anchor: middle;
+  dominant-baseline: middle;
   cursor: help;
 }
 
@@ -336,7 +656,8 @@ button {
 .over-horizon h3 {
   margin: 0 0 0.3rem;
   font-size: 0.8rem;
-  text-transform: uppercase;
+  font-family: var(--font-display);
+  font-variant-caps: small-caps;
   letter-spacing: 0.05em;
 }
 
@@ -513,10 +834,6 @@ button {
   line-height: 1.4;
 }
 
-.wheel-token {
-  cursor: pointer;
-}
-
 .sequence-description {
   color: var(--accent);
   font-weight: 600;
@@ -551,6 +868,13 @@ button {
   border: 1px solid var(--panel-border);
   border-radius: 4px;
   padding: 0.2rem 0.4rem;
+}
+
+/* Destructive but not urgent (unlike `.interrupt-button`'s solid fill) — Reset is already gated
+   behind a confirmation modal, so a hover-only warning is enough. */
+.reset-button:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .join-battle-successes-label {
@@ -710,6 +1034,70 @@ button {
 
 .modal-body {
   overflow-y: auto;
+}
+
+.reset-warning {
+  color: var(--text-dim);
+  margin: 0 0 1rem;
+}
+
+.reset-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.reset-confirm {
+  background: var(--danger) !important;
+  border-color: var(--danger) !important;
+  color: var(--ink-on-color) !important;
+}
+
+/* Layered above the modal backdrop (900) so a failure raised while a modal is open stays
+   readable, below the tip layer (1000) so a teaching tooltip is never hidden behind one. */
+.toast-layer {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 950;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 24rem;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-left: 3px solid var(--danger);
+  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.85rem;
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+}
+
+.toast-message {
+  flex: 1;
+  color: var(--text);
+}
+
+.toast-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.toast-dismiss:hover {
+  color: var(--text);
 }
 
 .event-log-list {

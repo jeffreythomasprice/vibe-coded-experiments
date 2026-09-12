@@ -1,8 +1,8 @@
 use crate::library::{Library, SavedAction, SavedEffect, SavedId, SavedShape};
-use crate::prefs::Pref;
+use crate::persist::Persisted;
 use crate::ui::glossary::Topic;
 use crate::ui::Tip;
-use exalted_battle_wheel::battle::{ActionKind, SequenceStep, SpeedSpec, CATALOG};
+use exalted_battle_wheel::battle::{catalog, ActionKind, BattleMode, SequenceStep, SpeedSpec};
 use leptos::prelude::*;
 
 /// A step or effect row keyed by a locally-minted id (not a `SavedId` or `MarkerId` — those are
@@ -33,9 +33,13 @@ fn next_row_id(counter: RwSignal<u32>) -> u32 {
 
 #[component]
 pub fn SavedActionEditor(
-    library: Pref<Library>,
+    library: Persisted<Library>,
     initial: SavedAction,
     editing_id: Option<SavedId>,
+    /// The battle's active mode: saving here tags the entry with it, and the catalog dropdown is
+    /// filtered to it, so a saved action always names a kind that actually exists in the mode it
+    /// was saved under.
+    mode: BattleMode,
     on_close: impl Fn() + Copy + 'static,
 ) -> impl IntoView {
     let row_counter = RwSignal::new(0u32);
@@ -45,7 +49,7 @@ pub fn SavedActionEditor(
     let is_sequence = RwSignal::new(matches!(initial.shape, SavedShape::Sequence { .. }));
 
     let (initial_kind, initial_speed, initial_dv) = match &initial.shape {
-        SavedShape::Single { kind, speed, dv_penalty } => (*kind, speed.to_string(), dv_penalty.to_string()),
+        SavedShape::Single { kind, speed, dv_penalty, .. } => (*kind, speed.to_string(), dv_penalty.to_string()),
         SavedShape::Sequence { .. } => (ActionKind::Custom, String::new(), String::new()),
     };
     let kind = RwSignal::new(initial_kind);
@@ -112,6 +116,7 @@ pub fn SavedActionEditor(
             SavedShape::Sequence { steps: built }
         } else {
             SavedShape::Single {
+                mode,
                 kind: kind.get(),
                 speed: speed.get().trim().parse().unwrap_or(0),
                 dv_penalty: dv_penalty.get().trim().parse().unwrap_or(0),
@@ -175,11 +180,11 @@ pub fn SavedActionEditor(
                     view! {
                         <div class="library-single">
                             <select prop:value=move || format!("{:?}", kind.get()) on:change=move |ev| {
-                                if let Some(template) = CATALOG.iter().find(|t| format!("{:?}", t.kind) == event_target_value(&ev)) {
+                                if let Some(template) = catalog(mode).find(|t| format!("{:?}", t.kind) == event_target_value(&ev)) {
                                     kind.set(template.kind);
                                 }
                             }>
-                                {CATALOG.iter().map(|template| view! {
+                                {catalog(mode).map(|template| view! {
                                     <option value=format!("{:?}", template.kind)>{template.name}</option>
                                 }).collect_view()}
                             </select>
@@ -218,30 +223,42 @@ pub fn SavedActionEditor(
 }
 
 #[component]
-pub fn SavedActionList(library: Pref<Library>, on_edit: impl Fn(SavedId) + Copy + Send + Sync + 'static) -> impl IntoView {
-    let rows = move || library.get().actions().to_vec();
-    let remove = move |id: SavedId| {
+pub fn SavedActionList(library: Persisted<Library>, on_edit: impl Fn(SavedId) + Copy + Send + Sync + 'static) -> impl IntoView {
+    let ids = move || library.read().actions().iter().map(|action| action.id).collect::<Vec<_>>();
+    let is_empty = move || library.read().actions().is_empty();
+
+    view! {
+        <ul class="library-list">
+            <For each=ids key=|id| *id let:id>
+                <SavedActionRow id=id library=library on_edit=on_edit />
+            </For>
+        </ul>
+        {move || is_empty().then(|| view! { <p class="library-empty">"No saved actions yet."</p> })}
+    }
+}
+
+#[component]
+fn SavedActionRow(id: SavedId, library: Persisted<Library>, on_edit: impl Fn(SavedId) + Copy + Send + Sync + 'static) -> impl IntoView {
+    let name = move || library.read().find(id).map(|action| action.name.clone()).unwrap_or_default();
+    let shape = move || library.read().find(id).map(|action| shape_label(&action.shape)).unwrap_or_default();
+    let remove = move |_| {
         library.update(|library| _ = library.remove(id));
     };
 
     view! {
-        <ul class="library-list">
-            <For each=rows key=|action| action.id let:action>
-                <li>
-                    <span class="name">{action.name.clone()}</span>
-                    <span class="library-shape">{shape_label(&action.shape)}</span>
-                    <button on:click=move |_| on_edit(action.id)>"Edit"</button>
-                    <button on:click=move |_| remove(action.id)>"Delete"</button>
-                </li>
-            </For>
-        </ul>
-        {move || rows().is_empty().then(|| view! { <p class="library-empty">"No saved actions yet."</p> })}
+        <li>
+            <span class="name">{name}</span>
+            <span class="library-shape">{shape}</span>
+            <button on:click=move |_| on_edit(id)>"Edit"</button>
+            <button on:click=remove>"Delete"</button>
+        </li>
     }
 }
 
 fn shape_label(shape: &SavedShape) -> String {
     match shape {
-        SavedShape::Single { .. } => "Action".to_string(),
+        SavedShape::Single { mode: BattleMode::Personal, .. } => "Action".to_string(),
+        SavedShape::Single { mode, .. } => format!("Action ({})", mode.label()),
         SavedShape::Sequence { steps } => format!("Sequence \u{00d7}{}", steps.len()),
     }
 }
@@ -252,7 +269,10 @@ mod tests {
 
     #[test]
     fn shape_label_distinguishes_single_and_sequence() {
-        assert_eq!(shape_label(&SavedShape::Single { kind: ActionKind::Attack, speed: 4, dv_penalty: -1 }), "Action");
+        assert_eq!(
+            shape_label(&SavedShape::Single { mode: BattleMode::Personal, kind: ActionKind::Attack, speed: 4, dv_penalty: -1 }),
+            "Action"
+        );
         assert_eq!(
             shape_label(&SavedShape::Sequence { steps: vec![SequenceStep { label: "Shape".to_string(), speed: SpeedSpec::Fixed(5), dv_penalty: -2 }] }),
             "Sequence \u{00d7}1"
