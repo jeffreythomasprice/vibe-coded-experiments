@@ -68,6 +68,7 @@ body {
 
 .app-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 1rem;
   padding: 0.75rem 1.25rem;
@@ -1155,6 +1156,117 @@ button {
 
 .peer-kick {
   margin-left: auto;
+}
+
+/* While the host/join handshake is running, the just-submitted form stays visible but inert
+   rather than being torn out and replaced piecemeal as each piece of the result arrives. */
+.room-busy {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.room-pending {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.spinner {
+  display: inline-block;
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: none;
+  border: 2px solid var(--panel-border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+}
+
+/* Reserves the invite's full height (label + textarea + QR) so re-minting it after every join
+   swaps content in place instead of collapsing the panel and shoving the reply field below it. */
+.room-invite-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 16rem;
+}
+
+.room-advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  border-top: 1px solid var(--panel-border);
+  padding-top: 0.6rem;
+}
+
+.room-advanced-toggle {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0;
+}
+
+.room-advanced-toggle:hover {
+  color: var(--text);
+}
+
+.room-stun-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.room-stun-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.room-stun-row input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+.room-stun-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.room-error {
+  color: var(--danger);
+  font-size: 0.8rem;
 }
 
 /* Layered above the modal backdrop (900) so a failure raised while a modal is open stays

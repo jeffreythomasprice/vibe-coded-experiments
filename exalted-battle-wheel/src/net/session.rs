@@ -40,11 +40,20 @@ type Msg<A> = Message<<A as Replicated>::Request, <A as Replicated>::Command, <A
 /// for a same-room, low-latency link; a real network hiccup is exactly what this exists to catch.
 const VOTE_TIMEOUT_MS: i32 = 5000;
 
-/// How long to wait, once signaling finishes on both sides, for ICE to actually finish connecting
-/// before giving up. Signaling itself can take as long as the humans need to copy-paste; this only
-/// starts once there's nothing left to do but wait for the browsers to reach each other, which
-/// with no TURN relay configured either succeeds within a few seconds or never will.
+/// How long the host waits, once it has accepted a joiner's answer, for ICE to actually finish
+/// connecting before giving up. Signaling is already done by this point — both descriptions are
+/// set and there's nothing left but for the browsers to reach each other, which with no TURN relay
+/// configured either succeeds within a few seconds or never will.
 const CONNECT_TIMEOUT_MS: i32 = 15000;
+
+/// How long the joiner waits, after producing its own answer, for a `Welcome` to arrive. Unlike
+/// `CONNECT_TIMEOUT_MS`, this window still has a human step inside it: the joiner's answer has to
+/// be copied (or QR-scanned) back to the host and pasted into `accept_answer` before the host's own
+/// ICE agent even has anything to connect to, and only then does the `Welcome` round trip happen.
+/// A short deadline here doesn't catch a slow network — it catches a slow human, misreported as one
+/// — so this is deliberately much more generous than `CONNECT_TIMEOUT_MS`, especially since this is
+/// exactly the path a QR-code phone hand-off goes through.
+const JOIN_REPLY_TIMEOUT_MS: i32 = 60000;
 
 fn report_connect_timeout() {
     crate::ui::toast::error(
@@ -303,7 +312,19 @@ impl<A: Replicated> Session<A> {
                     // Otherwise `leave()` (or a second `host()`) ran while this was negotiating;
                     // the link has no home to go to and is simply dropped.
                 }
-                Err(error) => report("create an invite", error),
+                Err(error) => {
+                    report("create an invite", error);
+                    // A room nobody has joined yet is dead without a usable invite — reset it
+                    // rather than leaving `mode` stuck on `Hosting` with `invite` forever `None`.
+                    // A room with connected peers stays up; they just don't get a fresh invite.
+                    let empty = self.state.with_untracked(|state| match state {
+                        RoomState::Hosting { peers, .. } => peers.is_empty(),
+                        _ => false,
+                    });
+                    if empty {
+                        self.reset_to_solo();
+                    }
+                }
             }
         });
     }
@@ -738,7 +759,7 @@ impl<A: Replicated> Session<A> {
     /// tell "still waiting" apart from "already joined" or "already left".
     fn joined_schedule_connect_timeout(self) {
         spawn_local(async move {
-            sleep_ms(CONNECT_TIMEOUT_MS).await;
+            sleep_ms(JOIN_REPLY_TIMEOUT_MS).await;
             if self.mode.get_untracked() == Mode::Joined && self.self_id.get_untracked().is_none() {
                 report_connect_timeout();
                 self.reset_to_solo();

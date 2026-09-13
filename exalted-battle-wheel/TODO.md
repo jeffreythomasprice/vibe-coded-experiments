@@ -1,10 +1,9 @@
 in-flight:
 
+In multiplayer mode, why does the host have to regenerate a new code and QR code when a player joins the room?
+
 
 todo:
-
-When I click host a room, or join a room, there is a pause then the code and QR code show up. There should be a spinner or other loading icon while we're waiting for that code. As is it just sort of pops in afer a couple of seconds.
-
 
 I'd like to review all the teaching tooltips for accuracy. Look them up in the book by the reference pages, check for accuracy, and verify that they make sense for that wigdet. Split off as many subagents as necessary.
 

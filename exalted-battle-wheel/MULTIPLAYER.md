@@ -11,19 +11,22 @@ There's no TURN/relay server and no authentication:
 
 - If both sides sit behind networks that can't reach each other directly (see "NAT hairpinning"
   below, and note some corporate networks and carrier-grade NAT setups block this outright), the
-  connection will simply fail. After about 15 seconds of trying, you'll get an honest "could not
-  connect" error rather than an indefinite hang.
+  connection will simply fail. You'll get an honest "could not connect" error rather than an
+  indefinite hang — within about 15 seconds on the host's side once it accepts your reply, or up to
+  a minute on the joining side, since that wait also covers the time it takes a human to carry the
+  reply code back to the host (a QR hand-off to a phone included) rather than just the network.
 - The "everyone who joins can change the battle" flag and the kick button are conveniences, not
   security. Nothing stops a modified client from ignoring either.
 
 ## Connecting
 
-1. One side: **Solo → name yourself → Host a room**. An invite code and QR appear after a few
-   seconds.
+1. One side: **Multiplayer (Solo) → name yourself → Host a room**. A spinner runs while the invite
+   is prepared; the code and QR appear together a few seconds later.
 2. Send the invite to the other side — paste the text, or let them scan the QR. The QR encodes a
    full link; scanning it (or opening it directly) drops the other side straight into the join
    flow with the code already filled in.
-3. Other side: name yourself, confirm **Join**. This produces a reply code/QR of its own.
+3. Other side: name yourself, confirm **Join**. A spinner runs the same way, then a reply code/QR
+   of its own appears.
 4. Send the reply back to the host the same way, paste it into "Paste their reply code here", and
    click **Connect**.
 5. Once the peer list shows both names, you're connected. Joining adopts whatever battle the host
@@ -34,8 +37,12 @@ There's no TURN/relay server and no authentication:
 The quick way to sanity-check the feature without involving a second device.
 
 1. `trunk serve`, open `http://127.0.0.1:8000/` in two tabs.
-2. Follow "Connecting" above between the two tabs.
-3. Give it up to 15 seconds. If it connects, you're done.
+2. Follow "Connecting" above between the two tabs. The joining tab's own clock on this starts the
+   moment it produces its reply code, before you've pasted that back into the host — so don't leave
+   the reply sitting copied while you read something else; paste it into the host and click
+   **Connect** right away, the same as you would with a real second person.
+3. Once the host clicks **Connect**, it should connect within a few seconds. If it connects, you're
+   done.
 
 **If it times out** ("Could not connect — this may be a restrictive network..."), see
 "NAT hairpinning" below — it's expected on a lot of home routers when testing this way, not a bug.
@@ -71,8 +78,18 @@ address means asking your own router to send the traffic back inside to yourself
 to connect to *each other* even though the app and the codes are working correctly. This is purely
 a same-machine testing artifact; it doesn't affect two separate computers on separate networks.
 
-To work around it, force the app off the STUN path and onto the local-network path instead, using
-the STUN-server override the app reads from the URL fragment:
+To work around it, force the app off the STUN path and onto the local-network path instead. The
+easiest way is the room modal's own **Advanced** section:
+
+1. Open the **Multiplayer** modal → **Advanced** → remove every STUN server listed (or replace
+   them with an address that will never respond — see below) in both tabs.
+2. Host/join as usual. With no reachable STUN server, ICE gathering finds no "public" candidate and
+   falls back to the local candidate Chrome generates on its own, so two tabs on one machine can
+   always reach each other directly. The invite code will be noticeably longer than normal (it's
+   carrying the full connection info instead of the compact form) — that's expected.
+
+The same override is also available as a `#stun=` URL fragment, read once at page load — useful
+for seeding a fresh tab (or a deep link) without having to click through Advanced by hand:
 
 1. Open a **new tab** (or navigate from a different page first) — don't just edit the fragment on
    a tab already sitting on the app, since a fragment-only change on an already-loaded page won't
@@ -81,15 +98,13 @@ the STUN-server override the app reads from the URL fragment:
    ```
    http://127.0.0.1:8000/#stun=stun:198.51.100.1:3478
    ```
-   That address is reserved for documentation (RFC 5737) and will never respond, so ICE gathering
-   waits out its ~3 second timeout, finds no real "public" candidate, and falls back to the local
-   candidate Chrome generates on its own.
-3. Do the same in the second tab.
-4. Host/join as usual from these two freshly-loaded tabs. The invite code will be noticeably
-   longer than normal (it's carrying the full connection info instead of the compact form) — that's
-   expected. It should connect within a couple seconds, since two tabs on one machine can always
-   reach each other on the local network directly.
+   That address is reserved for documentation (RFC 5737) and will never respond, giving the same
+   effect as an empty list once ICE gathering waits out its ~3 second timeout.
+3. Do the same in the second tab, then host/join as usual — it should connect within a couple
+   seconds.
 
-`#stun=` isn't just a debugging trick — it's a general override, and accepts a comma-separated
-list of STUN server URLs to use instead of the defaults. It's read once at page load and the
-fragment is cleared immediately afterward, so it won't persist across a refresh.
+`#stun=` accepts a comma-separated list of STUN server URLs and seeds the same list the Advanced
+section edits; entries that aren't valid `stun:`/`stuns:` URLs are rejected at boot with an error
+toast instead of silently breaking the next connection. Neither the fragment nor an edit made in
+Advanced is saved anywhere — the list lives only in that tab's memory, and reloading the page
+always restores the two built-in defaults.

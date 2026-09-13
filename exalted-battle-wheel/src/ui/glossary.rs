@@ -93,6 +93,7 @@ pub enum Topic {
     Room,
     RoomAdminModel,
     RoomKick,
+    RoomStunServers,
 
     // Roster
     Roster,
@@ -371,7 +372,7 @@ impl Topic {
                 source: book(141, "The reaction count for the combat scene is a value equal to the highest number of successes rolled by anyone who simultaneously joins at the start of combat."),
             },
             Topic::Room => Entry {
-                term: "Room",
+                term: "Multiplayer",
                 what: "Connects browsers directly, peer-to-peer, with no server in between, so everyone sees the same battle and agrees on every change.",
                 interacts: "One side hosts and shares a connection code or QR; the other pastes or scans it back and joins, adopting the host's battle immediately. After that, every edit anyone makes is proposed to the whole room and only takes effect once everyone agrees \u{2014} a genuine disagreement disconnects everyone with an error rather than quietly drifting apart. There's no relay server standing by, so two networks that both sit behind strict NATs (some phone hotspots, some corporate networks) may simply fail to connect to each other at all.",
                 source: Source::AppConvention,
@@ -386,6 +387,12 @@ impl Topic {
                 term: "Kick",
                 what: "Disconnects a peer from the room immediately.",
                 interacts: "Host-only, and only for other peers \u{2014} you can't kick yourself. The kicked peer keeps their own copy of the battle; only the connection ends. There's no ban list behind this: if the host hands out another invite, whoever was kicked can use it to rejoin like anyone else.",
+                source: Source::AppConvention,
+            },
+            Topic::RoomStunServers => Entry {
+                term: "STUN servers",
+                what: "The public-address lookup services a connection uses to work out how to be reached from outside your own network.",
+                interacts: "Read only at the moment a connection is made, so an edit here applies to the next invite you create or room you join \u{2014} never to a connection already underway. It's the same list the app seeds from a `#stun=` URL fragment at page load; editing it here does the same thing without needing a fresh tab. Nothing here is saved: reloading the page restores the built-in defaults.",
                 source: Source::AppConvention,
             },
 
@@ -974,6 +981,7 @@ mod tests {
         Topic::Room,
         Topic::RoomAdminModel,
         Topic::RoomKick,
+        Topic::RoomStunServers,
         Topic::Roster,
         Topic::CombatantName,
         Topic::Side,

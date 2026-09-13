@@ -9,12 +9,14 @@ mod message;
 mod rtc;
 mod sdp;
 mod session;
+mod stun;
 
 pub use error::RoomError;
 pub use hash::{hash_of, StateHash};
 pub use message::PeerInfo;
-pub use rtc::{set_stun_servers, Link};
+pub use rtc::{default_stun_servers, set_stun_servers, stun_servers, Link};
 pub use session::{set_root_owner, Mode, Role, Session};
+pub use stun::validate as validate_stun_url;
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;

@@ -9,7 +9,6 @@ use crate::net::error::{RoomError, RtcError};
 use js_sys::{Array, Promise};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::OnceLock;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
@@ -20,16 +19,28 @@ use web_sys::{
 
 const DEFAULT_STUN_SERVERS: &[&str] = &["stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"];
 
-/// Set once at boot from a `#stun=` URL fragment param (see `app.rs`); `None` means "use the
-/// default list". A `OnceLock` rather than a plain global `Vec` since this is written at most
-/// once, before any connection is ever attempted, and read from every later `host()`/`join()`.
-static STUN_OVERRIDE: OnceLock<Vec<String>> = OnceLock::new();
+thread_local! {
+    /// The STUN server list every new connection is configured with. Seeded from
+    /// `DEFAULT_STUN_SERVERS`, then overwritable at any time — from a `#stun=` URL fragment at
+    /// boot (see `app.rs`) or live from the room modal's Advanced section. A `RefCell`, not a
+    /// Leptos signal: this file deliberately has no Leptos dependency, and nothing outside the
+    /// modal needs to react to a change — only the next connection attempt reads it.
+    static STUN_SERVERS: RefCell<Vec<String>> = RefCell::new(default_stun_servers());
+}
 
-/// Overrides the STUN server list for every connection from here on. Only the first call has any
-/// effect — later calls are silently ignored, since by the time a second caller could plausibly
-/// want this, a room may already be connecting against the first list.
+pub fn default_stun_servers() -> Vec<String> {
+    DEFAULT_STUN_SERVERS.iter().map(|url| url.to_string()).collect()
+}
+
+pub fn stun_servers() -> Vec<String> {
+    STUN_SERVERS.with_borrow(Clone::clone)
+}
+
+/// Overrides the STUN server list for every connection from here on. Read fresh by
+/// `new_peer_connection` on each `host()`/`join()`, so a change reaches the next connection
+/// attempt with no further wiring.
 pub fn set_stun_servers(servers: Vec<String>) {
-    let _ = STUN_OVERRIDE.set(servers);
+    STUN_SERVERS.set(servers);
 }
 
 /// How long to wait for ICE candidate gathering before proceeding with whatever was found. srflx
@@ -65,12 +76,10 @@ fn js_message(error: &JsValue) -> String {
 }
 
 fn new_peer_connection() -> Result<RtcPeerConnection, RtcError> {
-    let default_urls: Vec<String> = DEFAULT_STUN_SERVERS.iter().map(|url| url.to_string()).collect();
-    let urls = STUN_OVERRIDE.get().unwrap_or(&default_urls);
     let servers = Array::new();
-    for url in urls {
+    for url in stun_servers() {
         let server = RtcIceServer::new();
-        server.set_urls_str(url);
+        server.set_urls_str(&url);
         servers.push(&server);
     }
     let config = RtcConfiguration::new();

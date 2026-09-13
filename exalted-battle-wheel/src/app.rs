@@ -27,7 +27,14 @@ fn consume_invite_fragment() -> Option<String> {
     let params = web_sys::UrlSearchParams::new_with_str(query).ok()?;
 
     if let Some(stun) = params.get("stun") {
-        let servers: Vec<String> = stun.split(',').map(str::trim).filter(|url| !url.is_empty()).map(str::to_string).collect();
+        let candidates = stun.split(',').map(str::trim).filter(|url| !url.is_empty());
+        let mut servers = Vec::new();
+        for url in candidates {
+            match crate::net::validate_stun_url(url) {
+                Ok(()) => servers.push(url.to_string()),
+                Err(error) => crate::ui::toast::error(format!("Ignoring STUN server {url:?} from the URL: {error}")),
+            }
+        }
         if !servers.is_empty() {
             crate::net::set_stun_servers(servers);
         }
