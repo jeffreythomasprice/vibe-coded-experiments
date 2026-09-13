@@ -1,4 +1,5 @@
 pub mod action_panel;
+pub mod clipboard;
 pub mod combobox;
 pub mod event_log;
 pub mod format;
@@ -6,7 +7,6 @@ pub mod glossary;
 pub mod library;
 pub mod markers;
 pub mod modal;
-pub mod qr;
 pub mod queue;
 pub mod reference;
 pub mod room;
@@ -19,12 +19,12 @@ pub mod tooltip;
 pub mod wheel;
 
 pub use action_panel::{ActionPanel, RailSelection};
+pub use clipboard::CopyButton;
 pub use combobox::Combobox;
 pub use event_log::EventLogButton;
 pub use library::{SavedActionEditor, SavedActionList};
 pub use markers::MarkerForm;
 pub use modal::Modal;
-pub use qr::Qr;
 pub use queue::QueuePanel;
 pub use reference::ReferenceRail;
 pub use room::{PendingJoin, RoomButton};

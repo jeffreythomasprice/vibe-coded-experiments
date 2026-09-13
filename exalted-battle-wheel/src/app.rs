@@ -126,12 +126,12 @@ pub fn App() -> impl IntoView {
                     <h1>"Exalted Battle Wheel"</h1>
                 </Tip>
                 <Tip topic=Topic::Undo>
-                    <button on:click=undo disabled=move || !log.read().can_undo()>
+                    <button on:click=undo disabled=move || battles.read_only().get() || !log.read().can_undo()>
                         "Undo"
                     </button>
                 </Tip>
                 <Tip topic=Topic::Redo>
-                    <button on:click=redo disabled=move || !log.read().can_redo()>
+                    <button on:click=redo disabled=move || battles.read_only().get() || !log.read().can_redo()>
                         "Redo"
                     </button>
                 </Tip>
@@ -160,7 +160,9 @@ pub fn App() -> impl IntoView {
                     topic=Topic::AdvanceTick
                     detail=Signal::derive(move || battle.read().mode.tick_note().unwrap_or_default().to_string())
                 >
-                    <button on:click=advance_tick>{move || format!("Advance {}", capitalize(battle.read().mode.tick_noun()))}</button>
+                    <button on:click=advance_tick disabled=move || battles.read_only().get()>
+                        {move || format!("Advance {}", capitalize(battle.read().mode.tick_noun()))}
+                    </button>
                 </DetailTip>
                 <Tip topic=Topic::TeachingMode>
                     <label class="header-control">
@@ -198,7 +200,7 @@ pub fn App() -> impl IntoView {
                 <Tip topic=Topic::Reset>
                     <button
                         class="reset-button"
-                        disabled=move || log.read().events().is_empty()
+                        disabled=move || battles.read_only().get() || log.read().events().is_empty()
                         on:click=move |_| confirming_reset.set(true)
                     >
                         "Reset"
@@ -216,7 +218,13 @@ pub fn App() -> impl IntoView {
                                 </p>
                                 <div class="reset-actions">
                                     <button class="btn" on:click=move |_| confirming_reset.set(false)>"Cancel"</button>
-                                    <button class="btn reset-confirm" on:click=move |_| reset()>"Reset battle"</button>
+                                    <button
+                                        class="btn reset-confirm"
+                                        disabled=move || battles.read_only().get()
+                                        on:click=move |_| reset()
+                                    >
+                                        "Reset battle"
+                                    </button>
                                 </div>
                             </Modal>
                         }

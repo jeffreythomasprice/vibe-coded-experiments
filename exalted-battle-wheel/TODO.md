@@ -1,9 +1,8 @@
 in-flight:
 
-In multiplayer mode, why does the host have to regenerate a new code and QR code when a player joins the room?
-
 
 todo:
+
 
 I'd like to review all the teaching tooltips for accuracy. Look them up in the book by the reference pages, check for accuracy, and verify that they make sense for that wigdet. Split off as many subagents as necessary.
 

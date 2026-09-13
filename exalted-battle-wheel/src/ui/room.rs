@@ -1,13 +1,20 @@
-//! Host or join a direct peer-to-peer room: name yourself, exchange connection codes or QR codes,
-//! see who's in the room, and (as host) kick someone. Joining adopts the host's whole battle
+//! Host or join a direct peer-to-peer room: name yourself, exchange connection codes, see who's in
+//! the room, rename yourself at any time, and — if you're an admin — promote or demote anyone but
+//! yourself and the host, or (host only) kick someone. Joining adopts the host's whole battle
 //! immediately; from then on every edit anyone makes is a two-phase-commit vote riding the same
 //! connection, so the room stays in agreement or disconnects loudly rather than drifting apart.
+//!
+//! There is no server: whoever hosts shares a connection code out of band (chat, a call), and the
+//! other side pastes back a reply code the same way. Anyone with the code can join. Admin is
+//! enforced against anything that reaches the shared battle — the host refuses a change proposed
+//! by a non-admin — but a connected peer still votes on every change like everyone else, so a
+//! modified client can still stall or tear down the room by voting badly.
 
 use crate::battle_net::Battles;
 use crate::net::{Mode, PeerId, Role};
 use crate::prefs::Prefs;
 use crate::ui::glossary::Topic;
-use crate::ui::{Modal, Qr, Spinner, Tip};
+use crate::ui::{CopyButton, DetailTip, Modal, Spinner, Tip};
 use leptos::prelude::*;
 
 /// Which sub-view `Mode::Solo` is showing. Unlike the room's actual state (host/joined/peers,
@@ -24,18 +31,6 @@ enum MenuChoice {
 /// navigating the modal closed and back open doesn't resurrect a stale invite.
 #[derive(Clone, Copy)]
 pub struct PendingJoin(pub RwSignal<Option<String>>);
-
-/// Builds the absolute, clickable URL an invite QR encodes: scanning it should land a phone
-/// straight in the join flow via the same `#j=` fragment `app.rs` parses on boot. Falls back to
-/// the bare code if `window`/`location` is ever unavailable, which is still enough to type in by
-/// hand — the fallback is defensive rather than expected to ever fire in a real browser.
-fn invite_url(code: &str) -> String {
-    let Some(window) = web_sys::window() else { return code.to_string() };
-    let location = window.location();
-    let origin = location.origin().unwrap_or_default();
-    let pathname = location.pathname().unwrap_or_default();
-    format!("{origin}{pathname}#j={code}")
-}
 
 #[component]
 pub fn RoomButton() -> impl IntoView {
@@ -101,20 +96,10 @@ fn RoomPanelBody() -> impl IntoView {
 
     view! {
         <div class="room-panel">
-            <p class="room-hint">
-                "There is no server: whoever hosts shares a connection code out of band (chat, a call), and the other side pastes back a reply code the same way. Anyone with the code can join, and if everyone is an admin, anyone who joins can change the battle \u{2014} nothing here enforces that against a modified client."
-            </p>
             {move || match battles.mode().get() {
                 Mode::Solo => view! {
                     <div class="room-menu">
-                        <label class="room-field">
-                            "Your name"
-                            <input
-                                placeholder="Name"
-                                prop:value=move || prefs.player_name.get()
-                                on:input=move |ev| prefs.player_name.set(event_target_value(&ev))
-                            />
-                        </label>
+                        <NameField />
                         {move || match menu.get() {
                             MenuChoice::Root => view! {
                                 <>
@@ -125,7 +110,7 @@ fn RoomPanelBody() -> impl IntoView {
                                                 prop:checked=move || everyone_admin.get()
                                                 on:change=move |ev| everyone_admin.set(event_target_checked(&ev))
                                             />
-                                            "Everyone who joins can change the battle"
+                                            "Everyone who joins starts as an admin"
                                         </label>
                                     </Tip>
                                     <button class="btn" on:click=host>"Host a room"</button>
@@ -152,21 +137,52 @@ fn RoomPanelBody() -> impl IntoView {
                 }.into_any(),
                 Mode::Hosting => view! {
                     <div class="room-menu">
+                        <NameField />
                         <HostingFields />
                         <PeerList />
+                        {move || battles.awaiting_peer().get().then(|| view! {
+                            <div class="room-pending"><Spinner /> "Waiting for a player to join\u{2026}"</div>
+                        })}
                         <button class="btn" on:click=leave>"Leave room"</button>
                     </div>
                 }.into_any(),
                 Mode::Joined => view! {
                     <div class="room-menu">
+                        <NameField />
                         <JoinedFields />
                         <PeerList />
+                        {move || battles.self_id().get().is_none().then(|| view! {
+                            <div class="room-pending"><Spinner /> "Joining room\u{2026}"</div>
+                        })}
                         <button class="btn" on:click=leave>"Leave room"</button>
                     </div>
                 }.into_any(),
             }}
             <Advanced />
         </div>
+    }
+}
+
+/// The same field in all three modes. `prefs.player_name` is this browser's own copy and follows
+/// every keystroke; the room only hears about a rename on `on:change` (blur or Enter), since every
+/// accepted one costs the host a full roster rebroadcast to every peer, not worth paying per
+/// keystroke on a channel also carrying the agreement traffic. `battles.rename` is a no-op outside
+/// a room, so this one component serves `Solo`, `Hosting`, and `Joined` alike.
+#[component]
+fn NameField() -> impl IntoView {
+    let battles = expect_context::<Battles>();
+    let prefs = expect_context::<Prefs>();
+
+    view! {
+        <label class="room-field">
+            <Tip topic=Topic::RoomRename><span>"Your name"</span></Tip>
+            <input
+                placeholder="Name"
+                prop:value=move || prefs.player_name.get()
+                on:input=move |ev| prefs.player_name.set(event_target_value(&ev))
+                on:change=move |ev| battles.rename(event_target_value(&ev))
+            />
+        </label>
     }
 }
 
@@ -277,13 +293,13 @@ fn HostingFields() -> impl IntoView {
             <div class="room-invite-slot">
                 {move || match battles.invite().get() {
                     Some(code) => view! {
-                        <>
+                        <div class="room-code">
                             <label class="room-field">
                                 "Send this to whoever is joining"
                                 <textarea readonly=true prop:value=code.clone() />
                             </label>
-                            <Qr text=Signal::derive(move || invite_url(&code)) />
-                        </>
+                            <CopyButton text=code />
+                        </div>
                     }.into_any(),
                     None => view! {
                         <div class="room-pending"><Spinner /> "Preparing an invite\u{2026}"</div>
@@ -314,13 +330,13 @@ fn JoinedFields() -> impl IntoView {
         <div class="room-invite-slot">
             {move || match battles.answer_code().get() {
                 Some(code) => view! {
-                    <>
+                    <div class="room-code">
                         <label class="room-field">
                             "Send this back to the host"
                             <textarea readonly=true prop:value=code.clone() />
                         </label>
-                        <Qr text=Signal::derive(move || code.clone()) />
-                    </>
+                        <CopyButton text=code />
+                    </div>
                 }.into_any(),
                 None => view! {
                     <div class="room-pending"><Spinner /> "Preparing your reply\u{2026}"</div>
@@ -350,18 +366,49 @@ fn PeerRow(id: PeerId) -> impl IntoView {
     let info = move || battles.peers().get().into_iter().find(|peer| peer.id == id);
     let name = move || info().map(|peer| peer.name).unwrap_or_default();
     let admin = move || info().is_some_and(|peer| peer.admin);
-    let show_kick = move || battles.role().get() == Role::Host && battles.self_id().get() != Some(id);
+    let is_host = move || battles.host_id().get() == Some(id);
+    let is_self = move || battles.self_id().get() == Some(id);
+    let can_administer = move || matches!(battles.role().get(), Role::Host | Role::Admin);
+    let show_admin_toggle = move || can_administer() && !is_host() && !is_self();
+    let show_kick = move || battles.role().get() == Role::Host && !is_self();
+    let toggle_admin = move |_| battles.set_admin(id, !admin());
     let kick = move |_| battles.kick(id);
+
+    // `topic`/`detail` are re-derived on every hover rather than cached: `DetailTip` only reads
+    // them at pointerenter/focusin, but a `Signal` costs nothing extra idle and keeps this correct
+    // if the seat's own role changes while the tip happens to already be open.
+    let role_topic = Signal::derive(move || match (is_host(), admin()) {
+        (true, _) => Topic::RoomRoleHost,
+        (false, true) => Topic::RoomRoleAdmin,
+        (false, false) => Topic::RoomRoleSpectator,
+    });
+    let role_detail = Signal::derive(move || if is_self() { "This is you.".to_string() } else { String::new() });
 
     view! {
         <li class="peer-row">
-            <span class="peer-name">{name}</span>
-            {move || admin().then(|| view! { <span class="peer-badge">"Admin"</span> })}
-            {move || show_kick().then(|| view! {
-                <Tip topic=Topic::RoomKick>
-                    <button class="btn peer-kick" on:click=kick>"\u{2715}"</button>
+            <DetailTip topic=role_topic detail=role_detail>
+                <span class="peer-name">{name}</span>
+            </DetailTip>
+            {move || is_host().then(|| view! { <span class="peer-badge peer-badge-host">"Host"</span> })}
+            {move || admin().then(|| view! {
+                <Tip topic=Topic::RoomAdmin>
+                    <span class="peer-badge">"Admin"</span>
                 </Tip>
             })}
+            <span class="peer-actions">
+                {move || show_admin_toggle().then(|| view! {
+                    <Tip topic=Topic::RoomAdmin>
+                        <button class="btn peer-admin-toggle" on:click=toggle_admin>
+                            {move || if admin() { "Remove admin" } else { "Make admin" }}
+                        </button>
+                    </Tip>
+                })}
+                {move || show_kick().then(|| view! {
+                    <Tip topic=Topic::RoomKick>
+                        <button class="btn" on:click=kick>"\u{2715}"</button>
+                    </Tip>
+                })}
+            </span>
         </li>
     }
 }

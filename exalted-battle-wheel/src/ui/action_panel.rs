@@ -544,7 +544,7 @@ fn NormalControls(actor_id: CombatantId, battles: Battles, battle: Memo<Battle>)
             })
         }}
         <DetailTip topic=declare_topic detail=declare_detail>
-            <button on:click=declare>"Declare"</button>
+            <button on:click=declare disabled=move || battles.read_only().get()>"Declare"</button>
         </DetailTip>
         {move || declare_result.get().map(|result| match result {
             Ok(message) => view! { <div class="action-status">{message}</div> }.into_any(),
@@ -591,7 +591,7 @@ fn SequenceControls(actor_id: CombatantId, battles: Battles, battle: Memo<Battle
             />
         </Tip>
         <Tip topic=Topic::AdvanceSequence>
-            <button on:click=advance>"Advance"</button>
+            <button on:click=advance disabled=move || battles.read_only().get()>"Advance"</button>
         </Tip>
     }
 }
@@ -641,10 +641,14 @@ fn InterruptControls(actor_id: CombatantId, battles: Battles, battle: Memo<Battl
             />
         </Tip>
         <Tip topic=Topic::InterruptSequence>
-            <button on:click=interrupt_voluntary class="interrupt-button">"Interrupt"</button>
+            <button on:click=interrupt_voluntary class="interrupt-button" disabled=move || battles.read_only().get()>
+                "Interrupt"
+            </button>
         </Tip>
         <Tip topic=Topic::InterruptDistracted>
-            <button on:click=interrupt_distracted class="interrupt-button">"Distracted"</button>
+            <button on:click=interrupt_distracted class="interrupt-button" disabled=move || battles.read_only().get()>
+                "Distracted"
+            </button>
         </Tip>
     }
 }

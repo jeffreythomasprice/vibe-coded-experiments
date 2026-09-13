@@ -69,7 +69,7 @@ pub fn Roster() -> impl IntoView {
                                 BattleMode::Mass => "mass",
                                 BattleMode::Social => "social",
                             }
-                            disabled=move || !in_setup()
+                            disabled=move || battles.read_only().get() || !in_setup()
                             on:change=move |ev| {
                                 set_mode(match event_target_value(&ev).as_str() {
                                     "mass" => BattleMode::Mass,
@@ -125,7 +125,7 @@ pub fn Roster() -> impl IntoView {
                     </label>
                 </Tip>
                 <Tip topic=Topic::AddCombatant>
-                    <button on:click=add_combatant>"Add"</button>
+                    <button on:click=add_combatant disabled=move || battles.read_only().get()>"Add"</button>
                 </Tip>
             </div>
             <ul class="roster-list">
@@ -134,7 +134,10 @@ pub fn Roster() -> impl IntoView {
                 </For>
             </ul>
             <Tip topic=Topic::StartBattle>
-                <button on:click=start_battle disabled=move || !matches!(battle.read().phase, Phase::Setup)>
+                <button
+                    on:click=start_battle
+                    disabled=move || battles.read_only().get() || !matches!(battle.read().phase, Phase::Setup)
+                >
                     "Start Battle"
                 </button>
             </Tip>
@@ -173,7 +176,7 @@ fn RosterRow(id: CombatantId, battle: Memo<Battle>, battles: Battles) -> impl In
                 }
             }}
             <Tip topic=Topic::RemoveCombatant>
-                <button on:click=remove>"Remove"</button>
+                <button on:click=remove disabled=move || battles.read_only().get()>"Remove"</button>
             </Tip>
         </li>
     }

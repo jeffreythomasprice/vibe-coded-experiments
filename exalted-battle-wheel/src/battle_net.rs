@@ -168,6 +168,10 @@ impl Battles {
         self.session.self_id()
     }
 
+    pub fn host_id(&self) -> Signal<Option<PeerId>> {
+        self.session.host_id()
+    }
+
     pub fn peers(&self) -> Signal<Vec<PeerInfo>> {
         self.session.peers()
     }
@@ -187,6 +191,16 @@ impl Battles {
         self.session.busy()
     }
 
+    /// Whether the host has a live invite nobody has claimed yet.
+    pub fn awaiting_peer(&self) -> Signal<bool> {
+        self.session.awaiting_peer()
+    }
+
+    /// Whether this node may only watch — its editing controls should be disabled.
+    pub fn read_only(&self) -> Signal<bool> {
+        self.session.read_only()
+    }
+
     pub fn host(&self, name: String, everyone_admin: bool) {
         self.session.host(name, everyone_admin);
     }
@@ -201,6 +215,14 @@ impl Battles {
 
     pub fn kick(&self, peer: PeerId) {
         self.session.kick(peer);
+    }
+
+    pub fn rename(&self, name: String) {
+        self.session.rename(name);
+    }
+
+    pub fn set_admin(&self, peer: PeerId, admin: bool) {
+        self.session.set_admin(peer, admin);
     }
 
     pub fn leave(&self) {

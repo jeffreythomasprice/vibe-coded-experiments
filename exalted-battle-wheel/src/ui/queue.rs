@@ -364,8 +364,10 @@ fn CombatantEditor(
                 <input prop:value=move || note.get() on:input=move |ev| note.set(event_target_value(&ev)) />
             </label>
             <div class="queue-editor-actions">
-                <button on:click=cancel_action class="interrupt-button">"Cancel action \u{2014} ready now"</button>
-                <button on:click=apply>"Apply"</button>
+                <button on:click=cancel_action class="interrupt-button" disabled=move || battles.read_only().get()>
+                    "Cancel action \u{2014} ready now"
+                </button>
+                <button on:click=apply disabled=move || battles.read_only().get()>"Apply"</button>
             </div>
         </div>
     }
@@ -404,8 +406,8 @@ fn MarkerEditor(marker_id: MarkerId, initial: Marker, battles: Battles, on_close
                 <input type="number" min="1" prop:value=move || ticks.get() on:input=move |ev| ticks.set(event_target_value(&ev)) />
             </label>
             <div class="queue-editor-actions">
-                <button on:click=remove class="interrupt-button">"Remove"</button>
-                <button on:click=apply>"Apply"</button>
+                <button on:click=remove class="interrupt-button" disabled=move || battles.read_only().get()>"Remove"</button>
+                <button on:click=apply disabled=move || battles.read_only().get()>"Apply"</button>
             </div>
         </div>
     }

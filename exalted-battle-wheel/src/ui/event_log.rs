@@ -229,6 +229,7 @@ pub fn EventLogButton() -> impl IntoView {
                                     <button
                                         class="event-log-row"
                                         class:event-log-row-current=cursor == 0
+                                        disabled=move || battles.read_only().get()
                                         on:click=move |_| jump(0)
                                     >
                                         "Battle start"
@@ -245,6 +246,7 @@ pub fn EventLogButton() -> impl IntoView {
                                                 class="event-log-row"
                                                 class:event-log-row-current=is_current
                                                 class:event-log-row-future=is_future
+                                                disabled=move || battles.read_only().get()
                                                 on:click=move |_| jump(index + 1)
                                             >
                                                 {line.text}

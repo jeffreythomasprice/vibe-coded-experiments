@@ -2,10 +2,10 @@
 
 Rooms connect browsers directly, peer-to-peer (WebRTC), with no server in between. There's no
 rendezvous service either, so the two sides exchange connection info by hand: one side hosts and
-shares an invite (a text code, or a QR code for screen-share/phone-camera convenience), the other
-pastes or scans it back a reply the same way. Once connected, every change either side makes is
-proposed to the room and only takes effect once everyone agrees — a genuine disagreement
-disconnects everyone with an error rather than letting the battles quietly drift apart.
+shares a text invite code, the other pastes it back a reply the same way. Once connected, every
+change either side makes is proposed to the room and only takes effect once everyone agrees — a
+genuine disagreement disconnects everyone with an error rather than letting the battles quietly
+drift apart.
 
 There's no TURN/relay server and no authentication:
 
@@ -14,23 +14,26 @@ There's no TURN/relay server and no authentication:
   connection will simply fail. You'll get an honest "could not connect" error rather than an
   indefinite hang — within about 15 seconds on the host's side once it accepts your reply, or up to
   a minute on the joining side, since that wait also covers the time it takes a human to carry the
-  reply code back to the host (a QR hand-off to a phone included) rather than just the network.
-- The "everyone who joins can change the battle" flag and the kick button are conveniences, not
-  security. Nothing stops a modified client from ignoring either.
+  reply code back to the host rather than just the network.
+- Admin is enforced against anything that reaches the shared battle: the host refuses a change
+  proposed by anyone who isn't an admin. What that can't stop is a connected peer voting badly on
+  everyone else's changes, since every node votes on every change the same way regardless of admin
+  — a modified client can still stall or tear down the room that way. Kick is a plain disconnect,
+  not a ban: whoever was kicked can rejoin with a fresh invite like anyone else.
 
 ## Connecting
 
 1. One side: **Multiplayer (Solo) → name yourself → Host a room**. A spinner runs while the invite
-   is prepared; the code and QR appear together a few seconds later.
-2. Send the invite to the other side — paste the text, or let them scan the QR. The QR encodes a
-   full link; scanning it (or opening it directly) drops the other side straight into the join
-   flow with the code already filled in.
-3. Other side: name yourself, confirm **Join**. A spinner runs the same way, then a reply code/QR
-   of its own appears.
+   is prepared; the code appears a few seconds later, with a **Copy** button next to it.
+2. Send the invite to the other side — paste the text, or copy it straight to the clipboard.
+3. Other side: name yourself, confirm **Join**. A spinner runs the same way, then a reply code of
+   its own appears.
 4. Send the reply back to the host the same way, paste it into "Paste their reply code here", and
    click **Connect**.
 5. Once the peer list shows both names, you're connected. Joining adopts whatever battle the host
-   currently has; hosting never resets your own.
+   currently has; hosting never resets your own. Anyone can rename themselves at any time from the
+   room modal, and any admin can promote or demote anyone else (except themselves and the host,
+   who is always an admin) — both take effect for everyone immediately.
 
 ## Manual test: two tabs, one machine
 
@@ -67,8 +70,11 @@ don't really exercise this; local traffic wouldn't need STUN in the first place.
    at one side's network (no TURN is configured — see the top of this document) rather than a bug;
    swapping one side for a phone hotspot is a quick way to confirm that.
 3. Once connected, exercise the real mechanics: add a combatant from each side, advance the tick,
-   undo — confirm changes land on both screens. Kick from the host and confirm the kicked side
-   sees "The host removed you from the room," drops back to Solo, and keeps its own local battle.
+   undo — confirm changes land on both screens. Rename yourself from either side and confirm the
+   other side's player list picks it up. From the host, demote the other side to a non-admin and
+   confirm its editing controls grey out immediately and a change it tries anyway is refused;
+   promote it back and confirm they re-enable. Kick from the host and confirm the kicked side sees
+   "The host removed you from the room," drops back to Solo, and keeps its own local battle.
 
 ## NAT hairpinning (and the localhost workaround)
 

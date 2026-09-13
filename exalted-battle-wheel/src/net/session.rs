@@ -48,11 +48,10 @@ const CONNECT_TIMEOUT_MS: i32 = 15000;
 
 /// How long the joiner waits, after producing its own answer, for a `Welcome` to arrive. Unlike
 /// `CONNECT_TIMEOUT_MS`, this window still has a human step inside it: the joiner's answer has to
-/// be copied (or QR-scanned) back to the host and pasted into `accept_answer` before the host's own
-/// ICE agent even has anything to connect to, and only then does the `Welcome` round trip happen.
-/// A short deadline here doesn't catch a slow network — it catches a slow human, misreported as one
-/// — so this is deliberately much more generous than `CONNECT_TIMEOUT_MS`, especially since this is
-/// exactly the path a QR-code phone hand-off goes through.
+/// be copied back to the host and pasted into `accept_answer` before the host's own ICE agent even
+/// has anything to connect to, and only then does the `Welcome` round trip happen. A short deadline
+/// here doesn't catch a slow network — it catches a slow human, misreported as one — so this is
+/// deliberately much more generous than `CONNECT_TIMEOUT_MS`.
 const JOIN_REPLY_TIMEOUT_MS: i32 = 60000;
 
 fn report_connect_timeout() {
@@ -130,13 +129,18 @@ enum RoomState<A: Replicated> {
         /// The one live, not-yet-joined invite. Regenerated every time a peer joins (or a pending
         /// connection dies before joining), so there is always exactly one usable invite.
         pending: Option<(PeerId, Link)>,
+        /// Bumped by every `create_invite` call and captured by its own async task, so that if two
+        /// invite-generation attempts are ever in flight at once (`on_hello`'s auto-regeneration is
+        /// the only case that can race like this), whichever one finishes second can tell it's no
+        /// longer current and close its now-orphaned connection instead of clobbering `pending`
+        /// with a `Link` nobody has the matching offer for.
+        invite_generation: u64,
         queue: VecDeque<QueuedProposal<A>>,
         in_flight: Option<InFlight<A>>,
     },
     Joined {
         /// Placeholder until `Welcome` names them; a random real id will never collide with it.
         self_id: PeerId,
-        host_id: PeerId,
         link: Link,
         /// This node's one outstanding proposal, if any — a peer only ever waits on one at a time
         /// in practice (the UI gates on `busy`), but see `joined_propose` for the defensive case.
@@ -158,6 +162,20 @@ fn roster_of(self_id: PeerId, self_name: &str, peers: &[ConnectedPeer]) -> Vec<P
         .collect()
 }
 
+/// Every roster entry's name passes through here before it's stored — a name is replicated to
+/// every peer on every change, so an unbounded one makes one peer's typing everyone else's
+/// bandwidth. Not attempting to catch anything more than length: this is a display label, not a
+/// security boundary.
+const MAX_NAME_LEN: usize = 40;
+
+fn sanitize_name(name: String) -> String {
+    let trimmed = name.trim();
+    match trimmed.char_indices().nth(MAX_NAME_LEN) {
+        Some((end, _)) => trimmed[..end].to_string(),
+        None => trimmed.to_string(),
+    }
+}
+
 /// Drives a `Replicated` app through proposals, and — once hosting or joined — through a room's
 /// membership and the two-phase-commit vote that keeps every node's copy in agreement. In
 /// `Mode::Solo`, `propose` still settles immediately via `sequence` + `commit`: there is nobody
@@ -169,6 +187,11 @@ pub struct Session<A: Replicated> {
     mode: RwSignal<Mode>,
     role: RwSignal<Role>,
     self_id: RwSignal<Option<PeerId>>,
+    /// Who the room answers to. `Some` for everyone in a room, including the host itself (its own
+    /// id); `None` in `Mode::Solo`. The roster synthesizes the host as entry 0, but nothing on the
+    /// wire marks it as such, so the UI needs this to tell the host's row apart from any other
+    /// admin's.
+    host_id: RwSignal<Option<PeerId>>,
     peers: RwSignal<Vec<PeerInfo>>,
     invite: RwSignal<Option<String>>,
     answer_code: RwSignal<Option<String>>,
@@ -188,6 +211,7 @@ impl<A: Replicated> Session<A> {
             mode: RwSignal::new(Mode::Solo),
             role: RwSignal::new(Role::Host),
             self_id: RwSignal::new(None),
+            host_id: RwSignal::new(None),
             peers: RwSignal::new(Vec::new()),
             invite: RwSignal::new(None),
             answer_code: RwSignal::new(None),
@@ -220,6 +244,11 @@ impl<A: Replicated> Session<A> {
         Signal::derive(move || self_id.get())
     }
 
+    pub fn host_id(&self) -> Signal<Option<PeerId>> {
+        let host_id = self.host_id;
+        Signal::derive(move || host_id.get())
+    }
+
     pub fn peers(&self) -> Signal<Vec<PeerInfo>> {
         let peers = self.peers;
         Signal::derive(move || peers.get())
@@ -233,6 +262,25 @@ impl<A: Replicated> Session<A> {
     pub fn answer_code(&self) -> Signal<Option<String>> {
         let answer_code = self.answer_code;
         Signal::derive(move || answer_code.get())
+    }
+
+    /// Whether the host is currently sitting on a live invite nobody has claimed yet — true for
+    /// essentially the whole time this end is `Hosting`, since a fresh invite is always kept
+    /// live for one more joiner (see `pending` on `RoomState::Hosting`). Lets the UI show that
+    /// this end is waiting on someone else, rather than just a blank "paste a code here" form.
+    pub fn awaiting_peer(&self) -> Signal<bool> {
+        let state = self.state;
+        Signal::derive(move || state.with(|state| matches!(state, RoomState::Hosting { pending: Some(_), .. })))
+    }
+
+    /// Whether this node may only watch. A spectator's copy stays in step with the room and it
+    /// votes on every `Prepare` like everyone else — it just may not propose a change: the host
+    /// answers a non-admin's `Propose` with an `Abort` (see `host_on_propose`). Driven by `role`,
+    /// which is re-derived from the roster on every `Roster`/`Welcome` (`sync_role_from_roster`),
+    /// so a promotion or demotion flips this — and everything gated on it — with no extra wiring.
+    pub fn read_only(&self) -> Signal<bool> {
+        let role = self.role;
+        Signal::derive(move || role.get() == Role::Spectator)
     }
 
     /// Whether this node has a proposal currently awaiting agreement.
@@ -264,6 +312,48 @@ impl<A: Replicated> Session<A> {
         }
     }
 
+    // ----------------------------------------------------- membership (hosting and joined both)
+
+    /// Renames this node in whatever room it's in — a no-op in `Mode::Solo`, so the room UI can
+    /// call this unconditionally regardless of which branch is showing. The host is the only node
+    /// that edits the roster, so a joiner asks rather than tells: nobody, including the caller,
+    /// sees the new name until the host's own `Roster` broadcast carries it back around.
+    pub fn rename(&self, name: String) {
+        let name = sanitize_name(name);
+        if name.is_empty() {
+            return;
+        }
+        match self.mode.get_untracked() {
+            Mode::Solo => {}
+            Mode::Hosting => {
+                let Some(self_id) = self.self_id.get_untracked() else { return };
+                self.host_set_name(self_id, name);
+            }
+            Mode::Joined => self.send_to_host(&Msg::<A>::Rename { name }),
+        }
+    }
+
+    /// Promotes or demotes another peer. The host and a peer both funnel into `host_set_admin`,
+    /// which is where every rule about who may do this to whom is checked — a peer's own UI
+    /// hiding the control is a convenience, not the enforcement.
+    pub fn set_admin(&self, peer_id: PeerId, admin: bool) {
+        match self.mode.get_untracked() {
+            Mode::Solo => {}
+            Mode::Hosting => {
+                let Some(self_id) = self.self_id.get_untracked() else { return };
+                self.host_set_admin(self_id, peer_id, admin);
+            }
+            Mode::Joined => self.send_to_host(&Msg::<A>::SetAdmin { peer: peer_id, admin }),
+        }
+    }
+
+    fn send_to_host(self, message: &Msg<A>) {
+        let Some(link) = self.joined_link() else { return };
+        if let Ok(json) = serde_json::to_string(message) {
+            let _ = link.send(&json);
+        }
+    }
+
     // --------------------------------------------------------------------------------- hosting
 
     pub fn host(&self, name: String, everyone_admin: bool) {
@@ -276,12 +366,14 @@ impl<A: Replicated> Session<A> {
             everyone_admin,
             peers: Vec::new(),
             pending: None,
+            invite_generation: 0,
             queue: VecDeque::new(),
             in_flight: None,
         });
         this.mode.set(Mode::Hosting);
         this.role.set(Role::Host);
         this.self_id.set(Some(self_id));
+        this.host_id.set(Some(self_id));
         this.room_active.set(true);
         this.invite.set(None);
         this.create_invite();
@@ -294,23 +386,37 @@ impl<A: Replicated> Session<A> {
         // connection that already has one) instead of an honest "not ready yet".
         self.invite.set(None);
         let peer_id = random_peer_id();
+        let mut generation = 0;
+        self.state.update(|state| {
+            if let RoomState::Hosting { invite_generation, .. } = state {
+                *invite_generation += 1;
+                generation = *invite_generation;
+            }
+        });
         spawn_local(async move {
             let on_message = move |link: Link, text: String| self.on_host_message(peer_id, link, text);
             let on_close = move || self.on_host_peer_closed(peer_id);
             match Link::host(|_link| {}, on_message, on_close).await {
                 Ok((link, code)) => {
-                    let mut still_hosting = false;
+                    let mut still_current = false;
                     self.state.update(|state| {
-                        if let RoomState::Hosting { pending, .. } = state {
-                            *pending = Some((peer_id, link));
-                            still_hosting = true;
+                        if let RoomState::Hosting { pending, invite_generation, .. } = state
+                            && *invite_generation == generation
+                        {
+                            *pending = Some((peer_id, link.clone()));
+                            still_current = true;
                         }
                     });
-                    if still_hosting {
+                    if still_current {
                         self.invite.set(Some(code));
+                    } else {
+                        // Either `leave()`/a second `host()` ran while this was negotiating, or
+                        // another `create_invite` call already won the race for this slot — this
+                        // connection has no home to go to. Close it explicitly rather than just
+                        // dropping it: an unclosed `RtcPeerConnection` keeps trying to negotiate in
+                        // the background instead of releasing its ICE/DTLS resources immediately.
+                        link.close();
                     }
-                    // Otherwise `leave()` (or a second `host()`) ran while this was negotiating;
-                    // the link has no home to go to and is simply dropped.
                 }
                 Err(error) => {
                     report("create an invite", error);
@@ -385,9 +491,11 @@ impl<A: Replicated> Session<A> {
                 return;
             };
             match message {
-                Message::Hello { name } => self.on_hello(peer_id, link, name),
+                Message::Hello { name } => self.on_hello(peer_id, link, sanitize_name(name)),
                 Message::Bye => self.remove_peer(peer_id),
-                Message::Propose { txn, request } => self.host_enqueue(txn, peer_id, request, None),
+                Message::Rename { name } => self.host_set_name(peer_id, sanitize_name(name)),
+                Message::SetAdmin { peer, admin } => self.host_set_admin(peer_id, peer, admin),
+                Message::Propose { txn, request } => self.host_on_propose(peer_id, txn, request),
                 Message::Vote { txn, vote } => self.host_on_vote(peer_id, txn, vote),
                 // A peer never legitimately sends these; there is nothing to act on either way.
                 Message::Welcome { .. } | Message::Roster { .. } | Message::Kick | Message::Prepare { .. } | Message::Commit { .. } | Message::Abort { .. } => {}
@@ -405,16 +513,73 @@ impl<A: Replicated> Session<A> {
             }
             *pending = None;
             peers.push(ConnectedPeer { info: PeerInfo { id: peer_id, name, admin: *everyone_admin }, link: link.clone() });
-            welcome_context = Some((*self_id, *everyone_admin, roster_of(*self_id, self_name, peers)));
+            welcome_context = Some((*self_id, roster_of(*self_id, self_name, peers)));
         });
-        let Some((host_id, everyone_admin, roster)) = welcome_context else { return };
-        let welcome = Msg::<A>::Welcome { you: peer_id, host: host_id, everyone_admin, roster: roster.clone(), snapshot };
+        let Some((host_id, roster)) = welcome_context else { return };
+        let welcome = Msg::<A>::Welcome { you: peer_id, host: host_id, roster: roster.clone(), snapshot };
         if let Ok(json) = serde_json::to_string(&welcome) {
             let _ = link.send(&json);
         }
         self.peers.set(roster);
         self.broadcast_roster(Some(peer_id));
         self.create_invite();
+    }
+
+    /// The host owns every name in the room; a joiner's `Rename` and the host's own `rename` both
+    /// land here. Skips the rebroadcast when nothing actually changed, since `on:change` fires on
+    /// every blur regardless of whether the field was actually edited.
+    fn host_set_name(self, peer_id: PeerId, name: String) {
+        let mut roster = None;
+        self.state.update(|state| {
+            let RoomState::Hosting { self_id, self_name, peers, .. } = state else { return };
+            let changed = if peer_id == *self_id {
+                let changed = *self_name != name;
+                *self_name = name;
+                changed
+            } else {
+                match peers.iter_mut().find(|peer| peer.info.id == peer_id) {
+                    Some(peer) => {
+                        let changed = peer.info.name != name;
+                        peer.info.name = name;
+                        changed
+                    }
+                    None => false,
+                }
+            };
+            if changed {
+                roster = Some(roster_of(*self_id, self_name, peers));
+            }
+        });
+        let Some(roster) = roster else { return };
+        self.peers.set(roster);
+        self.broadcast_roster(None);
+    }
+
+    /// Every promotion and demotion in the room funnels through here, the host's own clicks
+    /// included, so this is the one place the rules are checked: the requester must be an admin,
+    /// and the target must be neither the requester nor the host. A request that fails is dropped
+    /// rather than answered — the roster the host broadcasts is the only authority on who is an
+    /// admin, so a requester acting on a stale one simply never sees the change it asked for.
+    fn host_set_admin(self, requester: PeerId, target: PeerId, admin: bool) {
+        let mut roster = None;
+        self.state.update(|state| {
+            let RoomState::Hosting { self_id, self_name, peers, .. } = state else { return };
+            let requester_is_admin =
+                requester == *self_id || peers.iter().any(|peer| peer.info.id == requester && peer.info.admin);
+            if !requester_is_admin || target == requester || target == *self_id {
+                tracing::debug!(requester = requester.0, target = target.0, "refusing an admin change");
+                return;
+            }
+            let Some(peer) = peers.iter_mut().find(|peer| peer.info.id == target) else { return };
+            if peer.info.admin == admin {
+                return;
+            }
+            peer.info.admin = admin;
+            roster = Some(roster_of(*self_id, self_name, peers));
+        });
+        let Some(roster) = roster else { return };
+        self.peers.set(roster);
+        self.broadcast_roster(None);
     }
 
     /// Deferred for the same reason as `on_host_message`: this runs from the closing link's own
@@ -482,15 +647,20 @@ impl<A: Replicated> Session<A> {
         })
     }
 
-    /// Admin-only in the UI that calls this; nothing here re-checks that, since there is no
-    /// server to enforce it against a modified client anyway (see the room UI's own disclosure).
-    pub fn kick(&self, peer_id: PeerId) {
-        let this = *self;
-        let link = this.state.with_untracked(|state| match state {
+    fn host_link(self, peer_id: PeerId) -> Option<Link> {
+        self.state.with_untracked(|state| match state {
             RoomState::Hosting { peers, .. } => peers.iter().find(|peer| peer.info.id == peer_id).map(|peer| peer.link.clone()),
             _ => None,
-        });
-        let Some(link) = link else { return };
+        })
+    }
+
+    /// Host-only in the UI that calls this; nothing here re-checks that, since there is no server
+    /// to enforce it against a modified client anyway (see the room UI's own disclosure) — and
+    /// unlike `host_set_admin`/`host_on_propose`, a non-host has no peer links to kick over in the
+    /// first place, so there is nothing for a modified client to reach here even if it tried.
+    pub fn kick(&self, peer_id: PeerId) {
+        let this = *self;
+        let Some(link) = this.host_link(peer_id) else { return };
         if let Ok(json) = serde_json::to_string(&Msg::<A>::Kick) {
             let _ = link.send(&json);
         }
@@ -505,10 +675,34 @@ impl<A: Replicated> Session<A> {
 
     // ------------------------------------------------------- hosting: the two-phase-commit vote
 
+    /// Where every `Propose` from a peer actually lands (the host's own proposals go straight to
+    /// `host_enqueue`, since the host is always an admin). A peer whose admin flag was revoked a
+    /// moment ago may still have one in flight, or a modified client may simply ignore the flag —
+    /// either way the answer has to be an explicit `Abort` and not silence: nothing was enqueued,
+    /// so no timeout is ever scheduled for it, and the proposer's `awaiting` slot only clears on a
+    /// `Commit`/`Abort` naming its own `txn`. Dropping the message here would wedge that peer's
+    /// `busy()` at true until it left the room.
+    fn host_on_propose(self, peer_id: PeerId, txn: TxnId, request: A::Request) {
+        let allowed = self.state.with_untracked(|state| match state {
+            RoomState::Hosting { peers, .. } => peers.iter().any(|peer| peer.info.id == peer_id && peer.info.admin),
+            _ => false,
+        });
+        if !allowed {
+            let reason = AbortReason::Rejected { reason: "you are not an admin in this room".to_string() };
+            let abort = Msg::<A>::Abort { txn, origin: peer_id, reason };
+            if let (Some(link), Ok(json)) = (self.host_link(peer_id), serde_json::to_string(&abort)) {
+                let _ = link.send(&json);
+            }
+            return;
+        }
+        self.host_enqueue(txn, peer_id, request, None);
+    }
+
     /// Adds a proposal to the host's queue and, if nothing is already in flight, starts it. Used
     /// both for the host's own edits (`origin == self_id`, `on_settled` carries the caller's
-    /// callback) and for a `Propose` arriving from a peer (`on_settled` is `None` — that peer's
-    /// own `awaiting` slot is what resolves their callback, once `Commit`/`Abort` reaches them).
+    /// callback) and for an already-admin-checked `Propose` arriving from a peer (`on_settled` is
+    /// `None` — that peer's own `awaiting` slot is what resolves their callback, once
+    /// `Commit`/`Abort` reaches them).
     fn host_enqueue(self, txn: TxnId, origin: PeerId, request: A::Request, on_settled: Option<Settle>) {
         let mut idle = false;
         self.state.update(|state| {
@@ -740,8 +934,8 @@ impl<A: Replicated> Session<A> {
             let on_close = move || this.on_joined_disconnected();
             match Link::join(&offer_code, on_open, on_message, on_close).await {
                 Ok((link, answer)) => {
-                    // Real ids arrive with `Welcome`; nothing observes these placeholders before then.
-                    this.state.set(RoomState::Joined { self_id: PeerId(0), host_id: PeerId(0), link, awaiting: None });
+                    // Real id arrives with `Welcome`; nothing observes this placeholder before then.
+                    this.state.set(RoomState::Joined { self_id: PeerId(0), link, awaiting: None });
                     this.answer_code.set(Some(answer));
                     this.joined_schedule_connect_timeout();
                 }
@@ -806,27 +1000,38 @@ impl<A: Replicated> Session<A> {
     }
 
     fn handle_joined_message(self, text: String) {
+        // `on_joined_message` defers this, so the room can be gone by the time it actually runs —
+        // a `Kick` or a dropped connection can reset to `Mode::Solo` in between. Acting on a
+        // message now would repopulate a room that no longer exists and, since `role` now follows
+        // whatever roster last landed, could strand a solo battle as a read-only spectator of
+        // nothing.
+        if self.mode.get_untracked() != Mode::Joined {
+            return;
+        }
         let Ok(message) = serde_json::from_str::<Msg<A>>(&text) else {
             tracing::debug!("ignoring an undecodable message");
             return;
         };
         match message {
-            Message::Welcome { you, host, everyone_admin, roster, snapshot } => {
+            Message::Welcome { you, host, roster, snapshot } => {
                 if let Err(error) = self.app.restore(snapshot) {
                     tracing::error!(%error, "could not adopt the host's battle");
                     crate::ui::toast::error(format!("Could not adopt the shared battle: {error}"));
                 }
                 self.state.update(|state| {
-                    if let RoomState::Joined { self_id, host_id: stored_host, .. } = state {
+                    if let RoomState::Joined { self_id, .. } = state {
                         *self_id = you;
-                        *stored_host = host;
                     }
                 });
                 self.self_id.set(Some(you));
-                self.role.set(if everyone_admin { Role::Admin } else { Role::Spectator });
+                self.host_id.set(Some(host));
                 self.peers.set(roster);
+                self.sync_role_from_roster();
             }
-            Message::Roster { peers } => self.peers.set(peers),
+            Message::Roster { peers } => {
+                self.peers.set(peers);
+                self.sync_role_from_roster();
+            }
             Message::Kick => {
                 crate::ui::toast::error("The host removed you from the room".to_string());
                 self.reset_to_solo();
@@ -834,8 +1039,23 @@ impl<A: Replicated> Session<A> {
             Message::Prepare { txn, command, .. } => self.joined_vote(txn, command),
             Message::Commit { txn, origin, command, after } => self.joined_commit(txn, origin, command, after),
             Message::Abort { txn, origin, reason } => self.joined_abort(txn, origin, reason),
-            Message::Hello { .. } | Message::Bye | Message::Propose { .. } | Message::Vote { .. } => {}
+            Message::Hello { .. }
+            | Message::Bye
+            | Message::Rename { .. }
+            | Message::SetAdmin { .. }
+            | Message::Propose { .. }
+            | Message::Vote { .. } => {}
         }
+    }
+
+    /// The roster is the only authority on what this node may do, so `role` is re-read from it
+    /// every time one lands rather than settled once at `Welcome`: a promotion or demotion reaches
+    /// the affected peer as nothing more than an ordinary roster broadcast, and every control
+    /// gated on `role` (via `read_only`) has to follow it without being told a second time.
+    fn sync_role_from_roster(self) {
+        let Some(self_id) = self.self_id.get_untracked() else { return };
+        let admin = self.peers.with_untracked(|peers| peers.iter().any(|peer| peer.id == self_id && peer.admin));
+        self.role.set(if admin { Role::Admin } else { Role::Spectator });
     }
 
     fn joined_vote(self, txn: TxnId, command: A::Command) {
@@ -978,6 +1198,7 @@ impl<A: Replicated> Session<A> {
         self.mode.set(Mode::Solo);
         self.role.set(Role::Host);
         self.self_id.set(None);
+        self.host_id.set(None);
         self.peers.set(Vec::new());
         self.invite.set(None);
         self.answer_code.set(None);

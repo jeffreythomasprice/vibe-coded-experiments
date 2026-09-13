@@ -1068,12 +1068,6 @@ button {
   gap: 0.75rem;
 }
 
-.room-hint {
-  color: var(--text-dim);
-  font-size: 0.85rem;
-  margin: 0;
-}
-
 .room-menu {
   display: flex;
   flex-direction: column;
@@ -1116,13 +1110,6 @@ button {
   min-height: 4rem;
 }
 
-.qr-code {
-  align-self: center;
-  width: 10rem;
-  height: 10rem;
-  border-radius: 4px;
-}
-
 .peer-list {
   display: flex;
   flex-direction: column;
@@ -1144,6 +1131,7 @@ button {
 
 .peer-name {
   color: var(--text);
+  overflow-wrap: anywhere;
 }
 
 .peer-badge {
@@ -1154,8 +1142,24 @@ button {
   padding: 0.05rem 0.35rem;
 }
 
-.peer-kick {
+.peer-badge-host {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Holds every trailing control so the group stays right-aligned regardless of how many a given
+   row shows — this `auto` used to live on the kick button alone, which would strand an admin
+   toggle added beside it in the middle of the row. */
+.peer-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.peer-admin-toggle {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.45rem;
 }
 
 /* While the host/join handshake is running, the just-submitted form stays visible but inert
@@ -1202,13 +1206,27 @@ button {
   }
 }
 
-/* Reserves the invite's full height (label + textarea + QR) so re-minting it after every join
-   swaps content in place instead of collapsing the panel and shoving the reply field below it. */
+/* Reserves the invite's full height (label + textarea + copy button) so re-minting it after every
+   join swaps content in place instead of collapsing the panel and shoving the reply field below
+   it. */
 .room-invite-slot {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  min-height: 16rem;
+  min-height: 8rem;
+}
+
+.room-code {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+/* Fixed width so the label swapping to "Copied!" doesn't resize the button under the pointer. */
+.room-copy {
+  min-width: 6rem;
 }
 
 .room-advanced {
@@ -1335,8 +1353,14 @@ button {
   font-size: 0.85rem;
 }
 
-.event-log-row:hover {
+.event-log-row:hover:not(:disabled) {
   background: var(--accent-soft);
+}
+
+/* A spectator reads the whole log and just can't jump through it, so unlike every other disabled
+   control in the app this one keeps full contrast and only drops the clickable affordance. */
+.event-log-row:disabled {
+  cursor: default;
 }
 
 .event-log-row-current {

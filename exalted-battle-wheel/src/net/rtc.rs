@@ -239,12 +239,18 @@ impl Link {
         negotiate_local(&inner.pc, "offer").await?;
         wait_for_ice_gathering(&inner.pc).await;
         let sdp = local_sdp(&inner.pc)?;
+        // TEMP DEBUG (remove once the actpass-in-answer bug is captured): confirms whether the
+        // offer this side produces is ever anything but actpass.
+        tracing::debug!(setup_line = ?sdp.lines().find(|l| l.starts_with("a=setup")), "TEMP: host() produced offer");
         Ok((Self(inner), code::encode(&sdp)))
     }
 
     /// Completes hosting once the joiner has pasted back their answer.
     pub async fn accept_answer(&self, code: &str) -> Result<(), RoomError> {
         let sdp = code::decode(code)?;
+        // TEMP DEBUG (remove once the actpass-in-answer bug is captured): if this ever logs
+        // "actpass", capture the full `sdp` value here too — that's the smoking gun.
+        tracing::debug!(setup_line = ?sdp.lines().find(|l| l.starts_with("a=setup")), "TEMP: accept_answer decoded");
         set_remote(&self.0.pc, RtcSdpType::Answer, &sdp).await?;
         Ok(())
     }
@@ -270,10 +276,16 @@ impl Link {
         inner.pc.set_ondatachannel(Some(on_data_channel.as_ref().unchecked_ref()));
         *inner.on_data_channel.borrow_mut() = Some(on_data_channel);
 
+        // TEMP DEBUG (remove once the actpass-in-answer bug is captured).
+        tracing::debug!(setup_line = ?offer_sdp.lines().find(|l| l.starts_with("a=setup")), "TEMP: join() received offer");
         set_remote(&inner.pc, RtcSdpType::Offer, &offer_sdp).await?;
         negotiate_local(&inner.pc, "answer").await?;
         wait_for_ice_gathering(&inner.pc).await;
         let sdp = local_sdp(&inner.pc)?;
+        // TEMP DEBUG (remove once the actpass-in-answer bug is captured): if this ever logs
+        // "actpass" instead of "active", it's Chrome's own createAnswer() producing it, not this
+        // app's encode/decode — capture the full `sdp` value here too.
+        tracing::debug!(setup_line = ?sdp.lines().find(|l| l.starts_with("a=setup")), "TEMP: join() produced answer");
         Ok((Self(inner), code::encode(&sdp)))
     }
 

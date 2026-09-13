@@ -81,7 +81,7 @@ pub fn MarkerForm() -> impl IntoView {
                             }).collect_view()
                         }}
                     </select>
-                    <button on:click=add>"Add marker"</button>
+                    <button on:click=add disabled=move || battles.read_only().get()>"Add marker"</button>
                 </div>
             })
         }}
