@@ -29,4 +29,4 @@ export AWS_PROFILE=personal
 ./deploy.sh
 ```
 
-`deploy.sh` builds a release bundle, syncs it to S3, and invalidates the CloudFront cache. See `terraform/` for the infrastructure and `CLAUDE.md` for how the hosting is wired together.
+`deploy.sh` builds a release bundle, syncs it to S3, and invalidates the CloudFront cache. See `terraform/` for the infrastructure, `CLAUDE.md` for how the hosting is wired together, and `MULTIPLAYER.md` for connecting and testing rooms.

@@ -1,5 +1,7 @@
 mod app;
+mod battle_net;
 mod library;
+mod net;
 mod persist;
 mod prefs;
 mod storage;

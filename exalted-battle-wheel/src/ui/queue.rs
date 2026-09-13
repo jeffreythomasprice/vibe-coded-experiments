@@ -1,8 +1,9 @@
+use crate::battle_net::Battles;
 use crate::ui::glossary::Topic;
 use crate::ui::{ticks, DetailTip, MarkerForm, Modal, Tip};
 use exalted_battle_wheel::battle::{
-    queue, Battle, BattleEvent, BattleLog, BattleMode, Combatant, CombatantId, CombatantState, DvState, Marker,
-    MarkerId, QueueItem, Tick,
+    queue, Battle, BattleEvent, BattleMode, Combatant, CombatantId, CombatantState, DvState, Marker, MarkerId,
+    QueueItem, Tick,
 };
 use leptos::prelude::*;
 
@@ -48,7 +49,7 @@ enum Editing {
 
 #[component]
 pub fn QueuePanel() -> impl IntoView {
-    let log = expect_context::<RwSignal<BattleLog>>();
+    let battles = expect_context::<Battles>();
     let battle = expect_context::<Memo<Battle>>();
     let editing = RwSignal::new(None::<Editing>);
 
@@ -80,7 +81,7 @@ pub fn QueuePanel() -> impl IntoView {
                                     initial=initial
                                     others=others
                                     current_tick=current_tick
-                                    log=log
+                                    battles=battles
                                     on_close=move || editing.set(None)
                                 />
                             </Modal>
@@ -90,7 +91,7 @@ pub fn QueuePanel() -> impl IntoView {
                         let initial = battle.read().markers.iter().find(|m| m.id == id)?.clone();
                         Some(view! {
                             <Modal title="Revise marker" on_close=move || editing.set(None)>
-                                <MarkerEditor marker_id=id initial=initial log=log on_close=move || editing.set(None) />
+                                <MarkerEditor marker_id=id initial=initial battles=battles on_close=move || editing.set(None) />
                             </Modal>
                         }.into_any())
                     }
@@ -185,7 +186,7 @@ fn CombatantEditor(
     initial: Combatant,
     others: Vec<Combatant>,
     current_tick: Tick,
-    log: RwSignal<BattleLog>,
+    battles: Battles,
     on_close: impl Fn() + Copy + 'static,
 ) -> impl IntoView {
     let initial_commitment = initial.commitment.clone();
@@ -215,17 +216,13 @@ fn CombatantEditor(
             penalty: dv_penalty.get().trim().parse().unwrap_or(0),
             refreshes_at: if no_refresh.get() { None } else { dv_refreshes.get().trim().parse().ok() },
         };
-        log.update(|log| {
-            if let Err(error) = log.push(BattleEvent::ReviseCombatant {
-                actor: actor_id,
-                next_action_tick: current_tick,
-                state: CombatantState::Normal,
-                dv,
-                commitment: None,
-                note: note.get(),
-            }) {
-                tracing::error!(%error, "could not revise combatant");
-            }
+        battles.push(BattleEvent::ReviseCombatant {
+            actor: actor_id,
+            next_action_tick: current_tick,
+            state: CombatantState::Normal,
+            dv,
+            commitment: None,
+            note: note.get(),
         });
         on_close();
     };
@@ -251,17 +248,13 @@ fn CombatantEditor(
             refreshes_at: if no_refresh.get() { None } else { dv_refreshes.get().trim().parse().ok() },
         };
         let commitment = if clear_commitment.get() { None } else { initial_commitment.clone() };
-        log.update(|log| {
-            if let Err(error) = log.push(BattleEvent::ReviseCombatant {
-                actor: actor_id,
-                next_action_tick: parsed_tick,
-                state,
-                dv,
-                commitment,
-                note: note.get(),
-            }) {
-                tracing::error!(%error, "could not revise combatant");
-            }
+        battles.push(BattleEvent::ReviseCombatant {
+            actor: actor_id,
+            next_action_tick: parsed_tick,
+            state,
+            dv,
+            commitment,
+            note: note.get(),
         });
         on_close();
     };
@@ -379,7 +372,7 @@ fn CombatantEditor(
 }
 
 #[component]
-fn MarkerEditor(marker_id: MarkerId, initial: Marker, log: RwSignal<BattleLog>, on_close: impl Fn() + Copy + 'static) -> impl IntoView {
+fn MarkerEditor(marker_id: MarkerId, initial: Marker, battles: Battles, on_close: impl Fn() + Copy + 'static) -> impl IntoView {
     let label = RwSignal::new(initial.label.clone());
     let at_tick = RwSignal::new(initial.at_tick.to_string());
     let ticks = RwSignal::new(initial.ticks.to_string());
@@ -387,20 +380,12 @@ fn MarkerEditor(marker_id: MarkerId, initial: Marker, log: RwSignal<BattleLog>, 
     let apply = move |_| {
         let Ok(parsed_tick) = at_tick.get().trim().parse::<Tick>() else { return };
         let Ok(parsed_ticks) = ticks.get().trim().parse::<u32>() else { return };
-        log.update(|log| {
-            if let Err(error) = log.push(BattleEvent::ReviseMarker { id: marker_id, label: label.get(), at_tick: parsed_tick, ticks: parsed_ticks }) {
-                tracing::error!(%error, "could not revise marker");
-            }
-        });
+        battles.push(BattleEvent::ReviseMarker { id: marker_id, label: label.get(), at_tick: parsed_tick, ticks: parsed_ticks });
         on_close();
     };
 
     let remove = move |_| {
-        log.update(|log| {
-            if let Err(error) = log.push(BattleEvent::RemoveMarker { id: marker_id }) {
-                tracing::error!(%error, "could not remove marker");
-            }
-        });
+        battles.push(BattleEvent::RemoveMarker { id: marker_id });
         on_close();
     };
 

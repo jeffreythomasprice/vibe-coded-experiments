@@ -64,6 +64,61 @@ fn minted_marker_ids(event: &BattleEvent) -> Vec<MarkerId> {
     }
 }
 
+/// Raises the id watermarks past whatever `event` already carries, so any concrete event —
+/// whether built locally via `alloc_combatant_id`/`alloc_marker_id`, or arriving pre-stamped from
+/// a networked peer that allocated against a different log — always leaves the counters ahead of
+/// every id actually in the log, which `RestoredLog`'s validation depends on.
+fn raise_watermarks(event: &BattleEvent, next_combatant_id: &mut u32, next_marker_id: &mut u32) {
+    if let Some(id) = minted_combatant_id(event) {
+        *next_combatant_id = (*next_combatant_id).max(id.0 + 1);
+    }
+    for id in minted_marker_ids(event) {
+        *next_marker_id = (*next_marker_id).max(id.0 + 1);
+    }
+}
+
+/// Overwrites every id `event` mints with a freshly allocated one, in declaration order. Sibling
+/// of `minted_combatant_id`/`minted_marker_ids`, and exhaustive for the same reason: adding a
+/// `BattleEvent` variant that mints an id must fail to compile here until it's handled.
+///
+/// Deliberately does *not* touch `ReviseCombatant`'s `InSequence` effects: those ids were minted
+/// earlier by `StartSequence` (the queue editor only ever clones an existing sequence to change
+/// its `current` step), so restamping them here would renumber ids that already exist elsewhere
+/// in the log.
+fn restamp_minted_ids(event: &mut BattleEvent, next_combatant_id: &mut u32, next_marker_id: &mut u32) {
+    match event {
+        BattleEvent::AddCombatant { id, .. } => {
+            *id = CombatantId(*next_combatant_id);
+            *next_combatant_id += 1;
+        }
+        BattleEvent::DeclareAction { action, .. } => {
+            for effect in &mut action.effects {
+                effect.id = MarkerId(*next_marker_id);
+                *next_marker_id += 1;
+            }
+        }
+        BattleEvent::StartSequence { sequence, .. } => {
+            for effect in &mut sequence.effects {
+                effect.id = MarkerId(*next_marker_id);
+                *next_marker_id += 1;
+            }
+        }
+        BattleEvent::AddMarker { id, .. } => {
+            *id = MarkerId(*next_marker_id);
+            *next_marker_id += 1;
+        }
+        BattleEvent::SetMode { .. }
+        | BattleEvent::RemoveCombatant { .. }
+        | BattleEvent::StartBattle
+        | BattleEvent::AdvanceSequence { .. }
+        | BattleEvent::InterruptSequence { .. }
+        | BattleEvent::AdvanceTick
+        | BattleEvent::RemoveMarker { .. }
+        | BattleEvent::ReviseCombatant { .. }
+        | BattleEvent::ReviseMarker { .. } => {}
+    }
+}
+
 /// Mirrors `BattleLog`'s fields so deserializing can validate before committing to them (see the
 /// `#[serde(try_from)]` on `BattleLog`). `battle()` `.expect()`s that every logged event was valid
 /// when pushed — an invariant `push` maintains by construction, but a value decoded from storage
@@ -123,9 +178,23 @@ impl BattleLog {
         let mut battle = self.battle();
         apply(&mut battle, &event)?;
         self.events.truncate(self.cursor);
+        raise_watermarks(&event, &mut self.next_combatant_id, &mut self.next_marker_id);
         self.events.push(event);
         self.cursor += 1;
         Ok(())
+    }
+
+    /// Stamps `event`'s placeholder ids using this log's current counters, without appending
+    /// anything or advancing them — the actual counter bump happens later, when the stamped event
+    /// is pushed (by whoever ends up applying it, `push` raises the watermark on append). Used
+    /// only to turn a network peer's id-less proposal into the one concrete event every node then
+    /// validates and pushes identically; a single-player caller can just use
+    /// `alloc_combatant_id`/`alloc_marker_id` directly and never needs this.
+    pub fn restamp(&self, mut event: BattleEvent) -> BattleEvent {
+        let mut next_combatant_id = self.next_combatant_id;
+        let mut next_marker_id = self.next_marker_id;
+        restamp_minted_ids(&mut event, &mut next_combatant_id, &mut next_marker_id);
+        event
     }
 
     pub fn undo(&mut self) -> Result<(), BattleError> {
@@ -190,7 +259,7 @@ impl Default for BattleLog {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::battle::action::{template, ActionKind, Declaration, DeclaredEffect};
+    use crate::battle::action::{template, ActionKind, ActionTemplate, Declaration, DeclaredEffect};
     use crate::battle::combatant::{CombatantState, DvState, JoinBattleResult, Side};
     use crate::battle::event::InterruptReason;
     use crate::battle::mode::BattleMode;
@@ -262,6 +331,112 @@ mod tests {
         log.undo().unwrap_err();
         let second = log.alloc_combatant_id();
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn pushing_a_pre_stamped_event_raises_the_watermark_past_it() {
+        // The shape a networked peer receives: a concrete, already-minted id from someone else's
+        // counter, arriving with no local `alloc_combatant_id` call at all.
+        let mut log = BattleLog::new();
+        log.push(BattleEvent::AddCombatant {
+            id: CombatantId(41),
+            name: "Remote".to_string(),
+            side: Side("A".to_string()),
+            join_battle: JoinBattleResult::Successes(0),
+        })
+        .unwrap();
+        assert_eq!(log.alloc_combatant_id(), CombatantId(42));
+    }
+
+    #[test]
+    fn rejected_push_does_not_raise_the_watermark() {
+        let mut log = BattleLog::new();
+        log.push(BattleEvent::AddCombatant {
+            id: CombatantId(5),
+            name: "First".to_string(),
+            side: Side("A".to_string()),
+            join_battle: JoinBattleResult::Successes(0),
+        })
+        .unwrap();
+        // Same id again: rejected as a duplicate, so the watermark must not move.
+        log.push(BattleEvent::AddCombatant {
+            id: CombatantId(99),
+            name: "Second".to_string(),
+            side: Side("A".to_string()),
+            join_battle: JoinBattleResult::Successes(0),
+        })
+        .unwrap();
+        assert_eq!(log.alloc_combatant_id(), CombatantId(100));
+    }
+
+    #[test]
+    fn restamp_assigns_the_next_combatant_id_without_mutating_the_log() {
+        let mut log = BattleLog::new();
+        add_event(&mut log, 5);
+        let placeholder = BattleEvent::AddCombatant {
+            id: CombatantId(0),
+            name: "Newcomer".to_string(),
+            side: Side("A".to_string()),
+            join_battle: JoinBattleResult::Successes(0),
+        };
+        let stamped = log.restamp(placeholder);
+        assert_eq!(minted_combatant_id(&stamped), Some(CombatantId(1)));
+        // Calling it again from the same log produces the same id: restamp only peeks.
+        let placeholder_again = BattleEvent::AddCombatant {
+            id: CombatantId(0),
+            name: "Newcomer".to_string(),
+            side: Side("A".to_string()),
+            join_battle: JoinBattleResult::Successes(0),
+        };
+        assert_eq!(minted_combatant_id(&log.restamp(placeholder_again)), Some(CombatantId(1)));
+    }
+
+    #[test]
+    fn restamp_assigns_one_marker_id_per_effect_in_order() {
+        let mut log = BattleLog::new();
+        let cid = add_event(&mut log, 5);
+        log.push(BattleEvent::StartBattle).unwrap();
+        let action = personal(ActionKind::Attack).declare(Declaration {
+            effects: vec![
+                DeclaredEffect { id: MarkerId(0), label: "A".to_string(), delay: 0, ticks: 1 },
+                DeclaredEffect { id: MarkerId(0), label: "B".to_string(), delay: 0, ticks: 1 },
+            ],
+            ..Default::default()
+        });
+        let BattleEvent::DeclareAction { action: stamped, .. } =
+            log.restamp(BattleEvent::DeclareAction { actor: cid, action })
+        else {
+            unreachable!()
+        };
+        assert_eq!(stamped.effects[0].id, MarkerId(0));
+        assert_eq!(stamped.effects[1].id, MarkerId(1));
+    }
+
+    #[test]
+    fn restamp_leaves_an_in_sequence_revision_untouched() {
+        // These marker ids were minted earlier by `StartSequence`; restamping them here would
+        // renumber ids that already exist elsewhere in the log.
+        let mut log = BattleLog::new();
+        let cid = add_event(&mut log, 5);
+        log.push(BattleEvent::StartBattle).unwrap();
+        let mut sequence = Sequence::shape_terrestrial();
+        sequence.effects = vec![DeclaredEffect { id: MarkerId(7), label: "Cast".to_string(), delay: 0, ticks: 1 }];
+        let event = BattleEvent::ReviseCombatant {
+            actor: cid,
+            next_action_tick: 0,
+            state: CombatantState::InSequence(sequence),
+            dv: DvState::default(),
+            commitment: None,
+            note: String::new(),
+        };
+        let BattleEvent::ReviseCombatant { state: CombatantState::InSequence(stamped), .. } = log.restamp(event) else {
+            unreachable!()
+        };
+        assert_eq!(stamped.effects[0].id, MarkerId(7));
+    }
+
+    fn personal(kind: ActionKind) -> &'static ActionTemplate {
+        template(BattleMode::Personal, kind).expect("personal catalog")
     }
 
     #[test]

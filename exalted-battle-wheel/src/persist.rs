@@ -41,8 +41,8 @@ fn load<T: DeserializeOwned>(key: &'static str) -> Result<Option<T>, PersistErro
 }
 
 /// Stores only non-default values, so a later change to a default still reaches everyone who
-/// never touched the value, and `reset()` (a plain `value.set(default)`) naturally cleans the
-/// key back up the next time this runs rather than racing it.
+/// never touched the value, and setting the value back to its default naturally cleans the key
+/// back up the next time this runs rather than needing a separate "was this ever touched" flag.
 fn store(key: &'static str, json: &str, default_json: &str) -> Result<(), PersistError> {
     let full_key = storage_key(key);
     if json == default_json {
@@ -57,7 +57,6 @@ fn store(key: &'static str, json: &str, default_json: &str) -> Result<(), Persis
 /// autosaved on every change. `Deref`s to its `RwSignal<T>` so `.get()`, `.set()`, and
 /// `.get_untracked()` work exactly like an ordinary signal at every call site.
 pub struct Persisted<T: 'static> {
-    default: fn() -> T,
     value: RwSignal<T>,
 }
 
@@ -87,6 +86,16 @@ where
     /// mounted; a load failure also removes the unreadable key so it doesn't fail again next
     /// time.
     pub fn new(key: &'static str, default: fn() -> T) -> Self {
+        Self::new_gated(key, default, || true)
+    }
+
+    /// Like `new`, but `accept_remote` is checked before ever applying an update that arrived via
+    /// another tab's `storage` event. Only the battle log needs this: two tabs sharing
+    /// `localStorage` is exactly the existing (desired) cross-tab sync in `Mode::Solo`, but once
+    /// this tab has adopted a room's battle, an unrelated edit in a plain Solo tab must not
+    /// silently overwrite it — `accept_remote` is the negation of whatever signal `Session`
+    /// flips while a room is active (see `app.rs`, which wires the two together).
+    pub fn new_gated(key: &'static str, default: fn() -> T, accept_remote: impl Fn() -> bool + 'static) -> Self {
         let fallback = default();
         let default_json = encode(key, &fallback).unwrap_or_default();
 
@@ -122,6 +131,9 @@ where
             if event.key().as_deref() != Some(full_key.as_str()) {
                 return;
             }
+            if !accept_remote() {
+                return;
+            }
             let incoming = match event.new_value() {
                 Some(raw) => match decode::<T>(key, &raw) {
                     Ok(decoded) => decoded,
@@ -137,11 +149,7 @@ where
             }
         });
 
-        Self { default, value }
-    }
-
-    pub fn reset(&self) {
-        self.value.set((self.default)());
+        Self { value }
     }
 }
 

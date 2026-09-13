@@ -1,11 +1,12 @@
+use crate::battle_net::Battles;
 use crate::library::{Library, SavedAction, SavedDeclaration, SavedId, SavedShape};
 use crate::prefs::Prefs;
 use crate::ui::format::{format_dv_penalty, format_speed};
 use crate::ui::glossary::{action_topic, sequence_topic, Topic};
 use crate::ui::{DetailTip, Modal, SavedActionEditor, SavedActionList, Tip};
 use exalted_battle_wheel::battle::{
-    catalog, catalog_index, ActionKind, ActionTemplate, Battle, BattleEvent, BattleLog, BattleMode, CombatantId,
-    CombatantState, Declaration, InterruptReason, JoinBattleResult, Phase, Sequence, SequenceTemplate, Tick,
+    catalog, catalog_index, ActionKind, ActionTemplate, Battle, BattleEvent, BattleMode, CombatantId, CombatantState,
+    Declaration, InterruptReason, JoinBattleResult, MarkerId, Phase, Sequence, SequenceTemplate, Tick,
     SEQUENCE_CATALOG,
 };
 use leptos::prelude::*;
@@ -69,7 +70,7 @@ pub fn rail_target(battle: &Battle, touched: Option<CombatantId>) -> Option<Comb
 
 #[component]
 pub fn ActionPanel() -> impl IntoView {
-    let log = expect_context::<RwSignal<BattleLog>>();
+    let battles = expect_context::<Battles>();
     let battle = expect_context::<Memo<Battle>>();
 
     let up_now = move || actors_up_now(&battle.read());
@@ -91,14 +92,14 @@ pub fn ActionPanel() -> impl IntoView {
                 <h2>"Up now"</h2>
             </Tip>
             <For each=up_now key=|id| *id let:actor_id>
-                <ActorRow actor_id=actor_id log=log battle=battle />
+                <ActorRow actor_id=actor_id battles=battles battle=battle />
             </For>
             <Tip topic=Topic::ShapingSection>
                 <h2>"Shaping (can be interrupted anytime)"</h2>
             </Tip>
             <For each=shaping_but_not_up key=|id| *id let:actor_id>
                 <div class="actor-row">
-                    <InterruptControls actor_id=actor_id log=log battle=battle />
+                    <InterruptControls actor_id=actor_id battles=battles battle=battle />
                 </div>
             </For>
         </div>
@@ -106,7 +107,7 @@ pub fn ActionPanel() -> impl IntoView {
 }
 
 #[component]
-fn ActorRow(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Memo<Battle>) -> impl IntoView {
+fn ActorRow(actor_id: CombatantId, battles: Battles, battle: Memo<Battle>) -> impl IntoView {
     let selection = expect_context::<RailSelection>();
 
     let name = move || {
@@ -138,9 +139,9 @@ fn ActorRow(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Memo<Battle
             <span class="name">{name}</span>
             {move || {
                 if in_sequence() {
-                    view! { <SequenceControls actor_id=actor_id log=log battle=battle /> }.into_any()
+                    view! { <SequenceControls actor_id=actor_id battles=battles battle=battle /> }.into_any()
                 } else {
-                    view! { <NormalControls actor_id=actor_id log=log battle=battle /> }.into_any()
+                    view! { <NormalControls actor_id=actor_id battles=battles battle=battle /> }.into_any()
                 }
             }}
         </div>
@@ -261,7 +262,7 @@ fn draft_from_choice(mode: BattleMode, choice: Option<Choice>, name: &str, speed
 }
 
 #[component]
-fn NormalControls(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Memo<Battle>) -> impl IntoView {
+fn NormalControls(actor_id: CombatantId, battles: Battles, battle: Memo<Battle>) -> impl IntoView {
     let library = expect_context::<Prefs>().library;
     let selection = expect_context::<RailSelection>();
 
@@ -323,43 +324,8 @@ fn NormalControls(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Memo<
         _ => String::new(),
     });
 
-    let declare = move |_| {
-        let mut outcome: Result<(), String> = Ok(());
-        let mut reflexive = false;
-        match choice_for(mode(), selected_key.get(), &library.get()) {
-            Some(Choice::Action(template)) => {
-                let declaration = Declaration {
-                    name: Some(name.get()),
-                    speed: speed_override.get().parse().ok(),
-                    dv_penalty: dv_override.get().parse().ok(),
-                    ..Default::default()
-                };
-                let action = template.declare(declaration);
-                reflexive = action.reflexive;
-                log.update(|log| outcome = log.push(BattleEvent::DeclareAction { actor: actor_id, action }).map_err(|e| e.to_string()));
-            }
-            Some(Choice::Sequence(template)) => {
-                let sequence = template.build();
-                log.update(|log| outcome = log.push(BattleEvent::StartSequence { actor: actor_id, sequence }).map_err(|e| e.to_string()));
-            }
-            Some(Choice::Saved(saved)) => {
-                log.update(|log| {
-                    let ids: Vec<_> = (0..saved.effects.len()).map(|_| log.alloc_marker_id()).collect();
-                    match saved.build(&ids) {
-                        Ok(SavedDeclaration::Action(action)) => {
-                            reflexive = action.reflexive;
-                            outcome = log.push(BattleEvent::DeclareAction { actor: actor_id, action }).map_err(|e| e.to_string());
-                        }
-                        Ok(SavedDeclaration::Sequence(sequence)) => {
-                            outcome = log.push(BattleEvent::StartSequence { actor: actor_id, sequence }).map_err(|e| e.to_string());
-                        }
-                        Err(error) => outcome = Err(error.to_string()),
-                    }
-                });
-            }
-            None => {}
-        }
-        declare_result.set(Some(match outcome {
+    let settle = move |result: Result<(), String>, reflexive: bool| {
+        declare_result.set(Some(match result {
             Ok(()) if reflexive => {
                 Ok("Declared. Reflexive actions don't cost time, so this actor's tick, DV, and \u{201c}Up now\u{201d} slot stay the same \u{2014} check the Event Log to confirm it was recorded.".to_string())
             }
@@ -369,6 +335,43 @@ fn NormalControls(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Memo<
                 Err(error)
             }
         }));
+    };
+
+    let declare = move |_| {
+        match choice_for(mode(), selected_key.get(), &library.get()) {
+            Some(Choice::Action(template)) => {
+                let declaration = Declaration {
+                    name: Some(name.get()),
+                    speed: speed_override.get().parse().ok(),
+                    dv_penalty: dv_override.get().parse().ok(),
+                    ..Default::default()
+                };
+                let action = template.declare(declaration);
+                let reflexive = action.reflexive;
+                battles.push_with(BattleEvent::DeclareAction { actor: actor_id, action }, move |result| settle(result, reflexive));
+            }
+            Some(Choice::Sequence(template)) => {
+                let sequence = template.build();
+                battles.push_with(BattleEvent::StartSequence { actor: actor_id, sequence }, move |result| settle(result, false));
+            }
+            Some(Choice::Saved(saved)) => {
+                // Placeholders: the real ids are stamped from whichever log is authoritative for
+                // the room once this proposal is sequenced (see `Battles::push_minting`), so any
+                // value works here as long as there's one per effect.
+                let placeholders = vec![MarkerId(0); saved.effects.len()];
+                match saved.build(&placeholders) {
+                    Ok(SavedDeclaration::Action(action)) => {
+                        let reflexive = action.reflexive;
+                        battles.push_minting_with(BattleEvent::DeclareAction { actor: actor_id, action }, move |result| settle(result, reflexive));
+                    }
+                    Ok(SavedDeclaration::Sequence(sequence)) => {
+                        battles.push_minting_with(BattleEvent::StartSequence { actor: actor_id, sequence }, move |result| settle(result, false));
+                    }
+                    Err(error) => settle(Err(error.to_string()), false),
+                }
+            }
+            None => {}
+        }
     };
 
     let open_save = move |_| {
@@ -570,20 +573,16 @@ fn NormalControls(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Memo<
 }
 
 #[component]
-fn SequenceControls(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Memo<Battle>) -> impl IntoView {
+fn SequenceControls(actor_id: CombatantId, battles: Battles, battle: Memo<Battle>) -> impl IntoView {
     let speed_override = RwSignal::new(String::new());
 
     let advance = move |_| {
         let speed = speed_override.get().parse().ok();
-        log.update(|log| {
-            if let Err(error) = log.push(BattleEvent::AdvanceSequence { actor: actor_id, speed_override: speed }) {
-                tracing::error!(%error, "could not advance sequence");
-            }
-        });
+        battles.push(BattleEvent::AdvanceSequence { actor: actor_id, speed_override: speed });
     };
 
     view! {
-        <InterruptControls actor_id=actor_id log=log battle=battle />
+        <InterruptControls actor_id=actor_id battles=battles battle=battle />
         <Tip topic=Topic::CastSpeedOverride>
             <input
                 placeholder="speed override (Cast)"
@@ -598,7 +597,7 @@ fn SequenceControls(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Mem
 }
 
 #[component]
-fn InterruptControls(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Memo<Battle>) -> impl IntoView {
+fn InterruptControls(actor_id: CombatantId, battles: Battles, battle: Memo<Battle>) -> impl IntoView {
     let rejoin_successes = RwSignal::new(String::new());
 
     let description = move || {
@@ -623,25 +622,11 @@ fn InterruptControls(actor_id: CombatantId, log: RwSignal<BattleLog>, battle: Me
     };
 
     let interrupt_voluntary = move |_| {
-        log.update(|log| {
-            if let Err(error) =
-                log.push(BattleEvent::InterruptSequence { actor: actor_id, reason: InterruptReason::Voluntary, rejoin: rejoin() })
-            {
-                tracing::error!(%error, "could not interrupt sequence");
-            }
-        });
+        battles.push(BattleEvent::InterruptSequence { actor: actor_id, reason: InterruptReason::Voluntary, rejoin: rejoin() });
     };
 
     let interrupt_distracted = move |_| {
-        log.update(|log| {
-            if let Err(error) = log.push(BattleEvent::InterruptSequence {
-                actor: actor_id,
-                reason: InterruptReason::FailedOccultCheck,
-                rejoin: rejoin(),
-            }) {
-                tracing::error!(%error, "could not interrupt sequence");
-            }
-        });
+        battles.push(BattleEvent::InterruptSequence { actor: actor_id, reason: InterruptReason::FailedOccultCheck, rejoin: rejoin() });
     };
 
     view! {

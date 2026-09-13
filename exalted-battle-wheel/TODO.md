@@ -1,11 +1,10 @@
 in-flight:
 
-I want to implement a multi-player feature, where multiple browsers on multiple computers can all be in the same "room" together, sharing state. I currently have no backend, so I have no obvious way to link multiple browsers together.
-
-Let's brainstorm options here, and include estimates of both complexity and cost (e.g. $ to run a server or other infrastructure). Bonus points if there are headless plans that let us link browsers together without paying for any additional infrastructure, although I can't think what that would look like. Browser-to-browser STUN maybe?
-
 
 todo:
+
+When I click host a room, or join a room, there is a pause then the code and QR code show up. There should be a spinner or other loading icon while we're waiting for that code. As is it just sort of pops in afer a couple of seconds.
+
 
 I'd like to review all the teaching tooltips for accuracy. Look them up in the book by the reference pages, check for accuracy, and verify that they make sense for that wigdet. Split off as many subagents as necessary.
 

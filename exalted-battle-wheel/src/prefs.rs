@@ -80,6 +80,7 @@ pub struct Prefs {
     pub teaching_mode: Persisted<bool>,
     pub theme: Persisted<Theme>,
     pub library: Persisted<Library>,
+    pub player_name: Persisted<String>,
 }
 
 impl Prefs {
@@ -88,6 +89,7 @@ impl Prefs {
             teaching_mode: Persisted::new("pref.teaching_mode", || true),
             theme: Persisted::new("pref.theme", Theme::default),
             library: Persisted::new("pref.saved_actions", Library::default),
+            player_name: Persisted::new("pref.player_name", String::new),
         };
         install_theme(prefs.theme);
         prefs

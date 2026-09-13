@@ -90,6 +90,9 @@ pub enum Topic {
     Theme,
     Reset,
     ReactionCount,
+    Room,
+    RoomAdminModel,
+    RoomKick,
 
     // Roster
     Roster,
@@ -366,6 +369,24 @@ impl Topic {
                 what: "The highest number of successes rolled by anyone who simultaneously joined the fight at its start.",
                 interacts: "It is fixed once the battle starts and used ever after: every combatant's First Action is (reaction count − her Join Battle successes), and anyone joining a fight already in progress uses this same frozen number.",
                 source: book(141, "The reaction count for the combat scene is a value equal to the highest number of successes rolled by anyone who simultaneously joins at the start of combat."),
+            },
+            Topic::Room => Entry {
+                term: "Room",
+                what: "Connects browsers directly, peer-to-peer, with no server in between, so everyone sees the same battle and agrees on every change.",
+                interacts: "One side hosts and shares a connection code or QR; the other pastes or scans it back and joins, adopting the host's battle immediately. After that, every edit anyone makes is proposed to the whole room and only takes effect once everyone agrees \u{2014} a genuine disagreement disconnects everyone with an error rather than quietly drifting apart. There's no relay server standing by, so two networks that both sit behind strict NATs (some phone hotspots, some corporate networks) may simply fail to connect to each other at all.",
+                source: Source::AppConvention,
+            },
+            Topic::RoomAdminModel => Entry {
+                term: "Everyone can change the battle",
+                what: "Decides, once, whether anyone who joins can edit the battle or only the host can.",
+                interacts: "Chosen when you start hosting and fixed for that room's lifetime \u{2014} there's no way to change it afterward short of leaving and hosting again. Either way, this is a courtesy flag broadcast to every peer, not something enforced against a client that ignores it.",
+                source: Source::AppConvention,
+            },
+            Topic::RoomKick => Entry {
+                term: "Kick",
+                what: "Disconnects a peer from the room immediately.",
+                interacts: "Host-only, and only for other peers \u{2014} you can't kick yourself. The kicked peer keeps their own copy of the battle; only the connection ends. There's no ban list behind this: if the host hands out another invite, whoever was kicked can use it to rejoin like anyone else.",
+                source: Source::AppConvention,
             },
 
             Topic::Roster => Entry {
@@ -950,6 +971,9 @@ mod tests {
         Topic::Theme,
         Topic::Reset,
         Topic::ReactionCount,
+        Topic::Room,
+        Topic::RoomAdminModel,
+        Topic::RoomKick,
         Topic::Roster,
         Topic::CombatantName,
         Topic::Side,

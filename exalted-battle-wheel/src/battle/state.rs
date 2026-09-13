@@ -148,6 +148,9 @@ pub fn apply(battle: &mut Battle, event: &BattleEvent) -> Result<(), BattleError
         }
 
         BattleEvent::AddCombatant { id, name, side, join_battle } => {
+            if battle.find(*id).is_some() {
+                return Err(BattleError::DuplicateCombatant(*id));
+            }
             battle.combatants.push(Combatant {
                 id: *id,
                 name: name.clone(),
@@ -678,6 +681,18 @@ mod tests {
         assert_eq!(marker.last_tick(), 5);
         assert!(marker.covers(5));
         assert!(!marker.covers(6));
+    }
+
+    #[test]
+    fn adding_a_combatant_rejects_a_duplicate_id() {
+        let mut battle = Battle::genesis();
+        let cid = add(&mut battle, 1, 5);
+        let err = apply(
+            &mut battle,
+            &BattleEvent::AddCombatant { id: cid, name: "Impostor".to_string(), side: Side("A".to_string()), join_battle: JoinBattleResult::Successes(0) },
+        )
+        .unwrap_err();
+        assert_eq!(err, BattleError::DuplicateCombatant(cid));
     }
 
     #[test]

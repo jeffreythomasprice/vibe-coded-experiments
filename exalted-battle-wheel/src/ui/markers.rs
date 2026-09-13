@@ -1,13 +1,14 @@
+use crate::battle_net::Battles;
 use crate::ui::glossary::Topic;
 use crate::ui::Tip;
-use exalted_battle_wheel::battle::{Battle, BattleEvent, BattleLog, CombatantId, Phase};
+use exalted_battle_wheel::battle::{Battle, BattleEvent, CombatantId, MarkerId, Phase};
 use leptos::prelude::*;
 
 /// The add-marker form; the markers themselves (active and pending) are listed and edited from
 /// `QueuePanel`.
 #[component]
 pub fn MarkerForm() -> impl IntoView {
-    let log = expect_context::<RwSignal<BattleLog>>();
+    let battles = expect_context::<Battles>();
     let battle = expect_context::<Memo<Battle>>();
 
     let label = RwSignal::new(String::new());
@@ -23,18 +24,13 @@ pub fn MarkerForm() -> impl IntoView {
         }
         let offset_ticks: u32 = offset.get().parse().unwrap_or(0);
         let duration: u32 = ticks.get().parse().unwrap_or(1).max(1);
-        log.update(|log| {
-            let id = log.alloc_marker_id();
-            let at_tick = log.battle().current_tick + offset_ticks;
-            if let Err(error) = log.push(BattleEvent::AddMarker {
-                id,
-                label: entered_label,
-                source: CombatantId(source_id),
-                at_tick,
-                ticks: duration,
-            }) {
-                tracing::error!(%error, "could not add marker");
-            }
+        let at_tick = battle.read_untracked().current_tick + offset_ticks;
+        battles.push_minting(BattleEvent::AddMarker {
+            id: MarkerId(0),
+            label: entered_label,
+            source: CombatantId(source_id),
+            at_tick,
+            ticks: duration,
         });
         label.set(String::new());
         offset.set(String::from("0"));

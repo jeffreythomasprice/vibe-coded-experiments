@@ -13,6 +13,8 @@ pub enum BattleError {
     MarkerDurationZero(MarkerId),
     #[error("a marker with id {0:?} already exists")]
     DuplicateMarker(MarkerId),
+    #[error("a combatant with id {0:?} already exists")]
+    DuplicateCombatant(CombatantId),
     #[error("the battle has not started yet")]
     NotYetStarted,
     #[error("the battle has already started")]

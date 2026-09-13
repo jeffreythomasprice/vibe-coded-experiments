@@ -1,13 +1,46 @@
+use crate::battle_net::{BattleView, Battles};
 use crate::persist::Persisted;
 use crate::prefs::{Prefs, Theme};
 use crate::ui::glossary::Topic;
 use crate::ui::ticks;
 use crate::ui::{
-    ActionPanel, ActiveTip, DetailTip, EventLogButton, HoverCard, Hovered, Modal, QueuePanel, RailSelection,
-    ReferenceRail, Roster, Tip, TipLayer, ToastLayer, Toasts, Wheel,
+    ActionPanel, ActiveTip, DetailTip, EventLogButton, HoverCard, Hovered, Modal, PendingJoin, QueuePanel,
+    RailSelection, ReferenceRail, RoomButton, Roster, Tip, TipLayer, ToastLayer, Toasts, Wheel,
 };
 use exalted_battle_wheel::battle::{BattleEvent, BattleLog, CombatantId, Phase};
 use leptos::prelude::*;
+use wasm_bindgen::JsValue;
+
+/// Reads a one-shot `#j=<code>&stun=<url>,<url>` fragment (an invite link, or a bare STUN
+/// override), applies the STUN override immediately, and clears the fragment via
+/// `replace_state` so a refresh doesn't re-open a spent invite. Both params ride the fragment
+/// rather than the query string: fragments never reach CloudFront, so an invite code never lands
+/// in an access log, and can't perturb the CDN's cache key either.
+fn consume_invite_fragment() -> Option<String> {
+    let window = web_sys::window()?;
+    let location = window.location();
+    let hash = location.hash().ok()?;
+    let query = hash.strip_prefix('#').unwrap_or(&hash);
+    if query.is_empty() {
+        return None;
+    }
+    let params = web_sys::UrlSearchParams::new_with_str(query).ok()?;
+
+    if let Some(stun) = params.get("stun") {
+        let servers: Vec<String> = stun.split(',').map(str::trim).filter(|url| !url.is_empty()).map(str::to_string).collect();
+        if !servers.is_empty() {
+            crate::net::set_stun_servers(servers);
+        }
+    }
+    let join_code = params.get("j");
+
+    let cleared_url = format!("{}{}", location.pathname().unwrap_or_default(), location.search().unwrap_or_default());
+    if let Ok(history) = window.history() {
+        let _ = history.replace_state_with_url(&JsValue::NULL, "", Some(&cleared_url));
+    }
+
+    join_code
+}
 
 /// "tick" -> "Tick", "long tick" -> "Long Tick" — for button labels built from `BattleMode`'s
 /// lowercase nouns.
@@ -29,9 +62,25 @@ pub fn App() -> impl IntoView {
     let toasts: Toasts = RwSignal::new(Vec::new());
     provide_context(toasts);
 
-    let battle_log = Persisted::new("battle", BattleLog::new);
+    // Captured once, here, where a real reactive owner is guaranteed current — `net::session`'s
+    // deferred WebRTC-callback handlers have no owner of their own to work with and re-enter this
+    // one explicitly instead. See `session.rs`'s `ROOT_OWNER` doc comment for why that's necessary.
+    if let Some(owner) = Owner::current() {
+        crate::net::set_root_owner(owner);
+    }
+
+    // Read once, synchronously, before anything below could open a room of its own — applies any
+    // `#stun=` override immediately and hands the `#j=` invite code (if any) to `RoomButton`.
+    let pending_join = PendingJoin(RwSignal::new(consume_invite_fragment()));
+    provide_context(pending_join);
+
+    // Created before the log it gates, and threaded into both — see `Session::new`'s doc comment.
+    let room_active = RwSignal::new(false);
+    let battle_log = Persisted::new_gated("battle", BattleLog::new, move || !room_active.get());
     let log = *battle_log;
-    provide_context(log);
+    let battles = Battles::new(log, room_active);
+    provide_context(battles);
+    provide_context(log.read_only() as BattleView);
 
     let battle = Memo::new(move |_| log.read().battle());
     provide_context(battle);
@@ -48,19 +97,13 @@ pub fn App() -> impl IntoView {
 
     let confirming_reset = RwSignal::new(false);
     let reset = move || {
-        battle_log.reset();
+        battles.reset();
         confirming_reset.set(false);
     };
 
-    let advance_tick = move |_| {
-        log.update(|log| {
-            if let Err(error) = log.push(BattleEvent::AdvanceTick) {
-                tracing::error!(%error, "could not advance tick");
-            }
-        });
-    };
-    let undo = move |_| log.update(|log| _ = log.undo());
-    let redo = move |_| log.update(|log| _ = log.redo());
+    let advance_tick = move |_| battles.push(BattleEvent::AdvanceTick);
+    let undo = move |_| battles.undo();
+    let redo = move |_| battles.redo();
 
     let reaction_count = move || match battle.read().phase {
         Phase::Running { .. } => Some(battle.read().reaction_count()),
@@ -86,6 +129,7 @@ pub fn App() -> impl IntoView {
                     </button>
                 </Tip>
                 <EventLogButton />
+                <RoomButton />
                 <DetailTip
                     topic=Topic::CurrentTick
                     detail=Signal::derive(move || battle.read().mode.tick_note().unwrap_or_default().to_string())
@@ -171,7 +215,7 @@ pub fn App() -> impl IntoView {
                         }
                     })
             }}
-            <div class="app-body">
+            <div class="app-body" class:app-busy=move || battles.busy().get()>
                 <div class="side-column">
                     <Roster />
                     <QueuePanel />

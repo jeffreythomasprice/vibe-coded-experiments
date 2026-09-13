@@ -1,3 +1,4 @@
+use crate::battle_net::{BattleView, Battles};
 use crate::ui::glossary::Topic;
 use crate::ui::{ticks, Modal, TextTip, Tip};
 use exalted_battle_wheel::battle::{
@@ -203,11 +204,12 @@ fn lines(log: &BattleLog) -> Vec<EventLine> {
 
 #[component]
 pub fn EventLogButton() -> impl IntoView {
-    let log = expect_context::<RwSignal<BattleLog>>();
+    let log = expect_context::<BattleView>();
+    let battles = expect_context::<Battles>();
     let open = RwSignal::new(false);
 
     let jump = move |target: usize| {
-        log.update(|log| _ = log.seek(target));
+        battles.seek(target);
         open.set(false);
     };
 

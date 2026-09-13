@@ -1,11 +1,12 @@
+use crate::battle_net::Battles;
 use crate::ui::glossary::Topic;
 use crate::ui::{Combobox, DetailTip, Tip};
-use exalted_battle_wheel::battle::{Battle, BattleEvent, BattleLog, BattleMode, CombatantId, JoinBattleResult, Phase, Side};
+use exalted_battle_wheel::battle::{Battle, BattleEvent, BattleMode, CombatantId, JoinBattleResult, Phase, Side};
 use leptos::prelude::*;
 
 #[component]
 pub fn Roster() -> impl IntoView {
-    let log = expect_context::<RwSignal<BattleLog>>();
+    let battles = expect_context::<Battles>();
     let battle = expect_context::<Memo<Battle>>();
 
     let name = RwSignal::new(String::new());
@@ -16,13 +17,7 @@ pub fn Roster() -> impl IntoView {
     let mode = move || battle.read().mode;
     let in_setup = move || matches!(battle.read().phase, Phase::Setup);
     let sides = Signal::derive(move || battle.read().sides());
-    let set_mode = move |mode: BattleMode| {
-        log.update(|log| {
-            if let Err(error) = log.push(BattleEvent::SetMode { mode }) {
-                tracing::error!(%error, "could not set battle mode");
-            }
-        });
-    };
+    let set_mode = move |mode: BattleMode| battles.push(BattleEvent::SetMode { mode });
 
     let add_combatant = move |_| {
         let entered_name = name.get();
@@ -41,16 +36,11 @@ pub fn Roster() -> impl IntoView {
             .read_untracked()
             .canonical_side(typed_side.trim())
             .unwrap_or_else(|| Side(typed_side.trim().to_string()));
-        log.update(|log| {
-            let id = log.alloc_combatant_id();
-            if let Err(error) = log.push(BattleEvent::AddCombatant {
-                id,
-                name: entered_name,
-                side: entered_side.clone(),
-                join_battle,
-            }) {
-                tracing::error!(%error, "could not add combatant");
-            }
+        battles.push_minting(BattleEvent::AddCombatant {
+            id: CombatantId(0),
+            name: entered_name,
+            side: entered_side.clone(),
+            join_battle,
         });
         name.set(String::new());
         successes.set(0);
@@ -60,13 +50,7 @@ pub fn Roster() -> impl IntoView {
         side.set(entered_side.0);
     };
 
-    let start_battle = move |_| {
-        log.update(|log| {
-            if let Err(error) = log.push(BattleEvent::StartBattle) {
-                tracing::error!(%error, "could not start battle");
-            }
-        });
-    };
+    let start_battle = move |_| battles.push(BattleEvent::StartBattle);
 
     let combatant_ids = move || battle.read().combatants.iter().map(|c| c.id).collect::<Vec<_>>();
 
@@ -146,7 +130,7 @@ pub fn Roster() -> impl IntoView {
             </div>
             <ul class="roster-list">
                 <For each=combatant_ids key=|id| *id let:id>
-                    <RosterRow id=id battle=battle log=log />
+                    <RosterRow id=id battle=battle battles=battles />
                 </For>
             </ul>
             <Tip topic=Topic::StartBattle>
@@ -159,7 +143,7 @@ pub fn Roster() -> impl IntoView {
 }
 
 #[component]
-fn RosterRow(id: CombatantId, battle: Memo<Battle>, log: RwSignal<BattleLog>) -> impl IntoView {
+fn RosterRow(id: CombatantId, battle: Memo<Battle>, battles: Battles) -> impl IntoView {
     let name = move || battle.read().find(id).map(|c| c.name.clone()).unwrap_or_default();
     let side = move || battle.read().find(id).map(|c| c.side.0.clone()).unwrap_or_default();
     let tick = move || battle.read().find(id).map(|c| c.next_action_tick);
@@ -168,13 +152,7 @@ fn RosterRow(id: CombatantId, battle: Memo<Battle>, log: RwSignal<BattleLog>) ->
         Phase::Running { .. } => Topic::NextActionTick,
     };
 
-    let remove = move |_| {
-        log.update(|log| {
-            if let Err(error) = log.push(BattleEvent::RemoveCombatant { id }) {
-                tracing::error!(%error, "could not remove combatant");
-            }
-        });
-    };
+    let remove = move |_| battles.push(BattleEvent::RemoveCombatant { id });
 
     view! {
         <li>

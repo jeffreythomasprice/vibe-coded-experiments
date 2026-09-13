@@ -136,6 +136,14 @@ body {
   align-items: start;
 }
 
+/* While a room is agreeing on a change, further edits wait rather than race it — this is the one
+   place that's worth blocking on, unlike the header's Undo/Redo/Advance Tick, which stay usable
+   since they're quick, deliberate, and rare enough to just let the queue absorb. */
+.app-busy {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
 /* Below this the four columns can no longer sit side by side without crushing the wheel; the
    rail moves under it full-width, sharing a row with the action panel. */
 @media (max-width: 1500px) {
@@ -1051,6 +1059,102 @@ button {
   background: var(--danger) !important;
   border-color: var(--danger) !important;
   color: var(--ink-on-color) !important;
+}
+
+.room-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.room-hint {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.room-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.room-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.room-field-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.room-field textarea,
+.room-field input {
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.room-field textarea {
+  font-family: monospace;
+  font-size: 0.8rem;
+  resize: vertical;
+  min-height: 4rem;
+}
+
+.qr-code {
+  align-self: center;
+  width: 10rem;
+  height: 10rem;
+  border-radius: 4px;
+}
+
+.peer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.peer-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+}
+
+.peer-name {
+  color: var(--text);
+}
+
+.peer-badge {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+}
+
+.peer-kick {
+  margin-left: auto;
 }
 
 /* Layered above the modal backdrop (900) so a failure raised while a modal is open stays
