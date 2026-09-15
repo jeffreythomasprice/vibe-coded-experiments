@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+log() { echo "[bootstrap] $*"; }
+
+# cloud-init's runcmd can fire seconds after boot, while aws_eip_association swaps in the Elastic IP
+# shortly after — which drops in-flight outbound TCP. Wait for the swap before touching the network,
+# or the k0s download below can be cut off mid-stream.
+log "waiting for EIP association"
+token="$(curl -sSf -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 300')"
+for _ in $(seq 60); do
+  ip="$(curl -sSf -H "X-aws-ec2-metadata-token: $token" http://169.254.169.254/latest/meta-data/public-ipv4 || true)"
+  [ "$ip" = "${eip}" ] && break
+  sleep 2
+done
+
+# Pinned, retried, checksummed — get.k0s.sh has no retries (a mid-stream drop leaves a truncated,
+# non-executable binary) and resolves its version from stable.txt at boot, which would otherwise make
+# two identical applies months apart install different Kubernetes minors.
+log "downloading k0s ${k0s_version}"
+base="https://github.com/k0sproject/k0s/releases/download/${k0s_version}"
+curl --retry 8 --retry-all-errors --retry-delay 5 -fsSL -o /usr/local/bin/k0s "$base/k0s-${k0s_version}-arm64"
+curl --retry 8 --retry-all-errors --retry-delay 5 -fsSL -o /tmp/sha256sums.txt "$base/sha256sums.txt"
+want="$(awk -v f="k0s-${k0s_version}-arm64" '$2 == "*" f { print $1 }' /tmp/sha256sums.txt)"
+[ -n "$want" ]
+echo "$want  /usr/local/bin/k0s" | sha256sum -c -
+chmod 0755 /usr/local/bin/k0s
+rm -f /tmp/sha256sums.txt
+
+# Best debugging artifact if anything below goes wrong; fetch it over ./ssh.sh.
+k0s sysinfo > /var/log/k0s-sysinfo.log 2>&1 || true
+
+log "tuning for a 2GB node"
+cat > /etc/sysctl.d/99-k0s.conf <<'SYSCTL'
+vm.swappiness=10
+SYSCTL
+sysctl --system > /dev/null
+
+# Ubuntu's systemd-oomd kills the cgroup using the most swap once usage crosses 90% of the root
+# slice's limit — which would be k0scontroller.service, i.e. the whole control plane, killed by the
+# same mechanism the swapfile (added by cloud-init's `swap:` module) was there to help. Not present
+# on every Ubuntu 24.04 arm64 build, so `|| true` like the other best-effort disables below.
+systemctl disable --now systemd-oomd.service || true
+
+# The generated k0scontroller unit sets no OOM score, so the kernel OOM killer would pick
+# kube-apiserver (largest RSS) under memory pressure — which makes Helm's --wait time out on any
+# in-flight chart install, which makes k0s uninstall and retry it: a self-sustaining loop that looks
+# like "node Ready, nothing else ever is". Forked children inherit this; kubelet rewrites each
+# container's score from its QoS class, so it doesn't leak into pods.
+mkdir -p /etc/systemd/system/k0scontroller.service.d
+cat > /etc/systemd/system/k0scontroller.service.d/oom.conf <<'OOM'
+[Service]
+OOMScoreAdjust=-900
+OOM
+
+# Frees ~100-200MB of transient RSS and removes a source of dpkg-lock contention during bootstrap.
+# Trade-off: patching becomes manual, which is fine for a box that's rebuilt on every user_data change.
+systemctl disable --now unattended-upgrades.service apt-daily.timer apt-daily-upgrade.timer || true
+systemctl disable --now multipathd.service multipathd.socket || true
+
+log "installing k0s controller"
+k0s install controller --single -c /etc/k0s/k0s.yaml \
+  --disable-components metrics-server,autopilot,update-prober
+
+systemctl daemon-reload
+k0s start
+
+# k0s's own manifest-stack applier (anything dropped under /var/lib/k0s/manifests/) retries a fixed ~10
+# times over about a minute after a file change, then gives up for good -- it doesn't poll indefinitely.
+# cert-manager's webhook (installed via the Helm extension above, which async-installs after k0s start)
+# routinely isn't accepting connections yet within that one-minute window on a 2GB node, so ClusterIssuers
+# never end up created if left to that mechanism. Apply them here instead: the apply itself doubles as
+# the readiness check for both the CRDs and the webhook, and we keep retrying well past that window.
+log "waiting for cert-manager to accept ClusterIssuers"
+deadline=$((SECONDS + 600))
+until k0s kubectl apply -f /etc/k0s/clusterissuers.yaml > /tmp/clusterissuers-apply.log 2>&1; do
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    log "giving up waiting for cert-manager after 10m -- ClusterIssuers not applied, see /tmp/clusterissuers-apply.log"
+    cat /tmp/clusterissuers-apply.log
+    break
+  fi
+  sleep 5
+done
+
+log "bootstrap complete"

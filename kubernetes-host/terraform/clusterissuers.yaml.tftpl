@@ -1,0 +1,45 @@
+# Written to /etc/k0s/clusterissuers.yaml and applied by bootstrap.sh, which retries until cert-manager's
+# CRDs and webhook are both actually serving. (Not one of k0s's own /var/lib/k0s/manifests/ stacks --
+# that applier gives up for good after ~10 failed attempts in under a minute, which isn't reliably
+# enough time for cert-manager's webhook to come up here.)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+%{ if acme_email != "" ~}
+    email: "${acme_email}"
+%{ endif ~}
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx
+            ingressTemplate:
+              metadata:
+                annotations:
+                  nginx.ingress.kubernetes.io/ssl-redirect: "false"
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+%{ if acme_email != "" ~}
+    email: "${acme_email}"
+%{ endif ~}
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx
+            ingressTemplate:
+              metadata:
+                annotations:
+                  nginx.ingress.kubernetes.io/ssl-redirect: "false"

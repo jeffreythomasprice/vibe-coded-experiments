@@ -1,0 +1,97 @@
+apiVersion: k0s.k0sproject.io/v1beta1
+kind: ClusterConfig
+metadata:
+  name: k0s
+spec:
+  storage:
+    type: kine
+  workerProfiles:
+    - name: default
+      values:
+        systemReserved:
+          cpu: 150m
+          memory: 300Mi
+        kubeReserved:
+          cpu: 250m
+          memory: 650Mi
+        evictionHard:
+          memory.available: "150Mi"
+          nodefs.available: "10%"
+          imagefs.available: "10%"
+        evictionMinimumReclaim:
+          memory.available: "100Mi"
+        imageGCHighThresholdPercent: 80
+        imageGCLowThresholdPercent: 60
+        memorySwap:
+          swapBehavior: LimitedSwap
+  extensions:
+    helm:
+      repositories:
+        - name: jetstack
+          url: https://charts.jetstack.io
+        - name: ingress-nginx
+          url: https://kubernetes.github.io/ingress-nginx
+      charts:
+        - name: cert-manager
+          chartname: jetstack/cert-manager
+          version: "${cert_manager_version}"
+          namespace: cert-manager
+          timeout: 20m
+          forceUpgrade: false
+          values: |
+            crds:
+              enabled: true
+            startupapicheck:
+              enabled: false
+            resources:
+              requests:
+                cpu: 10m
+                memory: 64Mi
+              limits:
+                memory: 192Mi
+            webhook:
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 96Mi
+            cainjector:
+              extraArgs:
+                - --namespace=cert-manager
+                - --enable-certificates-data-source=false
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 128Mi
+        - name: ingress-nginx
+          chartname: ingress-nginx/ingress-nginx
+          version: "${ingress_nginx_version}"
+          namespace: ingress-nginx
+          timeout: 20m
+          forceUpgrade: false
+          values: |
+            controller:
+              kind: DaemonSet
+              hostPort:
+                enabled: true
+              service:
+                type: ClusterIP
+              ingressClassResource:
+                default: true
+              config:
+                worker-processes: "1"
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 96Mi
+                limits:
+                  memory: 320Mi
+              admissionWebhooks:
+                patch:
+                  resources:
+                    requests:
+                      cpu: 10m
+                      memory: 32Mi
