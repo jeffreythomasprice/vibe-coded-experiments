@@ -1,5 +1,8 @@
 # Multiplayer
 
+> This describes the current peer-to-peer implementation, which server-based multiplayer (see the
+> new `server` crate) will replace.
+
 Rooms connect browsers directly, peer-to-peer (WebRTC), with no server in between. There's no
 rendezvous service either, so the two sides exchange connection info by hand: one side hosts and
 shares a text invite code, the other pastes it back a reply the same way. Once connected, every

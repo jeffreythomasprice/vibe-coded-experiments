@@ -1,15 +1,25 @@
 # Exalted Battle Wheel
 
+A Cargo workspace: `client` (the browser app), `server` (the API), `shared` (game logic and
+wire types used by both).
+
 ## Run in debug mode
 
 ```
-trunk serve
+cd client && trunk serve      # client, http://127.0.0.1:8000
+cargo run -p server           # server, http://127.0.0.1:8001
+```
+
+## Test
+
+```
+cargo test --workspace
 ```
 
 ## Build for release
 
 ```
-trunk build --release
+cd client && trunk build --release
 ```
 
 ## Deploy
@@ -22,11 +32,20 @@ terraform -chdir=terraform init
 terraform -chdir=terraform apply
 ```
 
+For the server half, `../kubernetes-host` must already be stood up, and its kubectl tunnel running
+in another terminal (`./kubeconfig.sh` once, then `./tunnel.sh`) with `KUBECONFIG` exported to point
+at it.
+
 Every subsequent deploy:
 
 ```
 export AWS_PROFILE=personal
-./deploy.sh
+export AWS_REGION=us-east-1
+export KUBECONFIG=../kubernetes-host/kubeconfig
+./deploy.sh          # both client and server
+./deploy.sh client   # just the client
+./deploy.sh server   # just the server
 ```
 
-`deploy.sh` builds a release bundle, syncs it to S3, and invalidates the CloudFront cache. See `terraform/` for the infrastructure, `CLAUDE.md` for how the hosting is wired together, and `MULTIPLAYER.md` for connecting and testing rooms.
+See `CLAUDE.md` for how each half is hosted and what a redeploy does, and `MULTIPLAYER.md` for
+connecting and testing rooms.

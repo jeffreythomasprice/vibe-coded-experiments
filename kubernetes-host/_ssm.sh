@@ -11,9 +11,12 @@ instance_id="$(terraform -chdir=terraform output -raw instance_id)"
 # failure instead of "not ready yet".
 wait_for_ssm() {
   echo "waiting for SSM registration ($instance_id)..." >&2
-  until aws ssm describe-instance-information \
-    --filters "Key=InstanceIds,Values=$instance_id" \
-    --query 'InstanceInformationList[0].PingStatus' --output text 2>/dev/null | grep -q Online; do
+  local info
+  while true; do
+    info="$(aws ssm describe-instance-information \
+      --filters "Key=InstanceIds,Values=$instance_id" --output json 2>&1)" || true
+    echo "$info" >&2
+    grep -q '"PingStatus": "Online"' <<<"$info" && break
     sleep 5
   done
 }

@@ -1,0 +1,213 @@
+//! The app-specific half of multiplayer: teaches the generic `net::Session` how to sequence and
+//! apply changes to a `BattleLog`, and exposes `Battles` as the one facade every UI call site
+//! uses instead of touching the log directly. The request/command types and `apply_command` this
+//! plugs into `Replicated` live in `shared::protocol` — a server will sequence and apply the same
+//! ones.
+
+use crate::net::{Mode, Replicated, Role, Session};
+use leptos::prelude::*;
+use shared::battle::{BattleEvent, BattleLog};
+use shared::protocol::{apply_command, hash_of, BattleCommand, BattleRequest, BattleSyncError, PeerId, PeerInfo, StateHash};
+
+#[derive(Clone, Copy)]
+struct BattleApp {
+    log: RwSignal<BattleLog>,
+}
+
+impl Replicated for BattleApp {
+    type Request = BattleRequest;
+    type Command = BattleCommand;
+    type Snapshot = BattleLog;
+    type Error = BattleSyncError;
+
+    fn sequence(&self, request: BattleRequest) -> Result<BattleCommand, BattleSyncError> {
+        Ok(match request {
+            BattleRequest::Push(event) => BattleCommand::Push(event),
+            BattleRequest::PushMinting(event) => BattleCommand::Push(self.log.read_untracked().restamp(event)),
+            BattleRequest::Undo => BattleCommand::Undo,
+            BattleRequest::Redo => BattleCommand::Redo,
+            BattleRequest::Seek(cursor) => BattleCommand::Seek(cursor),
+            BattleRequest::Reset => BattleCommand::Reset,
+        })
+    }
+
+    fn dry_run(&self, command: &BattleCommand) -> Result<StateHash, BattleSyncError> {
+        let mut probe = self.log.get_untracked();
+        apply_command(&mut probe, command)?;
+        Ok(hash_of(&probe))
+    }
+
+    fn commit(&self, command: &BattleCommand) -> Result<(), BattleSyncError> {
+        let mut result = Ok(());
+        self.log.update(|log| result = apply_command(log, command));
+        result.map_err(BattleSyncError::from)
+    }
+
+    fn state_hash(&self) -> StateHash {
+        hash_of(&self.log.get_untracked())
+    }
+
+    fn snapshot(&self) -> BattleLog {
+        self.log.get_untracked()
+    }
+
+    fn restore(&self, snapshot: BattleLog) -> Result<(), BattleSyncError> {
+        // `snapshot` decoded from JSON on the way in — via `BattleLog`'s own
+        // `#[serde(try_from = "RestoredLog")]` — so by the time it's a `BattleLog` value at all it
+        // has already replayed clean and had its id counters checked. Nothing left to reject here.
+        self.log.set(snapshot);
+        Ok(())
+    }
+}
+
+/// The read-only view every UI component reads the battle log through. Context is keyed by type
+/// alone, so replacing the writable `RwSignal<BattleLog>` that used to be provided with this
+/// instead makes bypassing `Battles` a compile error, not just a convention.
+pub type BattleView = ReadSignal<BattleLog>;
+
+/// The one facade every UI call site uses to change the battle. Replaces direct
+/// `log.update(|log| log.push(..))` calls so that a future networked room can intercept every
+/// mutation at a single chokepoint; today (`Session` is solo-only) it settles synchronously and
+/// behaves exactly like the direct calls it replaces.
+#[derive(Clone, Copy)]
+pub struct Battles {
+    session: Session<BattleApp>,
+}
+
+impl Battles {
+    /// `room_active` must be the same signal already passed to the battle log's
+    /// `Persisted::new_gated` — see `Session::new`'s doc comment for why it's threaded in rather
+    /// than created here.
+    pub fn new(log: RwSignal<BattleLog>, room_active: RwSignal<bool>) -> Self {
+        Self { session: Session::new(BattleApp { log }, room_active) }
+    }
+
+    pub fn push(&self, event: BattleEvent) {
+        self.propose(BattleRequest::Push(event), "push event");
+    }
+
+    pub fn push_minting(&self, event: BattleEvent) {
+        self.propose(BattleRequest::PushMinting(event), "push event");
+    }
+
+    pub fn push_with(&self, event: BattleEvent, on_settled: impl FnOnce(Result<(), String>) + 'static) {
+        self.propose_with(BattleRequest::Push(event), on_settled);
+    }
+
+    pub fn push_minting_with(&self, event: BattleEvent, on_settled: impl FnOnce(Result<(), String>) + 'static) {
+        self.propose_with(BattleRequest::PushMinting(event), on_settled);
+    }
+
+    pub fn undo(&self) {
+        self.propose_quiet(BattleRequest::Undo);
+    }
+
+    pub fn redo(&self) {
+        self.propose_quiet(BattleRequest::Redo);
+    }
+
+    pub fn seek(&self, cursor: usize) {
+        self.propose_quiet(BattleRequest::Seek(cursor));
+    }
+
+    pub fn reset(&self) {
+        self.propose(BattleRequest::Reset, "reset battle");
+    }
+
+    pub fn mode(&self) -> Signal<Mode> {
+        self.session.mode()
+    }
+
+    pub fn role(&self) -> Signal<Role> {
+        self.session.role()
+    }
+
+    pub fn self_id(&self) -> Signal<Option<PeerId>> {
+        self.session.self_id()
+    }
+
+    pub fn host_id(&self) -> Signal<Option<PeerId>> {
+        self.session.host_id()
+    }
+
+    pub fn peers(&self) -> Signal<Vec<PeerInfo>> {
+        self.session.peers()
+    }
+
+    pub fn invite(&self) -> Signal<Option<String>> {
+        self.session.invite()
+    }
+
+    pub fn answer_code(&self) -> Signal<Option<String>> {
+        self.session.answer_code()
+    }
+
+    /// Whether a proposal is currently awaiting agreement — while a room exists, editing the
+    /// battle is a network round trip, not a local call, and the UI should hold off on starting a
+    /// second change until the first has settled.
+    pub fn busy(&self) -> Signal<bool> {
+        self.session.busy()
+    }
+
+    /// Whether the host has a live invite nobody has claimed yet.
+    pub fn awaiting_peer(&self) -> Signal<bool> {
+        self.session.awaiting_peer()
+    }
+
+    /// Whether this node may only watch — its editing controls should be disabled.
+    pub fn read_only(&self) -> Signal<bool> {
+        self.session.read_only()
+    }
+
+    pub fn host(&self, name: String, everyone_admin: bool) {
+        self.session.host(name, everyone_admin);
+    }
+
+    pub fn accept_answer(&self, code: String) {
+        self.session.accept_answer(code);
+    }
+
+    pub fn join(&self, offer_code: String, name: String) {
+        self.session.join(offer_code, name);
+    }
+
+    pub fn kick(&self, peer: PeerId) {
+        self.session.kick(peer);
+    }
+
+    pub fn rename(&self, name: String) {
+        self.session.rename(name);
+    }
+
+    pub fn set_admin(&self, peer: PeerId, admin: bool) {
+        self.session.set_admin(peer, admin);
+    }
+
+    pub fn leave(&self) {
+        self.session.leave();
+    }
+
+    fn propose(&self, request: BattleRequest, action: &'static str) {
+        self.propose_with(request, move |result| {
+            if let Err(error) = result {
+                tracing::error!(%error, "could not {action}");
+                crate::ui::toast::error(format!("Could not {action}: {error}"));
+            }
+        });
+    }
+
+    /// For `undo`/`redo`/`seek`: their buttons are already disabled when there's nothing to do, so
+    /// a rejection here only ever comes from a harmless race (another peer's command landed
+    /// first) rather than a user action gone wrong, and isn't worth a toast.
+    fn propose_quiet(&self, request: BattleRequest) {
+        self.propose_with(request, |result| {
+            if let Err(error) = result {
+                tracing::debug!(%error, "no-op");
+            }
+        });
+    }
+
+    fn propose_with(&self, request: BattleRequest, on_settled: impl FnOnce(Result<(), String>) + 'static) {
+        self.session.propose(request, on_settled);
+    }
+}
