@@ -601,12 +601,15 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "console_error_panic_hook",
+ "dotenvy",
+ "gloo-net",
  "js-sys",
  "leptos",
  "serde",
  "serde_json",
  "shared",
  "thiserror 2.0.20",
+ "time",
  "tracing",
  "tracing-subscriber",
  "tracing-web",
@@ -841,6 +844,12 @@ dependencies = [
  "quote",
  "syn 3.0.5",
 ]
+
+[[package]]
+name = "dotenvy"
+version = "0.15.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
 
 [[package]]
 name = "drain_filter_polyfill"
@@ -2260,6 +2269,7 @@ dependencies = [
  "aws-sdk-dynamodb",
  "aws-smithy-http-client",
  "axum",
+ "dotenvy",
  "getrandom 0.4.3",
  "serde",
  "serde_json",
@@ -2369,6 +2379,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
+ "time",
 ]
 
 [[package]]

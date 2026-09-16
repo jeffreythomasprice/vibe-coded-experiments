@@ -3,49 +3,21 @@
 A Cargo workspace: `client` (the browser app), `server` (the API), `shared` (game logic and
 wire types used by both).
 
-## Run in debug mode
+## Run locally
 
 ```
-cd client && trunk serve      # client, http://127.0.0.1:8000
-cargo run -p server           # server, http://127.0.0.1:8001
+./dev.sh
 ```
 
-## Local testing
+Starts `dynamodb-local` (8002), the API (8001), and the client at http://127.0.0.1:8000; Ctrl-C
+stops all three and removes the DynamoDB container. It creates the access-codes table from
+`dynamodb/access-codes-table.json` -- the same file `terraform/dynamodb.tf` builds the real table
+from -- and seeds an admin code `local-admin`. Both are recreated on every run, since
+`dynamodb-local` runs in-memory.
 
-The server's access-code API needs DynamoDB. `docker compose up -d` runs `dynamodb-local` on
-`http://127.0.0.1:8002` (requires the `docker compose` plugin: `sudo pacman -S docker-compose` on
-Arch).
+Needs `docker compose` (`sudo pacman -S docker-compose` on Arch), plus `aws`, `jq`, and `trunk`.
 
-Create the table once:
-
-```
-export AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local AWS_DEFAULT_REGION=us-east-1
-aws dynamodb create-table --endpoint-url http://127.0.0.1:8002 \
-  --table-name exalted-battle-wheel-access-codes \
-  --attribute-definitions AttributeName=access_key,AttributeType=S \
-  --key-schema AttributeName=access_key,KeyType=HASH \
-  --billing-mode PAY_PER_REQUEST
-```
-
-The admin CRUD API is admin-only and the table starts empty, so the first admin code has to be
-seeded directly (works the same way against the real table -- see "Deploy" below):
-
-```
-aws dynamodb put-item --endpoint-url http://127.0.0.1:8002 \
-  --table-name exalted-battle-wheel-access-codes \
-  --item '{"access_key":{"S":"local-admin"},"is_admin":{"BOOL":true},"created_at":{"S":"2026-01-01T00:00:00Z"}}'
-```
-
-Run the server against it (a region and credentials are required even though `dynamodb-local`
-ignores them -- without them the SDK fails with "no region configured"):
-
-```
-AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local AWS_REGION=us-east-1 \
-DYNAMODB_ENDPOINT=http://127.0.0.1:8002 \
-cargo run -p server
-```
-
-Then, with an admin token:
+With the stack up, and an admin token:
 
 ```
 curl -H 'Authorization: Bearer local-admin' localhost:8001/auth/me
@@ -97,8 +69,8 @@ export KUBECONFIG=../kubernetes-host/kubeconfig
 ./deploy.sh server   # just the server
 ```
 
-The access-codes table starts empty; seed the first admin code once, the same way as in "Local
-testing" but against the real table (no `--endpoint-url`):
+The access-codes table starts empty; seed the first admin code once, the same shape `dev.sh` seeds
+locally but against the real table (no `--endpoint-url`):
 
 ```
 export AWS_PROFILE=personal

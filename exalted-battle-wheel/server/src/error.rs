@@ -3,7 +3,7 @@ use aws_sdk_dynamodb::error::DisplayErrorContext;
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use serde_json::json;
+use shared::access::ApiErrorBody;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
@@ -54,6 +54,6 @@ impl IntoResponse for ApiError {
         }
 
         let status = self.status();
-        (status, Json(json!({ "error": self.to_string() }))).into_response()
+        (status, Json(ApiErrorBody { error: self.to_string() })).into_response()
     }
 }

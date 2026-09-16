@@ -21,8 +21,12 @@ impl AccessCodeStore for MemoryAccessCodeStore {
         Ok(self.codes.lock().unwrap().values().cloned().collect())
     }
 
-    async fn create(&self, is_admin: bool) -> Result<AccessCode, StoreError> {
-        let code = AccessCode { access_key: generate_key()?, is_admin, created_at: OffsetDateTime::now_utc() };
+    async fn create(&self, access_key: Option<&str>, is_admin: bool) -> Result<AccessCode, StoreError> {
+        let access_key = match access_key {
+            Some(access_key) => access_key.to_string(),
+            None => generate_key()?,
+        };
+        let code = AccessCode { access_key, is_admin, created_at: OffsetDateTime::now_utc() };
         let mut codes = self.codes.lock().unwrap();
         if codes.contains_key(&code.access_key) {
             return Err(StoreError::AlreadyExists);

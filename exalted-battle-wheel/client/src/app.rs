@@ -4,8 +4,8 @@ use crate::prefs::{Prefs, Theme};
 use crate::ui::glossary::Topic;
 use crate::ui::ticks;
 use crate::ui::{
-    ActionPanel, ActiveTip, DetailTip, EventLogButton, HoverCard, Hovered, Modal, PendingJoin, QueuePanel,
-    RailSelection, ReferenceRail, RoomButton, Roster, Tip, TipLayer, ToastLayer, Toasts, Wheel,
+    ActionPanel, ActiveTip, ConfigButton, DetailTip, EventLogButton, HoverCard, Hovered, Modal, PendingJoin,
+    QueuePanel, RailSelection, ReferenceRail, RoomButton, Roster, Tip, TipLayer, ToastLayer, Toasts, Wheel,
 };
 use shared::battle::{BattleEvent, BattleLog, CombatantId, Phase};
 use leptos::prelude::*;
@@ -68,6 +68,8 @@ pub fn App() -> impl IntoView {
     // Provided before any `Persisted` value loads, so a load failure has a layer to report to.
     let toasts: Toasts = RwSignal::new(Vec::new());
     provide_context(toasts);
+
+    provide_context(crate::access::Access::new());
 
     // Captured once, here, where a real reactive owner is guaranteed current — `net::session`'s
     // deferred WebRTC-callback handlers have no owner of their own to work with and re-enter this
@@ -206,6 +208,7 @@ pub fn App() -> impl IntoView {
                         "Reset"
                     </button>
                 </Tip>
+                <ConfigButton />
             </header>
             {move || {
                 confirming_reset

@@ -22,10 +22,9 @@ provider "aws" {
 }
 
 locals {
-  domain             = "exalted.jeffrey.lol"
-  bucket             = "jeff-exalted-battle-wheel"
-  cert_domain        = "*.jeffrey.lol"
-  hosted_zone_id     = "Z234AULK6UMOJT"
-  origin_id          = "s3-site"
-  access_codes_table = "exalted-battle-wheel-access-codes"
+  domain         = "exalted.jeffrey.lol"
+  bucket         = "jeff-exalted-battle-wheel"
+  cert_domain    = "*.jeffrey.lol"
+  hosted_zone_id = "Z234AULK6UMOJT"
+  origin_id      = "s3-site"
 }

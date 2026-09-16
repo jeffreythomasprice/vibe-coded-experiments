@@ -1,11 +1,11 @@
 use crate::access_codes::{AccessCode, AccessCodeStore};
-use crate::auth::{require_access_code, require_admin};
+use crate::auth::{require_access_code, require_admin, Caller};
 use crate::error::ApiError;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{middleware, Json, Router};
-use serde::{Deserialize, Serialize};
+use shared::access::{AccessCodeList, CreateAccessCode, UpdateAccessCode};
 
 #[derive(Clone)]
 pub struct AppState<S> {
@@ -45,13 +45,8 @@ async fn not_found() -> ApiError {
     ApiError::NotFound
 }
 
-async fn my_access_code(code: AccessCode) -> Json<AccessCode> {
+async fn my_access_code(Caller(code): Caller) -> Json<AccessCode> {
     Json(code)
-}
-
-#[derive(Debug, Serialize)]
-struct AccessCodeList {
-    codes: Vec<AccessCode>,
 }
 
 async fn list_access_codes<S: AccessCodeStore>(State(state): State<AppState<S>>) -> Result<Json<AccessCodeList>, ApiError> {
@@ -59,16 +54,12 @@ async fn list_access_codes<S: AccessCodeStore>(State(state): State<AppState<S>>)
     Ok(Json(AccessCodeList { codes }))
 }
 
-#[derive(Debug, Deserialize)]
-struct CreateAccessCodeRequest {
-    is_admin: bool,
-}
-
 async fn create_access_code<S: AccessCodeStore>(
     State(state): State<AppState<S>>,
-    Json(body): Json<CreateAccessCodeRequest>,
+    Json(body): Json<CreateAccessCode>,
 ) -> Result<(StatusCode, Json<AccessCode>), ApiError> {
-    let code = state.access_codes.create(body.is_admin).await?;
+    let access_key = body.access_key.as_deref().map(str::trim).filter(|key| !key.is_empty());
+    let code = state.access_codes.create(access_key, body.is_admin).await?;
     Ok((StatusCode::CREATED, Json(code)))
 }
 
@@ -80,16 +71,11 @@ async fn read_access_code<S: AccessCodeStore>(
     Ok(Json(code))
 }
 
-#[derive(Debug, Deserialize)]
-struct UpdateAccessCodeRequest {
-    is_admin: bool,
-}
-
 async fn update_access_code<S: AccessCodeStore>(
-    caller: AccessCode,
+    Caller(caller): Caller,
     State(state): State<AppState<S>>,
     Path(access_key): Path<String>,
-    Json(body): Json<UpdateAccessCodeRequest>,
+    Json(body): Json<UpdateAccessCode>,
 ) -> Result<Json<AccessCode>, ApiError> {
     // An admin can't demote or delete themselves through this API -- without this, the only way
     // back from locking out the last admin is the AWS console or CLI.
@@ -101,7 +87,7 @@ async fn update_access_code<S: AccessCodeStore>(
 }
 
 async fn delete_access_code<S: AccessCodeStore>(
-    caller: AccessCode,
+    Caller(caller): Caller,
     State(state): State<AppState<S>>,
     Path(access_key): Path<String>,
 ) -> Result<StatusCode, ApiError> {
@@ -216,6 +202,60 @@ mod tests {
 
         assert_eq!(request(&app, "DELETE", &path, Some("root")).await, StatusCode::NO_CONTENT);
         assert_eq!(request(&app, "GET", &path, Some("root")).await, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn admin_can_create_a_code_with_a_chosen_key() {
+        let (app, store) = app();
+        store.seed("root", true);
+
+        let create = Request::builder()
+            .method("POST")
+            .uri("/access-codes")
+            .header("authorization", "Bearer root")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"access_key":"player-one","is_admin":false}"#))
+            .unwrap();
+        let response = app.clone().oneshot(create).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let created: AccessCode = serde_json::from_slice(&body).unwrap();
+        assert_eq!(created.access_key, "player-one");
+    }
+
+    #[tokio::test]
+    async fn creating_a_code_with_a_colliding_key_is_a_conflict() {
+        let (app, store) = app();
+        store.seed("root", true);
+        store.seed("player-one", false);
+
+        let create = Request::builder()
+            .method("POST")
+            .uri("/access-codes")
+            .header("authorization", "Bearer root")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"access_key":"player-one","is_admin":false}"#))
+            .unwrap();
+        assert_eq!(app.oneshot(create).await.unwrap().status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn a_blank_key_still_generates_one() {
+        let (app, store) = app();
+        store.seed("root", true);
+
+        let create = Request::builder()
+            .method("POST")
+            .uri("/access-codes")
+            .header("authorization", "Bearer root")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"access_key":"  ","is_admin":false}"#))
+            .unwrap();
+        let response = app.oneshot(create).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let created: AccessCode = serde_json::from_slice(&body).unwrap();
+        assert!(!created.access_key.trim().is_empty());
     }
 
     #[tokio::test]

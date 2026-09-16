@@ -2,3 +2,4 @@
 /client/dist
 /terraform/.terraform/
 terraform/*.tfstate*
+.env.local

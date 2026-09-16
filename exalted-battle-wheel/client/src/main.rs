@@ -1,5 +1,8 @@
+mod access;
+mod api;
 mod app;
 mod battle_net;
+mod config;
 mod net;
 mod persist;
 mod prefs;

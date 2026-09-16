@@ -1017,6 +1017,10 @@ button {
   padding: 1rem 1.2rem;
 }
 
+.modal-panel-wide {
+  max-width: 60rem;
+}
+
 .modal-title {
   font-weight: 700;
   color: var(--accent);
@@ -1162,14 +1166,17 @@ button {
   padding: 0.15rem 0.45rem;
 }
 
-/* While the host/join handshake is running, the just-submitted form stays visible but inert
-   rather than being torn out and replaced piecemeal as each piece of the result arrives. */
-.room-busy {
+/* While the host/join handshake -- or an access-code request -- is running, the just-submitted
+   form stays visible but inert rather than being torn out and replaced piecemeal as each piece of
+   the result arrives. */
+.room-busy,
+.access-busy {
   pointer-events: none;
   opacity: 0.6;
 }
 
-.room-pending {
+.room-pending,
+.access-pending {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1465,4 +1472,105 @@ button {
 
 .library-save {
   align-self: flex-start;
+}
+
+/* The gear-icon settings dialog: check or set this browser's access code, and — for an admin
+   code — manage every code the server knows about. */
+.access-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.access-code-input {
+  font-family: monospace;
+}
+
+.access-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.75rem;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.access-meta dt {
+  color: var(--text-dim);
+}
+
+.access-meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.access-admin {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-top: 1px solid var(--panel-border);
+  padding-top: 0.75rem;
+}
+
+.access-table-heading {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.access-table-scroll {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.access-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.access-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--panel-border);
+  padding: 0.35rem 0.5rem;
+}
+
+.access-table td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--panel-border);
+  vertical-align: middle;
+}
+
+.access-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.access-key {
+  font-family: monospace;
+  overflow-wrap: anywhere;
+}
+
+.access-key .peer-badge {
+  margin-left: 0.4rem;
+  font-family: initial;
+}
+
+.access-created {
+  color: var(--text-dim);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.access-delete {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.45rem;
+}
+
+.access-create {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-top: 1px solid var(--panel-border);
+  padding-top: 0.75rem;
 }

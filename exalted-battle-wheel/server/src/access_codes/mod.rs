@@ -16,17 +16,8 @@ use aws_sdk_dynamodb::operation::get_item::GetItemError;
 use aws_sdk_dynamodb::operation::put_item::PutItemError;
 use aws_sdk_dynamodb::operation::scan::ScanError;
 use aws_sdk_dynamodb::operation::update_item::UpdateItemError;
-use serde::{Deserialize, Serialize};
+pub use shared::access::AccessCode;
 use std::future::Future;
-use time::OffsetDateTime;
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AccessCode {
-    pub access_key: String,
-    pub is_admin: bool,
-    #[serde(with = "time::serde::rfc3339")]
-    pub created_at: OffsetDateTime,
-}
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
@@ -63,7 +54,13 @@ pub enum ItemError {
 pub trait AccessCodeStore: Clone + Send + Sync + 'static {
     fn get(&self, access_key: &str) -> impl Future<Output = Result<Option<AccessCode>, StoreError>> + Send;
     fn list(&self) -> impl Future<Output = Result<Vec<AccessCode>, StoreError>> + Send;
-    fn create(&self, is_admin: bool) -> impl Future<Output = Result<AccessCode, StoreError>> + Send;
+    /// `access_key`, if given, becomes the code verbatim; otherwise one is generated. A collision
+    /// with an existing key -- whether given or generated -- is `StoreError::AlreadyExists`.
+    fn create(
+        &self,
+        access_key: Option<&str>,
+        is_admin: bool,
+    ) -> impl Future<Output = Result<AccessCode, StoreError>> + Send;
     fn update(&self, access_key: &str, is_admin: bool) -> impl Future<Output = Result<AccessCode, StoreError>> + Send;
     fn delete(&self, access_key: &str) -> impl Future<Output = Result<(), StoreError>> + Send;
 }

@@ -1,6 +1,7 @@
 pub mod action_panel;
 pub mod clipboard;
 pub mod combobox;
+pub mod config;
 pub mod event_log;
 pub mod format;
 pub mod glossary;
@@ -21,6 +22,7 @@ pub mod wheel;
 pub use action_panel::{ActionPanel, RailSelection};
 pub use clipboard::CopyButton;
 pub use combobox::Combobox;
+pub use config::ConfigButton;
 pub use event_log::EventLogButton;
 pub use library::{SavedActionEditor, SavedActionList};
 pub use markers::MarkerForm;

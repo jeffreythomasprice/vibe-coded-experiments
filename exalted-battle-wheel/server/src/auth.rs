@@ -44,14 +44,19 @@ pub async fn require_admin(request: Request, next: Next) -> Result<Response, Api
     Ok(next.run(request).await)
 }
 
-impl<S> FromRequestParts<S> for AccessCode
+/// Extracts the caller's `AccessCode` from a handler's arguments. A wrapper, not a
+/// `FromRequestParts` impl directly on `AccessCode`, because that type now lives in `shared` --
+/// implementing axum's (foreign) trait for a (foreign) type is an orphan-rule violation.
+pub struct Caller(pub AccessCode);
+
+impl<S> FromRequestParts<S> for Caller
 where
     S: Send + Sync,
 {
     type Rejection = ApiError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        parts.extensions.get::<AccessCode>().cloned().ok_or(ApiError::Unauthorized)
+        parts.extensions.get::<AccessCode>().cloned().map(Caller).ok_or(ApiError::Unauthorized)
     }
 }
 

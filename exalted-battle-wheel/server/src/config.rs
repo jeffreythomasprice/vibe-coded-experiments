@@ -1,12 +1,43 @@
 use axum::http::HeaderValue;
 use axum::http::header::InvalidHeaderValue;
 use std::net::{AddrParseError, SocketAddr};
+use std::path::Path;
+
+/// Baked in at compile time to this crate's own directory, not read from the process's current
+/// directory -- `cargo run -p server` and the deployed binary can have different working
+/// directories, but this path is always `server/.env` relative to the workspace.
+pub const DOTENV_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/.env");
+
+/// What happened trying to load `server/.env`, so `main` can log it once a subscriber exists.
+/// Missing is the normal case in the deployed image, which never has the file at all.
+pub enum DotenvOutcome {
+    Loaded,
+    NotFound,
+    Unreadable(dotenvy::Error),
+}
+
+/// Loads `server/.env` into the process environment, if present, before anything else touches
+/// it -- must run before the tokio runtime (and therefore its worker threads) exists, since
+/// mutating the environment concurrently with threads that might read it is a real hazard, not
+/// just a hoop the 2024-edition `unsafe fn` signature makes you jump through. `dotenvy::from_path`
+/// never overrides a variable already set, so real process env (what `dev.sh` exports, what k8s
+/// injects) always wins over the file.
+pub fn load_dotenv() -> DotenvOutcome {
+    match dotenvy::from_path(Path::new(DOTENV_PATH)) {
+        Ok(()) => DotenvOutcome::Loaded,
+        Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => DotenvOutcome::NotFound,
+        Err(error) => DotenvOutcome::Unreadable(error),
+    }
+}
 
 const DEFAULT_ADDRESS: &str = "0.0.0.0:8001";
 // `TraceLayer::new_for_http()`'s default request/response spans log at `debug`, not `info` — this
 // target needs `debug` specifically or every request goes silent.
 pub const DEFAULT_LOG: &str = "warn,server=info,shared=info,tower_http::trace=debug";
-const DEFAULT_CORS_ORIGINS: &str = "https://exalted.jeffrey.lol,http://127.0.0.1:8000";
+// `localhost` and `127.0.0.1` are different origins to a browser even though they reach the same
+// server, so both are listed -- dev.sh prints the latter, but nothing stops a developer (or a
+// browser autocompleting a URL) from using the former instead.
+const DEFAULT_CORS_ORIGINS: &str = "https://exalted.jeffrey.lol,http://127.0.0.1:8000,http://localhost:8000";
 const DEFAULT_ACCESS_CODES_TABLE: &str = "exalted-battle-wheel-access-codes";
 
 #[derive(Debug, thiserror::Error)]

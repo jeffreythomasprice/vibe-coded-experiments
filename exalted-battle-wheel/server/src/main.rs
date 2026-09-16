@@ -5,7 +5,7 @@ mod error;
 mod routes;
 
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
-use config::{Config, ConfigError};
+use config::{Config, ConfigError, DotenvOutcome};
 use routes::AppState;
 use std::net::SocketAddr;
 use std::process::ExitCode;
@@ -80,14 +80,31 @@ async fn run() -> Result<(), StartupError> {
     axum::serve(listener, app).with_graceful_shutdown(shutdown_signal()).await.map_err(StartupError::Serve)
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
+/// Deliberately not `#[tokio::main]`: `server/.env` must be loaded into the process environment
+/// before the runtime -- and therefore its worker threads -- exists, so nothing else can be
+/// concurrently reading the environment while it's being mutated.
+fn main() -> ExitCode {
+    let dotenv_outcome = config::load_dotenv();
+
     // Read directly, ahead of `Config::from_env`, so a filter is in place to log any error that
     // call turns up.
     init_logging(&config::log_directives());
+    match dotenv_outcome {
+        DotenvOutcome::Loaded => tracing::info!(path = config::DOTENV_PATH, "loaded local .env"),
+        DotenvOutcome::NotFound => {}
+        DotenvOutcome::Unreadable(error) => tracing::warn!(%error, "could not read server/.env"),
+    }
     tracing::info!("starting server");
 
-    match run().await {
+    let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            tracing::error!(%error, "could not start the async runtime");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    match runtime.block_on(run()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!(%error, "startup failed");
