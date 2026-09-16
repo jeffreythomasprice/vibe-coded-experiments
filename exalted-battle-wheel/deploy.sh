@@ -37,6 +37,14 @@ deploy_client() {
 deploy_server() {
   : "${KUBECONFIG:?KUBECONFIG must point at ../kubernetes-host/kubeconfig -- export it and run ../kubernetes-host/tunnel.sh in another terminal first}"
 
+  # The pod can't use the node's instance role (IMDS hop limit 1, deliberately -- see CLAUDE.md), so
+  # its DynamoDB credentials come from a dedicated IAM user's access key instead, upserted into a
+  # Secret from the current Terraform outputs on every deploy.
+  kubectl create secret generic exalted-server-aws \
+    --from-literal=AWS_ACCESS_KEY_ID="$(terraform -chdir=terraform output -raw server_access_key_id)" \
+    --from-literal=AWS_SECRET_ACCESS_KEY="$(terraform -chdir=terraform output -raw server_secret_access_key)" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
   # A fresh tag every deploy, never reused: there's no registry, so the tag in the manifest is how
   # the node tells old bits from new ones (see CLAUDE.md).
   local tag="v$(date -u +%Y%m%d%H%M%S)"

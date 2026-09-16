@@ -1,3 +1,5 @@
+use crate::access_codes::StoreError;
+use aws_sdk_dynamodb::error::DisplayErrorContext;
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -7,18 +9,50 @@ use serde_json::json;
 pub enum ApiError {
     #[error("not found")]
     NotFound,
+    #[error("missing or unknown access code")]
+    Unauthorized,
+    #[error("access code is not an admin")]
+    Forbidden,
+    #[error("cannot modify or delete your own access code")]
+    SelfModification,
+    #[error("access code already exists")]
+    Conflict,
+    // Deliberately opaque: a `StoreError` can carry a DynamoDB error with the table name, endpoint,
+    // and request id in it. `to_string()` is what a caller sees; the real cause only reaches the log.
+    #[error("internal error")]
+    Internal(#[source] StoreError),
 }
 
 impl ApiError {
     fn status(&self) -> StatusCode {
         match self {
             ApiError::NotFound => StatusCode::NOT_FOUND,
+            ApiError::Unauthorized => StatusCode::UNAUTHORIZED,
+            ApiError::Forbidden | ApiError::SelfModification => StatusCode::FORBIDDEN,
+            ApiError::Conflict => StatusCode::CONFLICT,
+            ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
+impl From<StoreError> for ApiError {
+    fn from(error: StoreError) -> Self {
+        match error {
+            StoreError::NotFound => ApiError::NotFound,
+            StoreError::AlreadyExists => ApiError::Conflict,
+            error => ApiError::Internal(error),
         }
     }
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        // `SdkError`'s own `Display` is just "service error" -- `DisplayErrorContext` walks the
+        // source chain to the actual DynamoDB error, so the log line is worth reading.
+        if let ApiError::Internal(source) = &self {
+            tracing::error!(error = %DisplayErrorContext(source), "request failed");
+        }
+
         let status = self.status();
         (status, Json(json!({ "error": self.to_string() }))).into_response()
     }

@@ -14,6 +14,13 @@ spec:
         - name: exalted-server
           image: exalted-server:v1 # never :latest, never untagged -- see push-image.sh
           imagePullPolicy: IfNotPresent
+          env:
+            - name: AWS_REGION
+              value: us-east-1
+            - name: ACCESS_CODES_TABLE
+              value: exalted-battle-wheel-access-codes
+          envFrom:
+            - secretRef: { name: exalted-server-aws } # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, from deploy.sh
           ports:
             - containerPort: 8001
           resources:

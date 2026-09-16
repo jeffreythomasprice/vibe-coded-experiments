@@ -1,0 +1,6 @@
+services:
+  dynamodb:
+    image: amazon/dynamodb-local:3.3.1
+    # Host 8002: trunk serve owns 8000 and the server owns 8001.
+    ports: ["8002:8000"]
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]

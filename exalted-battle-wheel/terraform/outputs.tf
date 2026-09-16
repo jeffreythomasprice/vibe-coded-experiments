@@ -9,3 +9,16 @@ output "distribution_domain_name" {
 output "site_url" {
   value = "https://${local.domain}"
 }
+
+output "access_codes_table" {
+  value = aws_dynamodb_table.access_codes.name
+}
+
+output "server_access_key_id" {
+  value = aws_iam_access_key.server.id
+}
+
+output "server_secret_access_key" {
+  value     = aws_iam_access_key.server.secret
+  sensitive = true
+}

@@ -1,8 +1,12 @@
+mod access_codes;
+mod auth;
 mod config;
 mod error;
 mod routes;
 
+use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
 use config::{Config, ConfigError};
+use routes::AppState;
 use std::net::SocketAddr;
 use std::process::ExitCode;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
@@ -56,13 +60,16 @@ async fn shutdown_signal() {
 
 async fn run() -> Result<(), StartupError> {
     let config = Config::from_env()?;
+    let state = AppState { access_codes: access_codes::connect(&config).await };
 
+    // An explicit header list rather than `Any`: `Any` emits `Access-Control-Allow-Headers: *`,
+    // which stops covering `Authorization` the moment credentialed requests are ever turned on.
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::list(config.cors_origins.clone()))
         .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_headers([AUTHORIZATION, CONTENT_TYPE]);
 
-    let app = routes::router().layer(cors).layer(TraceLayer::new_for_http());
+    let app = routes::router(state).layer(cors).layer(TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind(config.address)
         .await

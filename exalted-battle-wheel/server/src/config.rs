@@ -7,6 +7,7 @@ const DEFAULT_ADDRESS: &str = "0.0.0.0:8001";
 // target needs `debug` specifically or every request goes silent.
 pub const DEFAULT_LOG: &str = "warn,server=info,shared=info,tower_http::trace=debug";
 const DEFAULT_CORS_ORIGINS: &str = "https://exalted.jeffrey.lol,http://127.0.0.1:8000";
+const DEFAULT_ACCESS_CODES_TABLE: &str = "exalted-battle-wheel-access-codes";
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
@@ -26,6 +27,8 @@ pub fn log_directives() -> String {
 pub struct Config {
     pub address: SocketAddr,
     pub cors_origins: Vec<HeaderValue>,
+    pub access_codes_table: String,
+    pub dynamodb_endpoint: Option<String>,
 }
 
 impl Config {
@@ -45,6 +48,13 @@ impl Config {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(Self { address, cors_origins })
+        let access_codes_table =
+            std::env::var("ACCESS_CODES_TABLE").unwrap_or_else(|_| DEFAULT_ACCESS_CODES_TABLE.to_string());
+
+        // Empty counts as unset, so a manifest can declare the variable without pointing at a
+        // local DynamoDB.
+        let dynamodb_endpoint = std::env::var("DYNAMODB_ENDPOINT").ok().filter(|value| !value.is_empty());
+
+        Ok(Self { address, cors_origins, access_codes_table, dynamodb_endpoint })
     }
 }

@@ -26,6 +26,14 @@ My goal at the end of this is a server I can test locally or deploy, prove authe
 
 todo:
 
+for local testing, there should be a script for launching everything, shutting everything down when ctrl+c
+also should make dynamo tables
+sync dynamo table with terraform scripts even for local to avoid duplicating table definition?
+
+
+json schemas for all API endpoint types and all websocket messages, then generate rust types from that
+
+
 delete protection on access tokens table
 
 

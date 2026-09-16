@@ -16,6 +16,9 @@ COPY . .
 RUN cargo build --release -p server
 
 FROM debian:bookworm-slim AS runtime
+# Needed for the DynamoDB client's TLS: aws-smithy-http-client's default connector loads the system
+# trust store (rustls-native-certs) rather than vendoring its own root certificates.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN useradd --uid 10001 --system --shell /usr/sbin/nologin app
 COPY --from=builder /app/target/release/server /usr/local/bin/server
 USER app
