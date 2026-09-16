@@ -8,9 +8,8 @@ use crate::protocol::BattleRequest;
 use serde::{Deserialize, Serialize};
 
 /// Identifies one live websocket connection, minted by the server when the socket is accepted.
-/// Unlike the old peer-to-peer `PeerId`, this is never generated client-side — the server is the
-/// only node that hands these out, the same way it is the only node that mints combatant and
-/// marker ids into a room's log.
+/// This is never generated client-side — the server is the only node that hands these out, the
+/// same way it is the only node that mints combatant and marker ids into a room's log.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ConnectionId(pub String);
 

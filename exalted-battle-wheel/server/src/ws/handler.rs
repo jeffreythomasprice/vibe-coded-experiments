@@ -277,8 +277,8 @@ async fn handle_request<R: RoomStore>(rooms: &R, connection_id: &ConnectionId, c
     }
 
     // `PushMinting` carries placeholder ids; the server is the room's sole authority, so it (and
-    // only it) turns them into real ones by restamping from its own log -- exactly what used to
-    // be the P2P host's job. See `shared::protocol::BattleRequest`'s doc comment.
+    // only it) turns them into real ones by restamping from its own log. See
+    // `shared::protocol::BattleRequest`'s doc comment.
     let command = match request {
         BattleRequest::Push(event) => BattleCommand::Push(event),
         BattleRequest::PushMinting(event) => BattleCommand::Push(room.log.restamp(event)),

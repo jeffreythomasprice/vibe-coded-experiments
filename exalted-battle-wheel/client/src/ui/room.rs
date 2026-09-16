@@ -1,8 +1,7 @@
-//! Host or join a server-hosted room: name yourself, name the room, and see who's in it. Replaces
-//! the old peer-to-peer version — there's a real server now, so no connection codes to exchange by
-//! hand, no NAT to fight, and the server (not a two-phase-commit vote) is the one authority on
-//! whether a move is legal. Any access code may create a room, join a room, and play; write access
-//! inside a room is per connection, controlled by whoever already has it.
+//! Host or join a server-hosted room: name yourself, name the room, and see who's in it. The
+//! server is the one authority on whether a move is legal. Any access code may create a room,
+//! join a room, and play; write access inside a room is per connection, controlled by whoever
+//! already has it.
 
 use crate::access::Access;
 use crate::battle_net::{Battles, Mode};

@@ -1,10 +1,8 @@
 //! Server-authoritative multiplayer. `Battles` is the one facade every UI call site uses to
-//! change the battle or manage room membership — replacing the old peer-to-peer `Session`, whose
-//! whole two-phase-commit vote existed only because there was no server to be the single
-//! authority. Now there is: the server owns every room's battle log and its membership, checks
-//! every move for legality and permission, and this browser's own state is never more than
-//! whatever the server's last message said it is. A websocket connection (`crate::net::Socket`)
-//! carries every request and reply.
+//! change the battle or manage room membership. The server owns every room's battle log and its
+//! membership, checks every move for legality and permission, and this browser's own state is
+//! never more than whatever the server's last message said it is. A websocket connection
+//! (`crate::net::Socket`) carries every request and reply.
 
 use crate::access::Access;
 use crate::net::{Socket, SocketError};
@@ -123,8 +121,7 @@ pub type BattleView = ReadSignal<BattleLog>;
 #[derive(Clone, Copy)]
 pub struct Battles {
     log: RwSignal<BattleLog>,
-    /// `Socket` wraps a `web_sys::WebSocket` (`Rc`-backed, so `!Send`) — hence `LocalStorage`,
-    /// same reasoning as the old peer-to-peer `Session`'s own room state.
+    /// `Socket` wraps a `web_sys::WebSocket` (`Rc`-backed, so `!Send`) — hence `LocalStorage`.
     socket: RwSignal<Option<Socket>, LocalStorage>,
     mode: RwSignal<Mode>,
     room: RwSignal<Option<String>>,
