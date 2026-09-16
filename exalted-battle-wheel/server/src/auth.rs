@@ -4,7 +4,9 @@
 //! just take an `AccessCode` argument instead of repeating either check.
 
 use crate::access_codes::{AccessCode, AccessCodeStore};
+use crate::connections::ConnectionStore;
 use crate::error::ApiError;
+use crate::rooms::RoomStore;
 use crate::routes::AppState;
 use axum::extract::{FromRequestParts, Request, State};
 use axum::http::header::AUTHORIZATION;
@@ -18,8 +20,8 @@ fn bearer_token(headers: &HeaderMap) -> Option<&str> {
     scheme.eq_ignore_ascii_case("bearer").then(|| token.trim())
 }
 
-pub async fn require_access_code<S: AccessCodeStore>(
-    State(state): State<AppState<S>>,
+pub async fn require_access_code<A: AccessCodeStore, R: RoomStore, C: ConnectionStore>(
+    State(state): State<AppState<A, R, C>>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, ApiError> {

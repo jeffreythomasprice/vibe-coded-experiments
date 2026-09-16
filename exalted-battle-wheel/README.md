@@ -10,10 +10,10 @@ wire types used by both).
 ```
 
 Starts `dynamodb-local` (8002), the API (8001), and the client at http://127.0.0.1:8000; Ctrl-C
-stops all three and removes the DynamoDB container. It creates the access-codes table from
-`dynamodb/access-codes-table.json` -- the same file `terraform/dynamodb.tf` builds the real table
-from -- and seeds an admin code `local-admin`. Both are recreated on every run, since
-`dynamodb-local` runs in-memory.
+stops all three and removes the DynamoDB container. It creates all three tables (access codes,
+rooms, websocket connections) from the JSON files under `dynamodb/` -- the same files
+`terraform/dynamodb.tf` builds the real tables from -- and seeds an admin code `local-admin`.
+Everything is recreated on every run, since `dynamodb-local` runs in-memory.
 
 Needs `docker compose` (`sudo pacman -S docker-compose` on Arch), plus `aws`, `jq`, and `trunk`.
 
@@ -27,10 +27,13 @@ curl -H 'Authorization: Bearer local-admin' localhost:8001/access-codes
 curl -H 'Authorization: Bearer local-admin' -X PUT -H 'Content-Type: application/json' \
   -d '{"is_admin":true}' localhost:8001/access-codes/<access_key>
 curl -H 'Authorization: Bearer local-admin' -X DELETE localhost:8001/access-codes/<access_key>
+curl -H 'Authorization: Bearer local-admin' localhost:8001/rooms
 ```
 
 A request with no `Authorization` header, or an unrecognized code, gets `401`; a non-admin code
-against any `/access-codes` route gets `403`.
+against any `/access-codes` route gets `403`. `/rooms` needs a valid code but not an admin one --
+any access code may create, join, and play in a room, over the websocket at `/ws`; see
+`MULTIPLAYER.md`.
 
 ## Test
 

@@ -886,6 +886,44 @@ button {
   color: var(--danger);
 }
 
+/* `margin-left: auto` pins it to the header's right edge regardless of what else is in the row
+   (same trick `.tick-readout` uses), so it always reads as the menu bar's far-right control. */
+.hamburger-menu {
+  position: relative;
+  margin-left: auto;
+}
+
+/* Above ordinary panel content, but well below the modal backdrop (900), toast layer (950) and
+   tip layer (1000) — see the layering note above .toast-layer. */
+.hamburger-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 12rem;
+  padding: 0.5rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.hamburger-dropdown .tip-target {
+  display: block;
+}
+
+/* Layout only — `.app-header button` (above) already supplies the chip look every other header
+   button uses, so these just stack that same chip full-width instead of overriding its styling. */
+.hamburger-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  white-space: nowrap;
+}
+
 .join-battle-successes-label {
   display: flex;
   align-items: center;
@@ -1166,10 +1204,8 @@ button {
   padding: 0.15rem 0.45rem;
 }
 
-/* While the host/join handshake -- or an access-code request -- is running, the just-submitted
-   form stays visible but inert rather than being torn out and replaced piecemeal as each piece of
-   the result arrives. */
-.room-busy,
+/* While an access-code request is running, the just-submitted form stays visible but inert rather
+   than being torn out and replaced piecemeal as each piece of the result arrives. */
 .access-busy {
   pointer-events: none;
   opacity: 0.6;
@@ -1213,78 +1249,13 @@ button {
   }
 }
 
-/* Reserves the invite's full height (label + textarea + copy button) so re-minting it after every
-   join swaps content in place instead of collapsing the panel and shoving the reply field below
-   it. */
-.room-invite-slot {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-height: 8rem;
-}
-
-.room-code {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.35rem;
-  width: 100%;
-}
-
-/* Fixed width so the label swapping to "Copied!" doesn't resize the button under the pointer. */
-.room-copy {
-  min-width: 6rem;
-}
-
-.room-advanced {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  width: 100%;
-  border-top: 1px solid var(--panel-border);
-  padding-top: 0.6rem;
-}
-
-.room-advanced-toggle {
-  align-self: flex-start;
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  font-size: 0.85rem;
-  padding: 0;
-}
-
-.room-advanced-toggle:hover {
+.room-name-heading {
+  margin: 0;
   color: var(--text);
+  font-size: 1rem;
 }
 
-.room-stun-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  width: 100%;
-}
-
-.room-stun-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.4rem;
-}
-
-.room-stun-row input {
-  flex: 1;
-  min-width: 0;
-  background: var(--bg);
-  border: 1px solid var(--panel-border);
-  color: var(--text);
-  border-radius: 4px;
-  padding: 0.3rem 0.5rem;
-  font-family: monospace;
-  font-size: 0.8rem;
-}
-
-.room-stun-actions {
+.room-actions {
   display: flex;
   gap: 0.5rem;
 }

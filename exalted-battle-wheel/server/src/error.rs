@@ -1,4 +1,5 @@
 use crate::access_codes::StoreError;
+use crate::rooms::RoomStoreError;
 use aws_sdk_dynamodb::error::DisplayErrorContext;
 use axum::Json;
 use axum::http::StatusCode;
@@ -21,6 +22,11 @@ pub enum ApiError {
     // and request id in it. `to_string()` is what a caller sees; the real cause only reaches the log.
     #[error("internal error")]
     Internal(#[source] StoreError),
+    // Same reasoning as `Internal`, for the one HTTP handler (`GET /rooms`) that reads the room
+    // store directly -- everything else that touches rooms goes through the websocket, which maps
+    // `RoomStoreError` to `shared::protocol::ProtocolError` instead (see `ws::handler::store_error`).
+    #[error("internal error")]
+    RoomStore(#[source] RoomStoreError),
 }
 
 impl ApiError {
@@ -30,7 +36,7 @@ impl ApiError {
             ApiError::Unauthorized => StatusCode::UNAUTHORIZED,
             ApiError::Forbidden | ApiError::SelfModification => StatusCode::FORBIDDEN,
             ApiError::Conflict => StatusCode::CONFLICT,
-            ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            ApiError::Internal(_) | ApiError::RoomStore(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
@@ -45,12 +51,20 @@ impl From<StoreError> for ApiError {
     }
 }
 
+impl From<RoomStoreError> for ApiError {
+    fn from(error: RoomStoreError) -> Self {
+        ApiError::RoomStore(error)
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         // `SdkError`'s own `Display` is just "service error" -- `DisplayErrorContext` walks the
         // source chain to the actual DynamoDB error, so the log line is worth reading.
-        if let ApiError::Internal(source) = &self {
-            tracing::error!(error = %DisplayErrorContext(source), "request failed");
+        match &self {
+            ApiError::Internal(source) => tracing::error!(error = %DisplayErrorContext(source), "request failed"),
+            ApiError::RoomStore(source) => tracing::error!(error = %DisplayErrorContext(source), "request failed"),
+            _ => {}
         }
 
         let status = self.status();

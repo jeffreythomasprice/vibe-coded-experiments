@@ -1,53 +1,15 @@
-use crate::battle_net::{BattleView, Battles};
+use crate::battle_net::{set_root_owner, BattleView, Battles};
 use crate::persist::Persisted;
 use crate::prefs::{Prefs, Theme};
 use crate::ui::glossary::Topic;
 use crate::ui::ticks;
 use crate::ui::{
-    ActionPanel, ActiveTip, ConfigButton, DetailTip, EventLogButton, HoverCard, Hovered, Modal, PendingJoin,
-    QueuePanel, RailSelection, ReferenceRail, RoomButton, Roster, Tip, TipLayer, ToastLayer, Toasts, Wheel,
+    ActionPanel, ActiveTip, ConfigOpen, DetailTip, EventLogButton, HamburgerMenu, HoverCard, Hovered, Modal,
+    QueuePanel, RailSelection, ReferenceRail, RoomOpen, RoomStatusButton, Roster, Tip, TipLayer, ToastLayer, Toasts,
+    Wheel,
 };
 use shared::battle::{BattleEvent, BattleLog, CombatantId, Phase};
 use leptos::prelude::*;
-use wasm_bindgen::JsValue;
-
-/// Reads a one-shot `#j=<code>&stun=<url>,<url>` fragment (an invite link, or a bare STUN
-/// override), applies the STUN override immediately, and clears the fragment via
-/// `replace_state` so a refresh doesn't re-open a spent invite. Both params ride the fragment
-/// rather than the query string: fragments never reach CloudFront, so an invite code never lands
-/// in an access log, and can't perturb the CDN's cache key either.
-fn consume_invite_fragment() -> Option<String> {
-    let window = web_sys::window()?;
-    let location = window.location();
-    let hash = location.hash().ok()?;
-    let query = hash.strip_prefix('#').unwrap_or(&hash);
-    if query.is_empty() {
-        return None;
-    }
-    let params = web_sys::UrlSearchParams::new_with_str(query).ok()?;
-
-    if let Some(stun) = params.get("stun") {
-        let candidates = stun.split(',').map(str::trim).filter(|url| !url.is_empty());
-        let mut servers = Vec::new();
-        for url in candidates {
-            match crate::net::validate_stun_url(url) {
-                Ok(()) => servers.push(url.to_string()),
-                Err(error) => crate::ui::toast::error(format!("Ignoring STUN server {url:?} from the URL: {error}")),
-            }
-        }
-        if !servers.is_empty() {
-            crate::net::set_stun_servers(servers);
-        }
-    }
-    let join_code = params.get("j");
-
-    let cleared_url = format!("{}{}", location.pathname().unwrap_or_default(), location.search().unwrap_or_default());
-    if let Ok(history) = window.history() {
-        let _ = history.replace_state_with_url(&JsValue::NULL, "", Some(&cleared_url));
-    }
-
-    join_code
-}
 
 /// "tick" -> "Tick", "long tick" -> "Long Tick" — for button labels built from `BattleMode`'s
 /// lowercase nouns.
@@ -70,20 +32,17 @@ pub fn App() -> impl IntoView {
     provide_context(toasts);
 
     provide_context(crate::access::Access::new());
+    provide_context(ConfigOpen(RwSignal::new(false)));
+    provide_context(RoomOpen(RwSignal::new(false)));
 
-    // Captured once, here, where a real reactive owner is guaranteed current — `net::session`'s
-    // deferred WebRTC-callback handlers have no owner of their own to work with and re-enter this
-    // one explicitly instead. See `session.rs`'s `ROOT_OWNER` doc comment for why that's necessary.
+    // Captured once, here, where a real reactive owner is guaranteed current — `battle_net`'s
+    // deferred websocket-callback handlers have no owner of their own to work with and re-enter
+    // this one explicitly instead. See its `ROOT_OWNER` doc comment for why that's necessary.
     if let Some(owner) = Owner::current() {
-        crate::net::set_root_owner(owner);
+        set_root_owner(owner);
     }
 
-    // Read once, synchronously, before anything below could open a room of its own — applies any
-    // `#stun=` override immediately and hands the `#j=` invite code (if any) to `RoomButton`.
-    let pending_join = PendingJoin(RwSignal::new(consume_invite_fragment()));
-    provide_context(pending_join);
-
-    // Created before the log it gates, and threaded into both — see `Session::new`'s doc comment.
+    // Created before the log it gates, and threaded into both — see `Battles::new`'s doc comment.
     let room_active = RwSignal::new(false);
     let battle_log = Persisted::new_gated("battle", BattleLog::new, move || !room_active.get());
     let log = *battle_log;
@@ -138,7 +97,6 @@ pub fn App() -> impl IntoView {
                     </button>
                 </Tip>
                 <EventLogButton />
-                <RoomButton />
                 <DetailTip
                     topic=Topic::CurrentTick
                     detail=Signal::derive(move || battle.read().mode.tick_note().unwrap_or_default().to_string())
@@ -208,7 +166,8 @@ pub fn App() -> impl IntoView {
                         "Reset"
                     </button>
                 </Tip>
-                <ConfigButton />
+                <RoomStatusButton />
+                <HamburgerMenu />
             </header>
             {move || {
                 confirming_reset

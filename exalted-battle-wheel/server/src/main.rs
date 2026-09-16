@@ -1,8 +1,13 @@
 mod access_codes;
 mod auth;
 mod config;
+mod connections;
+mod dynamo_client;
 mod error;
+mod random_key;
+mod rooms;
 mod routes;
+mod ws;
 
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
 use config::{Config, ConfigError, DotenvOutcome};
@@ -60,7 +65,12 @@ async fn shutdown_signal() {
 
 async fn run() -> Result<(), StartupError> {
     let config = Config::from_env()?;
-    let state = AppState { access_codes: access_codes::connect(&config).await };
+    let state = AppState {
+        access_codes: access_codes::connect(&config).await,
+        rooms: rooms::connect(&config).await,
+        connections: connections::connect(&config).await,
+        hub: ws::Hub::default(),
+    };
 
     // An explicit header list rather than `Any`: `Any` emits `Access-Control-Allow-Headers: *`,
     // which stops covering `Authorization` the moment credentialed requests are ever turned on.

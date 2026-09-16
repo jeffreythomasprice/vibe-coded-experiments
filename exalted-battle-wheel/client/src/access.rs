@@ -41,6 +41,14 @@ impl Access {
         Signal::derive(move || me.get())
     }
 
+    /// The raw bearer token, for whatever wants to authenticate its own requests directly (the
+    /// websocket client, in particular — every message it sends carries this). `None` means "not
+    /// signed in," the same condition `me()` reports.
+    pub fn token(&self) -> Signal<Option<String>> {
+        let token = self.token;
+        Signal::derive(move || token.get())
+    }
+
     pub fn codes(&self) -> Signal<Vec<AccessCode>> {
         let codes = self.codes;
         Signal::derive(move || codes.get())

@@ -3,6 +3,11 @@ kind: Deployment
 metadata:
   name: exalted-server
 spec:
+  # Must stay 1: room broadcast fans out through an in-process sender registry keyed by
+  # connection id (see `server/src/ws/hub.rs`), and every room mutation is serialized by a single
+  # in-process lock. A second pod would neither receive broadcasts meant for connections on the
+  # first, nor actually serialize writes against it -- multi-replica needs a real pub/sub and
+  # locking layer this app doesn't have.
   replicas: 1
   selector:
     matchLabels: { app: exalted-server }
@@ -19,6 +24,10 @@ spec:
               value: us-east-1
             - name: ACCESS_CODES_TABLE
               value: exalted-battle-wheel-access-codes
+            - name: ROOMS_TABLE
+              value: exalted-battle-wheel-rooms
+            - name: CONNECTIONS_TABLE
+              value: exalted-battle-wheel-websocket-connections
           envFrom:
             - secretRef: { name: exalted-server-aws } # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, from deploy.sh
           ports:

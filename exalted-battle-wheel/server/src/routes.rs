@@ -1,23 +1,30 @@
 use crate::access_codes::{AccessCode, AccessCodeStore};
 use crate::auth::{require_access_code, require_admin, Caller};
+use crate::connections::ConnectionStore;
 use crate::error::ApiError;
+use crate::rooms::RoomStore;
+use crate::ws::{self, Hub};
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{middleware, Json, Router};
 use shared::access::{AccessCodeList, CreateAccessCode, UpdateAccessCode};
+use shared::rooms::RoomList;
 
 #[derive(Clone)]
-pub struct AppState<S> {
-    pub access_codes: S,
+pub struct AppState<A, R, C> {
+    pub access_codes: A,
+    pub rooms: R,
+    pub connections: C,
+    pub hub: Hub,
 }
 
-pub fn router<S: AccessCodeStore>(state: AppState<S>) -> Router {
+pub fn router<A: AccessCodeStore, R: RoomStore, C: ConnectionStore>(state: AppState<A, R, C>) -> Router {
     let admin = Router::new()
-        .route("/access-codes", get(list_access_codes::<S>).post(create_access_code::<S>))
+        .route("/access-codes", get(list_access_codes::<A, R, C>).post(create_access_code::<A, R, C>))
         .route(
             "/access-codes/{access_key}",
-            get(read_access_code::<S>).put(update_access_code::<S>).delete(delete_access_code::<S>),
+            get(read_access_code::<A, R, C>).put(update_access_code::<A, R, C>).delete(delete_access_code::<A, R, C>),
         )
         .route_layer(middleware::from_fn(require_admin));
 
@@ -27,14 +34,22 @@ pub fn router<S: AccessCodeStore>(state: AppState<S>) -> Router {
     // routing conflict.
     let authenticated = Router::new()
         .route("/auth/me", get(my_access_code))
+        .route("/rooms", get(list_rooms::<A, R, C>))
         .merge(admin)
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_access_code::<S>));
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_access_code::<A, R, C>));
 
     // `route_layer`, not `layer`: it skips the fallback, so an unauthenticated request to an
-    // unknown path stays a 404 instead of becoming a 401. `/health` is added to the outer router
-    // afterward, so it is never wrapped by `require_access_code` -- the pod's liveness and
-    // readiness probes need to reach it with no token.
-    Router::new().route("/health", get(health)).merge(authenticated).fallback(not_found).with_state(state)
+    // unknown path stays a 404 instead of becoming a 401. `/health` and `/ws` are added to the
+    // outer router afterward, so neither is ever wrapped by `require_access_code` -- `/health`
+    // for the pod's liveness/readiness probes, `/ws` because a browser can't attach an
+    // `Authorization` header to `new WebSocket()`; every websocket message carries its own token
+    // instead (see `ws`'s own doc comment).
+    Router::new()
+        .route("/health", get(health))
+        .route("/ws", get(ws::upgrade::<A, R, C>))
+        .merge(authenticated)
+        .fallback(not_found)
+        .with_state(state)
 }
 
 async fn health() -> &'static str {
@@ -49,13 +64,22 @@ async fn my_access_code(Caller(code): Caller) -> Json<AccessCode> {
     Json(code)
 }
 
-async fn list_access_codes<S: AccessCodeStore>(State(state): State<AppState<S>>) -> Result<Json<AccessCodeList>, ApiError> {
+async fn list_rooms<A: AccessCodeStore, R: RoomStore, C: ConnectionStore>(
+    State(state): State<AppState<A, R, C>>,
+) -> Result<Json<RoomList>, ApiError> {
+    let rooms = state.rooms.list().await?;
+    Ok(Json(RoomList { rooms }))
+}
+
+async fn list_access_codes<A: AccessCodeStore, R: RoomStore, C: ConnectionStore>(
+    State(state): State<AppState<A, R, C>>,
+) -> Result<Json<AccessCodeList>, ApiError> {
     let codes = state.access_codes.list().await?;
     Ok(Json(AccessCodeList { codes }))
 }
 
-async fn create_access_code<S: AccessCodeStore>(
-    State(state): State<AppState<S>>,
+async fn create_access_code<A: AccessCodeStore, R: RoomStore, C: ConnectionStore>(
+    State(state): State<AppState<A, R, C>>,
     Json(body): Json<CreateAccessCode>,
 ) -> Result<(StatusCode, Json<AccessCode>), ApiError> {
     let access_key = body.access_key.as_deref().map(str::trim).filter(|key| !key.is_empty());
@@ -63,17 +87,17 @@ async fn create_access_code<S: AccessCodeStore>(
     Ok((StatusCode::CREATED, Json(code)))
 }
 
-async fn read_access_code<S: AccessCodeStore>(
-    State(state): State<AppState<S>>,
+async fn read_access_code<A: AccessCodeStore, R: RoomStore, C: ConnectionStore>(
+    State(state): State<AppState<A, R, C>>,
     Path(access_key): Path<String>,
 ) -> Result<Json<AccessCode>, ApiError> {
     let code = state.access_codes.get(&access_key).await?.ok_or(ApiError::NotFound)?;
     Ok(Json(code))
 }
 
-async fn update_access_code<S: AccessCodeStore>(
+async fn update_access_code<A: AccessCodeStore, R: RoomStore, C: ConnectionStore>(
     Caller(caller): Caller,
-    State(state): State<AppState<S>>,
+    State(state): State<AppState<A, R, C>>,
     Path(access_key): Path<String>,
     Json(body): Json<UpdateAccessCode>,
 ) -> Result<Json<AccessCode>, ApiError> {
@@ -86,9 +110,9 @@ async fn update_access_code<S: AccessCodeStore>(
     Ok(Json(code))
 }
 
-async fn delete_access_code<S: AccessCodeStore>(
+async fn delete_access_code<A: AccessCodeStore, R: RoomStore, C: ConnectionStore>(
     Caller(caller): Caller,
-    State(state): State<AppState<S>>,
+    State(state): State<AppState<A, R, C>>,
     Path(access_key): Path<String>,
 ) -> Result<StatusCode, ApiError> {
     if caller.access_key == access_key {
@@ -102,13 +126,21 @@ async fn delete_access_code<S: AccessCodeStore>(
 mod tests {
     use super::*;
     use crate::access_codes::MemoryAccessCodeStore;
+    use crate::connections::MemoryConnectionStore;
+    use crate::rooms::MemoryRoomStore;
     use axum::body::{to_bytes, Body};
     use axum::http::Request;
     use tower::ServiceExt;
 
     fn app() -> (Router, MemoryAccessCodeStore) {
         let store = MemoryAccessCodeStore::default();
-        (router(AppState { access_codes: store.clone() }), store)
+        let state = AppState {
+            access_codes: store.clone(),
+            rooms: MemoryRoomStore::default(),
+            connections: MemoryConnectionStore::default(),
+            hub: Hub::default(),
+        };
+        (router(state), store)
     }
 
     async fn request(app: &Router, method: &str, path: &str, token: Option<&str>) -> StatusCode {
@@ -157,6 +189,19 @@ mod tests {
         let code: AccessCode = serde_json::from_slice(&body).unwrap();
         assert_eq!(code.access_key, "member");
         assert!(!code.is_admin);
+    }
+
+    #[tokio::test]
+    async fn rooms_lists_for_any_valid_code_not_just_an_admin() {
+        let (app, store) = app();
+        store.seed("member", false);
+        assert_eq!(request(&app, "GET", "/rooms", Some("member")).await, StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn rooms_requires_a_token() {
+        let (app, _store) = app();
+        assert_eq!(request(&app, "GET", "/rooms", None).await, StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]

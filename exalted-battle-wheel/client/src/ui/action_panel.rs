@@ -348,11 +348,15 @@ fn NormalControls(actor_id: CombatantId, battles: Battles, battle: Memo<Battle>)
                 };
                 let action = template.declare(declaration);
                 let reflexive = action.reflexive;
-                battles.push_with(BattleEvent::DeclareAction { actor: actor_id, action }, move |result| settle(result, reflexive));
+                battles.push_with(BattleEvent::DeclareAction { actor: actor_id, action }, move |result| {
+                    settle(result.map_err(|error| error.to_string()), reflexive)
+                });
             }
             Some(Choice::Sequence(template)) => {
                 let sequence = template.build();
-                battles.push_with(BattleEvent::StartSequence { actor: actor_id, sequence }, move |result| settle(result, false));
+                battles.push_with(BattleEvent::StartSequence { actor: actor_id, sequence }, move |result| {
+                    settle(result.map_err(|error| error.to_string()), false)
+                });
             }
             Some(Choice::Saved(saved)) => {
                 // Placeholders: the real ids are stamped from whichever log is authoritative for
@@ -362,10 +366,14 @@ fn NormalControls(actor_id: CombatantId, battles: Battles, battle: Memo<Battle>)
                 match saved.build(&placeholders) {
                     Ok(SavedDeclaration::Action(action)) => {
                         let reflexive = action.reflexive;
-                        battles.push_minting_with(BattleEvent::DeclareAction { actor: actor_id, action }, move |result| settle(result, reflexive));
+                        battles.push_minting_with(BattleEvent::DeclareAction { actor: actor_id, action }, move |result| {
+                            settle(result.map_err(|error| error.to_string()), reflexive)
+                        });
                     }
                     Ok(SavedDeclaration::Sequence(sequence)) => {
-                        battles.push_minting_with(BattleEvent::StartSequence { actor: actor_id, sequence }, move |result| settle(result, false));
+                        battles.push_minting_with(BattleEvent::StartSequence { actor: actor_id, sequence }, move |result| {
+                            settle(result.map_err(|error| error.to_string()), false)
+                        });
                     }
                     Err(error) => settle(Err(error.to_string()), false),
                 }

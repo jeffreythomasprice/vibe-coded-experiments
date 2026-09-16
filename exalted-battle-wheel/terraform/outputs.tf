@@ -11,7 +11,15 @@ output "site_url" {
 }
 
 output "access_codes_table" {
-  value = aws_dynamodb_table.access_codes.name
+  value = aws_dynamodb_table.this["access_codes"].name
+}
+
+output "rooms_table" {
+  value = aws_dynamodb_table.this["rooms"].name
+}
+
+output "connections_table" {
+  value = aws_dynamodb_table.this["connections"].name
 }
 
 output "server_access_key_id" {

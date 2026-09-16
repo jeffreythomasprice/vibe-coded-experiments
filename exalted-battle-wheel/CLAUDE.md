@@ -64,6 +64,13 @@ The cluster has no StorageClass and no working PVCs, and pods can't reach the EC
 (IMDS hop limit 1) for any AWS access either — so the server must stay stateless; anything durable
 needs a deliberate decision (an external database, S3, etc.), not local disk.
 
+`server/manifest.yaml`'s Deployment is pinned to `replicas: 1` and must stay that way: room
+membership broadcast goes through an in-process sender registry keyed by connection id, and every
+room mutation is serialized by a single in-process lock (`server/src/ws/hub.rs`). A second pod
+would neither receive broadcasts meant for connections on the first, nor actually serialize writes
+against it. Scaling this out for real needs a pub/sub layer (e.g. DynamoDB Streams, or Redis) and a
+distributed lock, not a replica count bump.
+
 Actually deploying — `deploy.sh`'s server half, `../kubernetes-host/push-image.sh`, `kubeconfig.sh`,
 `tunnel.sh`, and any `kubectl` command against that cluster's real kubeconfig — is human-only, same
 as `terraform apply`/`destroy` above. Claude may write and edit `server/Dockerfile`,

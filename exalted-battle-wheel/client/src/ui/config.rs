@@ -21,20 +21,21 @@ fn format_created_at(at: OffsetDateTime) -> String {
 }
 
 /// Which code (if any) is pending a delete confirmation -- dialog-local navigation state, not part
-/// of `Access` itself, in the same spirit as `room.rs`'s `PendingJoin`.
+/// of `Access` itself.
 #[derive(Clone, Copy)]
 struct ConfirmingDelete(RwSignal<Option<String>>);
 
+/// Whether the settings dialog is open. Provided in `app.rs` (not owned locally by
+/// `ConfigModal`, unlike most of this app's modals) so `ui::room`'s "no access code" prompt and the
+/// hamburger menu can open it directly instead of just telling the user where to find it.
+#[derive(Clone, Copy)]
+pub struct ConfigOpen(pub RwSignal<bool>);
+
 #[component]
-pub fn ConfigButton() -> impl IntoView {
-    let open = RwSignal::new(false);
+pub fn ConfigModal() -> impl IntoView {
+    let open = expect_context::<ConfigOpen>().0;
 
     view! {
-        <Tip topic=Topic::Config>
-            <button aria-label="Settings" on:click=move |_| open.set(true)>
-                "\u{2699}"
-            </button>
-        </Tip>
         {move || {
             open.get().then(|| view! {
                 <Modal title="Access code" wide=true on_close=move || open.set(false)>

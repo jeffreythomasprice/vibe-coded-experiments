@@ -1,119 +1,59 @@
 # Multiplayer
 
-> This describes the current peer-to-peer implementation, which server-based multiplayer (see the
-> new `server` crate) will replace.
+Rooms are hosted by the server: every browser in a room holds a websocket connection to it, the
+server owns the shared battle log, and it checks every move for legality and for write access
+before applying it and telling everyone the result. There's nothing for two browsers to disagree
+about — a browser's own state is never more than whatever the server's last message said it is.
 
-Rooms connect browsers directly, peer-to-peer (WebRTC), with no server in between. There's no
-rendezvous service either, so the two sides exchange connection info by hand: one side hosts and
-shares a text invite code, the other pastes it back a reply the same way. Once connected, every
-change either side makes is proposed to the room and only takes effect once everyone agrees — a
-genuine disagreement disconnects everyone with an error rather than letting the battles quietly
-drift apart.
+Any access code can create a room, join a room, and play — access-code admin status (who may
+manage access codes) is unrelated to what you can do inside a room. Inside a room, write access is
+per connection:
 
-There's no TURN/relay server and no authentication:
+- **Write access** lets you add and remove combatants, declare actions, advance the tick, undo,
+  and grant or revoke anyone else's write access — except your own and the host's.
+- **Read-only** members watch every change as it happens, and may still rename themselves, leave,
+  and ask the server to resend the current state. Everything else is refused.
+- The **host** is whoever created the room. The host always has write access and can never be
+  demoted or kicked, by anyone, including themselves. If the host's connection drops, the room
+  keeps running for everyone else; nobody else ever becomes host in their place.
+- **Everyone who joins can edit** is a room-level setting, chosen when the room is created and
+  changeable later by anyone with write access. It only sets what a *future* joiner starts as —
+  never retroactive to anyone already in the room.
 
-- If both sides sit behind networks that can't reach each other directly (see "NAT hairpinning"
-  below, and note some corporate networks and carrier-grade NAT setups block this outright), the
-  connection will simply fail. You'll get an honest "could not connect" error rather than an
-  indefinite hang — within about 15 seconds on the host's side once it accepts your reply, or up to
-  a minute on the joining side, since that wait also covers the time it takes a human to carry the
-  reply code back to the host rather than just the network.
-- Admin is enforced against anything that reaches the shared battle: the host refuses a change
-  proposed by anyone who isn't an admin. What that can't stop is a connected peer voting badly on
-  everyone else's changes, since every node votes on every change the same way regardless of admin
-  — a modified client can still stall or tear down the room that way. Kick is a plain disconnect,
-  not a ban: whoever was kicked can rejoin with a fresh invite like anyone else.
+A room outlives its members: the last person leaving doesn't delete it, so its battle is still
+there if someone rejoins later. Idle rooms and connections expire after 30 minutes of inactivity.
 
 ## Connecting
 
-1. One side: **Multiplayer (Solo) → name yourself → Host a room**. A spinner runs while the invite
-   is prepared; the code appears a few seconds later, with a **Copy** button next to it.
-2. Send the invite to the other side — paste the text, or copy it straight to the clipboard.
-3. Other side: name yourself, confirm **Join**. A spinner runs the same way, then a reply code of
-   its own appears.
-4. Send the reply back to the host the same way, paste it into "Paste their reply code here", and
-   click **Connect**.
-5. Once the peer list shows both names, you're connected. Joining adopts whatever battle the host
-   currently has; hosting never resets your own. Anyone can rename themselves at any time from the
-   room modal, and any admin can promote or demote anyone else (except themselves and the host,
-   who is always an admin) — both take effect for everyone immediately.
+1. **Multiplayer (Solo)** → name yourself → type a room name → **Host a room**, or pick **Join a
+   room** and use a name someone else already hosted under.
+2. Joining adopts whatever battle the room currently has; hosting seeds the room with your own.
+3. From the room panel, rename yourself at any time, and — if you have write access — grant or
+   revoke anyone else's, or kick them.
 
 ## Manual test: two tabs, one machine
 
-The quick way to sanity-check the feature without involving a second device.
-
-1. `trunk serve`, open `http://127.0.0.1:8000/` in two tabs.
-2. Follow "Connecting" above between the two tabs. The joining tab's own clock on this starts the
-   moment it produces its reply code, before you've pasted that back into the host — so don't leave
-   the reply sitting copied while you read something else; paste it into the host and click
-   **Connect** right away, the same as you would with a real second person.
-3. Once the host clicks **Connect**, it should connect within a few seconds. If it connects, you're
-   done.
-
-**If it times out** ("Could not connect — this may be a restrictive network..."), see
-"NAT hairpinning" below — it's expected on a lot of home routers when testing this way, not a bug.
+1. `./dev.sh`, then open `http://127.0.0.1:8000/` in two tabs.
+2. Sign both in with an access code (`local-admin`, or create a second code from the settings
+   dialog so the two tabs are genuinely distinct connections).
+3. Add a combatant in tab A, then **Host a room** under some name. In tab B, **Join a room** under
+   that same name and confirm it adopts A's battle.
+4. Advance the tick in either tab and confirm both follow.
+5. From A, take away B's write access; confirm B's editing controls grey out immediately and a
+   move it tries anyway is refused. Grant it back.
+6. Confirm B cannot touch A's (the host's) write access, and that renaming works from B while
+   read-only.
+7. Kick B from A; confirm B drops to Solo keeping its own local copy of the battle, then rejoins
+   under the same room name.
 
 ## Manual test: two computers, two networks
 
-The real test — confirms nothing here secretly needs a server or a shared network.
+The real test — confirms multiplayer works over the internet, not just on one machine.
 
-**Prerequisite:** the app needs to be reachable from both machines. Either:
-
-- Deploy the current code (`./deploy.sh` — run this yourself; see `CLAUDE.md`) and use
-  `https://exalted.jeffrey.lol` on both computers, or
-- Keep it local and tunnel `trunk serve` (ngrok, Tailscale Funnel, Cloudflare Tunnel) to a
-  temporary public URL.
-
-**Use genuinely different networks** — e.g. a laptop on home WiFi plus a phone on cellular data
-with WiFi off, or coordinate with someone at a different location. Two devices on the *same* WiFi
-don't really exercise this; local traffic wouldn't need STUN in the first place.
-
-1. Follow "Connecting" above between the two computers.
-2. It should connect within a few seconds on typical home/cellular networks. A timeout here points
-   at one side's network (no TURN is configured — see the top of this document) rather than a bug;
-   swapping one side for a phone hotspot is a quick way to confirm that.
-3. Once connected, exercise the real mechanics: add a combatant from each side, advance the tick,
-   undo — confirm changes land on both screens. Rename yourself from either side and confirm the
-   other side's player list picks it up. From the host, demote the other side to a non-admin and
-   confirm its editing controls grey out immediately and a change it tries anyway is refused;
-   promote it back and confirm they re-enable. Kick from the host and confirm the kicked side sees
-   "The host removed you from the room," drops back to Solo, and keeps its own local battle.
-
-## NAT hairpinning (and the localhost workaround)
-
-Two tabs on one machine each discover their own "public" address via STUN — connecting to that
-address means asking your own router to send the traffic back inside to yourself
-("hairpinning"). Plenty of consumer routers refuse to do this, so two tabs on one machine can fail
-to connect to *each other* even though the app and the codes are working correctly. This is purely
-a same-machine testing artifact; it doesn't affect two separate computers on separate networks.
-
-To work around it, force the app off the STUN path and onto the local-network path instead. The
-easiest way is the room modal's own **Advanced** section:
-
-1. Open the **Multiplayer** modal → **Advanced** → remove every STUN server listed (or replace
-   them with an address that will never respond — see below) in both tabs.
-2. Host/join as usual. With no reachable STUN server, ICE gathering finds no "public" candidate and
-   falls back to the local candidate Chrome generates on its own, so two tabs on one machine can
-   always reach each other directly. The invite code will be noticeably longer than normal (it's
-   carrying the full connection info instead of the compact form) — that's expected.
-
-The same override is also available as a `#stun=` URL fragment, read once at page load — useful
-for seeding a fresh tab (or a deep link) without having to click through Advanced by hand:
-
-1. Open a **new tab** (or navigate from a different page first) — don't just edit the fragment on
-   a tab already sitting on the app, since a fragment-only change on an already-loaded page won't
-   re-trigger the startup logic that reads it.
-2. Navigate to:
-   ```
-   http://127.0.0.1:8000/#stun=stun:198.51.100.1:3478
-   ```
-   That address is reserved for documentation (RFC 5737) and will never respond, giving the same
-   effect as an empty list once ICE gathering waits out its ~3 second timeout.
-3. Do the same in the second tab, then host/join as usual — it should connect within a couple
-   seconds.
-
-`#stun=` accepts a comma-separated list of STUN server URLs and seeds the same list the Advanced
-section edits; entries that aren't valid `stun:`/`stuns:` URLs are rejected at boot with an error
-toast instead of silently breaking the next connection. Neither the fragment nor an edit made in
-Advanced is saved anywhere — the list lives only in that tab's memory, and reloading the page
-always restores the two built-in defaults.
+1. Deploy the current code (`./deploy.sh` — run this yourself; see `CLAUDE.md`) and use
+   `https://exalted.jeffrey.lol` on both computers.
+2. Follow "Connecting" above between the two computers, each with its own access code.
+3. Exercise the real mechanics: add a combatant from each side, advance the tick, undo — confirm
+   changes land on both screens.
+4. Turn off wifi on one side briefly and back on; confirm it reconnects to the room on its own
+   within a few seconds and picks the current battle back up.

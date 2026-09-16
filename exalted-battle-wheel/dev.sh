@@ -6,8 +6,16 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 endpoint="http://127.0.0.1:8002"
-table_json="dynamodb/access-codes-table.json"
 admin_code="local-admin"
+
+# TTL attribute per table, empty for the one table (access-codes) that doesn't have one --
+# `create-table --cli-input-json` can't carry TTL, so it's a separate `update-time-to-live` call
+# per table, same as `terraform/dynamodb.tf`'s `ttl` block does for the real tables.
+declare -A table_ttl_attribute=(
+  [dynamodb/access-codes-table.json]=""
+  [dynamodb/rooms-table.json]="expires_at"
+  [dynamodb/websocket-connections-table.json]="expires_at"
+)
 
 for bin in docker aws jq cargo trunk; do
   command -v "$bin" >/dev/null || { echo "dev.sh: '$bin' is required but not on PATH" >&2; exit 1; }
@@ -56,20 +64,39 @@ for _ in $(seq 1 30); do
 done
 aws dynamodb list-tables --endpoint-url "$endpoint" >/dev/null
 
-table="$(jq -r .TableName "$table_json")"
+access_codes_table=""
+rooms_table=""
+connections_table=""
 
-# dynamodb-local runs -inMemory (see docker-compose.yml), so the table never survives a previous
-# teardown -- ResourceInUseException only happens if a stale container is still running.
-create_output="$(aws dynamodb create-table --endpoint-url "$endpoint" --cli-input-json "file://$table_json" 2>&1)" \
-  || { [[ "$create_output" == *ResourceInUseException* ]] || { echo "$create_output" >&2; exit 1; }; }
+for table_json in "${!table_ttl_attribute[@]}"; do
+  table="$(jq -r .TableName "$table_json")"
 
-aws dynamodb put-item --endpoint-url "$endpoint" --table-name "$table" --item "$(
+  # dynamodb-local runs -inMemory (see docker-compose.yml), so a table never survives a previous
+  # teardown -- ResourceInUseException only happens if a stale container is still running.
+  create_output="$(aws dynamodb create-table --endpoint-url "$endpoint" --cli-input-json "file://$table_json" 2>&1)" \
+    || { [[ "$create_output" == *ResourceInUseException* ]] || { echo "$create_output" >&2; exit 1; }; }
+
+  ttl_attribute="${table_ttl_attribute[$table_json]}"
+  if [[ -n "$ttl_attribute" ]]; then
+    aws dynamodb update-time-to-live --endpoint-url "$endpoint" --table-name "$table" \
+      --time-to-live-specification "Enabled=true,AttributeName=$ttl_attribute" >/dev/null
+  fi
+
+  case "$table_json" in
+    dynamodb/access-codes-table.json) access_codes_table="$table" ;;
+    dynamodb/rooms-table.json) rooms_table="$table" ;;
+    dynamodb/websocket-connections-table.json) connections_table="$table" ;;
+  esac
+done
+
+aws dynamodb put-item --endpoint-url "$endpoint" --table-name "$access_codes_table" --item "$(
   jq -n --arg key "$admin_code" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     '{access_key: {S: $key}, is_admin: {BOOL: true}, created_at: {S: $now}}'
 )" >/dev/null
 
 set -m
-ACCESS_CODES_TABLE="$table" DYNAMODB_ENDPOINT="$endpoint" cargo run -p server &
+ACCESS_CODES_TABLE="$access_codes_table" ROOMS_TABLE="$rooms_table" CONNECTIONS_TABLE="$connections_table" \
+  DYNAMODB_ENDPOINT="$endpoint" cargo run -p server &
 server_pid=$!
 ( cd client && exec trunk serve ) &
 client_pid=$!

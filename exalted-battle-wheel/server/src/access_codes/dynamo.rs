@@ -1,13 +1,11 @@
 use super::{generate_key, AccessCode, AccessCodeStore, ItemError, StoreError};
 use crate::config::Config;
-use aws_config::BehaviorVersion;
+use crate::dynamo_client::{self, format_timestamp};
 use aws_sdk_dynamodb::operation::delete_item::DeleteItemError;
 use aws_sdk_dynamodb::operation::put_item::PutItemError;
 use aws_sdk_dynamodb::operation::update_item::UpdateItemError;
 use aws_sdk_dynamodb::types::{AttributeValue, ReturnValue};
 use aws_sdk_dynamodb::Client;
-use aws_smithy_http_client::tls;
-use aws_smithy_http_client::tls::rustls_provider::CryptoMode;
 use std::collections::HashMap;
 use std::sync::Arc;
 use time::format_description::well_known::Rfc3339;
@@ -23,25 +21,8 @@ pub struct DynamoAccessCodeStore {
     table: Arc<str>,
 }
 
-/// Builds the DynamoDB client from the environment. Infallible: credentials are resolved lazily on
-/// the first request, so a missing region or bad key surfaces as a 500 on that request rather than
-/// as a startup failure -- which is fine, since `/health` (what the pod's probes hit) never touches
-/// DynamoDB.
 pub async fn connect(config: &Config) -> DynamoAccessCodeStore {
-    // The SDK's default HTTPS client is rustls over aws-lc-rs, which means compiling several
-    // hundred C files inside an emulated-arm64 container on every dependency-layer rebuild. Ring
-    // builds from pre-generated asm instead.
-    let http_client =
-        aws_smithy_http_client::Builder::new().tls_provider(tls::Provider::Rustls(CryptoMode::Ring)).build_https();
-
-    let sdk_config = aws_config::defaults(BehaviorVersion::latest()).http_client(http_client).load().await;
-
-    let mut builder = aws_sdk_dynamodb::config::Builder::from(&sdk_config);
-    if let Some(endpoint) = &config.dynamodb_endpoint {
-        builder = builder.endpoint_url(endpoint);
-    }
-
-    DynamoAccessCodeStore { client: Client::from_conf(builder.build()), table: Arc::from(config.access_codes_table.as_str()) }
+    DynamoAccessCodeStore { client: dynamo_client::client(config).await, table: Arc::from(config.access_codes_table.as_str()) }
 }
 
 impl AccessCodeStore for DynamoAccessCodeStore {
@@ -182,12 +163,6 @@ fn bool_attr(item: &HashMap<String, AttributeValue>, name: &'static str) -> Resu
 fn timestamp_attr(item: &HashMap<String, AttributeValue>, name: &'static str) -> Result<OffsetDateTime, ItemError> {
     let value = string_attr(item, name)?;
     OffsetDateTime::parse(&value, &Rfc3339).map_err(|source| ItemError::Timestamp { name, value, source })
-}
-
-fn format_timestamp(at: OffsetDateTime) -> String {
-    // Only fails for years outside 0000-9999, which `OffsetDateTime` cannot hold without the
-    // `large-dates` feature, so this never actually happens.
-    at.format(&Rfc3339).expect("an in-range timestamp always formats")
 }
 
 #[cfg(test)]
