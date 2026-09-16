@@ -1,4 +1,4 @@
-use super::{ItemError, NewRoom, Room, RoomMember, RoomStore, RoomStoreError, MAX_ITEM_BYTES, ROOM_TTL};
+use super::{ItemError, NewRoom, Room, RoomId, RoomMember, RoomStore, RoomStoreError, MAX_ITEM_BYTES, ROOM_TTL};
 use crate::config::Config;
 use crate::dynamo_client::{self, format_timestamp};
 use aws_sdk_dynamodb::operation::put_item::PutItemError;
@@ -11,13 +11,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 const ROOM_KEY: &str = "room_key";
+const ROOM_ID: &str = "room_id";
 const DISPLAY_NAME: &str = "display_name";
 const VERSION: &str = "version";
 const LOG: &str = "log";
 const EVERYONE_WRITES: &str = "everyone_writes";
-const HOST: &str = "host";
 const MEMBERS: &str = "members";
 const UPDATED_AT: &str = "updated_at";
 const EXPIRES_AT: &str = "expires_at";
@@ -25,6 +26,7 @@ const EXPIRES_AT: &str = "expires_at";
 const MEMBER_CONNECTION_ID: &str = "connection_id";
 const MEMBER_NAME: &str = "name";
 const MEMBER_CAN_WRITE: &str = "can_write";
+const MEMBER_IS_HOST: &str = "is_host";
 
 #[derive(Clone)]
 pub struct DynamoRoomStore {
@@ -44,6 +46,8 @@ fn approximate_size(log_json: &str, room_key: &str, display_name: &str, members:
     log_json.len()
         + room_key.len()
         + display_name.len()
+        // A room id is a fixed-width UUID string, small enough not to need its own parameter --
+        // folded into the constant padding below instead.
         + members.iter().map(|member| member.name.len() + 64).sum::<usize>()
         + 256
 }
@@ -65,6 +69,7 @@ fn member_to_item(member: &RoomMember) -> AttributeValue {
         (MEMBER_CONNECTION_ID.to_string(), AttributeValue::S(member.connection_id.0.clone())),
         (MEMBER_NAME.to_string(), AttributeValue::S(member.name.clone())),
         (MEMBER_CAN_WRITE.to_string(), AttributeValue::Bool(member.can_write)),
+        (MEMBER_IS_HOST.to_string(), AttributeValue::Bool(member.is_host)),
     ]))
 }
 
@@ -73,12 +78,14 @@ fn item_to_member(item: &HashMap<String, AttributeValue>) -> Result<RoomMember, 
         connection_id: ConnectionId(string_attr(item, MEMBER_CONNECTION_ID)?),
         name: string_attr(item, MEMBER_NAME)?,
         can_write: bool_attr(item, MEMBER_CAN_WRITE)?,
+        is_host: bool_attr(item, MEMBER_IS_HOST)?,
     })
 }
 
 fn room_to_item(room: &Room, log_json: &str) -> HashMap<String, AttributeValue> {
-    let mut item = HashMap::from([
+    HashMap::from([
         (ROOM_KEY.to_string(), AttributeValue::S(room.room_key.clone())),
+        (ROOM_ID.to_string(), AttributeValue::S(room.id.0.clone())),
         (DISPLAY_NAME.to_string(), AttributeValue::S(room.display_name.clone())),
         (VERSION.to_string(), AttributeValue::N(room.version.to_string())),
         (LOG.to_string(), AttributeValue::S(log_json.to_string())),
@@ -86,11 +93,7 @@ fn room_to_item(room: &Room, log_json: &str) -> HashMap<String, AttributeValue> 
         (MEMBERS.to_string(), AttributeValue::L(room.members.iter().map(member_to_item).collect())),
         (UPDATED_AT.to_string(), AttributeValue::S(format_timestamp(room.updated_at))),
         (EXPIRES_AT.to_string(), AttributeValue::N(epoch_seconds(room.expires_at))),
-    ]);
-    if let Some(host) = &room.host {
-        item.insert(HOST.to_string(), AttributeValue::S(host.0.clone()));
-    }
-    item
+    ])
 }
 
 fn item_to_room(item: &HashMap<String, AttributeValue>) -> Result<Room, ItemError> {
@@ -107,19 +110,14 @@ fn item_to_room(item: &HashMap<String, AttributeValue>) -> Result<Room, ItemErro
         Some(_) => return Err(ItemError::WrongType { name: MEMBERS, expected: "L" }),
         None => return Err(ItemError::Missing(MEMBERS)),
     };
-    let host = match item.get(HOST) {
-        Some(AttributeValue::S(value)) => Some(ConnectionId(value.clone())),
-        Some(_) => return Err(ItemError::WrongType { name: HOST, expected: "S" }),
-        None => None,
-    };
 
     Ok(Room {
+        id: RoomId(string_attr(item, ROOM_ID)?),
         room_key: string_attr(item, ROOM_KEY)?,
         display_name: string_attr(item, DISPLAY_NAME)?,
         version: u64_attr(item, VERSION)?,
         log,
         everyone_writes: bool_attr(item, EVERYONE_WRITES)?,
-        host,
         members,
         updated_at: timestamp_attr(item, UPDATED_AT)?,
         expires_at: epoch_attr(item, EXPIRES_AT)?,
@@ -223,13 +221,13 @@ impl RoomStore for DynamoRoomStore {
     async fn create(&self, new_room: NewRoom) -> Result<Room, RoomStoreError> {
         let now = OffsetDateTime::now_utc();
         let room = Room {
+            id: RoomId(Uuid::new_v4().to_string()),
             room_key: new_room.room_key,
             display_name: new_room.display_name,
             version: 1,
             log: new_room.log,
             everyone_writes: new_room.everyone_writes,
-            host: Some(new_room.host.clone()),
-            members: vec![RoomMember { connection_id: new_room.host, name: new_room.host_name, can_write: true }],
+            members: vec![RoomMember { connection_id: new_room.host, name: new_room.host_name, can_write: true, is_host: true }],
             updated_at: now,
             expires_at: now + ROOM_TTL,
         };
@@ -294,13 +292,13 @@ mod tests {
 
     fn sample() -> Room {
         Room {
+            id: RoomId("11111111-1111-4111-8111-111111111111".to_string()),
             room_key: "test-room".to_string(),
             display_name: "Test Room".to_string(),
             version: 3,
             log: BattleLog::new(),
             everyone_writes: true,
-            host: Some(ConnectionId("host-conn".to_string())),
-            members: vec![RoomMember { connection_id: ConnectionId("host-conn".to_string()), name: "Host".to_string(), can_write: true }],
+            members: vec![RoomMember { connection_id: ConnectionId("host-conn".to_string()), name: "Host".to_string(), can_write: true, is_host: true }],
             updated_at: OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap(),
             expires_at: OffsetDateTime::from_unix_timestamp(1_700_001_800).unwrap(),
         }
@@ -314,9 +312,9 @@ mod tests {
     }
 
     #[test]
-    fn item_round_trips_with_no_host() {
+    fn item_round_trips_with_a_non_host_member() {
         let mut room = sample();
-        room.host = None;
+        room.members.push(RoomMember { connection_id: ConnectionId("other-conn".to_string()), name: "Other".to_string(), can_write: false, is_host: false });
         let log_json = serde_json::to_string(&room.log).unwrap();
         assert_eq!(item_to_room(&room_to_item(&room, &log_json)).unwrap(), room);
     }

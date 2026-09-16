@@ -24,7 +24,7 @@ impl AccessCodeStore for MemoryAccessCodeStore {
     async fn create(&self, access_key: Option<&str>, is_admin: bool) -> Result<AccessCode, StoreError> {
         let access_key = match access_key {
             Some(access_key) => access_key.to_string(),
-            None => generate_key()?,
+            None => generate_key(),
         };
         let code = AccessCode { access_key, is_admin, created_at: OffsetDateTime::now_utc() };
         let mut codes = self.codes.lock().unwrap();

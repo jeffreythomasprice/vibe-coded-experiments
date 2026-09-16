@@ -30,6 +30,7 @@ spec:
               value: exalted-battle-wheel-websocket-connections
           envFrom:
             - secretRef: { name: exalted-server-aws } # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, from deploy.sh
+            - secretRef: { name: exalted-server-session } # SESSION_SECRET, from deploy.sh
           ports:
             - containerPort: 8001
           resources:

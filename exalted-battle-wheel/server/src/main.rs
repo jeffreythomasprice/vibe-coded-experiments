@@ -4,9 +4,9 @@ mod config;
 mod connections;
 mod dynamo_client;
 mod error;
-mod random_key;
 mod rooms;
 mod routes;
+mod sessions;
 mod ws;
 
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
@@ -70,6 +70,7 @@ async fn run() -> Result<(), StartupError> {
         rooms: rooms::connect(&config).await,
         connections: connections::connect(&config).await,
         hub: ws::Hub::default(),
+        sessions: sessions::Sessions::new(&config.session_secret),
     };
 
     // An explicit header list rather than `Any`: `Any` emits `Access-Control-Allow-Headers: *`,

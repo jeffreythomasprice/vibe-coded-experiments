@@ -45,6 +45,13 @@ deploy_server() {
     --from-literal=AWS_SECRET_ACCESS_KEY="$(terraform -chdir=terraform output -raw server_secret_access_key)" \
     --dry-run=client -o yaml | kubectl apply -f -
 
+  # Signs room session tokens (see server/src/sessions.rs) -- a stable value held in Terraform
+  # state, not generated in-process, so a redeploy or pod restart never invalidates every
+  # outstanding session (see terraform/sessions.tf and CLAUDE.md's "Server hosting" section).
+  kubectl create secret generic exalted-server-session \
+    --from-literal=SESSION_SECRET="$(terraform -chdir=terraform output -raw session_secret)" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
   # A fresh tag every deploy, never reused: there's no registry, so the tag in the manifest is how
   # the node tells old bits from new ones (see CLAUDE.md).
   local tag="v$(date -u +%Y%m%d%H%M%S)"

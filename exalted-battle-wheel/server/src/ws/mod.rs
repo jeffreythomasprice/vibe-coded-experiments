@@ -26,8 +26,6 @@ use tokio::sync::mpsc;
 /// otherwise be indistinguishable from a slow, legitimate client and sit open forever.
 const AUTH_TIMEOUT: Duration = Duration::from_secs(15);
 
-const CONNECTION_ID_LENGTH: usize = 20;
-
 pub async fn upgrade<A, R, C>(ws: WebSocketUpgrade, State(state): State<AppState<A, R, C>>) -> Response
 where
     A: AccessCodeStore,
@@ -52,13 +50,7 @@ where
     R: RoomStore,
     C: ConnectionStore,
 {
-    let connection_id = match crate::random_key::generate(CONNECTION_ID_LENGTH) {
-        Ok(id) => ConnectionId(id),
-        Err(error) => {
-            tracing::error!(%error, "could not mint a connection id; refusing the socket");
-            return;
-        }
-    };
+    let connection_id = ConnectionId(uuid::Uuid::new_v4().to_string());
 
     let (mut sink, mut stream) = socket.split();
     let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
@@ -123,7 +115,7 @@ where
             // Held for the whole handler call, not just whichever `RoomStore` calls happen to be
             // inside it — see `Hub::lock_rooms`'s doc comment.
             let _guard = state.hub.lock_rooms().await;
-            handler::handle(&state.access_codes, &state.rooms, &connection_id, current_room.as_deref(), &token, message).await
+            handler::handle(&state.access_codes, &state.rooms, &state.sessions, &connection_id, current_room.as_deref(), &token, message).await
         };
 
         // A valid token proves this socket is a real client even if the specific action it asked

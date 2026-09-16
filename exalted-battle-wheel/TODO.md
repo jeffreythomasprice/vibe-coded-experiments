@@ -1,22 +1,16 @@
 in-flight:
 
-
-
 todo:
 
-is there a bug where the room host disconnects?
-can we fix reconnects? tokens issued for an active webbrowser session, in session storage?
+I'd like to use json schemas as our source of truth for all DTOs. This is every request and response object for a REST API call and for every websocket message. We should put schemas somewhere in the shared area. We should introduce a build step that generates rust types in the shared lib before building. We can then use the resulting types in both server and client.
 
 
-json schemas for all API endpoint types and all websocket messages, then generate rust types from that
+I'd like to enable delete protection on the access tokens table.
 
 
-delete protection on access tokens table
-
-
-frontend should respect some query string parameters
+The frontend should respect some query string parameters
 - auth_code, replaces the auth code currently stored in local storage
-- room, automatically tries to join the room with that name on startup
+- join_room, automatically tries to join the room with that name on startup
 
 Normal toaster errors can apply if, e.g. that auth_code is invalid (as checked by the /me endpoint) or if we can't successfully join that room
 

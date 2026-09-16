@@ -9,5 +9,5 @@ pub use command::{apply_command, BattleCommand, BattleRequest, BattleSyncError};
 pub use name::{room_key, sanitize_name, RoomNameError, MAX_NAME_LEN, MAX_ROOM_NAME_LEN};
 pub use room::{
     ClientEnvelope, ClientMessage, ConnectionId, LeaveReason, Member, ProtocolError, RequestId, ServerEnvelope,
-    ServerMessage,
+    ServerMessage, SessionRejection,
 };

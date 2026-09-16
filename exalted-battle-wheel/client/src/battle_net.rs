@@ -6,14 +6,16 @@
 
 use crate::access::Access;
 use crate::net::{Socket, SocketError};
+use crate::persist::Persisted;
 use leptos::prelude::*;
 use leptos::wasm_bindgen::closure::Closure;
 use leptos::wasm_bindgen::JsCast;
 use leptos::web_sys;
+use serde::{Deserialize, Serialize};
 use shared::battle::{BattleError, BattleEvent, BattleLog};
 use shared::protocol::{
     apply_command, BattleCommand, BattleRequest, ClientEnvelope, ClientMessage, ConnectionId, LeaveReason, Member,
-    ProtocolError, RequestId, ServerEnvelope, ServerMessage,
+    ProtocolError, RequestId, ServerEnvelope, ServerMessage, SessionRejection,
 };
 use std::collections::HashMap;
 use std::future::Future;
@@ -98,11 +100,16 @@ impl RequestError {
 type Settle = Box<dyn FnOnce(Result<(), RequestError>)>;
 
 /// What `create_room`/`join_room` remember so a dropped connection can rejoin the same room under
-/// the same name without the user doing anything — see `Battles::on_close`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// the same name without the user doing anything — see `Battles::on_close`. Persisted to local
+/// storage (see `Battles::new`'s own `rejoin` field), so this also survives a closed tab: `session`
+/// is `None` until the server's first `Joined` reply fills it in, then carries this connection's
+/// proof of membership (and host status, if it has it) for `Battles::restore` to present on the
+/// very next page load.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Rejoin {
     room: String,
     name: String,
+    session: Option<String>,
 }
 
 const BASE_RECONNECT_DELAY_MS: i32 = 2_000;
@@ -133,7 +140,11 @@ pub struct Battles {
     /// `Send`, hence `LocalStorage` — same reasoning as `socket`.
     pending: RwSignal<HashMap<RequestId, Settle>, LocalStorage>,
     next_request_id: RwSignal<u64>,
-    rejoin: RwSignal<Option<Rejoin>>,
+    /// Persisted to local storage so a closed-and-reopened tab can find its way back to the room
+    /// it left — see `Rejoin`'s own doc comment and `restore`. Never accepts a cross-tab `storage`
+    /// event: two tabs in the same room would otherwise hand each other's session token back and
+    /// forth, and each tab's session is specific to its own connection.
+    rejoin: Persisted<Option<Rejoin>>,
     reconnect_attempt: RwSignal<u32>,
     room_active: RwSignal<bool>,
 }
@@ -153,7 +164,7 @@ impl Battles {
             members: RwSignal::new(Vec::new()),
             pending: RwSignal::new_local(HashMap::new()),
             next_request_id: RwSignal::new(0),
-            rejoin: RwSignal::new(None),
+            rejoin: Persisted::new_gated("room.session", || None, || false),
             reconnect_attempt: RwSignal::new(0),
             room_active,
         }
@@ -297,7 +308,9 @@ impl Battles {
 
     pub fn create_room(&self, room: String, name: String, everyone_writes: bool) {
         let Some(socket) = self.ensure_socket() else { return };
-        self.rejoin.set(Some(Rejoin { room: room.clone(), name: name.clone() }));
+        // No `session` yet -- the server's own `Joined` reply mints one, and `handle_message`
+        // rewrites this with it.
+        self.rejoin.set(Some(Rejoin { room: room.clone(), name: name.clone(), session: None }));
         self.mode.set(Mode::Connecting);
         let this = *self;
         let message = ClientMessage::Create { room, name, everyone_writes, log: self.log.get_untracked() };
@@ -314,10 +327,10 @@ impl Battles {
 
     pub fn join_room(&self, room: String, name: String) {
         let Some(socket) = self.ensure_socket() else { return };
-        self.rejoin.set(Some(Rejoin { room: room.clone(), name: name.clone() }));
+        self.rejoin.set(Some(Rejoin { room: room.clone(), name: name.clone(), session: None }));
         self.mode.set(Mode::Connecting);
         let this = *self;
-        let message = ClientMessage::Join { room, name };
+        let message = ClientMessage::Join { room, name, session: None };
         self.send_with(socket, message, move |result| {
             if let Err(error) = result {
                 tracing::error!(%error, "could not join room");
@@ -484,7 +497,13 @@ impl Battles {
     fn handle_message(self, envelope: ServerEnvelope) {
         let ServerEnvelope { reply_to, message } = envelope;
         let result = match message {
-            ServerMessage::Joined { room, you, can_write, everyone_writes, members, version: _, log } => {
+            ServerMessage::Joined { room, you, can_write, everyone_writes, members, version: _, log, session } => {
+                // Rebuilt from the server's own reply, not just the `session` field -- the name a
+                // rejoin should present is this connection's own name as the server has it (found
+                // by matching `you`), which a `Rename` since the last `Joined` may have changed.
+                let name = members.iter().find(|member| member.id == you).map(|member| member.name.clone()).unwrap_or_default();
+                self.rejoin.set(Some(Rejoin { room: room.clone(), name, session: Some(session) }));
+
                 self.log.set(log);
                 self.self_id.set(Some(you));
                 self.can_write.set(can_write);
@@ -585,22 +604,66 @@ impl Battles {
             self.schedule_reconnect(rejoin);
             return;
         };
+        self.send_join(socket, rejoin);
+    }
+
+    /// Sends the `Join` a reconnect (or `restore`) needs on an already-open `socket`, and reacts
+    /// to how it settles. Split out from `attempt_reconnect` so a merely stale `session` can retry
+    /// once, immediately, on the same socket rather than going through the backoff -- see the
+    /// `SessionRejection::Expired`/`Malformed` arm below.
+    fn send_join(self, socket: Socket, rejoin: Rejoin) {
         let this = self;
-        let message = ClientMessage::Join { room: rejoin.room.clone(), name: rejoin.name.clone() };
-        self.send_with(socket, message, move |result| {
-            if let Err(error) = result {
-                // Unlike every other rejection here, this one will never stop recurring --
-                // there's no reason to believe the room will come back, so give up rather than
-                // retry into it forever.
-                if matches!(error, RequestError::Rejected(ProtocolError::NoSuchRoom)) {
+        let sent_on = socket.clone();
+        let message = ClientMessage::Join { room: rejoin.room.clone(), name: rejoin.name.clone(), session: rejoin.session.clone() };
+        self.send_with(sent_on, message, move |result| {
+            let Err(error) = result else { return };
+            match error {
+                // Unlike every other rejection here, this one will never stop recurring -- there's
+                // no reason to believe the room will come back, so give up rather than retry into
+                // it forever.
+                RequestError::Rejected(ProtocolError::NoSuchRoom) => {
                     crate::ui::toast::error("This room no longer exists.".to_string());
                     this.disconnect();
-                    return;
                 }
-                tracing::debug!(%error, "reconnect attempt failed");
-                this.schedule_reconnect(rejoin);
+                RequestError::Rejected(ProtocolError::InvalidSession(rejection)) => {
+                    crate::ui::toast::error(rejection.to_string());
+                    match rejection {
+                        // The room's name now belongs to a different room than this session was
+                        // minted for -- an automatic rejoin must never walk into someone else's
+                        // game on the strength of a token that predates it.
+                        SessionRejection::WrongRoom => this.disconnect(),
+                        // A merely stale token: the room itself is probably still fine, so retry
+                        // once, immediately, without it -- landing as an ordinary member rather
+                        // than host, but still in the room.
+                        SessionRejection::Expired | SessionRejection::Malformed => {
+                            let retry = Rejoin { session: None, ..rejoin };
+                            this.rejoin.set(Some(retry.clone()));
+                            this.send_join(socket, retry);
+                        }
+                    }
+                }
+                error => {
+                    tracing::debug!(%error, "reconnect attempt failed");
+                    this.schedule_reconnect(rejoin);
+                }
             }
         });
+    }
+
+    /// Replays a room session left behind by a previous page load, so a closed-and-reopened tab
+    /// comes back to the room it left -- called once at startup (see `app.rs`). Silent when
+    /// there's nothing stored, or when nobody's signed in (a socket would only fail every message
+    /// with `RequestError::NotSignedIn` and retry forever -- not worth opening at all). The very
+    /// first successful `create_room`/`join_room` overwrites whatever this restores.
+    pub fn restore(&self) {
+        let Some(rejoin) = self.rejoin.get_untracked() else { return };
+        if expect_context::<Access>().token().get_untracked().is_none() {
+            tracing::info!("a room session is stored but nobody is signed in; staying in Solo");
+            return;
+        }
+        self.room.set(Some(rejoin.room.clone()));
+        self.mode.set(Mode::Connecting);
+        self.attempt_reconnect(rejoin);
     }
 }
 

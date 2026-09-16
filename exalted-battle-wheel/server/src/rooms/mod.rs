@@ -30,23 +30,33 @@ pub const ROOM_TTL: time::Duration = time::Duration::minutes(30);
 /// `RoomStoreError::TooLarge` rather than an opaque `ValidationException` from the service.
 pub const MAX_ITEM_BYTES: usize = 400 * 1024;
 
+/// A room's own identity, independent of its (reusable, case-folded) name — what a session token
+/// is actually issued and checked against, so a token for a room that expired and whose name was
+/// later reused by a different room is never mistaken for one. See `server::sessions`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RoomId(pub String);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoomMember {
     pub connection_id: ConnectionId,
     pub name: String,
     pub can_write: bool,
+    /// This connection either created the room, or rejoined it presenting a session token that
+    /// said it had (see `shared::protocol::ClientMessage::Join`'s `session` field). Never demoted,
+    /// never kicked. Lives on the member rather than the room so more than one connection can hold
+    /// it at once — a rejoin claiming host status doesn't have to know or care whether the
+    /// original host's connection is still around.
+    pub is_host: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Room {
+    pub id: RoomId,
     pub room_key: String,
     pub display_name: String,
     pub version: u64,
     pub log: BattleLog,
     pub everyone_writes: bool,
-    /// The connection that created this room. Cleared for good once that connection leaves —
-    /// nobody else ever becomes host in its place (see `CLAUDE.md`'s notes on this design).
-    pub host: Option<ConnectionId>,
     pub members: Vec<RoomMember>,
     pub updated_at: OffsetDateTime,
     pub expires_at: OffsetDateTime,
@@ -58,7 +68,7 @@ impl Room {
     }
 
     pub fn is_host(&self, connection_id: &ConnectionId) -> bool {
-        self.host.as_ref() == Some(connection_id)
+        self.member(connection_id).is_some_and(|member| member.is_host)
     }
 }
 

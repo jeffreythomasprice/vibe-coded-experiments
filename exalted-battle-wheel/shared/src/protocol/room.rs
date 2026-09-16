@@ -25,9 +25,12 @@ pub struct Member {
     pub id: ConnectionId,
     pub name: String,
     pub can_write: bool,
-    /// The connection that created this room. Never demoted, never kicked — see `ClientMessage`'s
-    /// doc comment on `SetWritable`/`Kick`. Cleared for good once that connection leaves; nobody
-    /// else in the room ever becomes host in its place.
+    /// The connection that created this room, or one that rejoined presenting that room session's
+    /// host token (see `ClientMessage::Join`'s `session` field) — never demoted, never kicked, see
+    /// `ClientMessage`'s doc comment on `SetWritable`/`Kick`. Cleared when that connection leaves,
+    /// same as any other membership, and reclaimed by whichever connection next presents a valid
+    /// host token for this room; nothing stops two connections holding it at once if the original
+    /// is still around when a reconnect claims it too.
     pub is_host: bool,
 }
 
@@ -49,8 +52,12 @@ pub enum ClientMessage {
     /// name is already taken by a room that hasn't expired.
     Create { room: String, name: String, everyone_writes: bool, log: BattleLog },
     /// Joins an existing room by name, under `name`. `can_write` is granted from the room's
-    /// current `everyone_writes` flag alone.
-    Join { room: String, name: String },
+    /// current `everyone_writes` flag alone, unless `session` proves this connection was the
+    /// room's host — see `ServerMessage::Joined`'s own `session` field, which is where one comes
+    /// from in the first place. A `session` that fails to verify is `ProtocolError::InvalidSession`
+    /// rather than silently downgrading to an ordinary join, so the caller can decide whether to
+    /// retry without it (a stale token) or give up (the room it names is gone).
+    Join { room: String, name: String, session: Option<String> },
     /// Leaves whatever room this connection is in. A no-op reply, not an error, if it isn't in
     /// one.
     Leave,
@@ -84,8 +91,10 @@ pub struct ServerEnvelope {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessage {
-    /// Reply to a successful `Create` or `Join`: everything the client needs to render the room
-    /// from scratch, including its own id and write permission.
+    /// Reply to a successful `Create`, `Join`, or `Resync`: everything the client needs to render
+    /// the room from scratch, including its own id, write permission, and a fresh `session` token
+    /// to present on a future `Join` — this connection's proof of its own membership (and host
+    /// status, if it has it) in this room, for a reconnect or a rejoin after the browser restarts.
     Joined {
         room: String,
         you: ConnectionId,
@@ -94,6 +103,7 @@ pub enum ServerMessage {
         members: Vec<Member>,
         version: u64,
         log: BattleLog,
+        session: String,
     },
     /// Sent to every member of a room whenever who's in it, their names, or their write
     /// permission changes. Includes the actor's own connection, so every client's view of the
@@ -113,6 +123,18 @@ pub enum LeaveReason {
     Requested,
     /// A readwrite member kicked this connection.
     Kicked,
+}
+
+/// Why a `Join`'s `session` token was refused — split out from `ProtocolError` so the client can
+/// decide per-reason whether the room is still worth retrying without the token.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, Serialize, Deserialize)]
+pub enum SessionRejection {
+    #[error("that room session could not be read")]
+    Malformed,
+    #[error("that room session has expired")]
+    Expired,
+    #[error("that room session is for a different room")]
+    WrongRoom,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, Serialize, Deserialize)]
@@ -135,6 +157,8 @@ pub enum ProtocolError {
     BadRoomName(String),
     #[error("{0}")]
     IllegalMove(String),
+    #[error("{0}")]
+    InvalidSession(SessionRejection),
     #[error("that battle is too large to store")]
     TooLarge,
     #[error("internal error")]
@@ -150,7 +174,7 @@ mod tests {
         let envelope = ClientEnvelope {
             id: RequestId(1),
             token: "tok".to_string(),
-            message: ClientMessage::Join { room: "test".to_string(), name: "Alice".to_string() },
+            message: ClientMessage::Join { room: "test".to_string(), name: "Alice".to_string(), session: None },
         };
         let json = serde_json::to_string(&envelope).unwrap();
         let decoded: ClientEnvelope = serde_json::from_str(&json).unwrap();

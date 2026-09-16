@@ -26,8 +26,6 @@ pub enum StoreError {
     NotFound,
     #[error("access code already exists")]
     AlreadyExists,
-    #[error("could not generate an access code: {0}")]
-    Random(getrandom::Error),
     #[error(transparent)]
     Item(#[from] ItemError),
     #[error("dynamodb get_item failed")]
@@ -56,10 +54,8 @@ pub trait AccessCodeStore: Clone + Send + Sync + 'static {
     fn delete(&self, access_key: &str) -> impl Future<Output = Result<(), StoreError>> + Send;
 }
 
-const CODE_LENGTH: usize = 20;
-
-fn generate_key() -> Result<String, StoreError> {
-    crate::random_key::generate(CODE_LENGTH).map_err(StoreError::Random)
+fn generate_key() -> String {
+    uuid::Uuid::new_v4().to_string()
 }
 
 #[cfg(test)]
@@ -67,7 +63,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn generated_keys_are_the_right_length() {
-        assert_eq!(generate_key().unwrap().len(), CODE_LENGTH);
+    fn generated_keys_are_distinct() {
+        assert_ne!(generate_key(), generate_key());
     }
 }

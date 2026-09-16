@@ -3,6 +3,7 @@ use crate::auth::{require_access_code, require_admin, Caller};
 use crate::connections::ConnectionStore;
 use crate::error::ApiError;
 use crate::rooms::RoomStore;
+use crate::sessions::Sessions;
 use crate::ws::{self, Hub};
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -17,6 +18,7 @@ pub struct AppState<A, R, C> {
     pub rooms: R,
     pub connections: C,
     pub hub: Hub,
+    pub sessions: Sessions,
 }
 
 pub fn router<A: AccessCodeStore, R: RoomStore, C: ConnectionStore>(state: AppState<A, R, C>) -> Router {
@@ -139,6 +141,7 @@ mod tests {
             rooms: MemoryRoomStore::default(),
             connections: MemoryConnectionStore::default(),
             hub: Hub::default(),
+            sessions: Sessions::new("test-secret"),
         };
         (router(state), store)
     }

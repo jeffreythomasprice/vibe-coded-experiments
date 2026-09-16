@@ -3,11 +3,12 @@
 //! same as a real read), so websocket-handler tests can exercise real behavior with no Docker or
 //! DynamoDB.
 
-use super::{NewRoom, Room, RoomMember, RoomStore, RoomStoreError, MAX_ITEM_BYTES, ROOM_TTL};
+use super::{NewRoom, Room, RoomId, RoomMember, RoomStore, RoomStoreError, MAX_ITEM_BYTES, ROOM_TTL};
 use shared::rooms::RoomSummary;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 #[derive(Clone, Default)]
 pub struct MemoryRoomStore {
@@ -45,13 +46,13 @@ impl RoomStore for MemoryRoomStore {
     async fn create(&self, new_room: NewRoom) -> Result<Room, RoomStoreError> {
         let now = OffsetDateTime::now_utc();
         let room = Room {
+            id: RoomId(Uuid::new_v4().to_string()),
             room_key: new_room.room_key,
             display_name: new_room.display_name,
             version: 1,
             log: new_room.log,
             everyone_writes: new_room.everyone_writes,
-            host: Some(new_room.host.clone()),
-            members: vec![RoomMember { connection_id: new_room.host, name: new_room.host_name, can_write: true }],
+            members: vec![RoomMember { connection_id: new_room.host, name: new_room.host_name, can_write: true, is_host: true }],
             updated_at: now,
             expires_at: now + ROOM_TTL,
         };
@@ -90,7 +91,8 @@ impl RoomStore for MemoryRoomStore {
 
 impl MemoryRoomStore {
     /// Seeds a room directly, bypassing `create`, so tests can set up a room in whatever exact
-    /// state (host absent, `everyone_writes` off, a particular battle) they need to check.
+    /// state (no member currently holding host, `everyone_writes` off, a particular battle) they
+    /// need to check.
     pub fn seed(&self, room: Room) {
         self.rooms.lock().unwrap().insert(room.room_key.clone(), room);
     }

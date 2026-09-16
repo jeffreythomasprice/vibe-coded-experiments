@@ -48,6 +48,9 @@ pub fn App() -> impl IntoView {
     let log = *battle_log;
     let battles = Battles::new(log, room_active);
     provide_context(battles);
+    // A room session left behind by a previous page load, if any -- after `set_root_owner` (so a
+    // socket callback has an owner) and after `Access` (so a token is there to check).
+    battles.restore();
     provide_context(log.read_only() as BattleView);
 
     let battle = Memo::new(move |_| log.read().battle());

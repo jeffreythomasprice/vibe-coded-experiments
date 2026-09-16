@@ -71,6 +71,14 @@ would neither receive broadcasts meant for connections on the first, nor actuall
 against it. Scaling this out for real needs a pub/sub layer (e.g. DynamoDB Streams, or Redis) and a
 distributed lock, not a replica count bump.
 
+The server signs the room session token every websocket member is handed on `Joined`
+(`server/src/sessions.rs`) with `SESSION_SECRET`, delivered the same way as the DynamoDB
+credentials above: a Terraform-managed `random_password` (`terraform/sessions.tf`), upserted by
+`deploy.sh` into the `exalted-server-session` Secret on every deploy. Unlike the AWS credentials,
+this secret must be created by `terraform apply` at least once *before* the first `./deploy.sh
+server` that reads it — a fresh `terraform apply` for this project always needs to precede a deploy
+for that reason.
+
 Actually deploying — `deploy.sh`'s server half, `../kubernetes-host/push-image.sh`, `kubeconfig.sh`,
 `tunnel.sh`, and any `kubectl` command against that cluster's real kubeconfig — is human-only, same
 as `terraform apply`/`destroy` above. Claude may write and edit `server/Dockerfile`,

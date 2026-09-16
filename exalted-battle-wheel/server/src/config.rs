@@ -48,6 +48,8 @@ pub enum ConfigError {
     Address { value: String, source: AddrParseError },
     #[error("invalid CORS_ORIGINS entry {value:?}: {source}")]
     CorsOrigin { value: String, source: InvalidHeaderValue },
+    #[error("{key} must be set")]
+    Missing { key: &'static str },
 }
 
 /// Read before the rest of `Config`, so a filter directive is available to set up tracing before
@@ -64,6 +66,11 @@ pub struct Config {
     pub rooms_table: String,
     pub connections_table: String,
     pub dynamodb_endpoint: Option<String>,
+    /// Signs and verifies room session tokens (see `sessions.rs`). Required rather than defaulted
+    /// or generated at startup: an in-process default would invalidate every outstanding session
+    /// on every restart, silently undoing the whole point of a session that's supposed to survive
+    /// one. `server/.env` carries a throwaway value for local development.
+    pub session_secret: String,
 }
 
 impl Config {
@@ -92,6 +99,9 @@ impl Config {
         // local DynamoDB.
         let dynamodb_endpoint = std::env::var("DYNAMODB_ENDPOINT").ok().filter(|value| !value.is_empty());
 
-        Ok(Self { address, cors_origins, access_codes_table, rooms_table, connections_table, dynamodb_endpoint })
+        let session_secret =
+            std::env::var("SESSION_SECRET").map_err(|_| ConfigError::Missing { key: "SESSION_SECRET" })?;
+
+        Ok(Self { address, cors_origins, access_codes_table, rooms_table, connections_table, dynamodb_endpoint, session_secret })
     }
 }

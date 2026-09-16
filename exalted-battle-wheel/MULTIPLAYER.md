@@ -15,13 +15,24 @@ per connection:
   and ask the server to resend the current state. Everything else is refused.
 - The **host** is whoever created the room. The host always has write access and can never be
   demoted or kicked, by anyone, including themselves. If the host's connection drops, the room
-  keeps running for everyone else; nobody else ever becomes host in their place.
+  keeps running for everyone else, and nobody else becomes host in their place — but the browser
+  that was hosting reclaims it automatically if it comes back (see "Remembering a room" below).
+  Two connections can hold host at once if that happens while the original is still around.
 - **Everyone who joins can edit** is a room-level setting, chosen when the room is created and
   changeable later by anyone with write access. It only sets what a *future* joiner starts as —
   never retroactive to anyone already in the room.
 
 A room outlives its members: the last person leaving doesn't delete it, so its battle is still
 there if someone rejoins later. Idle rooms and connections expire after 30 minutes of inactivity.
+
+## Remembering a room
+
+Every member is handed a signed, expiring session token on join, which the browser keeps in local
+storage and presents again on its very next page load — closing the tab (or the whole browser) and
+reopening it lands back in the same room automatically, host status included, without retyping
+anything. A token that no longer checks out (the room's gone, the token expired, or it names a
+room that got reaped and its name reused by someone else's) fails silently into Solo instead of
+getting stuck: whatever went wrong is toasted once, and the stale token is cleared.
 
 ## Connecting
 
@@ -45,6 +56,9 @@ there if someone rejoins later. Idle rooms and connections expire after 30 minut
    read-only.
 7. Kick B from A; confirm B drops to Solo keeping its own local copy of the battle, then rejoins
    under the same room name.
+8. Hard-close tab A (not just Leave) and reopen `http://127.0.0.1:8000/`. Confirm it lands straight
+   back in the room with the current battle and its own Host badge, and that B's roster shows A
+   back and can be administered by it again.
 
 ## Manual test: two computers, two networks
 
@@ -57,3 +71,5 @@ The real test — confirms multiplayer works over the internet, not just on one 
    changes land on both screens.
 4. Turn off wifi on one side briefly and back on; confirm it reconnects to the room on its own
    within a few seconds and picks the current battle back up.
+5. Close the browser entirely on one side and reopen it later; confirm it rejoins the room on its
+   own, host status included if it was hosting.

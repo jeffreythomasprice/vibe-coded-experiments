@@ -30,3 +30,8 @@ output "server_secret_access_key" {
   value     = aws_iam_access_key.server.secret
   sensitive = true
 }
+
+output "session_secret" {
+  value     = random_password.session_secret.result
+  sensitive = true
+}
