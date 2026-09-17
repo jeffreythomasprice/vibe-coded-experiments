@@ -47,10 +47,32 @@ anything. A token that no longer checks out (the room's gone, the token expired,
 room that got reaped and its name reused by someone else's) fails silently into Solo instead of
 getting stuck: whatever went wrong is toasted once, and the stale token is cleared.
 
+## Invite links
+
+The room panel shows a **Copy invite link** button to whoever is hosting. It builds a URL of the
+form `?auth_code=<code>&join_room=<room>` for the client's own domain and copies it to the
+clipboard (or, if the clipboard is unavailable — an insecure origin, or the browser refuses it —
+reveals it in a field to copy by hand instead).
+
+Opening that link on startup: this browser's own access code is checked first, and kept if it
+still works — the link's code is only adopted when this browser has no working code of its own,
+so an invite link can never silently replace one. If the link names the room this browser was
+already remembering (see "Remembering a room" below), it resumes that session instead of joining
+fresh, so a host reopening their own link keeps their host status rather than rejoining as an
+ordinary member. Both parameters are stripped from the address bar immediately after they're
+read, so neither the code nor the room name lingers in browser history.
+
+Treat an invite link as a bearer credential, not just a room pointer: whoever has it can sign in
+as that access code until it's revoked, for anything the app lets that code do — not only this
+room. The code it carries is deliberately never an admin's own: an admin's invite link hands out
+the newest non-admin code the server knows about instead (an error if there isn't one), so an
+invite can never hand out the right to manage every other code.
+
 ## Connecting
 
 1. **Multiplayer (Solo)** → name yourself → type a room name → **Host a room**, or pick **Join a
-   room** and use a name someone else already hosted under.
+   room** and use a name someone else already hosted under. A name isn't required up front — one
+   is suggested automatically the first time it's needed.
 2. Joining adopts whatever battle the room currently has; hosting seeds the room with your own.
 3. From the room panel, rename yourself at any time, and — if you have write access — grant or
    revoke anyone else's, or kick them.
@@ -58,8 +80,8 @@ getting stuck: whatever went wrong is toasted once, and the stale token is clear
 ## Manual test: two tabs, one machine
 
 1. `./dev.sh`, then open `http://127.0.0.1:8000/` in two tabs.
-2. Sign both in with an access code (`local-admin`, or create a second code from the settings
-   dialog so the two tabs are genuinely distinct connections).
+2. Sign each tab in with one of the two access codes `./dev.sh` printed, so the tabs are genuinely
+   distinct connections.
 3. Add a combatant in tab A, then **Host a room** under some name. In tab B, **Join a room** under
    that same name and confirm it adopts A's battle.
 4. Advance the tick in either tab and confirm both follow.
@@ -72,6 +94,10 @@ getting stuck: whatever went wrong is toasted once, and the stale token is clear
 8. Hard-close tab A (not just Leave) and reopen `http://127.0.0.1:8000/`. Confirm it lands straight
    back in the room with the current battle and its own Host badge, and that B's roster shows A
    back and can be administered by it again.
+9. From A (the host), **Copy invite link**, then open it in a private window: confirm it signs in,
+   joins the room, the address bar ends up clean, and the guest appears in A's roster under a
+   suggested name. Reopen A's own invite link from A itself: confirm A stays host rather than
+   rejoining as an ordinary member.
 
 ## Manual test: two computers, two networks
 
@@ -86,3 +112,7 @@ The real test — confirms multiplayer works over the internet, not just on one 
    within a few seconds and picks the current battle back up.
 5. Close the browser entirely on one side and reopen it later; confirm it rejoins the room on its
    own, host status included if it was hosting.
+6. From the host's side, **Copy invite link** and send it to the other computer by whatever means
+   is actually at hand (chat, email); confirm opening it there joins the room over the real
+   network. On a browser without HTTPS or `localhost` (a plain LAN IP over http, say), confirm the
+   clipboard write is skipped silently and the revealed field still has the working link.

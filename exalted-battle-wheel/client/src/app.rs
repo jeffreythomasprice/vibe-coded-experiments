@@ -31,7 +31,16 @@ pub fn App() -> impl IntoView {
     let toasts: Toasts = RwSignal::new(Vec::new());
     provide_context(toasts);
 
-    provide_context(crate::access::Access::new());
+    // Loaded before `Access` (and everything after it) so every `Persisted`'s autosave effect is
+    // queued, in creation order, before `startup::run` below ever spawns its own task. That
+    // ordering is what lets `Prefs::ensure_player_name`'s `.set()` actually persist rather than
+    // being swallowed by an autosave effect that hasn't taken its own first (no-op) run yet -- see
+    // that method's doc comment and `persist.rs`'s `Persisted::new_gated`.
+    let prefs = Prefs::load();
+    provide_context(prefs);
+
+    let access = crate::access::Access::new();
+    provide_context(access);
     provide_context(ConfigOpen(RwSignal::new(false)));
     provide_context(RoomOpen(RwSignal::new(false)));
 
@@ -48,9 +57,11 @@ pub fn App() -> impl IntoView {
     let log = *battle_log;
     let battles = Battles::new(log, room_active);
     provide_context(battles);
-    // A room session left behind by a previous page load, if any -- after `set_root_owner` (so a
-    // socket callback has an owner) and after `Access` (so a token is there to check).
-    battles.restore();
+    // Resolves an invite link's `auth_code`/`join_room` (if any) and, once that's settled, either
+    // joins the room it named or resumes a room session left behind by a previous page load --
+    // after `set_root_owner` (so a socket callback has an owner) and after `Access`/`Prefs` (so
+    // there's a token to check and a name to join under). See `startup::run`'s doc comment.
+    crate::startup::run(access, battles, prefs);
     provide_context(log.read_only() as BattleView);
 
     let battle = Memo::new(move |_| log.read().battle());
@@ -61,8 +72,6 @@ pub fn App() -> impl IntoView {
 
     let active_tip: ActiveTip = RwSignal::new(None);
     provide_context(active_tip);
-    let prefs = Prefs::load();
-    provide_context(prefs);
 
     provide_context(RailSelection::new());
 

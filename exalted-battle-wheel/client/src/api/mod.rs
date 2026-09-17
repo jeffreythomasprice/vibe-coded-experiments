@@ -16,17 +16,10 @@ fn endpoint(path: &str) -> String {
 
 /// Percent-encodes a single path segment (RFC 3986's unreserved set survives unescaped) so an
 /// access code containing `/`, `#`, `?`, or whitespace still round-trips through
-/// `/access-codes/{access_key}`. Hand-rolled rather than `js_sys::encode_uri_component` so it's
-/// plain, host-testable logic -- this crate has no wasm-bindgen-test setup.
+/// `/access-codes/{access_key}`. The same rule serves a query-string value -- see
+/// `crate::link::percent_encode_component`, which owns the implementation and its tests.
 fn percent_encode_segment(segment: &str) -> String {
-    let mut encoded = String::with_capacity(segment.len());
-    for byte in segment.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => encoded.push(byte as char),
-            _ => encoded.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    encoded
+    crate::link::percent_encode_component(segment)
 }
 
 fn bearer(builder: RequestBuilder, token: &str) -> RequestBuilder {
@@ -96,15 +89,5 @@ mod tests {
     #[test]
     fn endpoint_joins_the_base_and_path() {
         assert_eq!(endpoint("/auth/me"), format!("{API_BASE_URL}/auth/me"));
-    }
-
-    #[test]
-    fn percent_encoding_leaves_unreserved_characters_alone() {
-        assert_eq!(percent_encode_segment("player-one.2_3~"), "player-one.2_3~");
-    }
-
-    #[test]
-    fn percent_encoding_escapes_everything_else() {
-        assert_eq!(percent_encode_segment("a/b c#d"), "a%2Fb%20c%23d");
     }
 }

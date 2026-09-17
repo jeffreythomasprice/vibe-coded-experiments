@@ -1257,7 +1257,19 @@ button {
 
 .room-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.room-invite-url {
+  flex-basis: 100%;
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 0.4rem 0.5rem;
+  font-family: monospace;
+  font-size: 0.8rem;
 }
 
 .room-error {

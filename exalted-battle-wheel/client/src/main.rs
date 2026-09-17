@@ -3,9 +3,12 @@ mod api;
 mod app;
 mod battle_net;
 mod config;
+mod link;
+mod names;
 mod net;
 mod persist;
 mod prefs;
+mod startup;
 mod storage;
 mod ui;
 

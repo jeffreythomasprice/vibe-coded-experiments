@@ -9,6 +9,7 @@ use crate::prefs::Prefs;
 use crate::ui::glossary::Topic;
 use crate::ui::{ConfigOpen, DetailTip, Modal, Spinner, Tip};
 use leptos::prelude::*;
+use leptos::web_sys;
 use shared::protocol::{ConnectionId, MAX_NAME_LEN, MAX_ROOM_NAME_LEN};
 
 /// Which sub-view `Mode::Solo` is showing. Unlike the room's actual state (owned by `Battles`),
@@ -98,11 +99,25 @@ pub fn RoomStatusButton() -> impl IntoView {
 fn RoomPanelBody(close: impl Fn() + Copy + Send + 'static) -> impl IntoView {
     let access = expect_context::<Access>();
     let battles = expect_context::<Battles>();
+    let prefs = expect_context::<Prefs>();
     let form = SoloForm::new();
+
+    // Suggests a name before the modal's first paint whenever one isn't saved yet, so the
+    // multiplayer form is never blank and "Host"/"Join" are never disabled for want of one. An
+    // `Effect` rather than a bare call in the body, to keep the `Persisted` write out of a render
+    // pass -- see `Prefs::ensure_player_name`'s doc comment for why the write itself is safe here.
+    Effect::new(move |_| {
+        prefs.ensure_player_name();
+    });
 
     view! {
         <div class="room-panel">
             {move || match access.me().get() {
+                // `startup::run`'s access-code check is still in flight -- not "no code", which
+                // would wrongly tell a browser that already has one that it doesn't.
+                None if access.busy().get() => view! {
+                    <div class="room-pending"><Spinner /> "Checking your access code\u{2026}"</div>
+                }.into_any(),
                 None => view! { <NoAccessCode close=close /> }.into_any(),
                 Some(_) => match battles.mode().get() {
                     Mode::Solo => view! { <SoloMenu form=form /> }.into_any(),
@@ -258,9 +273,110 @@ fn InRoomView() -> impl IntoView {
             <div class="room-actions">
                 <button class="btn" on:click=refresh>"Refresh"</button>
                 <button class="btn" on:click=leave>"Leave room"</button>
+                <InviteLink />
             </div>
         </div>
     }
+}
+
+/// A host-only "Copy invite link" button: builds a link carrying this room's name and an access
+/// code a guest can actually use (never an admin's own -- see `Access::invite_code`), copies it to
+/// the clipboard, and reveals it in a read-only field as a fallback for when the clipboard write
+/// is refused or unavailable.
+#[component]
+fn InviteLink() -> impl IntoView {
+    let access = expect_context::<Access>();
+    let battles = expect_context::<Battles>();
+
+    let url: RwSignal<Option<String>> = RwSignal::new(None);
+    let copied = RwSignal::new(false);
+    let working = RwSignal::new(false);
+
+    let click = move |_| {
+        if working.get_untracked() {
+            return;
+        }
+        // Already built (a second click, or a click after the field was revealed): just copy
+        // again. The clipboard write must be issued synchronously from this handler -- see below
+        // -- so a cached URL takes this path even though `invite_code` would answer instantly too.
+        if let Some(url) = url.get_untracked() {
+            copy_to_clipboard(&url, copied);
+            return;
+        }
+        let Some((origin, path)) = crate::link::origin_and_path() else {
+            crate::ui::toast::error("Could not read this page's own address.".to_string());
+            return;
+        };
+        let Some(room) = battles.room().get_untracked() else { return };
+        working.set(true);
+        access.invite_code(move |result| {
+            working.set(false);
+            match result {
+                Ok(code) => {
+                    let built = crate::link::invite_url(&origin, &path, &code, &room);
+                    url.set(Some(built.clone()));
+                    // Attempted even though the gesture that started this click may already be
+                    // gone by now (the admin path just awaited a fetch) -- Safari/Firefox may
+                    // refuse it, which is exactly what the revealed field below is the fallback
+                    // for. The non-admin path above never has this problem: it never awaits
+                    // anything, so the gesture is still live.
+                    copy_to_clipboard(&built, copied);
+                }
+                Err(error) => {
+                    tracing::error!(%error, "could not prepare an invite link");
+                    crate::ui::toast::error(format!("Could not prepare an invite link: {error}"));
+                }
+            }
+        });
+    };
+
+    view! {
+        {move || battles.is_host().get().then(|| view! {
+            <>
+                <Tip topic=Topic::RoomInviteLink>
+                    <button class="btn" on:click=click disabled=move || working.get()>
+                        {move || match (working.get(), copied.get()) {
+                            (true, _) => "Preparing\u{2026}",
+                            (false, true) => "Copied!",
+                            (false, false) => "Copy invite link",
+                        }}
+                    </button>
+                </Tip>
+                {move || url.get().map(|url| view! {
+                    <input
+                        class="room-invite-url"
+                        readonly=true
+                        prop:value=url
+                        on:click=move |ev| { event_target::<web_sys::HtmlInputElement>(&ev).select(); }
+                    />
+                })}
+            </>
+        })}
+    }
+}
+
+/// Writes to the clipboard and flips `copied` for a moment. Issued synchronously from the click
+/// handler that calls it wherever possible: Safari only grants clipboard access while the gesture
+/// that started it is still on the call stack, so awaiting anything first can lose it. Silent when
+/// there's no clipboard to write to -- an insecure origin (a LAN IP over plain http; a dev server
+/// on `127.0.0.1`/`localhost` is still a secure context) has no `navigator.clipboard` at all, and
+/// calling into it regardless would throw straight through wasm rather than returning an error;
+/// the revealed field is the fallback there.
+fn copy_to_clipboard(text: &str, copied: RwSignal<bool>) {
+    let Some(window) = web_sys::window() else { return };
+    if !window.is_secure_context() {
+        return;
+    }
+    let promise = window.navigator().clipboard().write_text(text);
+    leptos::task::spawn_local_scoped(async move {
+        match wasm_bindgen_futures::JsFuture::from(promise).await {
+            Ok(_) => {
+                copied.set(true);
+                set_timeout(move || copied.set(false), std::time::Duration::from_millis(1500));
+            }
+            Err(error) => tracing::warn!(?error, "could not write the invite link to the clipboard"),
+        }
+    });
 }
 
 #[component]

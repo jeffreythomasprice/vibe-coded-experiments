@@ -104,7 +104,7 @@ type Settle = Box<dyn FnOnce(Result<(), RequestError>)>;
 /// the same name without the user doing anything — see `Battles::on_close`. Persisted to local
 /// storage (see `Battles::new`'s own `rejoin` field), so this also survives a closed tab: `session`
 /// is `None` until the server's first `Joined` reply fills it in, then carries this connection's
-/// proof of membership (and host status, if it has it) for `Battles::restore` to present on the
+/// proof of membership (and host status, if it has it) for `Battles::resume` to present on the
 /// very next page load.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Rejoin {
@@ -158,7 +158,7 @@ pub struct Battles {
     pending: RwSignal<HashMap<RequestId, Settle>, LocalStorage>,
     next_request_id: RwSignal<u64>,
     /// Persisted to local storage so a closed-and-reopened tab can find its way back to the room
-    /// it left — see `Rejoin`'s own doc comment and `restore`. Never accepts a cross-tab `storage`
+    /// it left — see `Rejoin`'s own doc comment and `resume`. Never accepts a cross-tab `storage`
     /// event: two tabs in the same room would otherwise hand each other's session token back and
     /// forth, and each tab's session is specific to its own connection.
     rejoin: Persisted<Option<Rejoin>>,
@@ -209,6 +209,17 @@ impl Battles {
     pub fn members(&self) -> Signal<Vec<Member>> {
         let members = self.members;
         Signal::derive(move || members.get())
+    }
+
+    /// Whether this connection is the room's host -- the one member who may hand out an invite
+    /// link (`ui::room`'s `InviteLink`). Derived from the same membership broadcast `ui::room`'s
+    /// own per-row badge reads, rather than tracked separately, so the two can never disagree.
+    pub fn is_host(&self) -> Signal<bool> {
+        let (members, self_id) = (self.members, self.self_id);
+        Signal::derive(move || {
+            let Some(id) = self_id.get() else { return false };
+            members.with(|members| members.iter().any(|member| member.id == id && member.is_host))
+        })
     }
 
     /// What a *future* joiner starts as — not retroactive to anyone already in the room. See
@@ -322,6 +333,38 @@ impl Battles {
     }
 
     // --------------------------------------------------------------------------- room lifecycle
+
+    /// The room a session left behind by a previous page load belongs to, if any -- what
+    /// `crate::startup` compares an invite link's `join_room` against to decide whether to
+    /// `resume()` (presenting the stored host token) or `join_room` the link's own room instead.
+    pub fn stored_room(&self) -> Option<String> {
+        self.rejoin.get_untracked().map(|rejoin| rejoin.room)
+    }
+
+    /// Claims `Mode::Connecting` before startup even knows whether this browser's access code
+    /// still works, so the locally-persisted battle is never editable during that round trip -- an
+    /// edit landed in the gap would only be thrown away the moment a room's own log replaces it.
+    /// `room`, if given, is shown as the room the app is connecting to, the same way a reconnect's
+    /// `ConnectingView` already does. Paired with `release_connecting`.
+    pub fn hold_connecting(&self, room: Option<String>) {
+        self.mode.set(Mode::Connecting);
+        if room.is_some() {
+            self.room.set(room);
+        }
+    }
+
+    /// Backs out of a `hold_connecting` claim that turned out not to be needed (no access code,
+    /// nothing to join or resume). Unlike `reset_to_solo`, this never touches the stored room
+    /// session -- a browser that merely isn't signed in yet must still be able to find its way
+    /// back to it once it is. A no-op once a socket exists: from that point on, whatever opened it
+    /// (the user's own Host/Join, or `resume`/`join_room`) owns `mode`.
+    pub fn release_connecting(&self) {
+        if self.socket.get_untracked().is_some() {
+            return;
+        }
+        self.mode.set(Mode::Solo);
+        self.room.set(None);
+    }
 
     pub fn create_room(&self, room: String, name: String, everyone_writes: bool) {
         let Some(socket) = self.ensure_socket() else { return };
@@ -630,7 +673,7 @@ impl Battles {
         self.send_join(socket, rejoin);
     }
 
-    /// Sends the `Join` a reconnect (or `restore`) needs on an already-open `socket`, and reacts
+    /// Sends the `Join` a reconnect (or `resume`) needs on an already-open `socket`, and reacts
     /// to how it settles. Split out from `attempt_reconnect` so a merely stale `session` can retry
     /// once, immediately, on the same socket rather than going through the backoff -- see the
     /// `SessionRejection::Expired`/`Malformed` arm below.
@@ -650,6 +693,13 @@ impl Battles {
                 // it forever.
                 RequestError::Rejected(ProtocolError::NoSuchRoom) => {
                     crate::ui::toast::error("This room no longer exists.".to_string());
+                    this.disconnect();
+                }
+                // Also won't recur on its own: the access code this session was opened under has
+                // since been revoked (`crate::startup` only reaches this path after confirming it
+                // once, at page-load time -- this is a *later* revocation, mid-session).
+                RequestError::Rejected(ProtocolError::Unauthorized) => {
+                    crate::ui::toast::error("Your access code is no longer valid.".to_string());
                     this.disconnect();
                 }
                 RequestError::Rejected(ProtocolError::InvalidSession(rejection)) => {
@@ -677,17 +727,20 @@ impl Battles {
         });
     }
 
-    /// Replays a room session left behind by a previous page load, so a closed-and-reopened tab
-    /// comes back to the room it left -- called once at startup (see `app.rs`). Silent when
-    /// there's nothing stored, or when nobody's signed in (a socket would only fail every message
-    /// with `RequestError::NotSignedIn` and retry forever -- not worth opening at all). The very
-    /// first successful `create_room`/`join_room` overwrites whatever this restores.
-    pub fn restore(&self) {
-        let Some(rejoin) = self.rejoin.get_untracked() else { return };
-        if expect_context::<Access>().token().get_untracked().is_none() {
-            tracing::info!("a room session is stored but nobody is signed in; staying in Solo");
+    /// Replays a room session left behind by a previous page load, presenting its host token if it
+    /// has one -- so a returning host reclaims host rather than rejoining as an ordinary member.
+    /// Called once at startup, from `crate::startup::run`, which has already confirmed this
+    /// browser's access code still works -- unlike the `restore` this replaces, it no longer
+    /// checks that itself, since deferring behind that check is exactly what `hold_connecting`
+    /// already claimed `Mode::Connecting` for. Silent when there's nothing stored. A no-op if a
+    /// socket already exists: a user who started their own Host/Join while the check was still in
+    /// flight owns `mode` from that point on. The very first successful `create_room`/`join_room`
+    /// overwrites whatever this resumes.
+    pub fn resume(&self) {
+        if self.socket.get_untracked().is_some() {
             return;
         }
+        let Some(rejoin) = self.rejoin.get_untracked() else { return };
         self.room.set(Some(rejoin.room.clone()));
         self.mode.set(Mode::Connecting);
         self.attempt_reconnect(rejoin);

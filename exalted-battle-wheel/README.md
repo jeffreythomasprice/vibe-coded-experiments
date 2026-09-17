@@ -13,22 +13,25 @@ wire types used by both). Every wire type is generated from JSON Schema at build
 Starts `dynamodb-local` (8002), the API (8001), and the client at http://127.0.0.1:8000; Ctrl-C
 stops all three and removes the DynamoDB container. It creates all three tables (access codes,
 rooms, websocket connections) from the JSON files under `dynamodb/` -- the same files
-`terraform/dynamodb.tf` builds the real tables from -- and seeds an admin code `local-admin`.
-Everything is recreated on every run, since `dynamodb-local` runs in-memory.
+`terraform/dynamodb.tf` builds the real tables from -- and provisions an admin and a non-admin
+access code via `scripts/provision-access-codes.sh`, printing both. Everything is recreated on
+every run, since `dynamodb-local` runs in-memory; to keep the same codes across restarts, set
+`ADMIN_CODE`/`MEMBER_CODE` in an untracked `.env.local`.
 
-Needs `docker compose` (`sudo pacman -S docker-compose` on Arch), plus `aws`, `jq`, and `trunk`.
+Needs `docker compose` (`sudo pacman -S docker-compose` on Arch), plus `aws`, `jq`, `openssl`, and
+`trunk`.
 
-With the stack up, and an admin token:
+With the stack up, and the admin token `./dev.sh` printed:
 
 ```
-curl -H 'Authorization: Bearer local-admin' localhost:8001/auth/me
-curl -H 'Authorization: Bearer local-admin' -X POST -H 'Content-Type: application/json' \
+curl -H "Authorization: Bearer $ADMIN_CODE" localhost:8001/auth/me
+curl -H "Authorization: Bearer $ADMIN_CODE" -X POST -H 'Content-Type: application/json' \
   -d '{"is_admin":false}' localhost:8001/access-codes
-curl -H 'Authorization: Bearer local-admin' localhost:8001/access-codes
-curl -H 'Authorization: Bearer local-admin' -X PUT -H 'Content-Type: application/json' \
+curl -H "Authorization: Bearer $ADMIN_CODE" localhost:8001/access-codes
+curl -H "Authorization: Bearer $ADMIN_CODE" -X PUT -H 'Content-Type: application/json' \
   -d '{"is_admin":true}' localhost:8001/access-codes/<access_key>
-curl -H 'Authorization: Bearer local-admin' -X DELETE localhost:8001/access-codes/<access_key>
-curl -H 'Authorization: Bearer local-admin' localhost:8001/rooms
+curl -H "Authorization: Bearer $ADMIN_CODE" -X DELETE localhost:8001/access-codes/<access_key>
+curl -H "Authorization: Bearer $ADMIN_CODE" localhost:8001/rooms
 ```
 
 A request with no `Authorization` header, or an unrecognized code, gets `401`; a non-admin code
@@ -73,21 +76,24 @@ export KUBECONFIG=../kubernetes-host/kubeconfig
 ./deploy.sh server   # just the server
 ```
 
-The access-codes table starts empty; seed the first admin code once, the same shape `dev.sh` seeds
-locally but against the real table (no `--endpoint-url`):
+The access-codes table starts empty; `./deploy.sh server` provisions an admin and a non-admin code
+on its first run (via `scripts/provision-access-codes.sh`, the same script `dev.sh` uses locally)
+and prints both -- later deploys leave existing codes alone. To provision or review codes without a
+full deploy:
 
 ```
 export AWS_PROFILE=personal
-KEY="$(openssl rand -hex 16)" && echo "$KEY"
-aws dynamodb put-item --table-name exalted-battle-wheel-access-codes \
-  --item "{\"access_key\":{\"S\":\"$KEY\"},\"is_admin\":{\"BOOL\":true},\"created_at\":{\"S\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}}"
+ACCESS_CODES_TABLE="$(terraform -chdir=terraform output -raw access_codes_table)" \
+  scripts/provision-access-codes.sh
+ACCESS_CODES_TABLE="$(terraform -chdir=terraform output -raw access_codes_table)" \
+  scripts/list-access-codes.sh
 ```
 
 Then, against the deployed API:
 
 ```
-curl -H 'Authorization: Bearer <access_key>' https://exalted-api.jeffrey.lol/auth/me
-curl -H 'Authorization: Bearer <access_key>' https://exalted-api.jeffrey.lol/access-codes
+curl -H "Authorization: Bearer $ADMIN_CODE" https://exalted-api.jeffrey.lol/auth/me
+curl -H "Authorization: Bearer $ADMIN_CODE" https://exalted-api.jeffrey.lol/access-codes
 ```
 
 See `CLAUDE.md` for how each half is hosted and what a redeploy does, and `MULTIPLAYER.md` for

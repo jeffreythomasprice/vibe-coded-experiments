@@ -94,6 +94,26 @@ impl Prefs {
         install_theme(prefs.theme);
         prefs
     }
+
+    /// Fills in a random name the first time one is needed, so an invite-link join is never
+    /// attributed to nobody and the multiplayer form is never blank. Returns whatever name is now
+    /// in hand, generated or not.
+    ///
+    /// Deliberately not `player_name`'s `Persisted` default: `Persisted` only writes a value that
+    /// differs from its default, and its autosave effect skips its own first run (see
+    /// `persist.rs`), so a generated *default* would be a fresh name every page load, saved never.
+    /// Calling `.set()` here instead is safe exactly because `Prefs::load()` -- and so every
+    /// `Persisted`'s autosave effect -- runs before either of this method's two callers
+    /// (`crate::startup::run`, `ui::room`) can: see `app.rs`'s ordering comment.
+    pub fn ensure_player_name(&self) -> String {
+        let name = self.player_name.get_untracked();
+        if !name.trim().is_empty() {
+            return name;
+        }
+        let generated = crate::names::random_player_name();
+        self.player_name.set(generated.clone());
+        generated
+    }
 }
 
 #[cfg(test)]

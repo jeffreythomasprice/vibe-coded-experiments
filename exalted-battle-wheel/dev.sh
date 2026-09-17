@@ -6,7 +6,11 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 endpoint="http://127.0.0.1:8002"
-admin_code="local-admin"
+
+# Optional, untracked: pins ADMIN_CODE/MEMBER_CODE across restarts instead of generating fresh
+# random codes every time (dynamodb-local runs -inMemory, so the table -- and any codes in it --
+# never survives one). Same "last layer wins" convention as client/build.rs's .env.local.
+[[ -f .env.local ]] && set -a && . ./.env.local && set +a
 
 # TTL attribute per table, empty for the one table (access-codes) that doesn't have one --
 # `create-table --cli-input-json` can't carry TTL, so it's a separate `update-time-to-live` call
@@ -17,7 +21,7 @@ declare -A table_ttl_attribute=(
   [dynamodb/websocket-connections-table.json]="expires_at"
 )
 
-for bin in docker aws jq cargo trunk; do
+for bin in docker aws jq openssl cargo trunk; do
   command -v "$bin" >/dev/null || { echo "dev.sh: '$bin' is required but not on PATH" >&2; exit 1; }
 done
 docker compose version >/dev/null || {
@@ -89,10 +93,9 @@ for table_json in "${!table_ttl_attribute[@]}"; do
   esac
 done
 
-aws dynamodb put-item --endpoint-url "$endpoint" --table-name "$access_codes_table" --item "$(
-  jq -n --arg key "$admin_code" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '{access_key: {S: $key}, is_admin: {BOOL: true}, created_at: {S: $now}}'
-)" >/dev/null
+codes="$(DYNAMODB_ENDPOINT="$endpoint" ACCESS_CODES_TABLE="$access_codes_table" scripts/provision-access-codes.sh)"
+admin_code="$(jq -r .admin <<<"$codes")"
+member_code="$(jq -r .member <<<"$codes")"
 
 set -m
 ACCESS_CODES_TABLE="$access_codes_table" ROOMS_TABLE="$rooms_table" CONNECTIONS_TABLE="$connections_table" \
@@ -106,7 +109,8 @@ cat <<EOF
 dev.sh: client   http://127.0.0.1:8000
 dev.sh: server   http://127.0.0.1:8001
 dev.sh: dynamodb ${endpoint}
-dev.sh: admin access code: ${admin_code}
+dev.sh: admin access code:     ${admin_code}
+dev.sh: non-admin access code: ${member_code}
 
 Ctrl-C to stop everything.
 EOF

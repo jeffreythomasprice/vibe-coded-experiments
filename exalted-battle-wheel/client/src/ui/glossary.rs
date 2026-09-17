@@ -98,6 +98,7 @@ pub enum Topic {
     RoomCanWrite,
     RoomRename,
     RoomKick,
+    RoomInviteLink,
     Config,
     ConfigCode,
     ConfigSelf,
@@ -428,6 +429,12 @@ impl Topic {
                 term: "Kick",
                 what: "Disconnects a member from the room immediately.",
                 interacts: "Needs write access, and never works on yourself or the host. The kicked member keeps their own local copy of the battle; only their connection to the room ends. There's no ban list behind this: they can rejoin under the same room name like anyone else.",
+                source: Source::AppConvention,
+            },
+            Topic::RoomInviteLink => Entry {
+                term: "Copy invite link",
+                what: "Builds a link that signs someone in and joins them straight into this room.",
+                interacts: "Only the host sees this. The link carries an access code -- your own, unless it's an admin code, in which case the newest non-admin code is used instead, since an invite must never hand out admin rights. Whoever opens it keeps their own access code if they already have a working one; otherwise they adopt the one in the link. Treat the link itself as a bearer credential: anyone who has it can sign in as that code until it's revoked.",
                 source: Source::AppConvention,
             },
             Topic::Config => Entry {
@@ -1063,6 +1070,7 @@ mod tests {
         Topic::RoomCanWrite,
         Topic::RoomRename,
         Topic::RoomKick,
+        Topic::RoomInviteLink,
         Topic::Config,
         Topic::ConfigCode,
         Topic::ConfigSelf,

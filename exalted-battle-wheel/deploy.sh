@@ -61,6 +61,18 @@ deploy_server() {
   (cd ../kubernetes-host && ./push-image.sh "$image")
 
   sed "s|exalted-server:[^ ]*|${image}|" server/manifest.yaml | kubectl apply -f -
+
+  # No-ops once an admin + non-admin pair already exist (every deploy after the first) --
+  # DYNAMODB_ENDPOINT is set empty explicitly so an exported local value can't redirect this at
+  # dynamodb-local, same convention as server/src/config.rs treating empty as unset.
+  local provision_output
+  provision_output="$(DYNAMODB_ENDPOINT= \
+    ACCESS_CODES_TABLE="$(terraform -chdir=terraform output -raw access_codes_table)" \
+    scripts/provision-access-codes.sh)"
+  if [[ "$(jq -r .status <<<"$provision_output")" == created ]]; then
+    echo "deploy.sh: admin access code:     $(jq -r .admin <<<"$provision_output")"
+    echo "deploy.sh: non-admin access code: $(jq -r .member <<<"$provision_output")"
+  fi
 }
 
 case "$target" in

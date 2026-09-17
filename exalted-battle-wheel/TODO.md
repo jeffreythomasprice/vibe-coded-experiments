@@ -3,27 +3,19 @@ in-flight:
 
 todo:
 
-The frontend should respect some query string parameters
-- auth_code, replaces the auth code currently stored in local storage
-- join_room, automatically tries to join the room with that name on startup
-
-Normal toaster errors can apply if, e.g. that auth_code is invalid (as checked by the /me endpoint) or if we can't successfully join that room
-
-If we are the host of a room we should be able to generate a link that includes both concepts. This can be a button in the multiplayer modal.
-
-The auth_code selected for the link should be chosen such that:
-- if we are using a non-admin code, use our code
-- if we are using an admin code, find the most recent non-admin code using the admin code CRUD API and use that
-- if no non-admin codes exist, error, do not create a URL with no auth code or with an admin auth code
-
-The join_room should be chosen to be the room we're currently in.
-
-When we're processing the auth_code, we should accept the new auth code if and only if we don't currently have a valid auth code ourselves. We should check our saved auth code for validity first, so that if our remembered code was revoked we replace it with the incoming code.
+When we're preparing to host a room we should put a randomize button next to the room name. This should generate a new room name similar to how we generate random player names when joining a room. Clicking the randomize button should repeatedly generate new random names.
 
 
 frontend should have a UI that exposes all rooms
 admins can close rooms early
 join room by searching and clicking
+
+
+show other people's cursors
+
+
+advance tick should be disabled if battle hasn't started yet
+tooltip should prepend an explanation of why it's disabled
 
 
 I'd like to review all the teaching tooltips for accuracy. Look them up in the book by the reference pages, check for accuracy, and verify that they make sense for that wigdet. Split off as many subagents as necessary.
