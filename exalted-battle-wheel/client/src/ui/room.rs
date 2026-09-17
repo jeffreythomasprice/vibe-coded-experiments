@@ -25,16 +25,28 @@ enum MenuChoice {
 /// `match battles.mode()` in `RoomPanelBody` rebuilds `SoloMenu` from scratch on every mode
 /// change, so a join that fails (Solo -> Connecting -> Solo) would otherwise throw away both the
 /// branch the user picked and the room name they'd typed.
+///
+/// Host and Join each get their own room-name signal rather than sharing one: `host_room` starts
+/// pre-filled with a suggestion (below) so "Host a room" is one click away, and pre-filling would
+/// leak a bogus room name into Join if the two branches shared a field.
 #[derive(Clone, Copy)]
 struct SoloForm {
     menu: RwSignal<MenuChoice>,
-    room: RwSignal<String>,
+    host_room: RwSignal<String>,
+    join_room: RwSignal<String>,
     everyone_writes: RwSignal<bool>,
 }
 
 impl SoloForm {
     fn new() -> Self {
-        Self { menu: RwSignal::new(MenuChoice::Root), room: RwSignal::new(String::new()), everyone_writes: RwSignal::new(true) }
+        Self {
+            menu: RwSignal::new(MenuChoice::Root),
+            // A plain initializer, not a reactive write -- unlike `Prefs::ensure_player_name`,
+            // there's no `Persisted` autosave ordering to worry about here.
+            host_room: RwSignal::new(crate::names::random_room_name()),
+            join_room: RwSignal::new(String::new()),
+            everyone_writes: RwSignal::new(true),
+        }
     }
 }
 
@@ -153,11 +165,11 @@ fn NoAccessCode(close: impl Fn() + Copy + Send + 'static) -> impl IntoView {
 fn SoloMenu(form: SoloForm) -> impl IntoView {
     let battles = expect_context::<Battles>();
     let prefs = expect_context::<Prefs>();
-    let SoloForm { menu, room: room_input, everyone_writes } = form;
+    let SoloForm { menu, host_room, join_room, everyone_writes } = form;
 
     let host = move |_| {
         let name = prefs.player_name.get();
-        let room = room_input.get();
+        let room = host_room.get();
         if name.trim().is_empty() || room.trim().is_empty() {
             return;
         }
@@ -166,7 +178,7 @@ fn SoloMenu(form: SoloForm) -> impl IntoView {
 
     let join = move |_| {
         let name = prefs.player_name.get();
-        let room = room_input.get();
+        let room = join_room.get();
         if name.trim().is_empty() || room.trim().is_empty() {
             return;
         }
@@ -174,7 +186,8 @@ fn SoloMenu(form: SoloForm) -> impl IntoView {
     };
 
     let name_ready = move || !prefs.player_name.get().trim().is_empty();
-    let room_ready = move || !room_input.get().trim().is_empty();
+    let host_room_ready = move || !host_room.get().trim().is_empty();
+    let join_room_ready = move || !join_room.get().trim().is_empty();
     let back = move |_| menu.set(MenuChoice::Root);
 
     view! {
@@ -189,7 +202,7 @@ fn SoloMenu(form: SoloForm) -> impl IntoView {
                 }.into_any(),
                 MenuChoice::Hosting => view! {
                     <>
-                        <RoomNameField room=room_input />
+                        <RoomNameField room=host_room randomize=true />
                         <Tip topic=Topic::RoomEveryoneWrites>
                             <label class="room-field-inline">
                                 <input
@@ -202,7 +215,7 @@ fn SoloMenu(form: SoloForm) -> impl IntoView {
                         </Tip>
                         <div class="room-actions">
                             <button class="btn" on:click=back>"Back"</button>
-                            <button class="btn" on:click=host disabled=move || !name_ready() || !room_ready()>
+                            <button class="btn" on:click=host disabled=move || !name_ready() || !host_room_ready()>
                                 "Submit"
                             </button>
                         </div>
@@ -210,10 +223,10 @@ fn SoloMenu(form: SoloForm) -> impl IntoView {
                 }.into_any(),
                 MenuChoice::Joining => view! {
                     <>
-                        <RoomNameField room=room_input />
+                        <RoomNameField room=join_room />
                         <div class="room-actions">
                             <button class="btn" on:click=back>"Back"</button>
-                            <button class="btn" on:click=join disabled=move || !name_ready() || !room_ready()>
+                            <button class="btn" on:click=join disabled=move || !name_ready() || !join_room_ready()>
                                 "Submit"
                             </button>
                         </div>
@@ -224,17 +237,32 @@ fn SoloMenu(form: SoloForm) -> impl IntoView {
     }
 }
 
+/// `randomize` shows a die button that rerolls `room` from `names::random_room_name` -- host-only:
+/// on Join, a random name would almost certainly name a room that doesn't exist.
 #[component]
-fn RoomNameField(room: RwSignal<String>) -> impl IntoView {
+fn RoomNameField(room: RwSignal<String>, #[prop(optional)] randomize: bool) -> impl IntoView {
     view! {
         <label class="room-field">
             "Room name"
-            <input
-                placeholder="Room name"
-                maxlength=MAX_ROOM_NAME_LEN.to_string()
-                prop:value=move || room.get()
-                on:input=move |ev| room.set(event_target_value(&ev))
-            />
+            <div class="room-field-row">
+                <input
+                    placeholder="Room name"
+                    maxlength=MAX_ROOM_NAME_LEN.to_string()
+                    prop:value=move || room.get()
+                    on:input=move |ev| room.set(event_target_value(&ev))
+                />
+                {randomize.then(|| view! {
+                    <Tip topic=Topic::RoomRandomName>
+                        <button
+                            class="btn room-randomize"
+                            aria-label="Suggest a random room name"
+                            on:click=move |_| room.set(crate::names::random_room_name())
+                        >
+                            "\u{1F3B2}"
+                        </button>
+                    </Tip>
+                })}
+            </div>
         </label>
     }
 }

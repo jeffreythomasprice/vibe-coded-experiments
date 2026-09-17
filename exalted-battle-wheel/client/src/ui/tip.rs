@@ -12,19 +12,35 @@ use leptos::web_sys;
 pub type ActiveTip = RwSignal<Option<TipAnchor>>;
 
 /// A glossary `Topic` is gated behind Teaching mode; free-form `Text` (e.g. event-log detail) is
-/// not teaching content and always shows. `TopicWithDetail` is a `Topic` plus a computed line
-/// (e.g. projected tick numbers) appended to the tooltip — still cited and Teaching-gated.
+/// not teaching content and always shows.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TipContent {
-    Topic(Topic),
-    TopicWithDetail(Topic, String),
+    Topic(TopicTip),
     Text(String),
+}
+
+/// A `Topic` plus two independent optional lines. `detail` is a computed line (e.g. projected tick
+/// numbers) appended to the tooltip — still cited and Teaching-gated. `notice` is why the control
+/// this tip is attached to is currently disabled: unlike the rest of a topic tip, it is never
+/// gated behind Teaching mode, since a dead button has to explain itself either way.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TopicTip {
+    pub topic: Topic,
+    pub notice: Option<String>,
+    pub detail: Option<String>,
 }
 
 impl TipContent {
     fn topic(&self) -> Option<Topic> {
         match self {
-            TipContent::Topic(topic) | TipContent::TopicWithDetail(topic, _) => Some(*topic),
+            TipContent::Topic(tip) => Some(tip.topic),
+            TipContent::Text(_) => None,
+        }
+    }
+
+    fn notice(&self) -> Option<&str> {
+        match self {
+            TipContent::Topic(tip) => tip.notice.as_deref(),
             TipContent::Text(_) => None,
         }
     }
@@ -38,7 +54,8 @@ pub struct TipAnchor {
 }
 
 fn show(content: TipContent, x: f64, y: f64) {
-    if content.topic().is_some() && !expect_context::<Prefs>().teaching_mode.get_untracked() {
+    let gated_by_teaching = content.topic().is_some() && content.notice().is_none();
+    if gated_by_teaching && !expect_context::<Prefs>().teaching_mode.get_untracked() {
         return;
     }
     expect_context::<ActiveTip>().set(Some(TipAnchor { content, x, y }));
@@ -88,23 +105,27 @@ fn window_size() -> (f64, f64) {
     (width, height)
 }
 
+fn plain_topic(topic: Topic) -> TipContent {
+    TipContent::Topic(TopicTip { topic, notice: None, detail: None })
+}
+
 pub fn on_pointer_enter(topic: Topic) -> impl Fn(PointerEvent) + Clone {
-    move |ev: PointerEvent| show(TipContent::Topic(topic), ev.client_x() as f64, ev.client_y() as f64)
+    move |ev: PointerEvent| show(plain_topic(topic), ev.client_x() as f64, ev.client_y() as f64)
 }
 
 pub fn on_pointer_leave(topic: Topic) -> impl Fn(PointerEvent) + Clone {
-    move |_: PointerEvent| hide(TipContent::Topic(topic))
+    move |_: PointerEvent| hide(plain_topic(topic))
 }
 
 pub fn on_focus_in(topic: Topic) -> impl Fn(FocusEvent) + Clone {
     move |ev: FocusEvent| {
         let (x, y) = element_anchor(ev.target());
-        show(TipContent::Topic(topic), x, y);
+        show(plain_topic(topic), x, y);
     }
 }
 
 pub fn on_focus_out(topic: Topic) -> impl Fn(FocusEvent) + Clone {
-    move |_: FocusEvent| hide(TipContent::Topic(topic))
+    move |_: FocusEvent| hide(plain_topic(topic))
 }
 
 /// Free-text counterparts of `on_pointer_*`/`on_focus_*`, for SVG nodes that need `TextTip`'s
@@ -159,19 +180,21 @@ pub fn Tip(topic: Topic, children: Children) -> impl IntoView {
 
 /// Like `Tip`, but `topic` and `detail` are reactive: used where the glossary entry to show
 /// depends on live state (e.g. Declare's tooltip switches topic with the selected action, and
-/// appends computed tick numbers for a sorcery sequence).
+/// appends computed tick numbers for a sorcery sequence). `notice` is likewise reactive, for a
+/// control whose disabled reason can change (e.g. Advance Tick before Start Battle).
 #[component]
 pub fn DetailTip(
     #[prop(into)] topic: Signal<Topic>,
     #[prop(into)] detail: Signal<String>,
+    #[prop(into, optional)] notice: Signal<String>,
     children: Children,
 ) -> impl IntoView {
     let content = move || {
-        let topic = topic.get_untracked();
-        match detail.get_untracked() {
-            detail if detail.is_empty() => TipContent::Topic(topic),
-            detail => TipContent::TopicWithDetail(topic, detail),
-        }
+        TipContent::Topic(TopicTip {
+            topic: topic.get_untracked(),
+            notice: Some(notice.get_untracked()).filter(|n| !n.is_empty()),
+            detail: Some(detail.get_untracked()).filter(|d| !d.is_empty()),
+        })
     };
     view! {
         <span
@@ -217,17 +240,26 @@ pub fn TextTip(text: String, children: Children) -> impl IntoView {
     }
 }
 
-fn render_topic(topic: Topic, detail: Option<String>) -> AnyView {
-    let entry = topic.entry();
+/// `notice` renders unconditionally, at the top, since it's why the control is disabled rather
+/// than teaching material. The rest of the entry is teaching material and only renders when
+/// `teaching` is true — for a notice shown with Teaching mode off, that leaves the notice as the
+/// tooltip's only content.
+fn render_topic(tip: TopicTip, teaching: bool) -> AnyView {
+    let notice = tip.notice.map(|n| view! { <div class="tip-notice">{n}</div> });
+    if !teaching {
+        return view! { {notice} }.into_any();
+    }
+    let entry = tip.topic.entry();
     let (quote, cite_label) = match entry.source {
         Source::Book { quote, cite } => (quote, Some(cite.label())),
         Source::AppConvention => (None, None),
     };
     view! {
+        {notice}
         <div class="tip-term">{entry.term}</div>
         <div class="tip-what">{entry.what}</div>
         <div class="tip-interacts">{entry.interacts}</div>
-        {detail.map(|d| view! { <div class="tip-detail">{d}</div> })}
+        {tip.detail.map(|d| view! { <div class="tip-detail">{d}</div> })}
         {quote.map(|q| view! { <div class="tip-quote">{format!("“{q}”")}</div> })}
         {cite_label.map(|c| view! { <div class="tip-cite">{c}</div> })}
     }
@@ -257,14 +289,14 @@ pub fn TipLayer() -> impl IntoView {
     };
 
     let content = move || active.get().map(|anchor| anchor.content);
+    let teaching = move || expect_context::<Prefs>().teaching_mode.get();
 
     view! {
         <div class="tip-layer" class:tip-layer-visible=move || content().is_some() style=position_style>
             {move || {
                 content()
                     .map(|content| match content {
-                        TipContent::Topic(topic) => render_topic(topic, None),
-                        TipContent::TopicWithDetail(topic, detail) => render_topic(topic, Some(detail)),
+                        TipContent::Topic(tip) => render_topic(tip, teaching()),
                         TipContent::Text(text) => view! { <div class="tip-what">{text}</div> }.into_any(),
                     })
             }}

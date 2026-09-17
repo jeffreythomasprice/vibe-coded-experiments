@@ -3,19 +3,12 @@ in-flight:
 
 todo:
 
-When we're preparing to host a room we should put a randomize button next to the room name. This should generate a new room name similar to how we generate random player names when joining a room. Clicking the randomize button should repeatedly generate new random names.
-
-
 frontend should have a UI that exposes all rooms
 admins can close rooms early
 join room by searching and clicking
 
 
 show other people's cursors
-
-
-advance tick should be disabled if battle hasn't started yet
-tooltip should prepend an explanation of why it's disabled
 
 
 I'd like to review all the teaching tooltips for accuracy. Look them up in the book by the reference pages, check for accuracy, and verify that they make sense for that wigdet. Split off as many subagents as necessary.

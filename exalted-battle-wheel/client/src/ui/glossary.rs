@@ -91,6 +91,7 @@ pub enum Topic {
     Reset,
     ReactionCount,
     Room,
+    RoomRandomName,
     RoomEveryoneWrites,
     RoomRoleHost,
     RoomRoleWriter,
@@ -387,6 +388,12 @@ impl Topic {
                 term: "Multiplayer",
                 what: "Connects browsers through the server, so everyone sees the same battle and every change goes through the same checks.",
                 interacts: "One side hosts a room under a name; anyone else with an access code can join it by that name. Joining adopts the host's battle immediately. The server is the sole authority on the shared battle \u{2014} it checks every move for legality and for write access before applying it and telling everyone the result, so there's nothing left for two browsers to quietly disagree about.",
+                source: Source::AppConvention,
+            },
+            Topic::RoomRandomName => Entry {
+                term: "Random room name",
+                what: "Fills the field with a suggestion, drawn from the same word lists as a random player name.",
+                interacts: "A room's name is only a label and a lookup key -- it's trimmed and lowercased to find the room, so \u{201c}Brave Otter\u{201d} and \u{201c}brave otter\u{201d} are the same room. Click again for another suggestion, or type over it entirely; it has no effect on who can join or edit.",
                 source: Source::AppConvention,
             },
             Topic::RoomEveryoneWrites => Entry {
@@ -1063,6 +1070,7 @@ mod tests {
         Topic::Reset,
         Topic::ReactionCount,
         Topic::Room,
+        Topic::RoomRandomName,
         Topic::RoomEveryoneWrites,
         Topic::RoomRoleHost,
         Topic::RoomRoleWriter,

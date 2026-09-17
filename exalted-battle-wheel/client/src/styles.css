@@ -1016,6 +1016,14 @@ button {
   margin-bottom: 0.4rem;
 }
 
+.tip-notice {
+  color: var(--danger);
+  font-weight: 600;
+  border-left: 3px solid var(--danger);
+  padding-left: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
 .tip-quote {
   color: var(--text-dim);
   font-style: italic;
@@ -1133,6 +1141,24 @@ button {
   gap: 0.4rem;
   color: var(--text-dim);
   font-size: 0.85rem;
+}
+
+.room-field-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.room-field-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.room-randomize {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 .room-field textarea,

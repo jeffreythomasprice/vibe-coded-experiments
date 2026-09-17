@@ -41,12 +41,26 @@ fn name_from(adjectives: &[&str], nouns: &[&str], adjective_roll: f64, noun_roll
     }
 }
 
-/// A random display name, drawn from `petname`'s small English word lists (449 adjectives × 449
-/// nouns). Every combination comfortably fits `shared::protocol::MAX_NAME_LEN` -- see the
-/// `every_generated_name_fits_the_protocols_bound` test.
-pub fn random_player_name() -> String {
+/// "Brave Otter" -- drawn from `petname`'s small English word lists (449 adjectives × 449 nouns).
+/// Shared by `random_player_name` and `random_room_name`: both need the same shape of name and the
+/// same 40-character bound, just for different fields.
+fn random_two_word_name() -> String {
     let words = Petnames::small();
     name_from(&words.adjectives, &words.nouns, js_sys::Math::random(), js_sys::Math::random())
+}
+
+/// A random display name. Every combination comfortably fits `shared::protocol::MAX_NAME_LEN` --
+/// see the `every_generated_name_fits_the_protocols_bound` test.
+pub fn random_player_name() -> String {
+    random_two_word_name()
+}
+
+/// A random room name, suggested when opening the host form and on each click of its randomize
+/// button. Same word lists as `random_player_name` -- `MAX_ROOM_NAME_LEN` and `MAX_NAME_LEN` are
+/// both 40, so every combination that fits one fits the other too; see
+/// `every_generated_room_name_survives_room_key`.
+pub fn random_room_name() -> String {
+    random_two_word_name()
 }
 
 #[cfg(test)]
@@ -96,6 +110,19 @@ mod tests {
                 let name = format!("{} {}", capitalize(adjective), capitalize(noun));
                 assert!(name.chars().count() <= MAX_NAME_LEN, "{name:?} is too long");
                 assert_eq!(sanitize_name(&name).to_string(), name);
+            }
+        }
+    }
+
+    #[test]
+    fn every_generated_room_name_survives_room_key() {
+        use shared::protocol::room_key;
+
+        let words = Petnames::small();
+        for adjective in words.adjectives.iter() {
+            for noun in words.nouns.iter() {
+                let name = format!("{} {}", capitalize(adjective), capitalize(noun));
+                assert!(room_key(&name).is_ok(), "{name:?} was rejected as a room name");
             }
         }
     }

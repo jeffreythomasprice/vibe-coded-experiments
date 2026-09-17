@@ -23,6 +23,19 @@ fn capitalize(words: &str) -> String {
     }).collect::<Vec<_>>().join(" ")
 }
 
+/// Why the Advance Tick button is currently disabled, or "" if it isn't. Shared by the button's
+/// `disabled` prop and its tooltip's notice line so the two can never disagree. Read-only wins
+/// over Setup: starting the battle is not something a spectator can do.
+fn advance_tick_notice(read_only: bool, phase: &Phase) -> &'static str {
+    if read_only {
+        "Disabled — you are viewing this room read-only."
+    } else if matches!(phase, Phase::Setup) {
+        "Disabled — start the battle first."
+    } else {
+        ""
+    }
+}
+
 #[component]
 pub fn App() -> impl IntoView {
     tracing::trace!("rendering App");
@@ -82,6 +95,7 @@ pub fn App() -> impl IntoView {
     };
 
     let advance_tick = move |_| battles.push(BattleEvent::AdvanceTick);
+    let advance_notice = move || advance_tick_notice(battles.read_only().get(), &battle.read().phase);
     let undo = move |_| battles.undo();
     let redo = move |_| battles.redo();
 
@@ -131,8 +145,9 @@ pub fn App() -> impl IntoView {
                 <DetailTip
                     topic=Topic::AdvanceTick
                     detail=Signal::derive(move || battle.read().mode.tick_note().unwrap_or_default().to_string())
+                    notice=Signal::derive(move || advance_notice().to_string())
                 >
-                    <button on:click=advance_tick disabled=move || battles.read_only().get()>
+                    <button on:click=advance_tick disabled=move || !advance_notice().is_empty()>
                         {move || format!("Advance {}", capitalize(battle.read().mode.tick_noun()))}
                     </button>
                 </DetailTip>
@@ -217,5 +232,36 @@ pub fn App() -> impl IntoView {
                 <ReferenceRail />
             </div>
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn advance_tick_is_enabled_once_running_and_not_read_only() {
+        assert_eq!(advance_tick_notice(false, &Phase::Running { reaction_count: 0 }), "");
+    }
+
+    #[test]
+    fn advance_tick_is_disabled_in_setup() {
+        assert_eq!(advance_tick_notice(false, &Phase::Setup), "Disabled — start the battle first.");
+    }
+
+    #[test]
+    fn read_only_wins_over_setup() {
+        assert_eq!(
+            advance_tick_notice(true, &Phase::Setup),
+            "Disabled — you are viewing this room read-only.",
+        );
+    }
+
+    #[test]
+    fn read_only_disables_even_once_running() {
+        assert_eq!(
+            advance_tick_notice(true, &Phase::Running { reaction_count: 0 }),
+            "Disabled — you are viewing this room read-only.",
+        );
     }
 }
