@@ -55,28 +55,20 @@ cd client && trunk build --release
 
 ## Deploy
 
-One-time infrastructure setup (state bucket `jeffs-tfstate` must already exist):
+Needs the state bucket `jeffs-tfstate` to already exist. For the server half,
+`../kubernetes-host` must already be stood up, and its kubectl tunnel running in another terminal
+(`./kubeconfig.sh` once, then `./tunnel.sh`) with `KUBECONFIG` exported to point at it.
 
 ```
-export AWS_PROFILE=personal
-terraform -chdir=terraform init
-terraform -chdir=terraform apply
-```
-
-For the server half, `../kubernetes-host` must already be stood up, and its kubectl tunnel running
-in another terminal (`./kubeconfig.sh` once, then `./tunnel.sh`) with `KUBECONFIG` exported to point
-at it.
-
-Every subsequent deploy:
-
-```
-export AWS_PROFILE=personal
-export AWS_REGION=us-east-1
 export KUBECONFIG=../kubernetes-host/kubeconfig
 ./deploy.sh          # both client and server
 ./deploy.sh client   # just the client
 ./deploy.sh server   # just the server
 ```
+
+`deploy.sh` runs `terraform init`/`apply` itself first (prompting to confirm if there are
+infrastructure changes), and defaults `AWS_PROFILE` to `personal` and `AWS_REGION` to
+`us-east-1` -- export either beforehand to override.
 
 The access-codes table starts empty; `./deploy.sh server` provisions an admin and a non-admin code
 on its first run (via `scripts/provision-access-codes.sh`, the same script `dev.sh` uses locally)
