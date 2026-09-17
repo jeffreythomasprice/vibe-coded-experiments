@@ -596,8 +596,12 @@ impl Battles {
                 Ok(())
             }
             ServerMessage::Left { reason } => {
-                if reason == LeaveReason::Kicked {
-                    crate::ui::toast::error("You were removed from the room.".to_string());
+                match reason {
+                    LeaveReason::Requested => {}
+                    LeaveReason::Kicked => crate::ui::toast::error("You were removed from the room.".to_string()),
+                    LeaveReason::RoomClosed => {
+                        crate::ui::toast::error("This room was closed by an administrator.".to_string())
+                    }
                 }
                 self.disconnect();
                 Ok(())

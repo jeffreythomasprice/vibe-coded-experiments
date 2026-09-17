@@ -9,6 +9,7 @@ pub use error::ApiError;
 use crate::config::API_BASE_URL;
 use gloo_net::http::{Request, RequestBuilder, Response};
 use shared::access::{AccessCode, AccessCodeList, CreateAccessCode, UpdateAccessCode};
+use shared::rooms::RoomList;
 
 fn endpoint(path: &str) -> String {
     format!("{}{path}", API_BASE_URL.trim_end_matches('/'))
@@ -77,6 +78,31 @@ pub async fn update(token: &str, access_key: &str, is_admin: bool) -> Result<Acc
 
 pub async fn delete(token: &str, access_key: &str) -> Result<(), ApiError> {
     let path = format!("/access-codes/{}", percent_encode_segment(access_key));
+    let request = bearer(Request::delete(&endpoint(&path)), token);
+    let response = request.send().await.map_err(|error| ApiError::Transport(error.to_string()))?;
+    expect_no_content(response).await
+}
+
+/// `GET /rooms`, admin-only -- see `crate::rooms::RoomAdmin`, the reactive facade this backs.
+/// `search` is a case-insensitive substring match on the server side; an empty string matches
+/// every room. `cursor` is a previous page's own `RoomList::next_cursor`, opaque to this crate.
+pub async fn rooms(token: &str, search: &str, limit: usize, cursor: Option<&str>) -> Result<RoomList, ApiError> {
+    let mut path = format!("/rooms?limit={limit}");
+    if !search.is_empty() {
+        path.push_str(&format!("&q={}", crate::link::percent_encode_component(search)));
+    }
+    if let Some(cursor) = cursor {
+        path.push_str(&format!("&cursor={}", crate::link::percent_encode_component(cursor)));
+    }
+    let request = bearer(Request::get(&endpoint(&path)), token);
+    let response = request.send().await.map_err(|error| ApiError::Transport(error.to_string()))?;
+    parse_json(response).await
+}
+
+/// `DELETE /rooms/{room_name}`, admin-only -- closes the room and disconnects everyone in it (see
+/// `shared::protocol::LeaveReason::RoomClosed`).
+pub async fn delete_room(token: &str, room_name: &str) -> Result<(), ApiError> {
+    let path = format!("/rooms/{}", percent_encode_segment(room_name));
     let request = bearer(Request::delete(&endpoint(&path)), token);
     let response = request.send().await.map_err(|error| ApiError::Transport(error.to_string()))?;
     expect_no_content(response).await

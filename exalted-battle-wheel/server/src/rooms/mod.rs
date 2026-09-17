@@ -13,6 +13,7 @@ pub use memory::MemoryRoomStore;
 
 use crate::dynamo_client::ItemError;
 use aws_sdk_dynamodb::error::SdkError;
+use aws_sdk_dynamodb::operation::delete_item::DeleteItemError;
 use aws_sdk_dynamodb::operation::put_item::PutItemError;
 use aws_sdk_dynamodb::operation::scan::ScanError;
 use shared::battle::BattleLog;
@@ -29,6 +30,11 @@ pub const ROOM_TTL: time::Duration = time::Duration::minutes(30);
 /// DynamoDB's hard per-item cap. Checked before every write so an oversized battle is a clear
 /// `RoomStoreError::TooLarge` rather than an opaque `ValidationException` from the service.
 pub const MAX_ITEM_BYTES: usize = 400 * 1024;
+
+/// `GET /rooms`'s page size when the caller doesn't ask for a specific one.
+pub const DEFAULT_ROOM_PAGE: usize = 20;
+/// The largest page `GET /rooms` will ever return, regardless of what a caller asks for.
+pub const MAX_ROOM_PAGE: usize = 100;
 
 /// A room's own identity, independent of its (reusable, case-folded) name — what a session token
 /// is actually issued and checked against, so a token for a room that expired and whose name was
@@ -85,6 +91,27 @@ pub struct NewRoom {
     pub log: BattleLog,
 }
 
+/// What `RoomStore::list` filters and pages by, for `GET /rooms`'s admin room browser.
+pub struct RoomQuery {
+    /// A case-insensitive substring match against the room's key (the trimmed, lowercased
+    /// display name a room was created under — see `shared::protocol::room_key`). Empty matches
+    /// every room.
+    pub search: String,
+    /// Clamped to `1..=MAX_ROOM_PAGE` by the caller (`server/src/routes.rs`'s `room_query`) before
+    /// it ever reaches a `RoomStore` -- this field itself trusts whatever it's given.
+    pub limit: usize,
+    /// The `room_key` a previous page's `RoomPage::next` reported stopping at, if any.
+    pub after: Option<String>,
+}
+
+/// One page of `RoomStore::list`.
+pub struct RoomPage {
+    pub rooms: Vec<RoomSummary>,
+    /// `Some(room_key)` to resume from on the next call, as `RoomQuery::after`. `None` means this
+    /// was the last page.
+    pub next: Option<String>,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum RoomStoreError {
     #[error("a room with that name already exists")]
@@ -105,6 +132,8 @@ pub enum RoomStoreError {
     PutItem(#[source] SdkError<PutItemError>),
     #[error("dynamodb scan failed")]
     Scan(#[source] SdkError<ScanError>),
+    #[error("dynamodb delete_item failed")]
+    DeleteItem(#[source] SdkError<DeleteItemError>),
 }
 
 pub trait RoomStore: Clone + Send + Sync + 'static {
@@ -113,8 +142,8 @@ pub trait RoomStore: Clone + Send + Sync + 'static {
     /// all, so every read has to treat "expired" as "not there" itself rather than trusting the
     /// table to have already deleted it.
     fn get(&self, room_key: &str) -> impl Future<Output = Result<Option<Room>, RoomStoreError>> + Send;
-    /// Every non-expired room, for `GET /rooms`.
-    fn list(&self) -> impl Future<Output = Result<Vec<RoomSummary>, RoomStoreError>> + Send;
+    /// One page of non-expired rooms matching `query`, for `GET /rooms`'s admin room browser.
+    fn list(&self, query: &RoomQuery) -> impl Future<Output = Result<RoomPage, RoomStoreError>> + Send;
     /// `RoomStoreError::AlreadyExists` if a non-expired room already holds this name.
     fn create(&self, room: NewRoom) -> impl Future<Output = Result<Room, RoomStoreError>> + Send;
     /// Saves every field of `room` back, conditioned on the stored version still matching
@@ -122,4 +151,9 @@ pub trait RoomStore: Clone + Send + Sync + 'static {
     /// copy, and passes that copy here unchanged apart from whatever it meant to change. Bumps the
     /// version and refreshes `expires_at`/`updated_at`, returning the room as actually stored.
     fn save(&self, room: Room) -> impl Future<Output = Result<Room, RoomStoreError>> + Send;
+    /// Removes a room outright, regardless of who is in it or whether it's already expired.
+    /// Idempotent: a room already gone (reaped by TTL, or already deleted) is `Ok(())`, not an
+    /// error -- the 404 an admin-facing caller wants comes from its own preceding `get`, taken
+    /// under the same room lock as this call (see `server/src/ws/hub.rs`'s doc comment).
+    fn delete(&self, room_key: &str) -> impl Future<Output = Result<(), RoomStoreError>> + Send;
 }

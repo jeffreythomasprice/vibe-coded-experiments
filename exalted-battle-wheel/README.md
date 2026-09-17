@@ -31,13 +31,15 @@ curl -H "Authorization: Bearer $ADMIN_CODE" localhost:8001/access-codes
 curl -H "Authorization: Bearer $ADMIN_CODE" -X PUT -H 'Content-Type: application/json' \
   -d '{"is_admin":true}' localhost:8001/access-codes/<access_key>
 curl -H "Authorization: Bearer $ADMIN_CODE" -X DELETE localhost:8001/access-codes/<access_key>
-curl -H "Authorization: Bearer $ADMIN_CODE" localhost:8001/rooms
+curl -H "Authorization: Bearer $ADMIN_CODE" "localhost:8001/rooms?q=&limit=20&cursor="
+curl -H "Authorization: Bearer $ADMIN_CODE" -X DELETE "localhost:8001/rooms/<room name>"
 ```
 
 A request with no `Authorization` header, or an unrecognized code, gets `401`; a non-admin code
-against any `/access-codes` route gets `403`. `/rooms` needs a valid code but not an admin one --
-any access code may create, join, and play in a room, over the websocket at `/ws`; see
-`MULTIPLAYER.md`.
+against any `/access-codes` or `/rooms` route gets `403`. `GET /rooms` and `DELETE /rooms/<room
+name>` are both admin-only, for the in-app "All rooms" browser (`q`/`limit`/`cursor` are all
+optional). Any access code -- admin or not -- may create, join, and play in a room over the
+websocket at `/ws`; see `MULTIPLAYER.md`.
 
 ## Test
 

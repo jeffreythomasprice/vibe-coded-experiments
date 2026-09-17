@@ -1,4 +1,4 @@
-use super::{ItemError, NewRoom, Room, RoomId, RoomMember, RoomStore, RoomStoreError, MAX_ITEM_BYTES, ROOM_TTL};
+use super::{ItemError, NewRoom, Room, RoomId, RoomMember, RoomPage, RoomQuery, RoomStore, RoomStoreError, MAX_ITEM_BYTES, ROOM_TTL};
 use crate::config::Config;
 use crate::dynamo_client::{self, format_timestamp};
 use aws_sdk_dynamodb::operation::put_item::PutItemError;
@@ -185,47 +185,94 @@ impl RoomStore for DynamoRoomStore {
         Ok(Some(room))
     }
 
-    async fn list(&self) -> Result<Vec<RoomSummary>, RoomStoreError> {
-        // Projected, not a plain `scan()`: a `RoomSummary` needs four small fields, but a room's
-        // `log` can be up to `MAX_ITEM_BYTES` -- fetching (and JSON-decoding, via `item_to_room`)
-        // every room's whole battle just to report its member count would scale this endpoint's
-        // cost with total battle data across every room, not with the size of its own response.
-        let mut pages = self
-            .client
-            .scan()
-            .table_name(&*self.table)
-            .projection_expression("#display_name, #members, #updated_at, #expires_at")
-            .expression_attribute_names("#display_name", DISPLAY_NAME)
-            .expression_attribute_names("#members", MEMBERS)
-            .expression_attribute_names("#updated_at", UPDATED_AT)
-            .expression_attribute_names("#expires_at", EXPIRES_AT)
-            .into_paginator()
-            .items()
-            .send();
+    async fn list(&self, query: &RoomQuery) -> Result<RoomPage, RoomStoreError> {
+        // Projected, not a plain `scan()`: a `RoomSummary` needs a handful of small fields, but a
+        // room's `log` can be up to `MAX_ITEM_BYTES` -- fetching (and JSON-decoding, via
+        // `item_to_room`) every room's whole battle just to report its member count would scale
+        // this endpoint's cost with total battle data across every room, not with the size of its
+        // own response.
+        //
+        // The search and the page boundary are both applied here in Rust rather than as a
+        // DynamoDB `FilterExpression`/`Limit`: a `FilterExpression` still pays for scanning every
+        // *unfiltered* item (it just skips returning the ones that don't match), so a `Limit`
+        // paired with it would cap items scanned, not items matched, and could hand back an
+        // under-full page while rooms matching the search still existed further into the table.
+        // Scanning every raw page to completion and stopping once `query.limit` *matches* have
+        // been found is what actually makes `next` mean "there may be more."
+        let needle = query.search.trim().to_lowercase();
+        // A caller is expected to have already clamped this (`server/src/routes.rs`'s
+        // `room_query`) -- floored rather than trusted outright so a stray zero can't turn every
+        // page into an infinite scan that never finds enough matches to stop on.
+        let limit = query.limit.max(1);
         let now = OffsetDateTime::now_utc();
         let mut rooms = Vec::new();
-        while let Some(item) = pages.next().await {
-            let item = item.map_err(RoomStoreError::Scan)?;
-            if epoch_attr(&item, EXPIRES_AT)? <= now {
-                continue;
+        let mut next = None;
+        let mut start_key =
+            query.after.as_ref().map(|after| HashMap::from([(ROOM_KEY.to_string(), AttributeValue::S(after.clone()))]));
+
+        'paging: loop {
+            let output = self
+                .client
+                .scan()
+                .table_name(&*self.table)
+                .projection_expression("#room_key, #display_name, #members, #updated_at, #expires_at")
+                .expression_attribute_names("#room_key", ROOM_KEY)
+                .expression_attribute_names("#display_name", DISPLAY_NAME)
+                .expression_attribute_names("#members", MEMBERS)
+                .expression_attribute_names("#updated_at", UPDATED_AT)
+                .expression_attribute_names("#expires_at", EXPIRES_AT)
+                .set_exclusive_start_key(start_key.take())
+                .send()
+                .await
+                .map_err(RoomStoreError::Scan)?;
+
+            for item in output.items() {
+                if epoch_attr(item, EXPIRES_AT)? <= now {
+                    continue;
+                }
+                let room_key = string_attr(item, ROOM_KEY)?;
+                if !needle.is_empty() && !room_key.contains(&needle) {
+                    continue;
+                }
+                let member_count = match item.get(MEMBERS) {
+                    Some(AttributeValue::L(entries)) => u32::try_from(entries.len()).unwrap_or(u32::MAX),
+                    Some(_) => return Err(ItemError::WrongType { name: MEMBERS, expected: "L" }.into()),
+                    None => return Err(ItemError::Missing(MEMBERS).into()),
+                };
+                let display_name = string_attr(item, DISPLAY_NAME)?;
+                rooms.push(RoomSummary {
+                    display_name: RoomName::try_from(display_name.clone()).map_err(|error| ItemError::Invalid {
+                        name: DISPLAY_NAME,
+                        value: display_name,
+                        reason: error.to_string(),
+                    })?,
+                    member_count,
+                    updated_at: Timestamp(timestamp_attr(item, UPDATED_AT)?),
+                });
+                if rooms.len() == limit {
+                    next = Some(room_key);
+                    break 'paging;
+                }
             }
-            let member_count = match item.get(MEMBERS) {
-                Some(AttributeValue::L(entries)) => u32::try_from(entries.len()).unwrap_or(u32::MAX),
-                Some(_) => return Err(ItemError::WrongType { name: MEMBERS, expected: "L" }.into()),
-                None => return Err(ItemError::Missing(MEMBERS).into()),
-            };
-            let display_name = string_attr(&item, DISPLAY_NAME)?;
-            rooms.push(RoomSummary {
-                display_name: RoomName::try_from(display_name.clone()).map_err(|error| ItemError::Invalid {
-                    name: DISPLAY_NAME,
-                    value: display_name,
-                    reason: error.to_string(),
-                })?,
-                member_count,
-                updated_at: Timestamp(timestamp_attr(&item, UPDATED_AT)?),
-            });
+
+            match output.last_evaluated_key() {
+                Some(key) => start_key = Some(key.clone()),
+                None => break,
+            }
         }
-        Ok(rooms)
+
+        Ok(RoomPage { rooms, next })
+    }
+
+    async fn delete(&self, room_key: &str) -> Result<(), RoomStoreError> {
+        self.client
+            .delete_item()
+            .table_name(&*self.table)
+            .key(ROOM_KEY, AttributeValue::S(room_key.to_string()))
+            .send()
+            .await
+            .map_err(RoomStoreError::DeleteItem)?;
+        Ok(())
     }
 
     async fn create(&self, new_room: NewRoom) -> Result<Room, RoomStoreError> {

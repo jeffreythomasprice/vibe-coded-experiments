@@ -98,7 +98,12 @@ fn store_error(error: RoomStoreError) -> ProtocolError {
         // handler's own `get` and `save` -- shouldn't happen given the caller holds the process-
         // wide room lock for the whole handler call (see `ws::hub`'s doc comment), so there is
         // nothing more specific to tell the client than "something went wrong, try again."
-        RoomStoreError::VersionConflict | RoomStoreError::Item(_) | RoomStoreError::GetItem(_) | RoomStoreError::PutItem(_) | RoomStoreError::Scan(_) => {
+        RoomStoreError::VersionConflict
+        | RoomStoreError::Item(_)
+        | RoomStoreError::GetItem(_)
+        | RoomStoreError::PutItem(_)
+        | RoomStoreError::Scan(_)
+        | RoomStoreError::DeleteItem(_) => {
             ProtocolError::Internal
         }
     }

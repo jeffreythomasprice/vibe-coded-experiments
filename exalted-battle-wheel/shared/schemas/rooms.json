@@ -28,6 +28,18 @@
             "$ref": "#/$defs/RoomSummary"
           },
           "type": "array"
+        },
+        "next_cursor": {
+          "description": "Opaque continuation token: pass it back as `cursor` for the next page. Absent when this was the last page.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [

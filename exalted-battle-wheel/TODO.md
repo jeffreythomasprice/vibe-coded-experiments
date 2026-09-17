@@ -1,14 +1,9 @@
 in-flight:
 
-
 todo:
 
-frontend should have a UI that exposes all rooms
-admins can close rooms early
-join room by searching and clicking
-
-
 show other people's cursors
+but how to do this when the windows can be different sizes?
 
 
 I'd like to review all the teaching tooltips for accuracy. Look them up in the book by the reference pages, check for accuracy, and verify that they make sense for that wigdet. Split off as many subagents as necessary.

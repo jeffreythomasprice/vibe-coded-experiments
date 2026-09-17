@@ -1583,3 +1583,30 @@ button {
   border-top: 1px solid var(--panel-border);
   padding-top: 0.75rem;
 }
+
+.rooms-admin {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.rooms-search {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.rooms-more {
+  align-self: flex-start;
+}
+
+.rooms-empty {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin: 0;
+}

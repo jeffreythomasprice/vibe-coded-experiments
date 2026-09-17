@@ -3,7 +3,7 @@
 //! same as a real read), so websocket-handler tests can exercise real behavior with no Docker or
 //! DynamoDB.
 
-use super::{NewRoom, Room, RoomId, RoomMember, RoomStore, RoomStoreError, MAX_ITEM_BYTES, ROOM_TTL};
+use super::{NewRoom, Room, RoomId, RoomMember, RoomPage, RoomQuery, RoomStore, RoomStoreError, MAX_ITEM_BYTES, ROOM_TTL};
 use shared::rooms::RoomSummary;
 use shared::timestamp::Timestamp;
 use std::collections::HashMap;
@@ -30,18 +30,43 @@ impl RoomStore for MemoryRoomStore {
         Ok(rooms.get(room_key).filter(|room| room.expires_at > OffsetDateTime::now_utc()).cloned())
     }
 
-    async fn list(&self) -> Result<Vec<RoomSummary>, RoomStoreError> {
+    async fn list(&self, query: &RoomQuery) -> Result<RoomPage, RoomStoreError> {
         let rooms = self.rooms.lock().unwrap();
         let now = OffsetDateTime::now_utc();
-        Ok(rooms
+        let needle = query.search.trim().to_lowercase();
+        // A caller is expected to have already clamped this (`server/src/routes.rs`'s
+        // `room_query`) -- floored rather than trusted outright so a stray zero can't make every
+        // page come back empty with `next` stuck pointing at the same room forever.
+        let limit = query.limit.max(1);
+
+        // Sorted by `room_key` so a cursor ("resume strictly after this key") means the same
+        // thing across calls, mirroring the arbitrary-but-stable order a real DynamoDB `Scan`
+        // would give the dynamo implementation's own paging loop.
+        let mut matching: Vec<&Room> = rooms
             .values()
             .filter(|room| room.expires_at > now)
+            .filter(|room| needle.is_empty() || room.room_key.contains(&needle))
+            .collect();
+        matching.sort_by(|a, b| a.room_key.cmp(&b.room_key));
+
+        let start = match &query.after {
+            Some(after) => matching.partition_point(|room| room.room_key.as_str() <= after.as_str()),
+            None => 0,
+        };
+        let remaining = &matching[start..];
+        let page = &remaining[..remaining.len().min(limit)];
+        let next = (page.len() < remaining.len()).then(|| page.last().expect("non-empty: page shorter than remaining").room_key.clone());
+
+        let summaries = page
+            .iter()
             .map(|room| RoomSummary {
                 display_name: room.display_name.clone().try_into().expect("valid by construction: see ws/handler.rs"),
                 member_count: u32::try_from(room.members.len()).unwrap_or(u32::MAX),
                 updated_at: Timestamp(room.updated_at),
             })
-            .collect())
+            .collect();
+
+        Ok(RoomPage { rooms: summaries, next })
     }
 
     async fn create(&self, new_room: NewRoom) -> Result<Room, RoomStoreError> {
@@ -87,6 +112,11 @@ impl RoomStore for MemoryRoomStore {
         room.expires_at = now + ROOM_TTL;
         rooms.insert(room.room_key.clone(), room.clone());
         Ok(room)
+    }
+
+    async fn delete(&self, room_key: &str) -> Result<(), RoomStoreError> {
+        self.rooms.lock().unwrap().remove(room_key);
+        Ok(())
     }
 }
 

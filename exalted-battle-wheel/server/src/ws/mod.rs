@@ -44,6 +44,17 @@ fn envelope_message(reply_to: Option<RequestId>, message: ServerMessage) -> Mess
     Message::Text(serde_json::to_string(&envelope).expect("ServerEnvelope always encodes").into())
 }
 
+/// Fans one unprompted `ServerMessage` out to a set of connections, each as its own message with
+/// `reply_to: None` — for a caller with no `ClientEnvelope` of its own to reply on, namely
+/// `DELETE /rooms/{room}` closing a room out from under whoever was in it. Silently drops any
+/// target that isn't currently registered (see `Hub::send`'s own doc comment); nothing more to do
+/// about a connection that's already gone.
+pub fn notify(hub: &Hub, targets: impl IntoIterator<Item = ConnectionId>, message: ServerMessage) {
+    for target in targets {
+        hub.send(&target, envelope_message(None, message.clone()));
+    }
+}
+
 async fn run<A, R, C>(socket: WebSocket, state: AppState<A, R, C>)
 where
     A: AccessCodeStore,

@@ -9,7 +9,9 @@ use leptos::prelude::*;
 use shared::access::AccessCode;
 use time::OffsetDateTime;
 
-fn format_created_at(at: OffsetDateTime) -> String {
+/// "YYYY-MM-DD HH:MM UTC" -- shared with `ui::rooms_admin`'s "Last active" column, so a timestamp
+/// reads the same way in both admin tables.
+pub(crate) fn format_timestamp(at: OffsetDateTime) -> String {
     format!(
         "{:04}-{:02}-{:02} {:02}:{:02} UTC",
         at.year(),
@@ -115,7 +117,7 @@ fn IdentityPanel(code: AccessCode) -> impl IntoView {
             <dt>"Admin"</dt>
             <dd>{if code.is_admin { "Yes" } else { "No" }}</dd>
             <dt>"Created"</dt>
-            <dd>{format_created_at(*code.created_at)}</dd>
+            <dd>{format_timestamp(*code.created_at)}</dd>
         </dl>
         <button class="btn" on:click=move |_| access.clear() disabled=move || busy.get()>
             "Clear"
@@ -179,7 +181,7 @@ fn CodeRow(code: AccessCode, my_key: String) -> impl IntoView {
                     disabled=move || busy.get() || is_self
                 />
             </td>
-            <td class="access-created">{format_created_at(*code.created_at)}</td>
+            <td class="access-created">{format_timestamp(*code.created_at)}</td>
             <td>
                 {(!is_self).then({
                     let access_key = code.access_key.to_string();

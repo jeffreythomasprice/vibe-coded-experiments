@@ -521,6 +521,13 @@
             "Kicked"
           ],
           "type": "string"
+        },
+        {
+          "description": "An administrator closed the room this connection was in.",
+          "enum": [
+            "RoomClosed"
+          ],
+          "type": "string"
         }
       ]
     },

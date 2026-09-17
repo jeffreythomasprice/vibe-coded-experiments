@@ -8,6 +8,7 @@ mod names;
 mod net;
 mod persist;
 mod prefs;
+mod rooms;
 mod startup;
 mod storage;
 mod ui;

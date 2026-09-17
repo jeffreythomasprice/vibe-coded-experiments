@@ -33,6 +33,7 @@ wire_type!(crate::access::CreateAccessCode, "CreateAccessCode");
 wire_type!(crate::access::UpdateAccessCode, "UpdateAccessCode");
 wire_type!(crate::access::AccessCode, "AccessCode");
 wire_type!(crate::access::AccessCodeList, "AccessCodeList");
+wire_type!(crate::rooms::RoomList, "RoomList");
 
 #[derive(Debug, thiserror::Error)]
 pub enum WireError {
@@ -55,6 +56,7 @@ static VALIDATORS: LazyLock<HashMap<&'static str, Validator>> = LazyLock::new(||
         crate::access::UpdateAccessCode::DEF,
         crate::access::AccessCode::DEF,
         crate::access::AccessCodeList::DEF,
+        crate::rooms::RoomList::DEF,
     ]
     .into_iter()
     .map(|def| {

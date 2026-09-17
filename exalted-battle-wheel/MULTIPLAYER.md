@@ -68,6 +68,19 @@ room. The code it carries is deliberately never an admin's own: an admin's invit
 the newest non-admin code the server knows about instead (an error if there isn't one), so an
 invite can never hand out the right to manage every other code.
 
+## Administering rooms
+
+Whoever holds an admin access code (`README.md`'s `is_admin` — admin *access-code* status, unrelated
+to write access inside any one room, same as the opening paragraph above says) sees an **All rooms**
+button in the Multiplayer panel, both from Solo and from inside a room of their own. It opens every
+room currently live on the server: searchable by name, paged, each row with its own **Copy link**
+(the same invite link a host would build, never an admin's own code) and a **Close room** that
+deletes the room outright after a confirmation. Everyone in a closed room is disconnected
+immediately, drops to Solo keeping their own local copy of whatever battle the room had, and sees a
+message that an administrator closed their room. A room this list doesn't show yet just hasn't been
+searched for or paged to — the list itself is a plain `GET /rooms`, admin-only (see `README.md`), so
+nothing here is a special path around the room store.
+
 ## Connecting
 
 1. **Multiplayer (Solo)** → name yourself → type a room name → **Host a room**, or pick **Join a
@@ -98,6 +111,13 @@ invite can never hand out the right to manage every other code.
    joins the room, the address bar ends up clean, and the guest appears in A's roster under a
    suggested name. Reopen A's own invite link from A itself: confirm A stays host rather than
    rejoining as an ordinary member.
+10. From whichever of A/B is signed in with the admin code, open **All rooms**; confirm the room
+    from step 3 is listed with its current member count, that typing part of its name narrows the
+    list to it, and that clearing the search restores the rest. **Close** it and confirm the
+    dialog; the other tab should drop to Solo keeping its own local copy of the battle and show
+    "This room was closed by an administrator." Confirm the closed room no longer appears in
+    **All rooms** (refresh the search if needed) and that `curl -H "Authorization: Bearer
+    $MEMBER_CODE" localhost:8001/rooms` gets `403`.
 
 ## Manual test: two computers, two networks
 
