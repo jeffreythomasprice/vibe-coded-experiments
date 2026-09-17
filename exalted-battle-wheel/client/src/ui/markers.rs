@@ -27,7 +27,7 @@ pub fn MarkerForm() -> impl IntoView {
         let at_tick = battle.read_untracked().current_tick + offset_ticks;
         battles.push_minting(BattleEvent::AddMarker {
             id: MarkerId(0),
-            label: entered_label,
+            label: shared::battle::label(entered_label),
             source: CombatantId(source_id),
             at_tick,
             ticks: duration,

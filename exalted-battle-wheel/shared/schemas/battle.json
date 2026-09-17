@@ -1,0 +1,735 @@
+{
+  "$defs": {
+    "BattleEvent": {
+      "oneOf": [
+        {
+          "enum": [
+            "StartBattle",
+            "AdvanceTick"
+          ],
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Chosen during Setup and frozen by `StartBattle`, exactly like the reaction count: the mode decides which catalog is legal and how long a tick is, so it cannot change once actions are already on the wheel (RULES.md §11, pp. 158, 169).",
+          "properties": {
+            "SetMode": {
+              "properties": {
+                "mode": {
+                  "$ref": "#/$defs/BattleMode"
+                }
+              },
+              "required": [
+                "mode"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "SetMode"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "AddCombatant": {
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/CombatantId"
+                },
+                "join_battle": {
+                  "$ref": "#/$defs/JoinBattleResult"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "side": {
+                  "$ref": "#/$defs/Side"
+                }
+              },
+              "required": [
+                "id",
+                "join_battle",
+                "name",
+                "side"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "AddCombatant"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "RemoveCombatant": {
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/CombatantId"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "RemoveCombatant"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "DeclareAction": {
+              "properties": {
+                "action": {
+                  "$ref": "#/$defs/DeclaredAction"
+                },
+                "actor": {
+                  "$ref": "#/$defs/CombatantId"
+                }
+              },
+              "required": [
+                "action",
+                "actor"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "DeclareAction"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "StartSequence": {
+              "properties": {
+                "actor": {
+                  "$ref": "#/$defs/CombatantId"
+                },
+                "sequence": {
+                  "$ref": "#/$defs/Sequence"
+                }
+              },
+              "required": [
+                "actor",
+                "sequence"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "StartSequence"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "AdvanceSequence": {
+              "properties": {
+                "actor": {
+                  "$ref": "#/$defs/CombatantId"
+                },
+                "speed_override": {
+                  "format": "uint32",
+                  "minimum": 0.0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "actor"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "AdvanceSequence"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "InterruptSequence": {
+              "properties": {
+                "actor": {
+                  "$ref": "#/$defs/CombatantId"
+                },
+                "reason": {
+                  "$ref": "#/$defs/InterruptReason"
+                },
+                "rejoin": {
+                  "$ref": "#/$defs/JoinBattleResult"
+                }
+              },
+              "required": [
+                "actor",
+                "reason",
+                "rejoin"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "InterruptSequence"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "AddMarker": {
+              "properties": {
+                "at_tick": {
+                  "format": "uint32",
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                "id": {
+                  "$ref": "#/$defs/MarkerId"
+                },
+                "label": {
+                  "$ref": "#/$defs/Label"
+                },
+                "source": {
+                  "$ref": "#/$defs/CombatantId"
+                },
+                "ticks": {
+                  "format": "uint32",
+                  "minimum": 0.0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "at_tick",
+                "id",
+                "label",
+                "source",
+                "ticks"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "AddMarker"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "RemoveMarker": {
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/MarkerId"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "RemoveMarker"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The escape hatch: a full-override correction to a combatant's queue state, appended as a normal event so Undo/Redo covers it for free (see `BattleLog`). Every field is set, not patched, so one user edit is exactly one event.",
+          "properties": {
+            "ReviseCombatant": {
+              "properties": {
+                "actor": {
+                  "$ref": "#/$defs/CombatantId"
+                },
+                "commitment": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Commitment"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "dv": {
+                  "$ref": "#/$defs/DvState"
+                },
+                "next_action_tick": {
+                  "format": "uint32",
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                "note": {
+                  "$ref": "#/$defs/Note"
+                },
+                "state": {
+                  "$ref": "#/$defs/CombatantState"
+                }
+              },
+              "required": [
+                "actor",
+                "dv",
+                "next_action_tick",
+                "note",
+                "state"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "ReviseCombatant"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "ReviseMarker": {
+              "properties": {
+                "at_tick": {
+                  "format": "uint32",
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                "id": {
+                  "$ref": "#/$defs/MarkerId"
+                },
+                "label": {
+                  "$ref": "#/$defs/Label"
+                },
+                "ticks": {
+                  "format": "uint32",
+                  "minimum": 0.0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "at_tick",
+                "id",
+                "label",
+                "ticks"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "ReviseMarker"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "InterruptReason": {
+      "oneOf": [
+        {
+          "enum": [
+            "FailedOccultCheck",
+            "WentInactive",
+            "Voluntary"
+          ],
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "Other": {
+              "$ref": "#/$defs/Note"
+            }
+          },
+          "required": [
+            "Other"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "BattleMode": {
+      "enum": [
+        "personal",
+        "mass",
+        "social"
+      ],
+      "type": "string"
+    },
+    "CombatantId": {
+      "format": "uint32",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "MarkerId": {
+      "format": "uint32",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "Side": {
+      "type": "string"
+    },
+    "JoinBattleResult": {
+      "oneOf": [
+        {
+          "enum": [
+            "Botch"
+          ],
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "Successes": {
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "Successes"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "CombatantState": {
+      "oneOf": [
+        {
+          "enum": [
+            "Normal",
+            "Guarding",
+            "Inactive"
+          ],
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "Aiming": {
+              "properties": {
+                "target": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/CombatantId"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            }
+          },
+          "required": [
+            "Aiming"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "InSequence": {
+              "$ref": "#/$defs/Sequence"
+            }
+          },
+          "required": [
+            "InSequence"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "DvState": {
+      "properties": {
+        "penalty": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "refreshes_at": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "penalty"
+      ],
+      "type": "object"
+    },
+    "Commitment": {
+      "description": "What the combatant is currently committed to: the action whose Speed is holding her off the wheel until `next_action_tick`. Declaring an action resolves it immediately (state.rs), so without this the battle keeps only the tick and DV it left behind and cannot say what she's doing. Sequences don't use this — `CombatantState::InSequence` already carries the step.",
+      "properties": {
+        "declared_at": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "label": {
+          "$ref": "#/$defs/Label"
+        },
+        "speed": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "declared_at",
+        "label",
+        "speed"
+      ],
+      "type": "object"
+    },
+    "Sequence": {
+      "properties": {
+        "current": {
+          "$ref": "#/$defs/Index"
+        },
+        "effects": {
+          "description": "Dropped onto the wheel once the sequence's final step (the Cast) resolves.",
+          "items": {
+            "$ref": "#/$defs/DeclaredEffect"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/SequenceStep"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "current",
+        "effects",
+        "name",
+        "steps"
+      ],
+      "type": "object"
+    },
+    "SequenceStep": {
+      "properties": {
+        "dv_penalty": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "label": {
+          "type": "string"
+        },
+        "speed": {
+          "$ref": "#/$defs/SpeedSpec"
+        }
+      },
+      "required": [
+        "dv_penalty",
+        "label",
+        "speed"
+      ],
+      "type": "object"
+    },
+    "DeclaredAction": {
+      "properties": {
+        "dv_penalty": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "effects": {
+          "items": {
+            "$ref": "#/$defs/DeclaredEffect"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/ActionKind"
+        },
+        "label": {
+          "$ref": "#/$defs/Label"
+        },
+        "note": {
+          "$ref": "#/$defs/Note"
+        },
+        "reflexive": {
+          "type": "boolean"
+        },
+        "speed": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CombatantId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "dv_penalty",
+        "effects",
+        "kind",
+        "label",
+        "note",
+        "reflexive",
+        "speed"
+      ],
+      "type": "object"
+    },
+    "DeclaredEffect": {
+      "description": "A labelled span the action drops on the wheel when it resolves (RULES.md §4.7, p. 144; §9.4, p. 153 — see `Marker`). Actions resolve on the tick they're declared, so `delay` counts from that tick, not from the actor's own next action. `id` is allocated by the caller (`BattleLog::alloc_marker_id`) so replaying the same event is deterministic.",
+      "properties": {
+        "delay": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "id": {
+          "$ref": "#/$defs/MarkerId"
+        },
+        "label": {
+          "$ref": "#/$defs/Label"
+        },
+        "ticks": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "delay",
+        "id",
+        "label",
+        "ticks"
+      ],
+      "type": "object"
+    },
+    "ActionKind": {
+      "enum": [
+        "Aim",
+        "Attack",
+        "Dash",
+        "Guard",
+        "Inactive",
+        "Miscellaneous",
+        "Move",
+        "Flurry",
+        "ActivateCharm",
+        "Clinch",
+        "JoinBattleInProgress",
+        "Custom",
+        "CoordinateAttacks",
+        "ReadyWeapons",
+        "RiseFromProne",
+        "Jump",
+        "ChangeFormation",
+        "Disengage",
+        "Turn",
+        "SplitUnit",
+        "ExpelSpecialCharacter",
+        "MergeUnits",
+        "SignalUnits",
+        "Rally",
+        "ReadMotivation"
+      ],
+      "type": "string"
+    },
+    "SpeedSpec": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "Fixed": {
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "Fixed"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "Variable": {
+              "properties": {
+                "default": {
+                  "format": "uint32",
+                  "minimum": 0.0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "default"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "Variable"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "DvPenaltySpec": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "Fixed": {
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "Fixed"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "Variable": {
+              "properties": {
+                "default": {
+                  "format": "int32",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "default"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "Variable"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  }
+}

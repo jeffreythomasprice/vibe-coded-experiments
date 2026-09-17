@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "AccessCode": {
+      "properties": {
+        "access_key": {
+          "$ref": "#/$defs/AccessKey"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "is_admin": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "access_key",
+        "created_at",
+        "is_admin"
+      ],
+      "type": "object"
+    },
+    "AccessCodeList": {
+      "properties": {
+        "codes": {
+          "items": {
+            "$ref": "#/$defs/AccessCode"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "codes"
+      ],
+      "type": "object"
+    },
+    "CreateAccessCode": {
+      "properties": {
+        "access_key": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AccessKey"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "is_admin": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "is_admin"
+      ],
+      "type": "object"
+    },
+    "UpdateAccessCode": {
+      "properties": {
+        "is_admin": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "is_admin"
+      ],
+      "type": "object"
+    },
+    "ApiErrorBody": {
+      "properties": {
+        "error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "type": "object"
+    }
+  }
+}

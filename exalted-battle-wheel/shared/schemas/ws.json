@@ -1,0 +1,896 @@
+{
+  "$defs": {
+    "ConnectionId": {
+      "description": "Identifies one live websocket connection, minted by the server when the socket is accepted. This is never generated client-side — the server is the only node that hands these out, the same way it is the only node that mints combatant and marker ids into a room's log.",
+      "type": "string"
+    },
+    "RequestId": {
+      "description": "Correlates a reply with the request that caused it — minted by the client, meaningful only to the connection that sent it. A message the server sends unprompted (a `Members` update caused by someone else's action, a `Left { reason: Kicked }`) carries no `reply_to` at all.",
+      "format": "uint64",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "Member": {
+      "description": "One entry in a room's roster, as seen by anyone in it — including the host and yourself.",
+      "properties": {
+        "can_write": {
+          "type": "boolean"
+        },
+        "id": {
+          "$ref": "#/$defs/ConnectionId"
+        },
+        "is_host": {
+          "description": "The connection that created this room, or one that rejoined presenting that room session's host token (see `ClientMessage::Join`'s `session` field) — never demoted, never kicked, see `ClientMessage`'s doc comment on `SetWritable`/`Kick`. Cleared when that connection leaves, same as any other membership, and reclaimed by whichever connection next presents a valid host token for this room; nothing stops two connections holding it at once if the original is still around when a reconnect claims it too.",
+          "type": "boolean"
+        },
+        "name": {
+          "$ref": "#/$defs/MemberName"
+        }
+      },
+      "required": [
+        "can_write",
+        "id",
+        "is_host",
+        "name"
+      ],
+      "type": "object"
+    },
+    "ClientEnvelope": {
+      "description": "What a client sends. Every message carries the caller's access token — there is no separate handshake, and no assumption that a token checked out once stays valid; the server re-checks it on every single message.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "message": {
+          "$ref": "#/$defs/ClientMessage"
+        },
+        "token": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "message",
+        "token"
+      ],
+      "type": "object"
+    },
+    "ClientMessage": {
+      "oneOf": [
+        {
+          "description": "Creates a room, seeded with the caller's own current battle, and joins it as host under `name`. `everyone_writes` sets what a *future* joiner starts as — not retroactive, and irrelevant to the host, who can always write. Fails with `ProtocolError::RoomExists` if the name is already taken by a room that hasn't expired.",
+          "properties": {
+            "data": {
+              "properties": {
+                "everyone_writes": {
+                  "type": "boolean"
+                },
+                "log": {
+                  "$ref": "#/$defs/BattleLog"
+                },
+                "name": {
+                  "$ref": "#/$defs/MemberName"
+                },
+                "room": {
+                  "$ref": "#/$defs/RoomName"
+                }
+              },
+              "required": [
+                "everyone_writes",
+                "log",
+                "name",
+                "room"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "enum": [
+                "Create"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Joins an existing room by name, under `name`. `can_write` is granted from the room's current `everyone_writes` flag alone, unless `session` proves this connection was the room's host — see `ServerMessage::Joined`'s own `session` field, which is where one comes from in the first place. A `session` that fails to verify is `ProtocolError::InvalidSession` rather than silently downgrading to an ordinary join, so the caller can decide whether to retry without it (a stale token) or give up (the room it names is gone).",
+          "properties": {
+            "data": {
+              "properties": {
+                "name": {
+                  "$ref": "#/$defs/MemberName"
+                },
+                "room": {
+                  "$ref": "#/$defs/RoomName"
+                },
+                "session": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "name",
+                "room"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "enum": [
+                "Join"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Leaves whatever room this connection is in. A no-op reply, not an error, if it isn't in one.",
+          "properties": {
+            "type": {
+              "enum": [
+                "Leave"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Sets this connection's own display name. The one action a readonly member may take beyond watching and leaving.",
+          "properties": {
+            "data": {
+              "properties": {
+                "name": {
+                  "$ref": "#/$defs/MemberName"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "enum": [
+                "Rename"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Grants or revokes another member's write access. Readwrite-only, and never against the caller themselves or the room's host — both are `ProtocolError::NotAllowed`.",
+          "properties": {
+            "data": {
+              "properties": {
+                "can_write": {
+                  "type": "boolean"
+                },
+                "member": {
+                  "$ref": "#/$defs/ConnectionId"
+                }
+              },
+              "required": [
+                "can_write",
+                "member"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "enum": [
+                "SetWritable"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Changes what a *future* joiner starts as. Readwrite-only.",
+          "properties": {
+            "data": {
+              "properties": {
+                "everyone_writes": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "everyone_writes"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "enum": [
+                "SetEveryoneWrites"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Disconnects another member. Readwrite-only, and never against the caller themselves or the room's host.",
+          "properties": {
+            "data": {
+              "properties": {
+                "member": {
+                  "$ref": "#/$defs/ConnectionId"
+                }
+              },
+              "required": [
+                "member"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "enum": [
+                "Kick"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A move against the shared battle. Readwrite-only; a readonly member's attempt is `ProtocolError::ReadOnly`.",
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/BattleRequest"
+            },
+            "type": {
+              "enum": [
+                "Request"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Asks the server to resend the room's current membership and battle state, in case a broadcast was ever missed. Available to readonly members too — it changes nothing, it only asks.",
+          "properties": {
+            "type": {
+              "enum": [
+                "Resync"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ServerEnvelope": {
+      "properties": {
+        "message": {
+          "$ref": "#/$defs/ServerMessage"
+        },
+        "reply_to": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequestId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`Some` only when this is a direct reply to one particular `ClientEnvelope`; a broadcast caused by someone else's action carries `None`."
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
+    "ServerMessage": {
+      "oneOf": [
+        {
+          "description": "Reply to a successful `Create`, `Join`, or `Resync`: everything the client needs to render the room from scratch, including its own id, write permission, and a fresh `session` token to present on a future `Join` — this connection's proof of its own membership (and host status, if it has it) in this room, for a reconnect or a rejoin after the browser restarts.",
+          "properties": {
+            "data": {
+              "properties": {
+                "can_write": {
+                  "type": "boolean"
+                },
+                "everyone_writes": {
+                  "type": "boolean"
+                },
+                "log": {
+                  "$ref": "#/$defs/BattleLog"
+                },
+                "members": {
+                  "items": {
+                    "$ref": "#/$defs/Member"
+                  },
+                  "type": "array"
+                },
+                "room": {
+                  "$ref": "#/$defs/RoomName"
+                },
+                "session": {
+                  "type": "string"
+                },
+                "version": {
+                  "format": "uint64",
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                "you": {
+                  "$ref": "#/$defs/ConnectionId"
+                }
+              },
+              "required": [
+                "can_write",
+                "everyone_writes",
+                "log",
+                "members",
+                "room",
+                "session",
+                "version",
+                "you"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "enum": [
+                "Joined"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Sent to every member of a room whenever who's in it, their names, or their write permission changes. Includes the actor's own connection, so every client's view of the roster comes from the same broadcast rather than an optimistic local update.",
+          "properties": {
+            "data": {
+              "properties": {
+                "everyone_writes": {
+                  "type": "boolean"
+                },
+                "members": {
+                  "items": {
+                    "$ref": "#/$defs/Member"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "everyone_writes",
+                "members"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "enum": [
+                "Members"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Sent to every member of a room after a `Request` changes its battle. The whole log, not a diff — see the module doc.",
+          "properties": {
+            "data": {
+              "properties": {
+                "log": {
+                  "$ref": "#/$defs/BattleLog"
+                },
+                "room": {
+                  "$ref": "#/$defs/RoomName"
+                },
+                "version": {
+                  "format": "uint64",
+                  "minimum": 0.0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "log",
+                "room",
+                "version"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "enum": [
+                "State"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "This connection is no longer in the room it was in.",
+          "properties": {
+            "data": {
+              "properties": {
+                "reason": {
+                  "$ref": "#/$defs/LeaveReason"
+                }
+              },
+              "required": [
+                "reason"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "enum": [
+                "Left"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "data": {
+              "properties": {
+                "error": {
+                  "$ref": "#/$defs/ProtocolError"
+                }
+              },
+              "required": [
+                "error"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "enum": [
+                "Error"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "LeaveReason": {
+      "oneOf": [
+        {
+          "description": "This connection sent `Leave` itself.",
+          "enum": [
+            "Requested"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A readwrite member kicked this connection.",
+          "enum": [
+            "Kicked"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "ProtocolError": {
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "Unauthorized"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "RoomExists"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "NoSuchRoom"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "NotInRoom"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "AlreadyInRoom"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "ReadOnly"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "NotAllowed"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "data": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "BadRoomName"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "data": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "IllegalMove"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/SessionRejection"
+            },
+            "type": {
+              "enum": [
+                "InvalidSession"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "TooLarge"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "Internal"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "BattleRequest": {
+      "description": "What a caller asks for. `PushMinting` carries an event with placeholder ids (`CombatantId(0)`, `MarkerId(0)`, ...) for whatever it mints — only whoever is authoritative for the room turns those into real ones, by stamping them from its own log via `BattleLog::restamp`. Plain `Push` is for events that mint nothing, or that intentionally carry ids minted earlier by another event (`ReviseCombatant`'s `InSequence` case clones an existing sequence's effect ids).",
+      "oneOf": [
+        {
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/BattleEvent"
+            },
+            "type": {
+              "enum": [
+                "Push"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/BattleEvent"
+            },
+            "type": {
+              "enum": [
+                "PushMinting"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "Undo"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "Redo"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/Index"
+            },
+            "type": {
+              "enum": [
+                "Seek"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "Reset"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "BattleCommand": {
+      "description": "The concrete instruction every node applies identically — never a placeholder id in sight.",
+      "oneOf": [
+        {
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/BattleEvent"
+            },
+            "type": {
+              "enum": [
+                "Push"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "Undo"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "Redo"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/Index"
+            },
+            "type": {
+              "enum": [
+                "Seek"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "Reset"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  }
+}

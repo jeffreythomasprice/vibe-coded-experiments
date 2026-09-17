@@ -1,8 +1,9 @@
 in-flight:
 
+
 todo:
 
-I'd like to use json schemas as our source of truth for all DTOs. This is every request and response object for a REST API call and for every websocket message. We should put schemas somewhere in the shared area. We should introduce a build step that generates rust types in the shared lib before building. We can then use the resulting types in both server and client.
+/init
 
 
 I'd like to enable delete protection on the access tokens table.
@@ -13,6 +14,17 @@ The frontend should respect some query string parameters
 - join_room, automatically tries to join the room with that name on startup
 
 Normal toaster errors can apply if, e.g. that auth_code is invalid (as checked by the /me endpoint) or if we can't successfully join that room
+
+If we are the host of a room we should be able to generate a link that includes both concepts.
+
+The auth_code selected for the link should be chosen such that:
+- if we are using a non-admin code, use our code
+- if we are using an admin code, find the most recent non-admin code using the admin code CRUD API and use that
+- if no non-admin codes exist, error, do not create a URL with no auth code or with an admin auth code
+
+The join_room should be chosen to be the room we're currently in.
+
+When we're processing the auth_code, we should accept the new auth code if and only if we don't currently have a valid auth code ourselves. We should check our saved auth code for validity first, so that if our remembered code was revoked we replace it with the incoming code.
 
 
 frontend should have a UI that exposes all rooms

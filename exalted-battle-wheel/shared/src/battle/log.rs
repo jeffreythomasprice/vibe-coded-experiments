@@ -259,7 +259,7 @@ impl Default for BattleLog {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::battle::action::{template, ActionKind, ActionTemplate, Declaration, DeclaredEffect};
+    use crate::battle::action::{label, note, template, ActionKind, ActionTemplate, Declaration, DeclaredEffect};
     use crate::battle::combatant::{CombatantState, DvState, JoinBattleResult, Side};
     use crate::battle::event::InterruptReason;
     use crate::battle::mode::BattleMode;
@@ -398,8 +398,8 @@ mod tests {
         log.push(BattleEvent::StartBattle).unwrap();
         let action = personal(ActionKind::Attack).declare(Declaration {
             effects: vec![
-                DeclaredEffect { id: MarkerId(0), label: "A".to_string(), delay: 0, ticks: 1 },
-                DeclaredEffect { id: MarkerId(0), label: "B".to_string(), delay: 0, ticks: 1 },
+                DeclaredEffect { id: MarkerId(0), label: label("A"), delay: 0, ticks: 1 },
+                DeclaredEffect { id: MarkerId(0), label: label("B"), delay: 0, ticks: 1 },
             ],
             ..Default::default()
         });
@@ -420,14 +420,14 @@ mod tests {
         let cid = add_event(&mut log, 5);
         log.push(BattleEvent::StartBattle).unwrap();
         let mut sequence = Sequence::shape_terrestrial();
-        sequence.effects = vec![DeclaredEffect { id: MarkerId(7), label: "Cast".to_string(), delay: 0, ticks: 1 }];
+        sequence.effects = vec![DeclaredEffect { id: MarkerId(7), label: label("Cast"), delay: 0, ticks: 1 }];
         let event = BattleEvent::ReviseCombatant {
             actor: cid,
             next_action_tick: 0,
             state: CombatantState::InSequence(sequence),
             dv: DvState::default(),
             commitment: None,
-            note: String::new(),
+            note: note(""),
         };
         let BattleEvent::ReviseCombatant { state: CombatantState::InSequence(stamped), .. } = log.restamp(event) else {
             unreachable!()
@@ -458,7 +458,7 @@ mod tests {
             state: CombatantState::Normal,
             dv: DvState { penalty: -1, refreshes_at: Some(2) },
             commitment: None,
-            note: "retconned to resolve sooner".to_string(),
+            note: note("retconned to resolve sooner"),
         })
         .unwrap();
         assert_eq!(log.battle().find(id).unwrap().next_action_tick, 2);
@@ -483,7 +483,7 @@ mod tests {
             state: CombatantState::Normal,
             dv: DvState::default(),
             commitment: None,
-            note: String::new(),
+            note: note(""),
         })
         .unwrap();
 
@@ -595,7 +595,7 @@ mod tests {
             .unwrap()
             .declare(Declaration {
                 speed: Some(5),
-                effects: vec![DeclaredEffect { id: effect_id, label: "Bleed".to_string(), delay: 1, ticks: 2 }],
+                effects: vec![DeclaredEffect { id: effect_id, label: label("Bleed"), delay: 1, ticks: 2 }],
                 ..Default::default()
             });
         log.push(BattleEvent::DeclareAction { actor: a, action: attack }).unwrap();
@@ -605,7 +605,7 @@ mod tests {
             state: CombatantState::Guarding,
             dv: DvState { penalty: -1, refreshes_at: Some(100) },
             commitment: None,
-            note: "parked while b resolves its sorcery".to_string(),
+            note: note("parked while b resolves its sorcery"),
         })
         .unwrap();
 
@@ -625,8 +625,8 @@ mod tests {
         .unwrap();
 
         let marker_id = log.alloc_marker_id();
-        log.push(BattleEvent::AddMarker { id: marker_id, label: "Window".to_string(), source: a, at_tick: 0, ticks: 3 }).unwrap();
-        log.push(BattleEvent::ReviseMarker { id: marker_id, label: "Wider window".to_string(), at_tick: 1, ticks: 4 }).unwrap();
+        log.push(BattleEvent::AddMarker { id: marker_id, label: label("Window"), source: a, at_tick: 0, ticks: 3 }).unwrap();
+        log.push(BattleEvent::ReviseMarker { id: marker_id, label: label("Wider window"), at_tick: 1, ticks: 4 }).unwrap();
         log.push(BattleEvent::RemoveMarker { id: marker_id }).unwrap();
 
         log.undo().unwrap();
@@ -690,7 +690,7 @@ mod tests {
                 join_battle: JoinBattleResult::Successes(0),
             },
             BattleEvent::StartBattle,
-            BattleEvent::AddMarker { id: MarkerId(3), label: "Window".to_string(), source: CombatantId(0), at_tick: 0, ticks: 1 },
+            BattleEvent::AddMarker { id: MarkerId(3), label: label("Window"), source: CombatantId(0), at_tick: 0, ticks: 1 },
         ];
         let restored = RestoredLog { events, cursor: 3, next_combatant_id: 1, next_marker_id: 3 };
         let error = BattleLog::try_from(restored).unwrap_err();

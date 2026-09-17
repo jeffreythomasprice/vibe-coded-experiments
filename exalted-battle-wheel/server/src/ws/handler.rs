@@ -33,7 +33,12 @@ fn just_reply(connection_id: &ConnectionId, message: ServerMessage) -> Handled {
 fn members_of(room: &Room) -> Vec<Member> {
     room.members
         .iter()
-        .map(|member| Member { id: member.connection_id.clone(), name: member.name.clone(), can_write: member.can_write, is_host: member.is_host })
+        .map(|member| Member {
+            id: member.connection_id.clone(),
+            name: member.name.clone().try_into().expect("valid by construction: sanitize_name enforces the bound"),
+            can_write: member.can_write,
+            is_host: member.is_host,
+        })
         .collect()
 }
 
@@ -47,7 +52,7 @@ fn joined_message(room: &Room, you: &ConnectionId, sessions: &Sessions) -> Resul
         ProtocolError::Internal
     })?;
     Ok(ServerMessage::Joined {
-        room: room.display_name.clone(),
+        room: room.display_name.clone().try_into().expect("valid by construction: see ws/handler.rs's room_key validation"),
         you: you.clone(),
         can_write: member.can_write,
         everyone_writes: room.everyone_writes,
@@ -64,7 +69,11 @@ fn members_broadcast(room: &Room) -> Vec<(ConnectionId, ServerMessage)> {
 }
 
 fn state_broadcast(room: &Room) -> Vec<(ConnectionId, ServerMessage)> {
-    let message = ServerMessage::State { room: room.display_name.clone(), version: room.version, log: room.log.clone() };
+    let message = ServerMessage::State {
+        room: room.display_name.clone().try_into().expect("valid by construction: see ws/handler.rs's room_key validation"),
+        version: room.version,
+        log: room.log.clone(),
+    };
     room.members.iter().map(|member| (member.connection_id.clone(), message.clone())).collect()
 }
 
@@ -119,12 +128,14 @@ where
 
     match message {
         ClientMessage::Create { room, name, everyone_writes, log } => {
-            let create = CreateRoom { room_name: room, name, everyone_writes, log };
+            let create = CreateRoom { room_name: room.to_string(), name: name.to_string(), everyone_writes, log };
             handle_create(rooms, sessions, connection_id, current_room, create).await
         }
-        ClientMessage::Join { room, name, session } => handle_join(rooms, sessions, connection_id, current_room, room, name, session).await,
+        ClientMessage::Join { room, name, session } => {
+            handle_join(rooms, sessions, connection_id, current_room, room.to_string(), name.to_string(), session).await
+        }
         ClientMessage::Leave => handle_leave(rooms, connection_id, current_room).await,
-        ClientMessage::Rename { name } => handle_rename(rooms, connection_id, current_room, name).await,
+        ClientMessage::Rename { name } => handle_rename(rooms, connection_id, current_room, name.to_string()).await,
         ClientMessage::SetWritable { member, can_write } => handle_set_writable(rooms, connection_id, current_room, member, can_write).await,
         ClientMessage::SetEveryoneWrites { everyone_writes } => handle_set_everyone_writes(rooms, connection_id, current_room, everyone_writes).await,
         ClientMessage::Kick { member } => handle_kick(rooms, connection_id, current_room, member).await,
@@ -153,7 +164,7 @@ async fn handle_create<R: RoomStore>(
         return Err(ProtocolError::AlreadyInRoom);
     }
     let key = validate_room_key(&create.room_name).map_err(|error| ProtocolError::BadRoomName(error.to_string()))?;
-    let host_name = sanitize_name(&create.name);
+    let host_name = sanitize_name(&create.name).to_string();
 
     let new_room = crate::rooms::NewRoom {
         room_key: key.clone(),
@@ -192,7 +203,7 @@ async fn handle_join<R: RoomStore>(
         Some(token) => sessions.verify(&token, &room.id).map_err(ProtocolError::InvalidSession)?.host,
     };
     let can_write = is_host || room.everyone_writes;
-    room.members.push(RoomMember { connection_id: connection_id.clone(), name: sanitize_name(&name), can_write, is_host });
+    room.members.push(RoomMember { connection_id: connection_id.clone(), name: sanitize_name(&name).to_string(), can_write, is_host });
     let room = rooms.save(room).await.map_err(store_error)?;
 
     let mut sends = members_broadcast(&room);
@@ -228,7 +239,7 @@ async fn handle_leave<R: RoomStore>(rooms: &R, connection_id: &ConnectionId, cur
 
 async fn handle_rename<R: RoomStore>(rooms: &R, connection_id: &ConnectionId, current_room: Option<&str>, name: String) -> Result<Handled, ProtocolError> {
     let mut room = load_current_room(rooms, current_room).await?;
-    let name = sanitize_name(&name);
+    let name = sanitize_name(&name).to_string();
     let Some(member) = room.members.iter_mut().find(|member| &member.connection_id == connection_id) else {
         return Err(ProtocolError::NotInRoom);
     };
@@ -365,7 +376,7 @@ mod tests {
             host,
             None,
             "token",
-            ClientMessage::Create { room: room.to_string(), name: "Host".to_string(), everyone_writes, log: BattleLog::new() },
+            ClientMessage::Create { room: room.try_into().unwrap(), name: "Host".try_into().unwrap(), everyone_writes, log: BattleLog::new() },
         )
         .await
         .unwrap()
@@ -390,7 +401,7 @@ mod tests {
             member,
             None,
             "token",
-            ClientMessage::Join { room: room.to_string(), name: "Member".to_string(), session },
+            ClientMessage::Join { room: room.try_into().unwrap(), name: "Member".try_into().unwrap(), session },
         )
         .await
     }
@@ -439,7 +450,7 @@ mod tests {
             &conn("other"),
             None,
             "token",
-            ClientMessage::Create { room: "test room".to_string(), name: "Other".to_string(), everyone_writes: true, log: BattleLog::new() },
+            ClientMessage::Create { room: "test room".try_into().unwrap(), name: "Other".try_into().unwrap(), everyone_writes: true, log: BattleLog::new() },
         )
         .await;
         assert_eq!(result.err(), Some(ProtocolError::RoomExists));
@@ -460,7 +471,7 @@ mod tests {
             &host,
             Some("room"),
             "token",
-            ClientMessage::Create { room: "other".to_string(), name: "Host".to_string(), everyone_writes: true, log: BattleLog::new() },
+            ClientMessage::Create { room: "other".try_into().unwrap(), name: "Host".try_into().unwrap(), everyone_writes: true, log: BattleLog::new() },
         )
         .await;
         assert_eq!(result.err(), Some(ProtocolError::AlreadyInRoom));
@@ -488,7 +499,7 @@ mod tests {
         assert_eq!(move_result.err(), Some(ProtocolError::ReadOnly));
 
         let rename_result =
-            handle(&access, &rooms, &sessions, &joiner, Some("room"), "token", ClientMessage::Rename { name: "New Name".to_string() }).await;
+            handle(&access, &rooms, &sessions, &joiner, Some("room"), "token", ClientMessage::Rename { name: "New Name".try_into().unwrap() }).await;
         assert!(rename_result.is_ok());
     }
 

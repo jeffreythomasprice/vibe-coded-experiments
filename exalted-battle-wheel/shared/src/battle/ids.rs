@@ -1,9 +1,3 @@
-use serde::{Deserialize, Serialize};
-
 pub type Tick = u32;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct CombatantId(pub u32);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct MarkerId(pub u32);
+pub use crate::generated::{CombatantId, MarkerId};

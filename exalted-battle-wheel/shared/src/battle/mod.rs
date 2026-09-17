@@ -10,8 +10,9 @@ pub mod sequence;
 pub mod state;
 
 pub use action::{
-    catalog, catalog_index, template, ActionError, ActionKind, ActionTemplate, Declaration, DeclaredAction,
-    DeclaredEffect, DvPenaltySpec, SpeedSpec, MASS_ONLY_CATALOG, PERSONAL_CATALOG, SOCIAL_CATALOG,
+    catalog, catalog_index, label, note, template, ActionError, ActionKind, ActionTemplate, Declaration,
+    DeclaredAction, DeclaredEffect, DvPenaltySpec, Label, Note, SpeedSpec, MASS_ONLY_CATALOG, MAX_LABEL_LEN,
+    MAX_NOTE_LEN, PERSONAL_CATALOG, SOCIAL_CATALOG,
 };
 pub use combatant::{Combatant, CombatantState, Commitment, DvState, JoinBattleResult, Side};
 pub use error::{BattleError, RestoreError};

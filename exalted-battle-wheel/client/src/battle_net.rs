@@ -14,8 +14,9 @@ use leptos::web_sys;
 use serde::{Deserialize, Serialize};
 use shared::battle::{BattleError, BattleEvent, BattleLog};
 use shared::protocol::{
-    apply_command, BattleCommand, BattleRequest, ClientEnvelope, ClientMessage, ConnectionId, LeaveReason, Member,
-    ProtocolError, RequestId, ServerEnvelope, ServerMessage, SessionRejection,
+    apply_command, sanitize_name, BattleCommand, BattleRequest, ClientEnvelope, ClientMessage, ConnectionId,
+    LeaveReason, Member, ProtocolError, RequestId, RoomName, ServerEnvelope, ServerMessage, SessionRejection,
+    MAX_ROOM_NAME_LEN,
 };
 use std::collections::HashMap;
 use std::future::Future;
@@ -110,6 +111,22 @@ struct Rejoin {
     room: String,
     name: String,
     session: Option<String>,
+}
+
+/// Trims and truncates to fit `RoomName`'s bound, mirroring `sanitize_name`'s "never reject
+/// outright" policy -- but unlike a player name, an empty room name genuinely can't become a
+/// `RoomName` (it has a `minLength`), so a blank or all-whitespace input falls back to a single
+/// space rather than panicking; the server's own `room_key` then rejects that the same way it
+/// rejects any other blank room name, via the ordinary `BadRoomName` error path this module
+/// already handles. The room-name field also has a `maxlength` in the UI, so this only matters
+/// for input that somehow bypasses it.
+fn truncated_room_name(text: &str) -> RoomName {
+    let trimmed = text.trim();
+    let truncated = match trimmed.char_indices().nth(MAX_ROOM_NAME_LEN) {
+        Some((end, _)) => &trimmed[..end],
+        None => trimmed,
+    };
+    RoomName::try_from(truncated).unwrap_or_else(|_| RoomName::try_from(" ").expect("a single space always fits"))
 }
 
 const BASE_RECONNECT_DELAY_MS: i32 = 2_000;
@@ -313,7 +330,12 @@ impl Battles {
         self.rejoin.set(Some(Rejoin { room: room.clone(), name: name.clone(), session: None }));
         self.mode.set(Mode::Connecting);
         let this = *self;
-        let message = ClientMessage::Create { room, name, everyone_writes, log: self.log.get_untracked() };
+        let message = ClientMessage::Create {
+            room: truncated_room_name(&room),
+            name: sanitize_name(&name),
+            everyone_writes,
+            log: self.log.get_untracked(),
+        };
         self.send_with(socket, message, move |result| {
             if let Err(error) = result {
                 tracing::error!(%error, "could not create room");
@@ -330,7 +352,7 @@ impl Battles {
         self.rejoin.set(Some(Rejoin { room: room.clone(), name: name.clone(), session: None }));
         self.mode.set(Mode::Connecting);
         let this = *self;
-        let message = ClientMessage::Join { room, name, session: None };
+        let message = ClientMessage::Join { room: truncated_room_name(&room), name: sanitize_name(&name), session: None };
         self.send_with(socket, message, move |result| {
             if let Err(error) = result {
                 tracing::error!(%error, "could not join room");
@@ -357,7 +379,7 @@ impl Battles {
     }
 
     pub fn rename(&self, name: String) {
-        self.send_action(ClientMessage::Rename { name }, "rename");
+        self.send_action(ClientMessage::Rename { name: sanitize_name(&name) }, "rename");
     }
 
     pub fn set_writable(&self, member: ConnectionId, can_write: bool) {
@@ -501,15 +523,16 @@ impl Battles {
                 // Rebuilt from the server's own reply, not just the `session` field -- the name a
                 // rejoin should present is this connection's own name as the server has it (found
                 // by matching `you`), which a `Rename` since the last `Joined` may have changed.
-                let name = members.iter().find(|member| member.id == you).map(|member| member.name.clone()).unwrap_or_default();
-                self.rejoin.set(Some(Rejoin { room: room.clone(), name, session: Some(session) }));
+                let name =
+                    members.iter().find(|member| member.id == you).map(|member| member.name.to_string()).unwrap_or_default();
+                self.rejoin.set(Some(Rejoin { room: room.to_string(), name, session: Some(session) }));
 
                 self.log.set(log);
                 self.self_id.set(Some(you));
                 self.can_write.set(can_write);
                 self.everyone_writes.set(everyone_writes);
                 self.members.set(members);
-                self.room.set(Some(room));
+                self.room.set(Some(room.to_string()));
                 self.mode.set(Mode::InRoom);
                 self.room_active.set(true);
                 self.reconnect_attempt.set(0);
@@ -614,7 +637,11 @@ impl Battles {
     fn send_join(self, socket: Socket, rejoin: Rejoin) {
         let this = self;
         let sent_on = socket.clone();
-        let message = ClientMessage::Join { room: rejoin.room.clone(), name: rejoin.name.clone(), session: rejoin.session.clone() };
+        let message = ClientMessage::Join {
+            room: truncated_room_name(&rejoin.room),
+            name: sanitize_name(&rejoin.name),
+            session: rejoin.session.clone(),
+        };
         self.send_with(sent_on, message, move |result| {
             let Err(error) = result else { return };
             match error {

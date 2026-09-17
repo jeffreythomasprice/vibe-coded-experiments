@@ -54,4 +54,6 @@ pub enum ItemError {
     Number { name: &'static str, value: String, source: std::num::ParseIntError },
     #[error("item attribute {name:?} is not valid json: {source}")]
     Json { name: &'static str, source: serde_json::Error },
+    #[error("item attribute {name:?} does not satisfy its wire constraints ({value:?}): {reason}")]
+    Invalid { name: &'static str, value: String, reason: String },
 }

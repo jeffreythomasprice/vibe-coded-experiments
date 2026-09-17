@@ -5,6 +5,19 @@ server owns the shared battle log, and it checks every move for legality and for
 before applying it and telling everyone the result. There's nothing for two browsers to disagree
 about — a browser's own state is never more than whatever the server's last message said it is.
 
+The wire protocol itself — every message type below, and every REST request/response — is defined
+by JSON Schema in `shared/schemas/`, generated into Rust by `shared/build.rs`, and validated
+against that same schema on every decode, both directions (see `shared/src/validate.rs`). A message
+that doesn't match its schema — an unknown `type`, a name over the length bound, the wrong shape
+entirely — is rejected before it's ever deserialized, not just whatever `serde` happens to do with
+it. `ClientMessage`/`ServerMessage`/`BattleRequest`/`BattleCommand`/`ProtocolError` are adjacently
+tagged (`{"type":"Join","data":{...}}`); this is a breaking wire change for a client mid-connection
+across a deploy, though rooms' 30-minute idle TTL and the fact that deploys are manual keep the
+practical blast radius to "reconnects." `BattleEvent` and everything it carries keep serde's older
+externally-tagged encoding instead, deliberately: `BattleLog` (which embeds a `Vec<BattleEvent>`) is
+persisted in the browser's own `localStorage` for Solo mode, and retagging it would have silently
+broken every already-saved battle.
+
 Any access code can create a room, join a room, and play — access-code admin status (who may
 manage access codes) is unrelated to what you can do inside a room. Inside a room, write access is
 per connection:

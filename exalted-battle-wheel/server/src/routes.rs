@@ -4,6 +4,7 @@ use crate::connections::ConnectionStore;
 use crate::error::ApiError;
 use crate::rooms::RoomStore;
 use crate::sessions::Sessions;
+use crate::wire_json::WireJson;
 use crate::ws::{self, Hub};
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -82,9 +83,9 @@ async fn list_access_codes<A: AccessCodeStore, R: RoomStore, C: ConnectionStore>
 
 async fn create_access_code<A: AccessCodeStore, R: RoomStore, C: ConnectionStore>(
     State(state): State<AppState<A, R, C>>,
-    Json(body): Json<CreateAccessCode>,
+    WireJson(body): WireJson<CreateAccessCode>,
 ) -> Result<(StatusCode, Json<AccessCode>), ApiError> {
-    let access_key = body.access_key.as_deref().map(str::trim).filter(|key| !key.is_empty());
+    let access_key = body.access_key.as_ref().map(|key| key.trim()).filter(|key| !key.is_empty());
     let code = state.access_codes.create(access_key, body.is_admin).await?;
     Ok((StatusCode::CREATED, Json(code)))
 }
@@ -101,11 +102,11 @@ async fn update_access_code<A: AccessCodeStore, R: RoomStore, C: ConnectionStore
     Caller(caller): Caller,
     State(state): State<AppState<A, R, C>>,
     Path(access_key): Path<String>,
-    Json(body): Json<UpdateAccessCode>,
+    WireJson(body): WireJson<UpdateAccessCode>,
 ) -> Result<Json<AccessCode>, ApiError> {
     // An admin can't demote or delete themselves through this API -- without this, the only way
     // back from locking out the last admin is the AWS console or CLI.
-    if caller.access_key == access_key {
+    if *caller.access_key == access_key {
         return Err(ApiError::SelfModification);
     }
     let code = state.access_codes.update(&access_key, body.is_admin).await?;
@@ -117,7 +118,7 @@ async fn delete_access_code<A: AccessCodeStore, R: RoomStore, C: ConnectionStore
     State(state): State<AppState<A, R, C>>,
     Path(access_key): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    if caller.access_key == access_key {
+    if *caller.access_key == access_key {
         return Err(ApiError::SelfModification);
     }
     state.access_codes.delete(&access_key).await?;
@@ -190,7 +191,7 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let code: AccessCode = serde_json::from_slice(&body).unwrap();
-        assert_eq!(code.access_key, "member");
+        assert_eq!(code.access_key.to_string(), "member");
         assert!(!code.is_admin);
     }
 
@@ -235,7 +236,7 @@ mod tests {
         let created: AccessCode = serde_json::from_slice(&body).unwrap();
         assert!(!created.is_admin);
 
-        let path = format!("/access-codes/{}", created.access_key);
+        let path = format!("/access-codes/{}", created.access_key.to_string());
 
         assert_eq!(request(&app, "GET", &path, Some("root")).await, StatusCode::OK);
 
@@ -268,7 +269,58 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CREATED);
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let created: AccessCode = serde_json::from_slice(&body).unwrap();
-        assert_eq!(created.access_key, "player-one");
+        assert_eq!(created.access_key.to_string(), "player-one");
+    }
+
+    #[tokio::test]
+    async fn creating_a_code_missing_a_required_field_is_a_bad_request() {
+        let (app, store) = app();
+        store.seed("root", true);
+
+        // No `is_admin` at all -- valid JSON, wrong shape for `CreateAccessCode`, which the
+        // schema (not just serde's own field-presence check) catches before this ever reaches
+        // the handler.
+        let create = Request::builder()
+            .method("POST")
+            .uri("/access-codes")
+            .header("authorization", "Bearer root")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"access_key":"player-one"}"#))
+            .unwrap();
+        let response = app.clone().oneshot(create).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn creating_a_code_with_an_empty_access_key_is_a_bad_request() {
+        let (app, store) = app();
+        store.seed("root", true);
+
+        let create = Request::builder()
+            .method("POST")
+            .uri("/access-codes")
+            .header("authorization", "Bearer root")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"access_key":"","is_admin":false}"#))
+            .unwrap();
+        let response = app.clone().oneshot(create).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn creating_a_code_with_malformed_json_is_a_bad_request() {
+        let (app, store) = app();
+        store.seed("root", true);
+
+        let create = Request::builder()
+            .method("POST")
+            .uri("/access-codes")
+            .header("authorization", "Bearer root")
+            .header("content-type", "application/json")
+            .body(Body::from("{not json"))
+            .unwrap();
+        let response = app.clone().oneshot(create).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

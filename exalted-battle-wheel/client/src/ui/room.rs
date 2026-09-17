@@ -9,7 +9,7 @@ use crate::prefs::Prefs;
 use crate::ui::glossary::Topic;
 use crate::ui::{ConfigOpen, DetailTip, Modal, Spinner, Tip};
 use leptos::prelude::*;
-use shared::protocol::ConnectionId;
+use shared::protocol::{ConnectionId, MAX_NAME_LEN, MAX_ROOM_NAME_LEN};
 
 /// Which sub-view `Mode::Solo` is showing. Unlike the room's actual state (owned by `Battles`),
 /// this is purely local UI navigation with nothing to keep in sync.
@@ -216,6 +216,7 @@ fn RoomNameField(room: RwSignal<String>) -> impl IntoView {
             "Room name"
             <input
                 placeholder="Room name"
+                maxlength=MAX_ROOM_NAME_LEN.to_string()
                 prop:value=move || room.get()
                 on:input=move |ev| room.set(event_target_value(&ev))
             />
@@ -304,6 +305,7 @@ fn NameField() -> impl IntoView {
             <Tip topic=Topic::RoomRename><span>"Your name"</span></Tip>
             <input
                 placeholder="Name"
+                maxlength=MAX_NAME_LEN.to_string()
                 prop:value=move || prefs.player_name.get()
                 on:input=move |ev| prefs.player_name.set(event_target_value(&ev))
                 on:change=on_change
@@ -338,7 +340,7 @@ fn MemberRow(id: ConnectionId) -> impl IntoView {
         let id = id.clone();
         Signal::derive(move || battles.members().get().into_iter().find(|member| member.id == id))
     };
-    let name = Signal::derive(move || member.get().map(|member| member.name).unwrap_or_default());
+    let name = Signal::derive(move || member.get().map(|member| member.name.to_string()).unwrap_or_default());
     let can_write = Signal::derive(move || member.get().is_some_and(|member| member.can_write));
     let is_host = Signal::derive(move || member.get().is_some_and(|member| member.is_host));
     let is_self = {

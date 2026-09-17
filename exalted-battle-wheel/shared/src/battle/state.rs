@@ -132,7 +132,7 @@ impl Battle {
 /// (the tick the action resolves on) plus each effect's own delay.
 fn spawn_effects(battle: &mut Battle, source: CombatantId, current_tick: Tick, effects: &[DeclaredEffect]) -> Result<(), BattleError> {
     for effect in effects {
-        battle.add_marker(effect.id, effect.label.clone(), source, current_tick + effect.delay, effect.ticks)?;
+        battle.add_marker(effect.id, effect.label.to_string(), source, current_tick + effect.delay, effect.ticks)?;
     }
     Ok(())
 }
@@ -295,7 +295,7 @@ pub fn apply(battle: &mut Battle, event: &BattleEvent) -> Result<(), BattleError
         }
 
         BattleEvent::AddMarker { id, label, source, at_tick, ticks } => {
-            battle.add_marker(*id, label.clone(), *source, *at_tick, *ticks)
+            battle.add_marker(*id, label.to_string(), *source, *at_tick, *ticks)
         }
 
         BattleEvent::RemoveMarker { id } => {
@@ -328,7 +328,7 @@ pub fn apply(battle: &mut Battle, event: &BattleEvent) -> Result<(), BattleError
                 return Err(BattleError::MarkerDurationZero(*id));
             }
             let marker = battle.markers.iter_mut().find(|m| m.id == *id).ok_or(BattleError::UnknownMarker(*id))?;
-            marker.label = label.clone();
+            marker.label = label.to_string();
             marker.at_tick = *at_tick;
             marker.ticks = *ticks;
             Ok(())
@@ -390,7 +390,7 @@ fn apply_declare_action(battle: &mut Battle, actor: CombatantId, action: &Declar
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::battle::action::{template, ActionTemplate, Declaration};
+    use crate::battle::action::{label, note, template, ActionTemplate, Declaration};
     use crate::battle::event::InterruptReason;
     use crate::battle::ids::CombatantId;
     use crate::battle::sequence::Sequence;
@@ -702,7 +702,7 @@ mod tests {
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
         let err = apply(
             &mut battle,
-            &BattleEvent::AddMarker { id: MarkerId(0), label: "Bad".to_string(), source: cid, at_tick: 0, ticks: 0 },
+            &BattleEvent::AddMarker { id: MarkerId(0), label: label("Bad"), source: cid, at_tick: 0, ticks: 0 },
         )
         .unwrap_err();
         assert_eq!(err, BattleError::MarkerDurationZero(MarkerId(0)));
@@ -715,12 +715,12 @@ mod tests {
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
         apply(
             &mut battle,
-            &BattleEvent::AddMarker { id: MarkerId(0), label: "First".to_string(), source: cid, at_tick: 0, ticks: 1 },
+            &BattleEvent::AddMarker { id: MarkerId(0), label: label("First"), source: cid, at_tick: 0, ticks: 1 },
         )
         .unwrap();
         let err = apply(
             &mut battle,
-            &BattleEvent::AddMarker { id: MarkerId(0), label: "Second".to_string(), source: cid, at_tick: 1, ticks: 1 },
+            &BattleEvent::AddMarker { id: MarkerId(0), label: label("Second"), source: cid, at_tick: 1, ticks: 1 },
         )
         .unwrap_err();
         assert_eq!(err, BattleError::DuplicateMarker(MarkerId(0)));
@@ -732,7 +732,7 @@ mod tests {
         let cid = add(&mut battle, 1, 5);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
 
-        let effect = DeclaredEffect { id: MarkerId(0), label: "Butterflies".to_string(), delay: 1, ticks: 3 };
+        let effect = DeclaredEffect { id: MarkerId(0), label: label("Butterflies"), delay: 1, ticks: 3 };
         let action = crate::battle::action::DeclaredAction { effects: vec![effect], ..personal(ActionKind::Attack).declare(Declaration::default()) };
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action }).unwrap();
 
@@ -748,7 +748,7 @@ mod tests {
         let cid = add(&mut battle, 1, 5);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
 
-        let effect = DeclaredEffect { id: MarkerId(0), label: "Mark".to_string(), delay: 0, ticks: 1 };
+        let effect = DeclaredEffect { id: MarkerId(0), label: label("Mark"), delay: 0, ticks: 1 };
         let action = crate::battle::action::DeclaredAction { effects: vec![effect], ..personal(ActionKind::Move).declare(Declaration::default()) };
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action }).unwrap();
 
@@ -761,7 +761,7 @@ mod tests {
         let cid = add(&mut battle, 1, 5);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
 
-        let effect = DeclaredEffect { id: MarkerId(0), label: "Butterflies".to_string(), delay: 0, ticks: 3 };
+        let effect = DeclaredEffect { id: MarkerId(0), label: label("Butterflies"), delay: 0, ticks: 3 };
         let mut sequence = Sequence::shape_terrestrial();
         sequence.effects = vec![effect];
         apply(&mut battle, &BattleEvent::StartSequence { actor: cid, sequence }).unwrap();
@@ -801,7 +801,7 @@ mod tests {
                 state: CombatantState::Normal,
                 dv: DvState { penalty: -1, refreshes_at: Some(2) },
                 commitment: None,
-                note: "retconned to resolve sooner".to_string(),
+                note: note("retconned to resolve sooner"),
             },
         )
         .unwrap();
@@ -827,7 +827,7 @@ mod tests {
                 state: CombatantState::Normal,
                 dv: DvState::default(),
                 commitment: None,
-                note: String::new(),
+                note: note(""),
             },
         )
         .unwrap();
@@ -852,7 +852,7 @@ mod tests {
                 state: CombatantState::InSequence(sequence),
                 dv: DvState::default(),
                 commitment: None,
-                note: String::new(),
+                note: note(""),
             },
         )
         .unwrap_err();
@@ -870,7 +870,7 @@ mod tests {
                 state: CombatantState::Normal,
                 dv: DvState::default(),
                 commitment: None,
-                note: String::new(),
+                note: note(""),
             },
         )
         .unwrap_err();
@@ -882,9 +882,9 @@ mod tests {
         let mut battle = Battle::genesis();
         let cid = add(&mut battle, 1, 5);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
-        apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: "Window".to_string(), source: cid, at_tick: 8, ticks: 3 }).unwrap();
+        apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: label("Window"), source: cid, at_tick: 8, ticks: 3 }).unwrap();
 
-        apply(&mut battle, &BattleEvent::ReviseMarker { id: MarkerId(0), label: "Wider window".to_string(), at_tick: 9, ticks: 4 }).unwrap();
+        apply(&mut battle, &BattleEvent::ReviseMarker { id: MarkerId(0), label: label("Wider window"), at_tick: 9, ticks: 4 }).unwrap();
 
         let marker = battle.markers.iter().find(|m| m.id == MarkerId(0)).unwrap();
         assert_eq!(marker.label, "Wider window");
@@ -897,16 +897,16 @@ mod tests {
         let mut battle = Battle::genesis();
         let cid = add(&mut battle, 1, 5);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
-        apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: "Window".to_string(), source: cid, at_tick: 8, ticks: 3 }).unwrap();
+        apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: label("Window"), source: cid, at_tick: 8, ticks: 3 }).unwrap();
 
-        let err = apply(&mut battle, &BattleEvent::ReviseMarker { id: MarkerId(0), label: "Window".to_string(), at_tick: 8, ticks: 0 }).unwrap_err();
+        let err = apply(&mut battle, &BattleEvent::ReviseMarker { id: MarkerId(0), label: label("Window"), at_tick: 8, ticks: 0 }).unwrap_err();
         assert_eq!(err, BattleError::MarkerDurationZero(MarkerId(0)));
     }
 
     #[test]
     fn revise_marker_rejects_an_unknown_id() {
         let mut battle = Battle::genesis();
-        let err = apply(&mut battle, &BattleEvent::ReviseMarker { id: MarkerId(999), label: "?".to_string(), at_tick: 0, ticks: 1 }).unwrap_err();
+        let err = apply(&mut battle, &BattleEvent::ReviseMarker { id: MarkerId(999), label: label("?"), at_tick: 0, ticks: 1 }).unwrap_err();
         assert_eq!(err, BattleError::UnknownMarker(MarkerId(999)));
     }
 
@@ -917,7 +917,7 @@ mod tests {
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
         apply(
             &mut battle,
-            &BattleEvent::AddMarker { id: MarkerId(0), label: "Butterflies".to_string(), source: cid, at_tick: 0, ticks: 2 },
+            &BattleEvent::AddMarker { id: MarkerId(0), label: label("Butterflies"), source: cid, at_tick: 0, ticks: 2 },
         )
         .unwrap();
         assert_eq!(battle.active_markers().count(), 1);

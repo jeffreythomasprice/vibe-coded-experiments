@@ -49,7 +49,7 @@ pub fn queue(battle: &Battle) -> Vec<QueueRow> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::battle::action::{template, ActionKind, ActionTemplate, Declaration};
+    use crate::battle::action::{label, template, ActionKind, ActionTemplate, Declaration};
     use crate::battle::combatant::{JoinBattleResult, Side};
     use crate::battle::event::BattleEvent;
     use crate::battle::mode::BattleMode;
@@ -101,7 +101,7 @@ mod tests {
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
         let dash = personal(ActionKind::Dash).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: dash }).unwrap();
-        apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: "Ambush".to_string(), source: cid, at_tick: 3, ticks: 1 }).unwrap();
+        apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: label("Ambush"), source: cid, at_tick: 3, ticks: 1 }).unwrap();
 
         let rows = queue(&battle);
         let at_tick_3: Vec<QueueItem> = rows.iter().filter(|r| r.at_tick == 3).map(|r| r.item).collect();
@@ -113,7 +113,7 @@ mod tests {
         let mut battle = Battle::genesis();
         let cid = add(&mut battle, 1, 0);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
-        apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: "Later".to_string(), source: cid, at_tick: 10, ticks: 2 }).unwrap();
+        apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: label("Later"), source: cid, at_tick: 10, ticks: 2 }).unwrap();
 
         let rows = queue(&battle);
         assert!(rows.iter().any(|r| r.item == QueueItem::Marker(MarkerId(0))));
@@ -124,7 +124,7 @@ mod tests {
         let mut battle = Battle::genesis();
         let cid = add(&mut battle, 1, 5);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
-        apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: "Gone".to_string(), source: cid, at_tick: 0, ticks: 1 }).unwrap();
+        apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: label("Gone"), source: cid, at_tick: 0, ticks: 1 }).unwrap();
         let guard = personal(ActionKind::Guard).declare(Declaration::default());
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
         apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();

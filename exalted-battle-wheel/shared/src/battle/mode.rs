@@ -2,17 +2,16 @@
 //! three share the same Speed/DV/refresh machinery; mass combat (p. 158) and social combat
 //! (p. 169) only change the scale of a tick — a "long tick" of roughly one minute rather than
 //! roughly one second — and which actions are on the menu. Fixed before `Phase::Running`, exactly
-//! like the reaction count (see `BattleEvent::SetMode`).
+//! like the reaction count (see `BattleEvent::SetMode`). Defined in `shared/schemas/battle.json`.
 
-use serde::{Deserialize, Serialize};
+pub use crate::generated::BattleMode;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum BattleMode {
-    #[default]
-    Personal,
-    Mass,
-    Social,
+/// typify has no way to mark a generated enum variant `#[default]`, so this is hand-written; see
+/// `shared/schemas/README.md`.
+impl Default for BattleMode {
+    fn default() -> Self {
+        BattleMode::Personal
+    }
 }
 
 impl BattleMode {

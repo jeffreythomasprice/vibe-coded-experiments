@@ -44,7 +44,7 @@ fn interrupt_reason(reason: &InterruptReason) -> String {
         InterruptReason::FailedOccultCheck => "failed Occult check".to_string(),
         InterruptReason::WentInactive => "went inactive".to_string(),
         InterruptReason::Voluntary => "voluntary".to_string(),
-        InterruptReason::Other(reason) => reason.clone(),
+        InterruptReason::Other(reason) => reason.to_string(),
     }
 }
 
@@ -67,7 +67,7 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
             // Falls back to the action's own stored label if its kind no longer resolves in this
             // battle's mode (only reachable by replaying a log across a hand-edited mode change).
             let kind_name = template(battle.mode, action.kind).map(|t| t.name).unwrap_or(action.label.as_str());
-            let mut detail = if action.label == kind_name {
+            let mut detail = if action.label.as_str() == kind_name {
                 format!("Speed {}, DV {}", action.speed, action.dv_penalty)
             } else {
                 format!("{kind_name}, Speed {}, DV {}", action.speed, action.dv_penalty)
@@ -76,10 +76,10 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
                 detail.push_str(", reflexive");
             }
             if !action.note.is_empty() {
-                detail.push_str(&format!(" — {}", action.note));
+                detail.push_str(&format!(" — {}", action.note.to_string()));
             }
             EventLine {
-                text: format!("{} declares {}{target}", name(battle, *actor), action.label),
+                text: format!("{} declares {}{target}", name(battle, *actor), action.label.to_string()),
                 detail: Some(detail),
             }
         }
@@ -132,7 +132,7 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
         },
         BattleEvent::AddMarker { label, source, at_tick, ticks: span_ticks, .. } => {
             let span = marker_span(battle.mode, *at_tick, *span_ticks);
-            EventLine { text: format!("Marker \"{label}\" on {span} (from {})", name(battle, *source)), detail: None }
+            EventLine { text: format!("Marker \"{}\" on {span} (from {})", label.to_string(), name(battle, *source)), detail: None }
         }
         BattleEvent::RemoveMarker { id } => {
             let label = battle.markers.iter().find(|m| m.id == *id).map(|m| m.label.clone());
@@ -156,27 +156,27 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
                     parts.push(format!("{} \u{2192} {}", state_label(&before.state), state_label(state)));
                 }
                 match (&before.commitment, commitment) {
-                    (Some(prev), None) => parts.push(format!("cleared {}", prev.label)),
-                    (None, Some(next)) => parts.push(format!("set {}", next.label)),
+                    (Some(prev), None) => parts.push(format!("cleared {}", prev.label.to_string())),
+                    (None, Some(next)) => parts.push(format!("set {}", next.label.to_string())),
                     (Some(prev), Some(next)) if prev.label != next.label => {
-                        parts.push(format!("{} \u{2192} {}", prev.label, next.label));
+                        parts.push(format!("{} \u{2192} {}", prev.label.to_string(), next.label.to_string()));
                     }
                     _ => {}
                 }
             }
             if !note.is_empty() {
-                parts.push(note.clone());
+                parts.push(note.to_string());
             }
             let detail = if parts.is_empty() { "No changes".to_string() } else { parts.join("; ") };
             EventLine { text: format!("Revised {}", name(battle, *actor)), detail: Some(detail) }
         }
         BattleEvent::ReviseMarker { id, label, at_tick, ticks } => {
             let before = battle.markers.iter().find(|m| m.id == *id);
-            let title = before.map(|m| m.label.clone()).unwrap_or_else(|| label.clone());
+            let title = before.map(|m| m.label.clone()).unwrap_or_else(|| label.to_string());
             let mut parts = Vec::new();
             if let Some(before) = before {
-                if before.label != *label {
-                    parts.push(format!("\"{}\" \u{2192} \"{label}\"", before.label));
+                if before.label != label.to_string() {
+                    parts.push(format!("\"{}\" \u{2192} \"{}\"", before.label, label.to_string()));
                 }
                 let before_span = marker_span(battle.mode, before.at_tick, before.ticks);
                 let after_span = marker_span(battle.mode, *at_tick, *ticks);

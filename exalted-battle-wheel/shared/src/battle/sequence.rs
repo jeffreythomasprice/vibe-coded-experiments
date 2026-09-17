@@ -1,21 +1,6 @@
-use crate::battle::action::{DeclaredEffect, SpeedSpec};
-use serde::{Deserialize, Serialize};
+use crate::battle::action::SpeedSpec;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SequenceStep {
-    pub label: String,
-    pub speed: SpeedSpec,
-    pub dv_penalty: i32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Sequence {
-    pub name: String,
-    pub steps: Vec<SequenceStep>,
-    pub current: usize,
-    /// Dropped onto the wheel once the sequence's final step (the Cast) resolves.
-    pub effects: Vec<DeclaredEffect>,
-}
+pub use crate::generated::{Sequence, SequenceStep};
 
 impl Sequence {
     pub fn new(name: impl Into<String>, steps: Vec<SequenceStep>) -> Self {

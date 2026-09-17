@@ -1,30 +1,16 @@
-use crate::battle::{BattleError, BattleEvent, BattleLog};
-use serde::{Deserialize, Serialize};
+use crate::battle::{BattleError, BattleLog};
 
 /// What a caller asks for. `PushMinting` carries an event with placeholder ids (`CombatantId(0)`,
 /// `MarkerId(0)`, ...) for whatever it mints — only whoever is authoritative for the room turns
 /// those into real ones, by stamping them from its own log via `BattleLog::restamp`. Plain `Push`
 /// is for events that mint nothing, or that intentionally carry ids minted earlier by another
 /// event (`ReviseCombatant`'s `InSequence` case clones an existing sequence's effect ids).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum BattleRequest {
-    Push(BattleEvent),
-    PushMinting(BattleEvent),
-    Undo,
-    Redo,
-    Seek(usize),
-    Reset,
-}
+///
+/// Defined in `shared/schemas/ws.json`; see `shared/schemas/README.md`.
+pub use crate::generated::BattleRequest;
 
 /// The concrete instruction every node applies identically — never a placeholder id in sight.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum BattleCommand {
-    Push(BattleEvent),
-    Undo,
-    Redo,
-    Seek(usize),
-    Reset,
-}
+pub use crate::generated::BattleCommand;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BattleSyncError {

@@ -3,6 +3,8 @@
 //! exercise real 401/403/200 behavior without Docker or DynamoDB.
 
 use super::{generate_key, AccessCode, AccessCodeStore, StoreError};
+use shared::access::AccessKey;
+use shared::timestamp::Timestamp;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use time::OffsetDateTime;
@@ -26,12 +28,15 @@ impl AccessCodeStore for MemoryAccessCodeStore {
             Some(access_key) => access_key.to_string(),
             None => generate_key(),
         };
-        let code = AccessCode { access_key, is_admin, created_at: OffsetDateTime::now_utc() };
+        let access_key: AccessKey = access_key
+            .try_into()
+            .expect("non-empty by construction: routes.rs filters blanks, generate_key() always returns a UUID");
+        let code = AccessCode { access_key, is_admin, created_at: Timestamp(OffsetDateTime::now_utc()) };
         let mut codes = self.codes.lock().unwrap();
-        if codes.contains_key(&code.access_key) {
+        if codes.contains_key(&code.access_key.to_string()) {
             return Err(StoreError::AlreadyExists);
         }
-        codes.insert(code.access_key.clone(), code.clone());
+        codes.insert(code.access_key.to_string(), code.clone());
         Ok(code)
     }
 
@@ -51,8 +56,12 @@ impl AccessCodeStore for MemoryAccessCodeStore {
 impl MemoryAccessCodeStore {
     /// Seeds a code directly, bypassing generation, so tests can log in as a known key.
     pub fn seed(&self, access_key: &str, is_admin: bool) -> AccessCode {
-        let code = AccessCode { access_key: access_key.to_string(), is_admin, created_at: OffsetDateTime::now_utc() };
-        self.codes.lock().unwrap().insert(code.access_key.clone(), code.clone());
+        let code = AccessCode {
+            access_key: access_key.try_into().expect("test-provided access keys are non-empty"),
+            is_admin,
+            created_at: Timestamp(OffsetDateTime::now_utc()),
+        };
+        self.codes.lock().unwrap().insert(code.access_key.to_string(), code.clone());
         code
     }
 }

@@ -18,6 +18,12 @@ pub enum ApiError {
     SelfModification,
     #[error("access code already exists")]
     Conflict,
+    // A request body that doesn't validate against its own type's schema (see
+    // `shared::validate`) -- malformed JSON, an unknown field, or a value outside a wire type's
+    // own bounds (an over-long name, say). Distinct from `axum::Json`'s own rejection, which this
+    // crate never surfaces: every REST body goes through `WireJson` instead (see `wire_json.rs`).
+    #[error("invalid request body: {0}")]
+    BadRequest(#[from] shared::validate::WireError),
     // Deliberately opaque: a `StoreError` can carry a DynamoDB error with the table name, endpoint,
     // and request id in it. `to_string()` is what a caller sees; the real cause only reaches the log.
     #[error("internal error")]
@@ -36,6 +42,7 @@ impl ApiError {
             ApiError::Unauthorized => StatusCode::UNAUTHORIZED,
             ApiError::Forbidden | ApiError::SelfModification => StatusCode::FORBIDDEN,
             ApiError::Conflict => StatusCode::CONFLICT,
+            ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
             ApiError::Internal(_) | ApiError::RoomStore(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

@@ -1,0 +1,39 @@
+{
+  "$defs": {
+    "RoomSummary": {
+      "properties": {
+        "display_name": {
+          "$ref": "#/$defs/RoomName"
+        },
+        "member_count": {
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "display_name",
+        "member_count",
+        "updated_at"
+      ],
+      "type": "object"
+    },
+    "RoomList": {
+      "properties": {
+        "rooms": {
+          "items": {
+            "$ref": "#/$defs/RoomSummary"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "rooms"
+      ],
+      "type": "object"
+    }
+  }
+}

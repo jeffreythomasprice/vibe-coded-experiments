@@ -1,7 +1,8 @@
 # Exalted Battle Wheel
 
 A Cargo workspace: `client` (the browser app), `server` (the API), `shared` (game logic and
-wire types used by both).
+wire types used by both). Every wire type is generated from JSON Schema at build time; see
+`shared/schemas/README.md`.
 
 ## Run locally
 

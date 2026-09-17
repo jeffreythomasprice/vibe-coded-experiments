@@ -5,8 +5,9 @@ use aws_sdk_dynamodb::operation::put_item::PutItemError;
 use aws_sdk_dynamodb::types::AttributeValue;
 use aws_sdk_dynamodb::Client;
 use shared::battle::BattleLog;
-use shared::protocol::ConnectionId;
+use shared::protocol::{ConnectionId, RoomName};
 use shared::rooms::RoomSummary;
+use shared::timestamp::Timestamp;
 use std::collections::HashMap;
 use std::sync::Arc;
 use time::format_description::well_known::Rfc3339;
@@ -209,11 +210,20 @@ impl RoomStore for DynamoRoomStore {
                 continue;
             }
             let member_count = match item.get(MEMBERS) {
-                Some(AttributeValue::L(entries)) => entries.len(),
+                Some(AttributeValue::L(entries)) => u32::try_from(entries.len()).unwrap_or(u32::MAX),
                 Some(_) => return Err(ItemError::WrongType { name: MEMBERS, expected: "L" }.into()),
                 None => return Err(ItemError::Missing(MEMBERS).into()),
             };
-            rooms.push(RoomSummary { display_name: string_attr(&item, DISPLAY_NAME)?, member_count, updated_at: timestamp_attr(&item, UPDATED_AT)? });
+            let display_name = string_attr(&item, DISPLAY_NAME)?;
+            rooms.push(RoomSummary {
+                display_name: RoomName::try_from(display_name.clone()).map_err(|error| ItemError::Invalid {
+                    name: DISPLAY_NAME,
+                    value: display_name,
+                    reason: error.to_string(),
+                })?,
+                member_count,
+                updated_at: Timestamp(timestamp_attr(&item, UPDATED_AT)?),
+            });
         }
         Ok(rooms)
     }

@@ -35,7 +35,7 @@ fn combatant_row_text(mode: BattleMode, combatant: &Combatant, now: Tick) -> Str
     }
     match &combatant.commitment {
         Some(commitment) => {
-            format!("{} \u{2014} {} resolving, ready {next} (in {until})", combatant.name, commitment.label)
+            format!("{} \u{2014} {} resolving, ready {next} (in {until})", combatant.name, commitment.label.to_string())
         }
         None => format!("{} \u{2014} ready to act on {next} (in {until})", combatant.name),
     }
@@ -190,7 +190,7 @@ fn CombatantEditor(
     on_close: impl Fn() + Copy + 'static,
 ) -> impl IntoView {
     let initial_commitment = initial.commitment.clone();
-    let commitment_label = initial_commitment.as_ref().map(|c| c.label.clone());
+    let commitment_label = initial_commitment.as_ref().map(|c| c.label.to_string());
     let original_sequence = match &initial.state {
         CombatantState::InSequence(sequence) => Some(sequence.clone()),
         _ => None,
@@ -222,7 +222,7 @@ fn CombatantEditor(
             state: CombatantState::Normal,
             dv,
             commitment: None,
-            note: note.get(),
+            note: shared::battle::note(note.get()),
         });
         on_close();
     };
@@ -254,7 +254,7 @@ fn CombatantEditor(
             state,
             dv,
             commitment,
-            note: note.get(),
+            note: shared::battle::note(note.get()),
         });
         on_close();
     };
@@ -382,7 +382,12 @@ fn MarkerEditor(marker_id: MarkerId, initial: Marker, battles: Battles, on_close
     let apply = move |_| {
         let Ok(parsed_tick) = at_tick.get().trim().parse::<Tick>() else { return };
         let Ok(parsed_ticks) = ticks.get().trim().parse::<u32>() else { return };
-        battles.push(BattleEvent::ReviseMarker { id: marker_id, label: label.get(), at_tick: parsed_tick, ticks: parsed_ticks });
+        battles.push(BattleEvent::ReviseMarker {
+            id: marker_id,
+            label: shared::battle::label(label.get()),
+            at_tick: parsed_tick,
+            ticks: parsed_ticks,
+        });
         on_close();
     };
 
@@ -449,7 +454,7 @@ mod tests {
 
     #[test]
     fn combatant_row_reports_a_resolving_commitment() {
-        let commitment = Commitment { label: "Attack".to_string(), speed: 5, declared_at: 7 };
+        let commitment = Commitment { label: "Attack".try_into().unwrap(), speed: 5, declared_at: 7 };
         let c = combatant(CombatantState::Normal, Some(commitment));
         assert_eq!(combatant_row_text(BattleMode::Personal, &c, 7), "Rin \u{2014} Attack resolving, ready tick 12 (in 5 ticks)");
     }

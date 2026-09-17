@@ -105,9 +105,12 @@ where
             Message::Binary(_) | Message::Ping(_) | Message::Pong(_) => continue,
         };
 
-        let Ok(envelope) = serde_json::from_str::<ClientEnvelope>(&text) else {
-            tracing::debug!(connection = connection_id.0, "ignoring an undecodable message");
-            continue;
+        let envelope = match shared::validate::decode::<ClientEnvelope>(&text) {
+            Ok(envelope) => envelope,
+            Err(error) => {
+                tracing::debug!(connection = connection_id.0, %error, "ignoring an undecodable message");
+                continue;
+            }
         };
         let ClientEnvelope { id: request_id, token, message } = envelope;
 

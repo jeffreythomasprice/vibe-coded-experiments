@@ -120,6 +120,8 @@ impl Access {
 
     pub fn create(&self, access_key: Option<String>, is_admin: bool) {
         let Some(token) = self.token.get_untracked() else { return };
+        let access_key =
+            access_key.map(|key| key.try_into().expect("non-empty by construction: ui/config.rs filters blanks"));
         let this = *self;
         self.run_toasting("create access code", async move {
             api::create(&token, &CreateAccessCode { access_key, is_admin }).await?;
@@ -199,13 +201,14 @@ async fn fetch_sorted(token: &str) -> Result<Vec<AccessCode>, ApiError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use shared::timestamp::Timestamp;
     use time::OffsetDateTime;
 
     fn code_at(access_key: &str, unix: i64) -> AccessCode {
         AccessCode {
-            access_key: access_key.to_string(),
+            access_key: access_key.try_into().unwrap(),
             is_admin: false,
-            created_at: OffsetDateTime::from_unix_timestamp(unix).unwrap(),
+            created_at: Timestamp(OffsetDateTime::from_unix_timestamp(unix).unwrap()),
         }
     }
 

@@ -6,6 +6,8 @@ use aws_sdk_dynamodb::operation::put_item::PutItemError;
 use aws_sdk_dynamodb::operation::update_item::UpdateItemError;
 use aws_sdk_dynamodb::types::{AttributeValue, ReturnValue};
 use aws_sdk_dynamodb::Client;
+use shared::access::AccessKey;
+use shared::timestamp::Timestamp;
 use std::collections::HashMap;
 use std::sync::Arc;
 use time::format_description::well_known::Rfc3339;
@@ -56,7 +58,10 @@ impl AccessCodeStore for DynamoAccessCodeStore {
             Some(access_key) => access_key.to_string(),
             None => generate_key(),
         };
-        let code = AccessCode { access_key, is_admin, created_at: OffsetDateTime::now_utc() };
+        let access_key: AccessKey = access_key
+            .try_into()
+            .expect("non-empty by construction: routes.rs filters blanks, generate_key() always returns a UUID");
+        let code = AccessCode { access_key, is_admin, created_at: Timestamp(OffsetDateTime::now_utc()) };
 
         let result = self
             .client
@@ -130,17 +135,19 @@ impl AccessCodeStore for DynamoAccessCodeStore {
 
 fn access_code_to_item(code: &AccessCode) -> HashMap<String, AttributeValue> {
     HashMap::from([
-        (ACCESS_KEY.to_string(), AttributeValue::S(code.access_key.clone())),
+        (ACCESS_KEY.to_string(), AttributeValue::S(code.access_key.to_string())),
         (IS_ADMIN.to_string(), AttributeValue::Bool(code.is_admin)),
-        (CREATED_AT.to_string(), AttributeValue::S(format_timestamp(code.created_at))),
+        (CREATED_AT.to_string(), AttributeValue::S(format_timestamp(*code.created_at))),
     ])
 }
 
 fn item_to_access_code(item: &HashMap<String, AttributeValue>) -> Result<AccessCode, ItemError> {
+    let access_key = string_attr(item, ACCESS_KEY)?;
     Ok(AccessCode {
-        access_key: string_attr(item, ACCESS_KEY)?,
+        access_key: AccessKey::try_from(access_key.clone())
+            .map_err(|error| ItemError::Invalid { name: ACCESS_KEY, value: access_key, reason: error.to_string() })?,
         is_admin: bool_attr(item, IS_ADMIN)?,
-        created_at: timestamp_attr(item, CREATED_AT)?,
+        created_at: Timestamp(timestamp_attr(item, CREATED_AT)?),
     })
 }
 
@@ -171,9 +178,9 @@ mod tests {
 
     fn sample() -> AccessCode {
         AccessCode {
-            access_key: "test-key".to_string(),
+            access_key: "test-key".try_into().unwrap(),
             is_admin: true,
-            created_at: OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap(),
+            created_at: Timestamp(OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap()),
         }
     }
 

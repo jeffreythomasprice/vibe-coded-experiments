@@ -37,11 +37,12 @@ async fn body_of(response: &Response) -> String {
     response.text().await.unwrap_or_default()
 }
 
-async fn parse_json<T: serde::de::DeserializeOwned>(response: Response) -> Result<T, ApiError> {
+async fn parse_json<T: serde::de::DeserializeOwned + shared::validate::WireType>(response: Response) -> Result<T, ApiError> {
     if !response.ok() {
         return Err(error::error_for(response.status(), &body_of(&response).await));
     }
-    response.json().await.map_err(|error| ApiError::Malformed(error.to_string()))
+    let text = body_of(&response).await;
+    shared::validate::decode(&text).map_err(|error| ApiError::Malformed(error.to_string()))
 }
 
 async fn expect_no_content(response: Response) -> Result<(), ApiError> {

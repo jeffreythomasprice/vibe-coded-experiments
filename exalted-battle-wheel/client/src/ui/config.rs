@@ -111,16 +111,16 @@ fn IdentityPanel(code: AccessCode) -> impl IntoView {
     view! {
         <dl class="access-meta">
             <dt>"Access code"</dt>
-            <dd class="access-key">{code.access_key.clone()}</dd>
+            <dd class="access-key">{code.access_key.to_string()}</dd>
             <dt>"Admin"</dt>
             <dd>{if code.is_admin { "Yes" } else { "No" }}</dd>
             <dt>"Created"</dt>
-            <dd>{format_created_at(code.created_at)}</dd>
+            <dd>{format_created_at(*code.created_at)}</dd>
         </dl>
         <button class="btn" on:click=move |_| access.clear() disabled=move || busy.get()>
             "Clear"
         </button>
-        {is_admin.then(|| view! { <AdminPanel my_key=code.access_key.clone() /> })}
+        {is_admin.then(|| view! { <AdminPanel my_key=code.access_key.to_string() /> })}
     }
 }
 
@@ -142,7 +142,7 @@ fn AdminPanel(my_key: String) -> impl IntoView {
                         </tr>
                     </thead>
                     <tbody>
-                        <For each=move || access.codes().get() key=|code| code.access_key.clone() let:code>
+                        <For each=move || access.codes().get() key=|code| code.access_key.to_string() let:code>
                             <CodeRow code=code my_key=my_key.clone() />
                         </For>
                     </tbody>
@@ -158,15 +158,15 @@ fn CodeRow(code: AccessCode, my_key: String) -> impl IntoView {
     let access = expect_context::<Access>();
     let confirming = expect_context::<ConfirmingDelete>().0;
     let busy = access.busy();
-    let is_self = code.access_key == my_key;
-    let access_key = code.access_key.clone();
+    let is_self = code.access_key.to_string() == my_key;
+    let access_key = code.access_key.to_string();
 
     let toggle_admin = move |ev| access.set_admin(access_key.clone(), event_target_checked(&ev));
 
     view! {
         <tr>
             <td class="access-key">
-                {code.access_key.clone()}
+                {code.access_key.to_string()}
                 {is_self.then(|| view! {
                     <Tip topic=Topic::ConfigSelf><span class="peer-badge">"You"</span></Tip>
                 })}
@@ -179,10 +179,10 @@ fn CodeRow(code: AccessCode, my_key: String) -> impl IntoView {
                     disabled=move || busy.get() || is_self
                 />
             </td>
-            <td class="access-created">{format_created_at(code.created_at)}</td>
+            <td class="access-created">{format_created_at(*code.created_at)}</td>
             <td>
                 {(!is_self).then({
-                    let access_key = code.access_key.clone();
+                    let access_key = code.access_key.to_string();
                     move || view! {
                         <button
                             class="btn access-delete"

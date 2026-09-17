@@ -2,8 +2,8 @@
 //! preference: JSON in localStorage, kept in sync across tabs by the `storage` event.
 
 use crate::battle::{
-    template, ActionError, ActionKind, BattleMode, Declaration, DeclaredAction, DeclaredEffect, MarkerId, Sequence,
-    SequenceStep,
+    label, template, ActionError, ActionKind, BattleMode, Declaration, DeclaredAction, DeclaredEffect, MarkerId,
+    Sequence, SequenceStep,
 };
 use serde::{Deserialize, Serialize};
 
@@ -70,7 +70,7 @@ impl SavedAction {
             .effects
             .iter()
             .zip(ids)
-            .map(|(effect, id)| DeclaredEffect { id: *id, label: effect.label.clone(), delay: effect.delay, ticks: effect.ticks })
+            .map(|(effect, id)| DeclaredEffect { id: *id, label: label(&effect.label), delay: effect.delay, ticks: effect.ticks })
             .collect();
 
         match &self.shape {
@@ -263,7 +263,7 @@ mod tests {
         let (name, note, shape, effects) = single("Sweeping Blow");
         let action = SavedAction { id: 0, name, note, shape, effects };
         let SavedDeclaration::Action(declared) = action.build(&[]).unwrap() else { panic!("expected a single action") };
-        assert_eq!(declared.label, "Sweeping Blow");
+        assert_eq!(declared.label.to_string(), "Sweeping Blow");
         assert_eq!(declared.speed, 4);
         assert_eq!(declared.dv_penalty, -1);
     }

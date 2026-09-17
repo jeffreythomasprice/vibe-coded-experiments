@@ -5,6 +5,7 @@
 
 use super::{NewRoom, Room, RoomId, RoomMember, RoomStore, RoomStoreError, MAX_ITEM_BYTES, ROOM_TTL};
 use shared::rooms::RoomSummary;
+use shared::timestamp::Timestamp;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use time::OffsetDateTime;
@@ -36,9 +37,9 @@ impl RoomStore for MemoryRoomStore {
             .values()
             .filter(|room| room.expires_at > now)
             .map(|room| RoomSummary {
-                display_name: room.display_name.clone(),
-                member_count: room.members.len(),
-                updated_at: room.updated_at,
+                display_name: room.display_name.clone().try_into().expect("valid by construction: see ws/handler.rs"),
+                member_count: u32::try_from(room.members.len()).unwrap_or(u32::MAX),
+                updated_at: Timestamp(room.updated_at),
             })
             .collect())
     }

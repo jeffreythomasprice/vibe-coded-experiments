@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "Timestamp": {
+      "description": "An RFC 3339 timestamp, serialized exactly as `time`'s `serde::rfc3339` module encodes it (e.g. \"2024-01-15T09:30:00Z\") -- generated code never owns this type; it always maps to shared::timestamp::Timestamp, a hand-written wrapper around time::OffsetDateTime.",
+      "format": "date-time",
+      "type": "string"
+    },
+    "Index": {
+      "description": "A position into a `Vec` -- an event-log cursor, a sequence step, a `Seek` target. JSON Schema's plain \"uint\" format is ambiguous between u32 and usize (both schemars and typify treat them identically), so this is its own named def and mapped onto Rust's actual `usize` by `shared/build.rs`, rather than inlined wherever it's used.",
+      "format": "uint",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "BattleLog": {
+      "description": "Event-sourced battle state. `Battle` is always derived by replaying `events[..cursor]` from genesis; undo/redo just moves the cursor, and pushing a new event truncates any redo tail. Battles are small (a handful of combatants, a few hundred events), so a full replay is cheap and there is no drift between the log and the derived state by construction.",
+      "properties": {
+        "cursor": {
+          "$ref": "#/$defs/Index"
+        },
+        "events": {
+          "items": {
+            "$ref": "#/$defs/BattleEvent"
+          },
+          "type": "array"
+        },
+        "next_combatant_id": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "next_marker_id": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cursor",
+        "events",
+        "next_combatant_id",
+        "next_marker_id"
+      ],
+      "type": "object"
+    },
+    "SessionRejection": {
+      "description": "Why a `Join`'s `session` token was refused — split out from `ProtocolError` so the client can decide per-reason whether the room is still worth retrying without the token.",
+      "enum": [
+        "Malformed",
+        "Expired",
+        "WrongRoom"
+      ],
+      "type": "string"
+    },
+    "MemberName": {
+      "description": "A player's own display label -- replicated to every member of a room on every change, so an unbounded one makes one member's typing everyone else's bandwidth. Mirrors `MAX_NAME_LEN` (see `shared/src/protocol/name.rs`) -- a test asserts the two stay equal.",
+      "type": "string",
+      "maxLength": 40
+    },
+    "RoomName": {
+      "description": "A room's display name, as typed by whoever created it. Mirrors `MAX_ROOM_NAME_LEN`/`room_key`'s own validation (see `shared/src/protocol/name.rs`) -- a test asserts the bound stays equal.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40
+    },
+    "AccessKey": {
+      "description": "An access code's key, whether server-generated or admin-chosen.",
+      "type": "string",
+      "minLength": 1
+    },
+    "Label": {
+      "description": "A short user-facing label on a marker, sequence step, or commitment.",
+      "type": "string",
+      "maxLength": 120
+    },
+    "Note": {
+      "description": "Free-form user text attached to a revision or a declared action.",
+      "type": "string",
+      "maxLength": 1000
+    }
+  }
+}

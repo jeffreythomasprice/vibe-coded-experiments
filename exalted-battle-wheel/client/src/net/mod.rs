@@ -69,7 +69,7 @@ impl Socket {
 
         let on_message = Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |event: web_sys::MessageEvent| {
             let Some(text) = event.data().as_string() else { return };
-            match serde_json::from_str::<ServerEnvelope>(&text) {
+            match shared::validate::decode::<ServerEnvelope>(&text) {
                 Ok(envelope) => on_message(envelope),
                 Err(error) => tracing::debug!(%error, "ignoring an undecodable server message"),
             }

@@ -7,6 +7,7 @@ mod error;
 mod rooms;
 mod routes;
 mod sessions;
+mod wire_json;
 mod ws;
 
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};

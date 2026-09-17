@@ -1,12 +1,7 @@
-use crate::battle::ids::{CombatantId, MarkerId};
+use crate::battle::ids::CombatantId;
 use crate::battle::mode::BattleMode;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SpeedSpec {
-    Fixed(u32),
-    Variable { default: u32 },
-}
+pub use crate::generated::{ActionKind, DeclaredAction, DeclaredEffect, DvPenaltySpec, Label, Note, SpeedSpec};
 
 impl SpeedSpec {
     pub fn resolve(self, override_value: Option<u32>) -> u32 {
@@ -17,12 +12,6 @@ impl SpeedSpec {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum DvPenaltySpec {
-    Fixed(i32),
-    Variable { default: i32 },
-}
-
 impl DvPenaltySpec {
     pub fn resolve(self, override_value: Option<i32>) -> i32 {
         match self {
@@ -30,39 +19,6 @@ impl DvPenaltySpec {
             DvPenaltySpec::Variable { default } => override_value.unwrap_or(default),
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum ActionKind {
-    // Shared shapes: present in more than one mode, with per-mode Speed/DV (see `catalog`).
-    Aim,
-    Attack,
-    Dash,
-    Guard,
-    Inactive,
-    Miscellaneous,
-    Move,
-    Flurry,
-    ActivateCharm,
-    Clinch,
-    JoinBattleInProgress,
-    Custom,
-    // Personal combat only: named miscellaneous actions (RULES.md §4.7, p. 144).
-    CoordinateAttacks,
-    ReadyWeapons,
-    RiseFromProne,
-    Jump,
-    // Mass combat only (RULES.md §11.1, pp. 164-165).
-    ChangeFormation,
-    Disengage,
-    Turn,
-    SplitUnit,
-    ExpelSpecialCharacter,
-    MergeUnits,
-    SignalUnits,
-    Rally,
-    // Social combat only (RULES.md §11.2, p. 171).
-    ReadMotivation,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -416,30 +372,6 @@ pub fn catalog_index(mode: BattleMode, kind: ActionKind) -> Option<usize> {
     catalog(mode).position(|template| template.kind == kind)
 }
 
-/// A labelled span the action drops on the wheel when it resolves (RULES.md §4.7, p. 144; §9.4,
-/// p. 153 — see `Marker`). Actions resolve on the tick they're declared, so `delay` counts from
-/// that tick, not from the actor's own next action. `id` is allocated by the caller
-/// (`BattleLog::alloc_marker_id`) so replaying the same event is deterministic.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DeclaredEffect {
-    pub id: MarkerId,
-    pub label: String,
-    pub delay: u32,
-    pub ticks: u32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DeclaredAction {
-    pub kind: ActionKind,
-    pub label: String,
-    pub speed: u32,
-    pub dv_penalty: i32,
-    pub reflexive: bool,
-    pub target: Option<CombatantId>,
-    pub note: String,
-    pub effects: Vec<DeclaredEffect>,
-}
-
 /// Everything a `Declare` click can vary about an `ActionTemplate`. `name` overrides the label a
 /// custom or renamed action logs under; blank falls back to the template's own name.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -452,20 +384,45 @@ pub struct Declaration {
     pub effects: Vec<DeclaredEffect>,
 }
 
+/// Mirrors `Label`'s `maxLength` in `shared/schemas/common.json` -- a test asserts the two stay
+/// equal. Free-form text is truncated to fit rather than rejected, the same policy
+/// `protocol::name::sanitize_name` uses for a player's display name.
+pub const MAX_LABEL_LEN: usize = 120;
+
+/// Mirrors `Note`'s `maxLength` in `shared/schemas/common.json` -- see `MAX_LABEL_LEN`.
+pub const MAX_NOTE_LEN: usize = 1000;
+
+fn truncate_chars(text: &str, max: usize) -> &str {
+    match text.char_indices().nth(max) {
+        Some((end, _)) => &text[..end],
+        None => text,
+    }
+}
+
+/// Truncates to `Label`'s bound rather than rejecting -- see `MAX_LABEL_LEN`.
+pub fn label(text: impl AsRef<str>) -> Label {
+    Label::try_from(truncate_chars(text.as_ref(), MAX_LABEL_LEN)).expect("truncated to fit Label's bound")
+}
+
+/// Truncates to `Note`'s bound rather than rejecting -- see `MAX_NOTE_LEN`.
+pub fn note(text: impl AsRef<str>) -> Note {
+    Note::try_from(truncate_chars(text.as_ref(), MAX_NOTE_LEN)).expect("truncated to fit Note's bound")
+}
+
 impl ActionTemplate {
     pub fn declare(&self, declaration: Declaration) -> DeclaredAction {
-        let label = match declaration.name {
+        let label_text = match declaration.name {
             Some(name) if !name.trim().is_empty() => name.trim().to_string(),
             _ => self.name.to_string(),
         };
         DeclaredAction {
             kind: self.kind,
-            label,
+            label: label(label_text),
             speed: self.speed.resolve(declaration.speed),
             dv_penalty: self.dv_penalty.resolve(declaration.dv_penalty),
             reflexive: self.reflexive,
             target: declaration.target,
-            note: declaration.note,
+            note: note(declaration.note),
             effects: declaration.effects,
         }
     }
@@ -477,6 +434,30 @@ mod tests {
 
     fn personal(kind: ActionKind) -> &'static ActionTemplate {
         template(BattleMode::Personal, kind).expect("personal catalog")
+    }
+
+    /// `Label`/`Note` are generated from `shared/schemas/common.json`'s `maxLength`; `MAX_LABEL_LEN`
+    /// and `MAX_NOTE_LEN` must never drift from those bounds, since `label()`/`note()`'s truncation
+    /// assumes they match exactly. Same indirect check as `protocol::name`'s equivalent test, for
+    /// the same reason: typify inlines the literal bound with no constant to compare against.
+    #[test]
+    fn label_and_note_bounds_match_the_local_constants() {
+        assert!(Label::try_from("a".repeat(MAX_LABEL_LEN)).is_ok());
+        assert!(Label::try_from("a".repeat(MAX_LABEL_LEN + 1)).is_err());
+        assert!(Note::try_from("a".repeat(MAX_NOTE_LEN)).is_ok());
+        assert!(Note::try_from("a".repeat(MAX_NOTE_LEN + 1)).is_err());
+    }
+
+    #[test]
+    fn label_truncates_rather_than_rejecting() {
+        let long = "a".repeat(MAX_LABEL_LEN + 10);
+        assert_eq!(label(&long).chars().count(), MAX_LABEL_LEN);
+    }
+
+    #[test]
+    fn note_truncates_rather_than_rejecting() {
+        let long = "a".repeat(MAX_NOTE_LEN + 10);
+        assert_eq!(note(&long).chars().count(), MAX_NOTE_LEN);
     }
 
     #[test]
@@ -497,21 +478,21 @@ mod tests {
     #[test]
     fn declare_uses_a_given_name_over_the_template_name() {
         let action = personal(ActionKind::Attack).declare(Declaration { name: Some("Sweeping Blow".to_string()), ..Default::default() });
-        assert_eq!(action.label, "Sweeping Blow");
+        assert_eq!(action.label.to_string(), "Sweeping Blow");
     }
 
     #[test]
     fn declare_falls_back_to_the_template_name_when_blank() {
         let blank = personal(ActionKind::Attack).declare(Declaration { name: Some("   ".to_string()), ..Default::default() });
-        assert_eq!(blank.label, "Attack");
+        assert_eq!(blank.label.to_string(), "Attack");
         let none = personal(ActionKind::Attack).declare(Declaration::default());
-        assert_eq!(none.label, "Attack");
+        assert_eq!(none.label.to_string(), "Attack");
     }
 
     #[test]
     fn declare_trims_a_given_name() {
         let action = personal(ActionKind::Attack).declare(Declaration { name: Some("  Sweeping Blow  ".to_string()), ..Default::default() });
-        assert_eq!(action.label, "Sweeping Blow");
+        assert_eq!(action.label.to_string(), "Sweeping Blow");
     }
 
     #[test]
