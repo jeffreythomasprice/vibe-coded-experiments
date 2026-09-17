@@ -111,6 +111,10 @@ Build-time config (`API_BASE_URL`) is baked into the wasm bundle as an `env!` co
 composed together in `app.rs`. `Tip`/`DetailTip` plus `glossary.rs` are the teaching-tooltip
 mechanism referenced in "Game rules / references" below.
 
+Every timestamp shown in the UI (access-code "Created", room "Last active", ...) goes through the
+single `format_timestamp` in `ui/config.rs`, rendered as ISO 8601 UTC (`2026-09-17T14:30:05Z`) —
+never relative ("2 hours ago") and never converted to the viewer's local timezone.
+
 # Hosting
 
 The app is hosted as a static site at `exalted.jeffrey.lol`: Route 53 alias → CloudFront (OAC) → private S3 bucket `jeff-exalted-battle-wheel`. Nothing in the bucket is public; CloudFront is the only reader. Infrastructure is defined in `terraform/`, scoped entirely to this project (its own bucket, distribution, and certificate) — no resources are shared with other projects yet.

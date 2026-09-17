@@ -9,16 +9,17 @@ use leptos::prelude::*;
 use shared::access::AccessCode;
 use time::OffsetDateTime;
 
-/// "YYYY-MM-DD HH:MM UTC" -- shared with `ui::rooms_admin`'s "Last active" column, so a timestamp
-/// reads the same way in both admin tables.
+/// ISO 8601 UTC, e.g. "2026-09-17T14:30:05Z" -- shared with `ui::rooms_admin`'s "Last active"
+/// column, so a timestamp reads the same way in both admin tables.
 pub(crate) fn format_timestamp(at: OffsetDateTime) -> String {
     format!(
-        "{:04}-{:02}-{:02} {:02}:{:02} UTC",
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
         at.year(),
         u8::from(at.month()),
         at.day(),
         at.hour(),
-        at.minute()
+        at.minute(),
+        at.second()
     )
 }
 
