@@ -3,16 +3,13 @@ in-flight:
 
 todo:
 
-I'd like to enable delete protection on the access tokens table.
-
-
 The frontend should respect some query string parameters
 - auth_code, replaces the auth code currently stored in local storage
 - join_room, automatically tries to join the room with that name on startup
 
 Normal toaster errors can apply if, e.g. that auth_code is invalid (as checked by the /me endpoint) or if we can't successfully join that room
 
-If we are the host of a room we should be able to generate a link that includes both concepts.
+If we are the host of a room we should be able to generate a link that includes both concepts. This can be a button in the multiplayer modal.
 
 The auth_code selected for the link should be chosen such that:
 - if we are using a non-admin code, use our code

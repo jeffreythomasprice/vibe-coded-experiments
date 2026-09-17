@@ -5,9 +5,9 @@
 # `update-time-to-live` in `dev.sh`).
 locals {
   table_definitions = {
-    access_codes = { file = "access-codes-table.json", ttl_attribute = null }
-    rooms        = { file = "rooms-table.json", ttl_attribute = "expires_at" }
-    connections  = { file = "websocket-connections-table.json", ttl_attribute = "expires_at" }
+    access_codes = { file = "access-codes-table.json", ttl_attribute = null, deletion_protection = true }
+    rooms        = { file = "rooms-table.json", ttl_attribute = "expires_at", deletion_protection = false }
+    connections  = { file = "websocket-connections-table.json", ttl_attribute = "expires_at", deletion_protection = false }
   }
   tables = {
     for key, definition in local.table_definitions : key => merge(definition, {
@@ -19,9 +19,10 @@ locals {
 resource "aws_dynamodb_table" "this" {
   for_each = local.tables
 
-  name         = each.value.spec.TableName
-  billing_mode = each.value.spec.BillingMode
-  hash_key     = one([for key in each.value.spec.KeySchema : key.AttributeName if key.KeyType == "HASH"])
+  name                        = each.value.spec.TableName
+  billing_mode                = each.value.spec.BillingMode
+  hash_key                    = one([for key in each.value.spec.KeySchema : key.AttributeName if key.KeyType == "HASH"])
+  deletion_protection_enabled = each.value.deletion_protection
 
   dynamic "attribute" {
     for_each = each.value.spec.AttributeDefinitions
