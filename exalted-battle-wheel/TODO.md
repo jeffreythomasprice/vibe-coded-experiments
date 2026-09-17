@@ -3,9 +3,6 @@ in-flight:
 
 todo:
 
-/init
-
-
 I'd like to enable delete protection on the access tokens table.
 
 

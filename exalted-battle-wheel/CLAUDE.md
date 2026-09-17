@@ -1,10 +1,16 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 TODO.md is for humans. You can read it for context only if the user explicitly mentions it, and you can never update it.
 
-REAMDE.md should be kept fairly terse. This shouldn't be explaining project architecture, just how to build and run it.
+README.md should be kept fairly terse. This shouldn't be explaining project architecture, just how to build and run it.
 
 Prefer to avoid comments except when something is actually complicated. Avoid structural or conversational comments.
 
 Prefer strict error handling with specific enums over something like anyhow.
+
+Never run git commands that change repository or remote state — commit, add, branch, push, merge, rebase, reset, checkout to discard/switch, stash pop/drop, tag, etc. Investigating with git (`git diff`, `git log`, `git status`, `git show`, `git blame`) is fine and encouraged.
 
 # Workspace layout
 
@@ -13,6 +19,97 @@ project), `server` (an axum API), and `shared` (game logic and wire-protocol typ
 `shared::battle` is the rules engine, `shared::protocol` is what crosses the network). `client` and
 `server` deploy independently — see "Hosting" below for the client and "Server hosting" for the
 server.
+
+# Commands
+
+Full detail (including local access-code curl examples and the deploy sequence) is in README.md;
+this is just the quick reference.
+
+```
+./dev.sh                        # runs dynamodb-local + server + client together; see README.md
+cargo test --workspace          # all three crates, including client (native, not wasm)
+cargo test -p shared battle::   # scope to one crate / module path; same pattern for server, client
+cd client && trunk build --release   # production client bundle
+```
+
+`dev.sh` refuses to start if 8000 or 8001 are already bound, and needs `docker`, `aws`, `jq`,
+`cargo`, and `trunk` on `PATH`.
+
+# Architecture
+
+## Wire protocol (`shared`)
+
+Every DTO that crosses the network — REST bodies and websocket messages alike — is generated at
+build time from JSON Schema (`shared/schemas/*.json`) by `shared/build.rs` via `typify`, landing in
+`shared/src/generated.rs` and re-exported from `shared::access`/`rooms`/`protocol`. Never hand-edit
+`generated.rs`; change the schema (see `shared/schemas/README.md` for the authoring rules) and
+rebuild. A few types (`BattleLog`, `Timestamp`, `SessionRejection`, `Index`) are hand-written and
+substituted in via `build.rs`'s `REPLACEMENTS` list instead of being generated, where typify can't
+express what's needed.
+
+Every decode — both directions, both crates — goes through `shared::validate::decode`, which checks
+two independent layers before `serde` ever sees the bytes: typify's compiled-in bounds on named
+string defs (`MemberName`, `RoomName`, ...), and a full JSON Schema validation against the exact
+source document for whatever a compiled-in check can't express (cross-field rules). A malformed or
+out-of-bounds message is rejected outright rather than partially deserialized.
+
+Tagging is deliberately inconsistent between two families: the control-plane enums
+(`ClientMessage`, `ServerMessage`, `BattleRequest`, `BattleCommand`, `ProtocolError`) are adjacently
+tagged; `BattleEvent` (and `BattleLog`, which embeds a `Vec<BattleEvent>`) keep serde's external
+tagging because `BattleLog` is persisted verbatim in the browser's `localStorage` (Solo mode) and in
+the DynamoDB rooms table — retagging it would silently break every already-saved battle without a
+migration.
+
+`shared::battle` (the rules engine: `Combatant`, `BattleEvent`, `apply()`, `BattleLog`) has no
+networking or IO of its own; `shared::protocol` is the layer that talks about connections, rooms,
+and sessions on top of it. Both `client` and `server` depend on `shared` as a workspace path
+dependency, so there is no separate DTO definition on each side to keep in sync by hand.
+
+## Server (`server`, axum)
+
+Three storage-agnostic traits — `AccessCodeStore`, `RoomStore`, `ConnectionStore` — each live in
+their own module (`access_codes/`, `rooms/`, `connections/`) shaped the same way: a real `dynamo`
+implementation and a `#[cfg(test)]`-only `memory` fake with matching conditional-write semantics.
+`routes::AppState<A, R, C>` is generic over all three, so handlers are exercised end-to-end against
+the memory fakes in `routes.rs`'s own test module without touching DynamoDB.
+
+REST auth is a bearer access-code token in the `Authorization` header, checked by middleware
+(`auth.rs`) before a handler runs. `/ws` can't do that — a browser `WebSocket` can't set custom
+headers — so the upgrade itself is unauthenticated and every `ClientEnvelope` instead carries its
+own token, checked per message inside `ws::handler::handle`; a socket that never sends one valid
+message within 15s (`ws::AUTH_TIMEOUT`) is dropped.
+
+`ws/` splits transport from logic:
+- `ws/mod.rs` runs the actual per-connection read/write loop — mints a `ConnectionId`, spawns a
+  writer task so a slow client can't block reads, tracks which room the connection is currently in.
+- `ws/handler.rs` is pure dispatch: token check, permission check, `RoomStore` mutation, and the
+  resulting list of `(ConnectionId, ServerMessage)` to send. It knows nothing about sockets, so it's
+  unit-tested directly against the memory stores.
+- `ws/hub.rs` is the in-process `ConnectionId → sender` registry used to fan a handler's output back
+  out to every affected connection, plus the single global lock serializing every room mutation
+  process-wide (see "Server hosting" below for why this pins the deployment to one replica).
+
+## Client (`client`, Leptos/wasm)
+
+Mirrors the server's transport/logic split: `net/` is the raw websocket transport (`Socket`) and
+knows nothing about rooms or battles; `battle_net.rs`, built on top, tracks room membership, replays
+a persisted session token to silently rejoin a room after a page reload, and reconciles local state
+against whatever the server's last message actually said — the browser's own state is never
+authoritative. `persist.rs`/`storage.rs` wrap `localStorage` for anything that must survive a
+reload (a Solo-mode `BattleLog`, the room session token, prefs), each independently.
+
+`Socket`'s callbacks fire from raw JS `WebSocket` events, outside any Leptos-tracked call stack —
+every deferred handler in `battle_net.rs` re-enters the app's root `Owner` (captured once in
+`app.rs`, see `ROOT_OWNER`'s doc comment) rather than spawning directly, or `use_context` would
+silently find nothing.
+
+Build-time config (`API_BASE_URL`) is baked into the wasm bundle as an `env!` constant by
+`client/build.rs`, which layers `client/.env` < `.env.<profile>` < `.env.local` (`<profile>` is
+`development` under `trunk serve`, `production` under `trunk build --release`) — see `config.rs`.
+
+`ui/` is one module per panel/widget (`roster.rs`, `wheel.rs`, `queue.rs`, `action_panel.rs`, ...),
+composed together in `app.rs`. `Tip`/`DetailTip` plus `glossary.rs` are the teaching-tooltip
+mechanism referenced in "Game rules / references" below.
 
 # Hosting
 
