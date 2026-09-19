@@ -2,6 +2,7 @@ in-flight:
 
 todo:
 
-I want to be able to use command line arguments to generate an image via diffusion-rs from a prompt. One of the arguments should be a model. One of the argument should be whether to spit this out to a file or to display the result inline in the terminal.
+log which backend it's using, e.g. cpu or vulkan
+log timing info, e.g. how long it took to generate each image
 
-Ideally the model will auto-download if it's not already present. To the location specified in config.
+can we pre-build multiple versions of diffuse-rs-sys, so we don't have to rebuild when switching between feature sets, e.g. from cpu to vulkan?

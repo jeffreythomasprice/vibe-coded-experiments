@@ -2,6 +2,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AppError {
+    #[error("no output destination: stdout is not a terminal; pass -o <PATH> or --show")]
+    NoOutputTarget,
+
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 

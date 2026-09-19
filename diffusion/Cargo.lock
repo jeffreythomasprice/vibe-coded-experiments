@@ -601,6 +601,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "diffusion-rs",
+ "diffusion-rs-sys",
  "dirs",
  "hf-hub",
  "image",
