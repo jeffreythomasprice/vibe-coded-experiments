@@ -1,0 +1,11 @@
+# Copy this file to one of, in descending order of preference:
+#   the path given to --config
+#   ./config.toml
+#   <directory containing the diffusion binary>/config.toml
+#   $XDG_CONFIG_HOME/diffusion/config.toml (usually ~/.config/diffusion/config.toml)
+
+# Tracing filter, same syntax as RUST_LOG. When RUST_LOG is set it wins over this.
+log_filter = "warn,diffusion=trace"
+
+# Where model weights are downloaded and cached.
+models_dir = "/tmp/diffusion"

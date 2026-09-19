@@ -1,0 +1,7 @@
+/target
+
+# Fetched by vendor/diffusion-rs-sys/fetch-source.sh; see that script for why.
+/vendor/diffusion-rs-sys/stable-diffusion.cpp/
+
+# Local config; config.toml.example is the committed template.
+/config.toml
