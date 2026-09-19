@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{ArgGroup, Parser, ValueEnum};
-use diffusion_rs::api::{SampleMethod, WeightType};
+use diffusion_rs::api::{BackendDevice, SampleMethod, WeightType};
 
 use crate::models::ModelRef;
 
@@ -69,6 +69,10 @@ pub struct Cli {
     #[arg(long, value_name = "N")]
     pub threads: Option<i32>,
 
+    /// Compute backend to run on (default: best available GPU, falling back to CPU)
+    #[arg(long, value_name = "BACKEND")]
+    pub backend: Option<Backend>,
+
     /// Negative prompt (default: "")
     #[arg(short = 'n', long, value_name = "TEXT")]
     pub negative: Option<String>,
@@ -112,6 +116,45 @@ pub struct Cli {
     /// Display the generated image inline in the terminal
     #[arg(long)]
     pub show: bool,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum Backend {
+    Cpu,
+    Vulkan,
+    Cuda,
+}
+
+impl From<Backend> for BackendDevice {
+    fn from(value: Backend) -> Self {
+        match value {
+            Backend::Cpu => BackendDevice::CPU,
+            Backend::Vulkan => BackendDevice::VULKAN0,
+            Backend::Cuda => BackendDevice::CUDA0,
+        }
+    }
+}
+
+impl Backend {
+    /// The `--features` name needed to compile this backend in, or `None` if it's
+    /// always available (cpu) or was compiled in for this binary.
+    pub fn missing_feature(self) -> Option<&'static str> {
+        match self {
+            Backend::Cpu => None,
+            Backend::Vulkan if cfg!(feature = "vulkan") => None,
+            Backend::Vulkan => Some("vulkan"),
+            Backend::Cuda if cfg!(feature = "cuda") => None,
+            Backend::Cuda => Some("cuda"),
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Backend::Cpu => "cpu",
+            Backend::Vulkan => "vulkan",
+            Backend::Cuda => "cuda",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]

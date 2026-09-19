@@ -24,5 +24,13 @@ pub enum AppError {
     ConfigFile(#[from] crate::config::ConfigError),
 
     #[error(transparent)]
+    Log(#[from] crate::logging::LogError),
+
+    #[error(transparent)]
     Model(#[from] crate::models::ModelError),
+
+    #[error(
+        "--backend {backend} was requested, but this binary was built without `--features {backend}`"
+    )]
+    UnsupportedBackend { backend: &'static str },
 }

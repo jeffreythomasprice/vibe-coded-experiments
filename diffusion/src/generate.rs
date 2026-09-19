@@ -1,6 +1,10 @@
+use std::collections::HashMap;
 use std::path::Path;
+use std::time::Instant;
 
-use diffusion_rs::api::{ClipSkip, ConfigBuilder, ModelConfigBuilder, gen_img};
+use diffusion_rs::api::{
+    BackendDevice, ClipSkip, ConfigBuilder, ModelConfigBuilder, Module, gen_img,
+};
 
 use crate::cli::Cli;
 use crate::error::AppError;
@@ -39,6 +43,24 @@ pub fn generate(cli: &Cli, models_dir: &Path, output: &Path) -> Result<(), AppEr
     if let Some(threads) = cli.threads {
         model_config.n_threads(threads);
     }
+    if let Some(backend) = cli.backend {
+        if let Some(feature) = backend.missing_feature() {
+            return Err(AppError::UnsupportedBackend { backend: feature });
+        }
+        tracing::info!(backend = backend.as_str(), "using backend");
+        let device = BackendDevice::from(backend);
+        model_config.backend(HashMap::from([
+            (Module::Diffusion, device.clone()),
+            (Module::Te, device.clone()),
+            (Module::ClipVision, device.clone()),
+            (Module::Vae, device.clone()),
+            (Module::Controlnet, device.clone()),
+            (Module::Photomaker, device.clone()),
+            (Module::Upscaler, device),
+        ]));
+    } else {
+        tracing::info!("backend: auto-detecting best available GPU, falling back to CPU");
+    }
 
     let mut gen_config = ConfigBuilder::default();
     gen_config.prompt(cli.prompt.clone()).output(output);
@@ -76,7 +98,10 @@ pub fn generate(cli: &Cli, models_dir: &Path, output: &Path) -> Result<(), AppEr
 
     let gen_config = gen_config.build()?;
     let mut model_config = model_config.build()?;
+
+    let started = Instant::now();
     gen_img(&gen_config, &mut model_config)?;
+    tracing::info!(elapsed = ?started.elapsed(), "generated image");
 
     Ok(())
 }

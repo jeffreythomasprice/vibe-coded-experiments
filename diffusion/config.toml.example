@@ -7,5 +7,13 @@
 # Tracing filter, same syntax as RUST_LOG. When RUST_LOG is set it wins over this.
 log_filter = "warn,diffusion=trace"
 
+# Where rotating log files are written; console output is unaffected.
+log_dir = "/tmp/diffusion/logs"
+
+# Roll the log at this size or at the start of each UTC day, whichever comes
+# first, keeping this many files total (the one being written included).
+log_max_bytes = 104857600
+log_max_files = 15
+
 # Where model weights are downloaded and cached.
 models_dir = "/tmp/diffusion"

@@ -4,8 +4,9 @@ Generate images with diffusion-rs.
 
 ## Build
 
-The default build uses the Vulkan backend, which needs Vulkan and SPIR-V headers
-installed (`glslc` and `libvulkan.so` are not enough on their own):
+The CPU backend is always compiled in. The default build also compiles in Vulkan,
+which needs Vulkan and SPIR-V headers installed (`glslc` and `libvulkan.so` are not
+enough on their own):
 
 ```
 sudo pacman -S vulkan-headers spirv-headers   # or your distro's equivalent
@@ -13,15 +14,22 @@ vendor/diffusion-rs-sys/fetch-source.sh   # once, after cloning
 cargo build
 ```
 
-For a CPU-only build, or CUDA:
+For a CPU-only build, or to also compile in CUDA (needs the CUDA Toolkit), or both:
 
 ```
 cargo build --no-default-features
+cargo build --features cuda            # vulkan + cuda, since vulkan is a default feature
 cargo build --no-default-features --features cuda
 ```
 
-The first build compiles stable-diffusion.cpp and is slow. Switching feature sets
-(e.g. vulkan to cpu) forces a full rebuild of it.
+Whichever backends a build compiles in are all selectable at runtime with
+`--backend cpu|vulkan|cuda` (see Run below); no rebuild needed to switch. Leaving
+`--backend` unset picks the best available GPU backend, falling back to CPU.
+
+The first build of each feature set compiles stable-diffusion.cpp and is slow.
+Cargo caches that build per feature set in `target/`, so once you've built a given
+combination of features at least once, rebuilding it is fast; only `cargo clean` or
+editing anything under `vendor/diffusion-rs-sys/` forces a rebuild.
 
 ## Run
 

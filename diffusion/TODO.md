@@ -1,8 +1,12 @@
 in-flight:
 
+
 todo:
 
-log which backend it's using, e.g. cpu or vulkan
-log timing info, e.g. how long it took to generate each image
+generate multiple copies of a prompt with the same file name prefix
 
-can we pre-build multiple versions of diffuse-rs-sys, so we don't have to rebuild when switching between feature sets, e.g. from cpu to vulkan?
+
+pipeline that does image comparison or analysis against repeated attempts
+like an automated system that takes a prompt and then generates several and auto-evals each attempt against some metric
+then we have two different prompts and want to pick the one of each that is closest to each other, or the one that closest to the theme of an existing set
+like we're doing pixel art and we have a new sprite sheet and want to pick the ones that are in the same style as the rest

@@ -4,6 +4,9 @@ use serde::Deserialize;
 use thiserror::Error;
 
 pub const DEFAULT_LOG_FILTER: &str = "warn,diffusion=trace";
+pub const DEFAULT_LOG_DIR: &str = "/tmp/diffusion/logs";
+pub const DEFAULT_LOG_MAX_BYTES: u64 = 100 * 1024 * 1024;
+pub const DEFAULT_LOG_MAX_FILES: usize = 15;
 pub const DEFAULT_MODELS_DIR: &str = "/tmp/diffusion";
 const FILE_NAME: &str = "config.toml";
 
@@ -11,6 +14,9 @@ const FILE_NAME: &str = "config.toml";
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub log_filter: String,
+    pub log_dir: PathBuf,
+    pub log_max_bytes: u64,
+    pub log_max_files: usize,
     pub models_dir: PathBuf,
 }
 
@@ -18,6 +24,9 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             log_filter: DEFAULT_LOG_FILTER.to_owned(),
+            log_dir: PathBuf::from(DEFAULT_LOG_DIR),
+            log_max_bytes: DEFAULT_LOG_MAX_BYTES,
+            log_max_files: DEFAULT_LOG_MAX_FILES,
             models_dir: PathBuf::from(DEFAULT_MODELS_DIR),
         }
     }
@@ -46,13 +55,6 @@ pub enum ConfigError {
         path: PathBuf,
         #[source]
         source: toml::de::Error,
-    },
-
-    #[error("invalid log filter {value:?}: {source}")]
-    LogFilter {
-        value: String,
-        #[source]
-        source: tracing_subscriber::filter::ParseError,
     },
 }
 
@@ -161,6 +163,18 @@ mod tests {
         let loaded = load_from_candidates(&[path]).unwrap();
 
         assert_eq!(loaded.config.log_filter, "info");
+        assert_eq!(loaded.config.models_dir, PathBuf::from(DEFAULT_MODELS_DIR));
+    }
+
+    #[test]
+    fn log_dir_can_be_overridden() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "log_dir = \"/var/log/diffusion\"\n").unwrap();
+
+        let loaded = load_from_candidates(&[path]).unwrap();
+
+        assert_eq!(loaded.config.log_dir, PathBuf::from("/var/log/diffusion"));
         assert_eq!(loaded.config.models_dir, PathBuf::from(DEFAULT_MODELS_DIR));
     }
 

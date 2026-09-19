@@ -599,6 +599,7 @@ dependencies = [
 name = "diffusion"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "clap",
  "diffusion-rs",
  "diffusion-rs-sys",

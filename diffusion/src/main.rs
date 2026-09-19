@@ -3,6 +3,7 @@ mod config;
 mod error;
 mod generate;
 mod image_io;
+mod log_file;
 mod logging;
 mod models;
 mod sdlog;
@@ -26,14 +27,18 @@ fn main() -> ExitCode {
 fn run() -> Result<(), AppError> {
     let cli = cli::Cli::parse();
     let loaded = config::load(cli.config.as_deref())?;
-    logging::init(&loaded.config.log_filter)?;
+    logging::init(&loaded.config)?;
     sdlog::init();
 
     match &loaded.source {
         Some(path) => tracing::debug!(path = %path.display(), "loaded config"),
         None => tracing::debug!("no config file found; using defaults"),
     }
-    tracing::debug!(models_dir = %loaded.config.models_dir.display(), "resolved config");
+    tracing::debug!(
+        models_dir = %loaded.config.models_dir.display(),
+        log_dir = %loaded.config.log_dir.display(),
+        "resolved config"
+    );
 
     match &cli.output {
         Some(path) => {
@@ -43,6 +48,7 @@ fn run() -> Result<(), AppError> {
                 std::fs::create_dir_all(parent)?;
             }
             generate::generate(&cli, &loaded.config.models_dir, path)?;
+            tracing::info!(path = %path.display(), "wrote image");
             if cli.show {
                 image_io::display(path)?;
             }
