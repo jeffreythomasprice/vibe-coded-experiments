@@ -26,10 +26,14 @@ struct Sink {
 impl Sink {
     fn open(dir: &Path, max_bytes: u64, keep: usize) -> Result<Self, LogError> {
         if max_bytes == 0 {
-            return Err(LogError::InvalidLimit { key: "log_max_bytes" });
+            return Err(LogError::InvalidLimit {
+                key: "log_max_bytes",
+            });
         }
         if keep == 0 {
-            return Err(LogError::InvalidLimit { key: "log_max_files" });
+            return Err(LogError::InvalidLimit {
+                key: "log_max_files",
+            });
         }
 
         std::fs::create_dir_all(dir).map_err(|source| LogError::CreateDir {
@@ -211,7 +215,9 @@ impl FileWriter {
     }
 
     fn with_limits(dir: &Path, max_bytes: u64, keep: usize) -> Result<Self, LogError> {
-        Ok(Self(Arc::new(Mutex::new(Sink::open(dir, max_bytes, keep)?))))
+        Ok(Self(Arc::new(Mutex::new(Sink::open(
+            dir, max_bytes, keep,
+        )?))))
     }
 }
 
@@ -267,7 +273,10 @@ mod tests {
 
         assert_eq!(
             names(dir.path()),
-            vec!["diffusion-2026-09-19.000.log", "diffusion-2026-09-19.001.log"]
+            vec![
+                "diffusion-2026-09-19.000.log",
+                "diffusion-2026-09-19.001.log"
+            ]
         );
         let first = std::fs::read(dir.path().join("diffusion-2026-09-19.000.log")).unwrap();
         assert_eq!(first, [vec![b'a'; 20], vec![b'b'; 20]].concat());
@@ -297,7 +306,10 @@ mod tests {
 
         assert_eq!(
             names(dir.path()),
-            vec!["diffusion-2026-09-19.000.log", "diffusion-2026-09-20.000.log"]
+            vec![
+                "diffusion-2026-09-19.000.log",
+                "diffusion-2026-09-20.000.log"
+            ]
         );
     }
 
@@ -311,7 +323,10 @@ mod tests {
 
         assert_eq!(
             names(dir.path()),
-            vec!["diffusion-2026-09-19.000.log", "diffusion-2026-09-19.001.log"]
+            vec![
+                "diffusion-2026-09-19.000.log",
+                "diffusion-2026-09-19.001.log"
+            ]
         );
         let first = std::fs::read(dir.path().join("diffusion-2026-09-19.000.log")).unwrap();
         assert_eq!(first.len(), 30);
@@ -329,7 +344,10 @@ mod tests {
 
         assert_eq!(
             names(dir.path()),
-            vec!["diffusion-2026-09-19.000.log", "diffusion-2026-09-19.001.log"]
+            vec![
+                "diffusion-2026-09-19.000.log",
+                "diffusion-2026-09-19.001.log"
+            ]
         );
         let second = std::fs::read(dir.path().join("diffusion-2026-09-19.001.log")).unwrap();
         assert_eq!(second, b"x");
@@ -413,11 +431,15 @@ mod tests {
 
         assert!(matches!(
             Sink::open(dir.path(), 0, 15),
-            Err(LogError::InvalidLimit { key: "log_max_bytes" })
+            Err(LogError::InvalidLimit {
+                key: "log_max_bytes"
+            })
         ));
         assert!(matches!(
             Sink::open(dir.path(), 1024, 0),
-            Err(LogError::InvalidLimit { key: "log_max_files" })
+            Err(LogError::InvalidLimit {
+                key: "log_max_files"
+            })
         ));
     }
 

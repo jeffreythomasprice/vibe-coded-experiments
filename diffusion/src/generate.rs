@@ -10,7 +10,7 @@ use crate::cli::Cli;
 use crate::error::AppError;
 use crate::models;
 
-pub fn generate(cli: &Cli, models_dir: &Path, output: &Path) -> Result<(), AppError> {
+pub fn generate(cli: &Cli, models_dir: &Path, output: &Path, copies: u32) -> Result<(), AppError> {
     let mut model_config = ModelConfigBuilder::default();
 
     if let Some(reference) = &cli.model {
@@ -95,13 +95,16 @@ pub fn generate(cli: &Cli, models_dir: &Path, output: &Path) -> Result<(), AppEr
             _ => ClipSkip::Unspecified,
         });
     }
+    if copies > 1 {
+        gen_config.batch_count(copies as i32);
+    }
 
     let gen_config = gen_config.build()?;
     let mut model_config = model_config.build()?;
 
     let started = Instant::now();
     gen_img(&gen_config, &mut model_config)?;
-    tracing::info!(elapsed = ?started.elapsed(), "generated image");
+    tracing::info!(elapsed = ?started.elapsed(), copies, "generated image");
 
     Ok(())
 }

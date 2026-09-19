@@ -38,12 +38,10 @@ pub enum LogError {
 pub fn init(config: &Config) -> Result<(), LogError> {
     let filter = match EnvFilter::try_from_default_env() {
         Ok(filter) => filter,
-        Err(_) => {
-            EnvFilter::try_new(&config.log_filter).map_err(|source| LogError::Filter {
-                value: config.log_filter.clone(),
-                source,
-            })?
-        }
+        Err(_) => EnvFilter::try_new(&config.log_filter).map_err(|source| LogError::Filter {
+            value: config.log_filter.clone(),
+            source,
+        })?,
     };
     let file = FileWriter::new(config)?;
 

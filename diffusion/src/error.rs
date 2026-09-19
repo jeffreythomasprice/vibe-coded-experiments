@@ -1,9 +1,21 @@
+use std::path::PathBuf;
+
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("no output destination: stdout is not a terminal; pass -o <PATH> or --show")]
     NoOutputTarget,
+
+    #[error("--output {} is a directory; pass a file path", .path.display())]
+    OutputIsDirectory { path: PathBuf },
+
+    #[error("expected {expected} generated images but found {found} in {}", .dir.display())]
+    BatchOutputMismatch {
+        expected: u32,
+        found: usize,
+        dir: PathBuf,
+    },
 
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),

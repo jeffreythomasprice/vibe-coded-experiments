@@ -113,6 +113,15 @@ pub struct Cli {
     #[arg(short, long, value_name = "PATH")]
     pub output: Option<PathBuf>,
 
+    /// Generate this many images; with -o the path becomes a filename prefix
+    #[arg(
+        long,
+        value_name = "N",
+        default_value_t = 1,
+        value_parser = clap::value_parser!(u32).range(1..)
+    )]
+    pub copies: u32,
+
     /// Display the generated image inline in the terminal
     #[arg(long)]
     pub show: bool,
