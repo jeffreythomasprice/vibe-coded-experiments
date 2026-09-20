@@ -41,6 +41,9 @@ pub enum AppError {
     #[error(transparent)]
     Model(#[from] crate::models::ModelError),
 
+    #[error(transparent)]
+    Hub(#[from] crate::hub::HubError),
+
     #[error(
         "--backend {backend} was requested, but this binary was built without `--features {backend}`"
     )]

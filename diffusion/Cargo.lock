@@ -607,11 +607,13 @@ dependencies = [
  "hf-hub",
  "image",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
  "toml",
  "tracing",
  "tracing-subscriber",
+ "ureq",
  "viuer",
 ]
 

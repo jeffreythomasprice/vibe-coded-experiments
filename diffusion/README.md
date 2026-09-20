@@ -34,11 +34,21 @@ editing anything under `vendor/diffusion-rs-sys/` forces a rebuild.
 ## Run
 
 ```
-cargo run -- "a red bicycle on a beach" --model stabilityai/sd-turbo --steps 4 --cfg-scale 1 --guidance 0 -o /tmp/bike.png --show
+cargo run -- generate "a red bicycle on a beach" --model stabilityai/sd-turbo --steps 4 --cfg-scale 1 --guidance 0 -o /tmp/bike.png --show
 ```
 
 `--model` (or `--diffusion-model` for standalone diffusion weights) accepts a
 HuggingFace ref (`owner/repo`, `owner/repo:file`, `owner/repo@revision:file`) or a
 local path; weights auto-download into `models_dir` on first use. `--copies N`
 generates N images, turning `-o` into a filename prefix (`bike.png` → `bike0.png`,
-`bike1.png`, …). See `cargo run -- --help` for the full flag list.
+`bike1.png`, …). See `cargo run -- generate --help` for the full flag list.
+
+## Finding models
+
+```
+cargo run -- models search turbo      # search HuggingFace, marking what's already downloaded
+cargo run -- models list              # list only what's already downloaded, no network
+```
+
+`models search` caches HuggingFace's responses under `models_dir/.hub-cache`; pass
+`--refresh` to bypass that cache and re-query.

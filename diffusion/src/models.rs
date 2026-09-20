@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use hf_hub::api::sync::{ApiBuilder, ApiError, ApiRepo};
-use hf_hub::{Repo, RepoType};
+use hf_hub::{Cache, Repo, RepoType};
 use thiserror::Error;
 
 static WEIGHT_EXTENSIONS: [&str; 4] = ["safetensors", "gguf", "ckpt", "pt"];
@@ -121,6 +121,13 @@ pub enum ModelError {
 
     #[error("local model file not found: {}", .0.display())]
     MissingLocalFile(PathBuf),
+
+    #[error("failed to read the model cache at {}: {source}", .path.display())]
+    CacheScan {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 }
 
 #[allow(dead_code)]
@@ -185,25 +192,8 @@ fn auto_resolve_file(repo: &str, api_repo: &ApiRepo) -> Result<String, ModelErro
         source,
     })?;
 
-    let is_weight_file = |name: &str| {
-        Path::new(name)
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .is_some_and(|ext| WEIGHT_EXTENSIONS.contains(&ext))
-    };
-
-    let all: Vec<&str> = info
-        .siblings
-        .iter()
-        .map(|s| s.rfilename.as_str())
-        .filter(|name| is_weight_file(name))
-        .collect();
-    let root: Vec<&str> = all
-        .iter()
-        .copied()
-        .filter(|name| !name.contains('/'))
-        .collect();
-    let candidates = if root.is_empty() { all } else { root };
+    let all_files: Vec<&str> = info.siblings.iter().map(|s| s.rfilename.as_str()).collect();
+    let candidates = weight_candidates(&all_files);
 
     match candidates.as_slice() {
         [] => Err(ModelError::NoWeightFile {
@@ -211,11 +201,9 @@ fn auto_resolve_file(repo: &str, api_repo: &ApiRepo) -> Result<String, ModelErro
         }),
         [single] => Ok((*single).to_owned()),
         many => {
-            let mut sorted = many.to_vec();
-            sorted.sort_unstable();
-            let count = sorted.len();
-            let candidates = sorted
-                .into_iter()
+            let count = many.len();
+            let candidates = many
+                .iter()
                 .take(20)
                 .map(|name| format!("  {name}"))
                 .collect::<Vec<_>>()
@@ -227,6 +215,158 @@ fn auto_resolve_file(repo: &str, api_repo: &ApiRepo) -> Result<String, ModelErro
             })
         }
     }
+}
+
+pub fn is_weight_file(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| WEIGHT_EXTENSIONS.contains(&ext))
+}
+
+/// Filters `files` down to weight files, preferring root-level files over ones nested
+/// in subdirectories whenever at least one root-level weight file exists, and sorts
+/// the result. This is the same rule `--model owner/repo` uses to auto-resolve a file
+/// when no `:file` suffix is given.
+pub fn weight_candidates<'a>(files: &[&'a str]) -> Vec<&'a str> {
+    let all: Vec<&str> = files.iter().copied().filter(|name| is_weight_file(name)).collect();
+    let root: Vec<&str> = all
+        .iter()
+        .copied()
+        .filter(|name| !name.contains('/'))
+        .collect();
+    let mut candidates = if root.is_empty() { all } else { root };
+    candidates.sort_unstable();
+    candidates
+}
+
+/// The cached path for `repo`'s `file` on the `main` revision, or `None` if it hasn't
+/// been downloaded into `models_dir`. Never touches the network.
+pub fn cached_path(models_dir: &Path, repo: &str, file: &str) -> Option<PathBuf> {
+    Cache::new(models_dir.to_path_buf())
+        .model(repo.to_owned())
+        .get(file)
+}
+
+/// One weight file found on disk under `models_dir`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CachedWeight {
+    pub repo: String,
+    pub file: String,
+    pub size: u64,
+}
+
+/// Every weight file present under `models_dir`, one entry per `(repo, file)` pair
+/// even if multiple cached revisions hold it.
+pub fn cached_weights(models_dir: &Path) -> Result<Vec<CachedWeight>, ModelError> {
+    let mut found = Vec::new();
+
+    let entries = match std::fs::read_dir(models_dir) {
+        Ok(entries) => entries,
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => return Ok(found),
+        Err(source) => {
+            return Err(ModelError::CacheScan {
+                path: models_dir.to_path_buf(),
+                source,
+            });
+        }
+    };
+
+    for entry in entries {
+        let entry = entry.map_err(|source| ModelError::CacheScan {
+            path: models_dir.to_path_buf(),
+            source,
+        })?;
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let Some(repo_part) = name.strip_prefix("models--") else {
+            continue;
+        };
+        // Repo IDs are `owner/repo`; hf-hub's folder_name() replaces the single `/`
+        // with `--`, so undo that by restoring only the first occurrence. A repo
+        // whose owner or name itself contains `--` would map back incorrectly, but
+        // that mirrors the same ambiguity in hf-hub's own naming scheme.
+        let repo = repo_part.replacen("--", "/", 1);
+
+        let snapshots_dir = path.join("snapshots");
+        let snapshot_entries = match std::fs::read_dir(&snapshots_dir) {
+            Ok(entries) => entries,
+            Err(source) if source.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(source) => {
+                return Err(ModelError::CacheScan {
+                    path: snapshots_dir,
+                    source,
+                });
+            }
+        };
+        for snapshot in snapshot_entries {
+            let snapshot = snapshot.map_err(|source| ModelError::CacheScan {
+                path: snapshots_dir.clone(),
+                source,
+            })?;
+            let snapshot_path = snapshot.path();
+            if snapshot_path.is_dir() {
+                collect_weight_files(&snapshot_path, &snapshot_path, &repo, &mut found)?;
+            }
+        }
+    }
+
+    found.sort_by(|a, b| (&a.repo, &a.file).cmp(&(&b.repo, &b.file)));
+    found.dedup_by(|a, b| a.repo == b.repo && a.file == b.file);
+    Ok(found)
+}
+
+fn collect_weight_files(
+    root: &Path,
+    dir: &Path,
+    repo: &str,
+    out: &mut Vec<CachedWeight>,
+) -> Result<(), ModelError> {
+    let entries = std::fs::read_dir(dir).map_err(|source| ModelError::CacheScan {
+        path: dir.to_path_buf(),
+        source,
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|source| ModelError::CacheScan {
+            path: dir.to_path_buf(),
+            source,
+        })?;
+        let path = entry.path();
+        let file_type = entry.file_type().map_err(|source| ModelError::CacheScan {
+            path: path.clone(),
+            source,
+        })?;
+        if file_type.is_dir() {
+            collect_weight_files(root, &path, repo, out)?;
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if !is_weight_file(name) {
+            continue;
+        }
+        let Ok(relative) = path.strip_prefix(root) else {
+            continue;
+        };
+        let Some(relative) = relative.to_str() else {
+            continue;
+        };
+        let size = std::fs::metadata(&path)
+            .map_err(|source| ModelError::CacheScan {
+                path: path.clone(),
+                source,
+            })?
+            .len();
+        out.push(CachedWeight {
+            repo: repo.to_owned(),
+            file: relative.to_owned(),
+            size,
+        });
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -307,5 +447,139 @@ mod tests {
         };
         let parsed: ModelRef = "~/models/x.gguf".parse().unwrap();
         assert_eq!(parsed, ModelRef::Local(home.join("models/x.gguf")));
+    }
+
+    #[test]
+    fn weight_candidates_filters_non_weight_files() {
+        let files = ["README.md", "model.safetensors", "config.json"];
+        assert_eq!(weight_candidates(&files), vec!["model.safetensors"]);
+    }
+
+    #[test]
+    fn weight_candidates_prefers_root_over_nested() {
+        let files = [
+            "unet/diffusion_pytorch_model.safetensors",
+            "model.safetensors",
+            "vae/diffusion_pytorch_model.safetensors",
+        ];
+        assert_eq!(weight_candidates(&files), vec!["model.safetensors"]);
+    }
+
+    #[test]
+    fn weight_candidates_falls_back_to_nested_when_no_root_file_exists() {
+        let files = [
+            "vae/diffusion_pytorch_model.safetensors",
+            "unet/diffusion_pytorch_model.safetensors",
+        ];
+        assert_eq!(
+            weight_candidates(&files),
+            vec![
+                "unet/diffusion_pytorch_model.safetensors",
+                "vae/diffusion_pytorch_model.safetensors",
+            ]
+        );
+    }
+
+    #[test]
+    fn weight_candidates_sorts_results() {
+        let files = ["b.safetensors", "a.safetensors"];
+        assert_eq!(
+            weight_candidates(&files),
+            vec!["a.safetensors", "b.safetensors"]
+        );
+    }
+
+    fn write_fake_weight(models_dir: &Path, repo_folder: &str, snapshot: &str, file: &str, bytes: &[u8]) {
+        let dir = models_dir.join(repo_folder).join("snapshots").join(snapshot);
+        let file_path = dir.join(file);
+        std::fs::create_dir_all(file_path.parent().unwrap()).unwrap();
+        std::fs::write(&file_path, bytes).unwrap();
+    }
+
+    #[test]
+    fn cached_weights_finds_root_and_nested_files() {
+        let dir = tempfile::tempdir().unwrap();
+        write_fake_weight(
+            dir.path(),
+            "models--stabilityai--sd-turbo",
+            "abc123",
+            "sd_turbo.safetensors",
+            b"12345",
+        );
+        write_fake_weight(
+            dir.path(),
+            "models--stabilityai--sdxl-turbo",
+            "def456",
+            "unet/diffusion_pytorch_model.safetensors",
+            b"1234567890",
+        );
+
+        let mut found = cached_weights(dir.path()).unwrap();
+        found.sort_by(|a, b| a.repo.cmp(&b.repo));
+
+        assert_eq!(
+            found,
+            vec![
+                CachedWeight {
+                    repo: "stabilityai/sd-turbo".to_owned(),
+                    file: "sd_turbo.safetensors".to_owned(),
+                    size: 5,
+                },
+                CachedWeight {
+                    repo: "stabilityai/sdxl-turbo".to_owned(),
+                    file: "unet/diffusion_pytorch_model.safetensors".to_owned(),
+                    size: 10,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn cached_weights_dedups_across_snapshots() {
+        let dir = tempfile::tempdir().unwrap();
+        write_fake_weight(
+            dir.path(),
+            "models--stabilityai--sd-turbo",
+            "abc123",
+            "sd_turbo.safetensors",
+            b"hello",
+        );
+        write_fake_weight(
+            dir.path(),
+            "models--stabilityai--sd-turbo",
+            "def456",
+            "sd_turbo.safetensors",
+            b"hello",
+        );
+
+        let found = cached_weights(dir.path()).unwrap();
+        assert_eq!(found.len(), 1);
+    }
+
+    #[test]
+    fn cached_weights_ignores_non_repo_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".hub-cache")).unwrap();
+        std::fs::write(dir.path().join(".hub-cache/search-1.json"), b"{}").unwrap();
+        std::fs::create_dir_all(dir.path().join("logs")).unwrap();
+
+        let found = cached_weights(dir.path()).unwrap();
+        assert!(found.is_empty());
+    }
+
+    #[test]
+    fn cached_weights_on_missing_dir_is_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("does-not-exist");
+        assert_eq!(cached_weights(&missing).unwrap(), vec![]);
+    }
+
+    #[test]
+    fn cached_path_is_none_when_not_downloaded() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            cached_path(dir.path(), "stabilityai/sd-turbo", "sd_turbo.safetensors"),
+            None
+        );
     }
 }

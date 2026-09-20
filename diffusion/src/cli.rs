@@ -1,15 +1,71 @@
 use std::path::PathBuf;
 
-use clap::{ArgGroup, Parser, ValueEnum};
+use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use diffusion_rs::api::{BackendDevice, SampleMethod, WeightType};
 
 use crate::models::ModelRef;
 
 #[derive(Debug, Parser)]
+#[command(name = "diffusion", version, about = "Generate images with diffusion-rs")]
+pub struct Cli {
+    /// Path to a config.toml, overriding the default search locations
+    #[arg(short, long, value_name = "PATH", global = true)]
+    pub config: Option<PathBuf>,
+
+    #[command(subcommand)]
+    pub command: Command,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum Command {
+    /// Generate an image from a prompt
+    Generate(Box<GenerateArgs>),
+    /// Find models to pull, and see which ones you already have
+    Models {
+        #[command(subcommand)]
+        command: ModelsCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ModelsCommand {
+    /// Search HuggingFace for models you could pull
+    Search(SearchArgs),
+    /// List weight files already downloaded into models_dir
+    List(ListArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct SearchArgs {
+    /// Text to search HuggingFace model names for
+    pub query: String,
+
+    /// Maximum number of repos to inspect
+    #[arg(
+        long,
+        value_name = "N",
+        default_value_t = 20,
+        value_parser = clap::value_parser!(u32).range(1..=100)
+    )]
+    pub limit: u32,
+
+    /// Include every pipeline type, not just text-to-image
+    #[arg(long)]
+    pub all: bool,
+
+    /// Ignore cached hub responses and re-query HuggingFace
+    #[arg(long)]
+    pub refresh: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct ListArgs {
+    /// Only show refs containing this text
+    pub query: Option<String>,
+}
+
+#[derive(Debug, Args)]
 #[command(
-    name = "diffusion",
-    version,
-    about = "Generate images with diffusion-rs",
     group(
         ArgGroup::new("checkpoint")
             .required(true)
@@ -17,11 +73,7 @@ use crate::models::ModelRef;
             .args(["model", "diffusion_model"]),
     )
 )]
-pub struct Cli {
-    /// Path to a config.toml, overriding the default search locations
-    #[arg(short, long, value_name = "PATH")]
-    pub config: Option<PathBuf>,
-
+pub struct GenerateArgs {
     /// The prompt to render
     pub prompt: String,
 
@@ -279,5 +331,17 @@ impl From<WeightTypeArg> for WeightType {
             WeightTypeArg::Q3K => WeightType::SD_TYPE_Q3_K,
             WeightTypeArg::Q2K => WeightType::SD_TYPE_Q2_K,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::CommandFactory;
+
+    use super::Cli;
+
+    #[test]
+    fn cli_definition_is_valid() {
+        Cli::command().debug_assert();
     }
 }

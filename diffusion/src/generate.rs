@@ -6,44 +6,49 @@ use diffusion_rs::api::{
     BackendDevice, ClipSkip, ConfigBuilder, ModelConfigBuilder, Module, gen_img,
 };
 
-use crate::cli::Cli;
+use crate::cli::GenerateArgs;
 use crate::error::AppError;
 use crate::models;
 
-pub fn generate(cli: &Cli, models_dir: &Path, output: &Path, copies: u32) -> Result<(), AppError> {
+pub fn generate(
+    args: &GenerateArgs,
+    models_dir: &Path,
+    output: &Path,
+    copies: u32,
+) -> Result<(), AppError> {
     let mut model_config = ModelConfigBuilder::default();
 
-    if let Some(reference) = &cli.model {
+    if let Some(reference) = &args.model {
         model_config.model(models::resolve(models_dir, reference)?);
     }
-    if let Some(reference) = &cli.diffusion_model {
+    if let Some(reference) = &args.diffusion_model {
         model_config.diffusion_model(models::resolve(models_dir, reference)?);
     }
-    if let Some(reference) = &cli.vae {
+    if let Some(reference) = &args.vae {
         model_config.vae(models::resolve(models_dir, reference)?);
     }
-    if let Some(reference) = &cli.clip_l {
+    if let Some(reference) = &args.clip_l {
         model_config.clip_l(models::resolve(models_dir, reference)?);
     }
-    if let Some(reference) = &cli.clip_g {
+    if let Some(reference) = &args.clip_g {
         model_config.clip_g(models::resolve(models_dir, reference)?);
     }
-    if let Some(reference) = &cli.t5xxl {
+    if let Some(reference) = &args.t5xxl {
         model_config.t5xxl(models::resolve(models_dir, reference)?);
     }
-    if let Some(reference) = &cli.taesd {
+    if let Some(reference) = &args.taesd {
         model_config.taesd(models::resolve(models_dir, reference)?);
     }
-    if let Some(weight_type) = cli.weight_type {
+    if let Some(weight_type) = args.weight_type {
         model_config.weight_type(weight_type);
     }
     model_config
-        .vae_tiling(cli.vae_tiling)
-        .flash_attention(cli.flash_attn);
-    if let Some(threads) = cli.threads {
+        .vae_tiling(args.vae_tiling)
+        .flash_attention(args.flash_attn);
+    if let Some(threads) = args.threads {
         model_config.n_threads(threads);
     }
-    if let Some(backend) = cli.backend {
+    if let Some(backend) = args.backend {
         if let Some(feature) = backend.missing_feature() {
             return Err(AppError::UnsupportedBackend { backend: feature });
         }
@@ -63,32 +68,32 @@ pub fn generate(cli: &Cli, models_dir: &Path, output: &Path, copies: u32) -> Res
     }
 
     let mut gen_config = ConfigBuilder::default();
-    gen_config.prompt(cli.prompt.clone()).output(output);
-    if let Some(negative) = &cli.negative {
+    gen_config.prompt(args.prompt.clone()).output(output);
+    if let Some(negative) = &args.negative {
         gen_config.negative_prompt(negative.clone());
     }
-    if let Some(width) = cli.width {
+    if let Some(width) = args.width {
         gen_config.width(width);
     }
-    if let Some(height) = cli.height {
+    if let Some(height) = args.height {
         gen_config.height(height);
     }
-    if let Some(steps) = cli.steps {
+    if let Some(steps) = args.steps {
         gen_config.steps(steps);
     }
-    if let Some(cfg_scale) = cli.cfg_scale {
+    if let Some(cfg_scale) = args.cfg_scale {
         gen_config.cfg_scale(cfg_scale);
     }
-    if let Some(guidance) = cli.guidance {
+    if let Some(guidance) = args.guidance {
         gen_config.guidance(guidance);
     }
-    if let Some(seed) = cli.seed {
+    if let Some(seed) = args.seed {
         gen_config.seed(seed);
     }
-    if let Some(sampler) = cli.sampler {
+    if let Some(sampler) = args.sampler {
         gen_config.sampling_method(sampler);
     }
-    if let Some(clip_skip) = cli.clip_skip {
+    if let Some(clip_skip) = args.clip_skip {
         gen_config.clip_skip(match clip_skip {
             1 => ClipSkip::None,
             2 => ClipSkip::OneLayer,
