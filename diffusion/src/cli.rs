@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use diffusion_rs::api::{BackendDevice, SampleMethod, WeightType};
 
 use crate::models::ModelRef;
@@ -65,17 +65,13 @@ pub struct ListArgs {
 }
 
 #[derive(Debug, Args)]
-#[command(
-    group(
-        ArgGroup::new("checkpoint")
-            .required(true)
-            .multiple(true)
-            .args(["model", "diffusion_model"]),
-    )
-)]
 pub struct GenerateArgs {
     /// The prompt to render
     pub prompt: String,
+
+    /// Apply a named preset from config.toml; explicit flags still win
+    #[arg(long, value_name = "NAME")]
+    pub preset: Option<String>,
 
     /// Full checkpoint: owner/repo[:file], owner/repo@revision[:file], or a local path
     #[arg(short, long, value_name = "REF")]
@@ -109,13 +105,25 @@ pub struct GenerateArgs {
     #[arg(long, value_name = "TYPE")]
     pub weight_type: Option<WeightTypeArg>,
 
-    /// Process the VAE in tiles to reduce memory usage
-    #[arg(long)]
-    pub vae_tiling: bool,
+    /// Process the VAE in tiles to reduce memory usage (default: false)
+    #[arg(
+        long,
+        value_name = "BOOL",
+        num_args = 0..=1,
+        default_missing_value = "true",
+        require_equals = true
+    )]
+    pub vae_tiling: Option<bool>,
 
-    /// Use flash attention to reduce memory usage
-    #[arg(long)]
-    pub flash_attn: bool,
+    /// Use flash attention to reduce memory usage (default: false)
+    #[arg(
+        long,
+        value_name = "BOOL",
+        num_args = 0..=1,
+        default_missing_value = "true",
+        require_equals = true
+    )]
+    pub flash_attn: Option<bool>,
 
     /// Number of CPU threads to use (default: physical core count)
     #[arg(long, value_name = "N")]
@@ -177,9 +185,13 @@ pub struct GenerateArgs {
     /// Display the generated image inline in the terminal
     #[arg(long)]
     pub show: bool,
+
+    /// Print the produced paths and total elapsed time as JSON on stdout
+    #[arg(long)]
+    pub json: bool,
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]
 pub enum Backend {
     Cpu,
     Vulkan,
@@ -218,7 +230,7 @@ impl Backend {
     }
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]
 pub enum Sampler {
     #[value(name = "euler")]
     Euler,
@@ -284,7 +296,7 @@ impl From<Sampler> for SampleMethod {
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]
 pub enum WeightTypeArg {
     #[value(name = "f32")]
     F32,
@@ -336,12 +348,26 @@ impl From<WeightTypeArg> for WeightType {
 
 #[cfg(test)]
 mod tests {
-    use clap::CommandFactory;
+    use clap::{CommandFactory, Parser};
 
-    use super::Cli;
+    use super::{Cli, Command};
 
     #[test]
     fn cli_definition_is_valid() {
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn generate_accepts_json_flag() {
+        let cli = Cli::try_parse_from(["diffusion", "generate", "a prompt", "--json"]).unwrap();
+        match cli.command {
+            Command::Generate(args) => assert!(args.json),
+            other => panic!("expected Command::Generate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn models_list_rejects_json_flag() {
+        assert!(Cli::try_parse_from(["diffusion", "models", "list", "--json"]).is_err());
     }
 }

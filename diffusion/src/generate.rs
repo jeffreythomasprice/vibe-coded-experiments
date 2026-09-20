@@ -43,8 +43,8 @@ pub fn generate(
         model_config.weight_type(weight_type);
     }
     model_config
-        .vae_tiling(args.vae_tiling)
-        .flash_attention(args.flash_attn);
+        .vae_tiling(args.vae_tiling.unwrap_or(false))
+        .flash_attention(args.flash_attn.unwrap_or(false));
     if let Some(threads) = args.threads {
         model_config.n_threads(threads);
     }

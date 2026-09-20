@@ -47,7 +47,7 @@ pub fn init(config: &Config) -> Result<(), LogError> {
 
     tracing_subscriber::registry()
         .with(filter)
-        .with(fmt::layer())
+        .with(fmt::layer().with_writer(std::io::stderr))
         .with(fmt::layer().with_ansi(false).with_writer(file))
         .init();
 

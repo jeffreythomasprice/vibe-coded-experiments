@@ -4,9 +4,6 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AppError {
-    #[error("no output destination: stdout is not a terminal; pass -o <PATH> or --show")]
-    NoOutputTarget,
-
     #[error("--output {} is a directory; pass a file path", .path.display())]
     OutputIsDirectory { path: PathBuf },
 
@@ -44,8 +41,17 @@ pub enum AppError {
     #[error(transparent)]
     Hub(#[from] crate::hub::HubError),
 
+    #[error(transparent)]
+    Llm(#[from] crate::llm::LlmError),
+
     #[error(
         "--backend {backend} was requested, but this binary was built without `--features {backend}`"
     )]
     UnsupportedBackend { backend: &'static str },
+
+    #[error("no checkpoint: pass --model or --diffusion-model, or a --preset that sets one")]
+    NoCheckpoint,
+
+    #[error("unknown preset '{name}'; config defines: {available}")]
+    UnknownPreset { name: String, available: String },
 }

@@ -57,6 +57,11 @@ local path; weights auto-download into `models_dir` on first use. `--copies N`
 generates N images, turning `-o` into a filename prefix (`bike.png` → `bike0.png`,
 `bike1.png`, …). See `cargo run -- generate --help` for the full flag list.
 
+Flag bundles that only depend on the model can live in `config.toml` as named
+presets, reducing the above to `generate "a red bicycle on a beach" --preset
+turbo -o /tmp/bike.png --show`. Explicit flags override the preset. See
+`config.toml.example`.
+
 ## Finding models
 
 ```
@@ -66,3 +71,8 @@ cargo run -- models list              # list only what's already downloaded, no 
 
 `models search` caches HuggingFace's responses under `models_dir/.hub-cache`; pass
 `--refresh` to bypass that cache and re-query.
+
+## Testing
+
+`cargo test` runs the unit suite. `cargo test --features ollama-tests` also runs
+integration tests against a real Ollama server expected at `localhost:11434`.

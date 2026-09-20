@@ -17,3 +17,35 @@ log_max_files = 15
 
 # Where model weights are downloaded and cached.
 models_dir = "/tmp/diffusion"
+
+# Named bundles of `generate` arguments. `--preset flux` is the same as typing
+# each key below as its --flag. Anything you also pass on the command line wins
+# and logs a warning. Keys are the long flag name in snake_case; values use the
+# same syntax the flag does. Every generate flag is allowed except the
+# per-invocation ones: the prompt, --output, --copies, --show, --json and --seed.
+# Note floats need a decimal point: cfg_scale = 1.0, not 1.
+
+[presets.flux]
+diffusion_model = "city96/FLUX.1-dev-gguf:flux1-dev-F16.gguf"
+clip_l = "comfyanonymous/flux_text_encoders:clip_l.safetensors"
+t5xxl = "comfyanonymous/flux_text_encoders:t5xxl_fp8_e4m3fn.safetensors"
+vae = "unsloth/FLUX.1-dev:ae.safetensors"
+weight_type = "q8_0"
+
+[presets.turbo]
+model = "stabilityai/sd-turbo"
+steps = 4
+cfg_scale = 1.0
+guidance = 0.0
+
+# LLM backend, for prompt rewriting and other agent-driven features. "ollama" is
+# the only backend right now.
+[llm]
+backend = "ollama"
+model = "qwen3:4b"
+max_turns = 8
+
+[llm.ollama]
+host = "localhost"
+port = 11434
+timeout_secs = 120

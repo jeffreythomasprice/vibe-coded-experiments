@@ -1,7 +1,11 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use thiserror::Error;
+
+use crate::llm::LlmConfig;
+use crate::preset::Preset;
 
 pub const DEFAULT_LOG_FILTER: &str = "warn,diffusion=trace";
 pub const DEFAULT_LOG_DIR: &str = "/tmp/diffusion/logs";
@@ -18,6 +22,8 @@ pub struct Config {
     pub log_max_bytes: u64,
     pub log_max_files: usize,
     pub models_dir: PathBuf,
+    pub presets: BTreeMap<String, Preset>,
+    pub llm: LlmConfig,
 }
 
 impl Default for Config {
@@ -28,6 +34,8 @@ impl Default for Config {
             log_max_bytes: DEFAULT_LOG_MAX_BYTES,
             log_max_files: DEFAULT_LOG_MAX_FILES,
             models_dir: PathBuf::from(DEFAULT_MODELS_DIR),
+            presets: BTreeMap::new(),
+            llm: LlmConfig::default(),
         }
     }
 }
@@ -179,6 +187,70 @@ mod tests {
     }
 
     #[test]
+    fn preset_table_is_parsed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            concat!(
+                "[presets.turbo]\n",
+                "model = \"stabilityai/sd-turbo\"\n",
+                "steps = 4\n",
+                "cfg_scale = 1.0\n",
+                "guidance = 0.0\n",
+            ),
+        )
+        .unwrap();
+
+        let loaded = load_from_candidates(&[path]).unwrap();
+
+        let turbo = loaded.config.presets.get("turbo").unwrap();
+        assert_eq!(turbo.model, Some("stabilityai/sd-turbo".parse().unwrap()));
+        assert_eq!(turbo.steps, Some(4));
+        assert_eq!(turbo.cfg_scale, Some(1.0));
+        assert_eq!(turbo.guidance, Some(0.0));
+    }
+
+    #[test]
+    fn preset_typo_key_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[presets.turbo]\nstep = 4\n").unwrap();
+
+        let err = load_from_candidates(std::slice::from_ref(&path)).unwrap_err();
+
+        assert!(matches!(err, ConfigError::Parse { .. }));
+    }
+
+    #[test]
+    fn preset_invalid_weight_type_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[presets.turbo]\nweight_type = \"not_a_type\"\n").unwrap();
+
+        let err = load_from_candidates(std::slice::from_ref(&path)).unwrap_err();
+
+        match err {
+            ConfigError::Parse { source, .. } => {
+                let message = source.to_string();
+                assert!(message.contains("q8_0"), "message was: {message}");
+            }
+            other => panic!("expected Parse error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn no_presets_table_still_matches_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "log_filter = \"info\"\n").unwrap();
+
+        let loaded = load_from_candidates(&[path]).unwrap();
+
+        assert!(loaded.config.presets.is_empty());
+    }
+
+    #[test]
     fn unknown_key_is_rejected() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
@@ -201,6 +273,28 @@ mod tests {
         let err = load_from_candidates(std::slice::from_ref(&path)).unwrap_err();
 
         assert!(matches!(err, ConfigError::Parse { .. }));
+    }
+
+    #[test]
+    fn llm_section_is_parsed_and_defaults_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            concat!("[llm]\n", "model = \"llama3.2\"\n", "[llm.ollama]\n", "port = 9999\n"),
+        )
+        .unwrap();
+
+        let loaded = load_from_candidates(&[path]).unwrap();
+
+        assert_eq!(loaded.config.llm.model, "llama3.2");
+        assert_eq!(loaded.config.llm.ollama.port, 9999);
+        assert_eq!(loaded.config.llm.ollama.host, "localhost");
+
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("missing.toml");
+        let defaulted = load_from_candidates(&[missing]).unwrap();
+        assert_eq!(defaulted.config.llm, crate::llm::LlmConfig::default());
     }
 
     #[test]
