@@ -2,8 +2,8 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 use clap::Parser;
-use diffusion::cli::{self, Command};
-use diffusion::{report, run};
+use image_gen::cli::{self, Command};
+use image_gen::{report, run};
 
 fn main() -> ExitCode {
     let started = Instant::now();

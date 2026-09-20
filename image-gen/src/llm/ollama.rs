@@ -62,14 +62,14 @@ impl Provider for OllamaProvider {
         };
 
         tracing::debug!(
-            target: "diffusion::llm",
+            target: "image_gen::llm",
             model = %request.model,
             "model missing locally, pulling before retrying chat"
         );
 
         if let Err(pull_err) = self.pull(&request.model).await {
             tracing::warn!(
-                target: "diffusion::llm",
+                target: "image_gen::llm",
                 model = %request.model,
                 error = %pull_err,
                 "pulling model failed"

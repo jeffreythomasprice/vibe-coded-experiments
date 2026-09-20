@@ -6,7 +6,7 @@ use diffusion_rs::api::{BackendDevice, SampleMethod, WeightType};
 use crate::models::ModelRef;
 
 #[derive(Debug, Parser)]
-#[command(name = "diffusion", version, about = "Generate images with diffusion-rs")]
+#[command(name = "image-gen", version, about = "Generate images with diffusion-rs")]
 pub struct Cli {
     /// Path to a config.toml, overriding the default search locations
     #[arg(short, long, value_name = "PATH", global = true)]
@@ -408,7 +408,7 @@ mod tests {
 
     #[test]
     fn generate_accepts_json_flag() {
-        let cli = Cli::try_parse_from(["diffusion", "generate", "a prompt", "--json"]).unwrap();
+        let cli = Cli::try_parse_from(["image-gen", "generate", "a prompt", "--json"]).unwrap();
         match cli.command {
             Command::Generate(args) => assert!(args.json),
             other => panic!("expected Command::Generate, got {other:?}"),
@@ -417,12 +417,12 @@ mod tests {
 
     #[test]
     fn models_list_rejects_json_flag() {
-        assert!(Cli::try_parse_from(["diffusion", "models", "list", "--json"]).is_err());
+        assert!(Cli::try_parse_from(["image-gen", "models", "list", "--json"]).is_err());
     }
 
     #[test]
     fn eval_absent_is_none_not_empty_vec() {
-        let cli = Cli::try_parse_from(["diffusion", "generate", "a prompt"]).unwrap();
+        let cli = Cli::try_parse_from(["image-gen", "generate", "a prompt"]).unwrap();
         match cli.command {
             Command::Generate(args) => assert_eq!(args.eval, None),
             other => panic!("expected Command::Generate, got {other:?}"),
@@ -432,7 +432,7 @@ mod tests {
     #[test]
     fn repeated_eval_flags_combine_into_one_vec() {
         let cli = Cli::try_parse_from([
-            "diffusion", "generate", "a prompt", "--eval", "vqa", "--eval", "tit",
+            "image-gen", "generate", "a prompt", "--eval", "vqa", "--eval", "tit",
         ])
         .unwrap();
         match cli.command {
@@ -446,7 +446,7 @@ mod tests {
     #[test]
     fn repeated_preset_flags_collect_in_order() {
         let cli = Cli::try_parse_from([
-            "diffusion", "generate", "a prompt", "--preset", "a", "--preset", "b",
+            "image-gen", "generate", "a prompt", "--preset", "a", "--preset", "b",
         ])
         .unwrap();
         match cli.command {

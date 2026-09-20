@@ -7,16 +7,16 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use diffusion::llm::{
+use image_gen::llm::{
     Agent, ChatOptions, ChatRequest, FunctionTool, Message, Provider, StopReason, ToolOutput,
     ToolRegistry,
 };
-use diffusion::llm::ollama::OllamaProvider;
+use image_gen::llm::ollama::OllamaProvider;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
 fn model() -> String {
-    std::env::var("DIFFUSION_OLLAMA_MODEL").unwrap_or_else(|_| "qwen3:4b".to_owned())
+    std::env::var("IMAGE_GEN_OLLAMA_MODEL").unwrap_or_else(|_| "qwen3:4b".to_owned())
 }
 
 fn provider() -> OllamaProvider {
@@ -52,7 +52,7 @@ async fn vision_round_trip() {
     require_ollama_running().await;
 
     let png = one_pixel_png();
-    let image = diffusion::llm::Image::from_bytes(png).unwrap();
+    let image = image_gen::llm::Image::from_bytes(png).unwrap();
     let request = ChatRequest {
         model: model(),
         messages: vec![Message::user_with_images(

@@ -1,4 +1,4 @@
-# diffusion
+# image-gen
 
 Generate images with diffusion-rs.
 
@@ -12,6 +12,7 @@ enough on their own):
 sudo pacman -S vulkan-headers spirv-headers   # or your distro's equivalent
 vendor/diffusion-rs-sys/fetch-source.sh   # once, after cloning
 cargo build
+cargo build --release
 ```
 
 For a CPU-only build, or to also compile in CUDA (needs the CUDA Toolkit), or both:

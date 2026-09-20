@@ -7,11 +7,11 @@ use thiserror::Error;
 use crate::llm::LlmConfig;
 use crate::preset::Preset;
 
-pub const DEFAULT_LOG_FILTER: &str = "warn,diffusion=trace";
-pub const DEFAULT_LOG_DIR: &str = "/tmp/diffusion/logs";
+pub const DEFAULT_LOG_FILTER: &str = "warn,image_gen=trace";
+pub const DEFAULT_LOG_DIR: &str = "/tmp/image-gen/logs";
 pub const DEFAULT_LOG_MAX_BYTES: u64 = 100 * 1024 * 1024;
 pub const DEFAULT_LOG_MAX_FILES: usize = 15;
-pub const DEFAULT_MODELS_DIR: &str = "/tmp/diffusion";
+pub const DEFAULT_MODELS_DIR: &str = "/tmp/image-gen";
 const FILE_NAME: &str = "config.toml";
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -88,7 +88,7 @@ pub fn load(explicit: Option<&Path>) -> Result<Loaded, ConfigError> {
         candidates.push(dir.join(FILE_NAME));
     }
     if let Some(dir) = dirs::config_dir() {
-        candidates.push(dir.join("diffusion").join(FILE_NAME));
+        candidates.push(dir.join("image-gen").join(FILE_NAME));
     }
 
     load_from_candidates(&candidates)
@@ -178,11 +178,11 @@ mod tests {
     fn log_dir_can_be_overridden() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
-        std::fs::write(&path, "log_dir = \"/var/log/diffusion\"\n").unwrap();
+        std::fs::write(&path, "log_dir = \"/var/log/image-gen\"\n").unwrap();
 
         let loaded = load_from_candidates(&[path]).unwrap();
 
-        assert_eq!(loaded.config.log_dir, PathBuf::from("/var/log/diffusion"));
+        assert_eq!(loaded.config.log_dir, PathBuf::from("/var/log/image-gen"));
         assert_eq!(loaded.config.models_dir, PathBuf::from(DEFAULT_MODELS_DIR));
     }
 

@@ -9,7 +9,7 @@ use tracing_subscriber::fmt::MakeWriter;
 use crate::config::Config;
 use crate::logging::LogError;
 
-const PREFIX: &str = "diffusion-";
+const PREFIX: &str = "image-gen-";
 const SUFFIX: &str = ".log";
 
 struct Sink {
@@ -274,13 +274,13 @@ mod tests {
         assert_eq!(
             names(dir.path()),
             vec![
-                "diffusion-2026-09-19.000.log",
-                "diffusion-2026-09-19.001.log"
+                "image-gen-2026-09-19.000.log",
+                "image-gen-2026-09-19.001.log"
             ]
         );
-        let first = std::fs::read(dir.path().join("diffusion-2026-09-19.000.log")).unwrap();
+        let first = std::fs::read(dir.path().join("image-gen-2026-09-19.000.log")).unwrap();
         assert_eq!(first, [vec![b'a'; 20], vec![b'b'; 20]].concat());
-        let second = std::fs::read(dir.path().join("diffusion-2026-09-19.001.log")).unwrap();
+        let second = std::fs::read(dir.path().join("image-gen-2026-09-19.001.log")).unwrap();
         assert_eq!(second, vec![b'c'; 20]);
     }
 
@@ -291,8 +291,8 @@ mod tests {
 
         sink.write_event(day(19), &[b'a'; 100]);
 
-        assert_eq!(names(dir.path()), vec!["diffusion-2026-09-19.000.log"]);
-        let contents = std::fs::read(dir.path().join("diffusion-2026-09-19.000.log")).unwrap();
+        assert_eq!(names(dir.path()), vec!["image-gen-2026-09-19.000.log"]);
+        let contents = std::fs::read(dir.path().join("image-gen-2026-09-19.000.log")).unwrap();
         assert_eq!(contents.len(), 100);
     }
 
@@ -307,8 +307,8 @@ mod tests {
         assert_eq!(
             names(dir.path()),
             vec![
-                "diffusion-2026-09-19.000.log",
-                "diffusion-2026-09-20.000.log"
+                "image-gen-2026-09-19.000.log",
+                "image-gen-2026-09-20.000.log"
             ]
         );
     }
@@ -316,7 +316,7 @@ mod tests {
     #[test]
     fn existing_file_length_is_carried_over() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("diffusion-2026-09-19.000.log"), [0u8; 30]).unwrap();
+        std::fs::write(dir.path().join("image-gen-2026-09-19.000.log"), [0u8; 30]).unwrap();
 
         let mut sink = Sink::open(dir.path(), 32, 15).unwrap();
         sink.write_event(day(19), &[b'x'; 10]);
@@ -324,20 +324,20 @@ mod tests {
         assert_eq!(
             names(dir.path()),
             vec![
-                "diffusion-2026-09-19.000.log",
-                "diffusion-2026-09-19.001.log"
+                "image-gen-2026-09-19.000.log",
+                "image-gen-2026-09-19.001.log"
             ]
         );
-        let first = std::fs::read(dir.path().join("diffusion-2026-09-19.000.log")).unwrap();
+        let first = std::fs::read(dir.path().join("image-gen-2026-09-19.000.log")).unwrap();
         assert_eq!(first.len(), 30);
-        let second = std::fs::read(dir.path().join("diffusion-2026-09-19.001.log")).unwrap();
+        let second = std::fs::read(dir.path().join("image-gen-2026-09-19.001.log")).unwrap();
         assert_eq!(second, vec![b'x'; 10]);
     }
 
     #[test]
     fn full_file_at_startup_opens_the_next_index() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("diffusion-2026-09-19.000.log"), [0u8; 40]).unwrap();
+        std::fs::write(dir.path().join("image-gen-2026-09-19.000.log"), [0u8; 40]).unwrap();
 
         let mut sink = Sink::open(dir.path(), 32, 15).unwrap();
         sink.write_event(day(19), b"x");
@@ -345,11 +345,11 @@ mod tests {
         assert_eq!(
             names(dir.path()),
             vec![
-                "diffusion-2026-09-19.000.log",
-                "diffusion-2026-09-19.001.log"
+                "image-gen-2026-09-19.000.log",
+                "image-gen-2026-09-19.001.log"
             ]
         );
-        let second = std::fs::read(dir.path().join("diffusion-2026-09-19.001.log")).unwrap();
+        let second = std::fs::read(dir.path().join("image-gen-2026-09-19.001.log")).unwrap();
         assert_eq!(second, b"x");
     }
 
@@ -365,9 +365,9 @@ mod tests {
         assert_eq!(
             names(dir.path()),
             vec![
-                "diffusion-2026-09-17.000.log",
-                "diffusion-2026-09-18.000.log",
-                "diffusion-2026-09-19.000.log",
+                "image-gen-2026-09-17.000.log",
+                "image-gen-2026-09-18.000.log",
+                "image-gen-2026-09-19.000.log",
             ]
         );
     }
@@ -377,12 +377,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let unrelated = [
             "model.safetensors",
-            "diffusion.log",
-            "diffusion-2026-09-19.log",
-            "diffusion-2026-09-19.1.log",
-            "diffusion-2026-13-45.000.log",
-            "diffusion-2026-09-19.000.log.gz",
-            "diffusionista-2026-09-19.000.log",
+            "image-gen.log",
+            "image-gen-2026-09-19.log",
+            "image-gen-2026-09-19.1.log",
+            "image-gen-2026-13-45.000.log",
+            "image-gen-2026-09-19.000.log.gz",
+            "image-genesis-2026-09-19.000.log",
         ];
         for name in unrelated {
             std::fs::write(dir.path().join(name), b"").unwrap();
@@ -404,12 +404,12 @@ mod tests {
     #[test]
     fn pruning_keeps_the_open_file() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("diffusion-2026-09-20.000.log"), b"").unwrap();
+        std::fs::write(dir.path().join("image-gen-2026-09-20.000.log"), b"").unwrap();
 
         let mut sink = Sink::open(dir.path(), 1024, 1).unwrap();
         sink.write_event(day(19), b"x");
 
-        assert!(dir.path().join("diffusion-2026-09-19.000.log").is_file());
+        assert!(dir.path().join("image-gen-2026-09-19.000.log").is_file());
     }
 
     #[test]
@@ -446,15 +446,15 @@ mod tests {
     #[test]
     fn parse_name_rejects_near_misses() {
         let cases = [
-            ("diffusion-2026-09-19.000.log", Some((day(19), 0))),
-            ("diffusion-2026-09-19.042.log", Some((day(19), 42))),
+            ("image-gen-2026-09-19.000.log", Some((day(19), 0))),
+            ("image-gen-2026-09-19.042.log", Some((day(19), 42))),
             ("model.safetensors", None),
-            ("diffusion.log", None),
-            ("diffusion-2026-09-19.log", None),
-            ("diffusion-2026-09-19.1.log", None),
-            ("diffusion-2026-09-19.000.log.gz", None),
-            ("diffusion-2026-13-45.000.log", None),
-            ("diffusionista-2026-09-19.000.log", None),
+            ("image-gen.log", None),
+            ("image-gen-2026-09-19.log", None),
+            ("image-gen-2026-09-19.1.log", None),
+            ("image-gen-2026-09-19.000.log.gz", None),
+            ("image-gen-2026-13-45.000.log", None),
+            ("image-genesis-2026-09-19.000.log", None),
         ];
         for (name, expected) in cases {
             assert_eq!(parse_name(name), expected, "{name}");

@@ -229,7 +229,7 @@ mod tests {
     use clap::Parser;
 
     fn parse(args: &[&str]) -> GenerateArgs {
-        let mut full = vec!["diffusion", "generate"];
+        let mut full = vec!["image-gen", "generate"];
         full.extend_from_slice(args);
         match Cli::try_parse_from(full).unwrap().command {
             Command::Generate(args) => *args,

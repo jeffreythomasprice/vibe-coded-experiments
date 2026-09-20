@@ -79,7 +79,7 @@ impl Agent {
             }
 
             tracing::debug!(
-                target: "diffusion::llm",
+                target: "image_gen::llm",
                 turn,
                 tool_calls = tool_calls.len(),
                 "agent turn requested tool calls"
@@ -90,7 +90,7 @@ impl Agent {
                     Ok(output) => output.content,
                     Err(err) => {
                         tracing::warn!(
-                            target: "diffusion::llm",
+                            target: "image_gen::llm",
                             tool = %call.name,
                             error = %err,
                             "tool call failed"

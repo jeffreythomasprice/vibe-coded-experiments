@@ -294,7 +294,7 @@ fn produce_to_file(
             .filter(|parent| !parent.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
         let scratch = tempfile::Builder::new()
-            .prefix(".diffusion-")
+            .prefix(".image-gen-")
             .tempdir_in(scratch_parent)?;
         generate::generate(args, prompt, seed, models_dir, scratch.path(), args.copies)?;
         let sources = output::collect(scratch.path(), args.copies)?;
@@ -356,7 +356,7 @@ mod tests {
     use cli::Cli;
 
     fn parse(args: &[&str]) -> GenerateArgs {
-        let mut full = vec!["diffusion", "generate"];
+        let mut full = vec!["image-gen", "generate"];
         full.extend_from_slice(args);
         match Cli::try_parse_from(full).unwrap().command {
             Command::Generate(args) => *args,

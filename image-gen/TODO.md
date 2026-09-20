@@ -3,16 +3,6 @@ in-flight:
 
 todo:
 
-I want to rename this project. Currently we call this `diffusion` but I want to call it `image-gen`.
-
-This affects
-- the cargo project name
-- where config files are located, e.g. the default is `~/.config/diffusion` and should be `~/.config/image-gen`
-- exampels in the README.md maybe?
-- unit tests that hard-code paths?
-- anything else I've forgotten?
-
-
 I want to make a skill in .claude/skills that runs this project. It should expect the already built binary to be available on the path, so don't try to hard-code paths to the target dir.
 
 If the user is asking to generate an image we should try to invoke the tool and given them the path to the best image. This means we should use `--copies` and `--eval` to generate 
@@ -32,6 +22,8 @@ vqa_model = "qwen3-vl:4b"
 caption_model = "qwen3-vl:4b"
 model = "qwen3:4b"
 ```
+
+We should invoke with `--copies 5` unless the user expresses a preference for a specific number.
 
 We should invoke with `--json` and parse the output to find the "best" image. We're looking to order by something like `.images[].borda.rank`. Example output is like:
 ```
