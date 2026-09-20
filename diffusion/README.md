@@ -34,7 +34,21 @@ editing anything under `vendor/diffusion-rs-sys/` forces a rebuild.
 ## Run
 
 ```
-cargo run -- generate "a red bicycle on a beach" --model stabilityai/sd-turbo --steps 4 --cfg-scale 1 --guidance 0 -o /tmp/bike.png --show
+cargo run -- generate "a chess piece beating another chess piece with a baseball bat" \
+	--diffusion-model city96/FLUX.1-dev-gguf:flux1-dev-F16.gguf \
+	--clip-l comfyanonymous/flux_text_encoders:clip_l.safetensors \
+	--t5xxl comfyanonymous/flux_text_encoders:t5xxl_fp8_e4m3fn.safetensors \
+	--vae unsloth/FLUX.1-dev:ae.safetensors \
+	--weight-type q8_0 \
+	-o /tmp/chess.png \
+	--show
+
+cargo run -- generate "a red bicycle on a beach" \
+	--model stabilityai/sd-turbo \
+	--steps 4 \
+	--cfg-scale 1 \
+	--guidance 0 \
+	-o /tmp/bike.png --show
 ```
 
 `--model` (or `--diffusion-model` for standalone diffusion weights) accepts a
