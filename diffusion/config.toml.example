@@ -19,11 +19,14 @@ log_max_files = 15
 models_dir = "/tmp/diffusion"
 
 # Named bundles of `generate` arguments. `--preset flux` is the same as typing
-# each key below as its --flag. Anything you also pass on the command line wins
-# and logs a warning. Keys are the long flag name in snake_case; values use the
-# same syntax the flag does. Every generate flag is allowed except the
-# per-invocation ones: the prompt, --output, --copies, --show, --json and --seed.
-# Note floats need a decimal point: cfg_scale = 1.0, not 1.
+# each key below as its --flag. `--preset` is repeatable and combines left to
+# right (`--preset flux --preset eval` applies both); a key both presets set logs
+# a warning and keeps the later preset's value. Anything you also pass on the
+# command line wins over every preset, also with a warning. Keys are the long
+# flag name in snake_case; values use the same syntax the flag does. Every
+# generate flag is allowed except the per-invocation ones: the prompt, --output,
+# --copies, --show, --json and --seed. Note floats need a decimal point:
+# cfg_scale = 1.0, not 1.
 
 [presets.flux]
 diffusion_model = "city96/FLUX.1-dev-gguf:flux1-dev-F16.gguf"
@@ -38,8 +41,34 @@ steps = 4
 cfg_scale = 1.0
 guidance = 0.0
 
-# LLM backend, for prompt rewriting and other agent-driven features. "ollama" is
-# the only backend right now.
+# Everything --eval and --rewrite need, bundled so `--preset eval` turns both on
+# with one flag. Four model overrides exist, all falling back to [llm].model
+# when unset: rewrite_model (text only), vqa_model (vision), caption_model
+# (vision) and judge_model (text only, judges the caption text against the
+# prompt). None of the four has a built-in default, and neither does
+# [llm].model itself: whichever role you actually use (--rewrite and/or --eval)
+# must resolve a model from an explicit flag, a preset, or [llm].model below,
+# or that run fails. Only vqa_model/caption_model need a vision-capable model,
+# so they're set explicitly here; rewrite_model and judge_model are left to
+# fall back to [llm].model below.
+# TIT-Score is slow (two LLM calls per image, one a 250-350 word caption), so
+# raise [llm.ollama].timeout_secs below if you use it.
+[presets.eval]
+eval = ["vqa", "tit"]
+rewrite = "auto"
+rewrite_threshold = 300
+eval_max_px = 512
+vqa_model = "qwen3-vl:4b"
+caption_model = "qwen3-vl:4b"
+
+# LLM backend, for prompt rewriting and automated evaluation (VQAScore,
+# TIT-Score). "ollama" is the only backend right now. `model` here is the
+# fallback used by rewrite_model/vqa_model/caption_model/judge_model above
+# when they're not set individually; leave it unset and every role must be
+# set individually instead, or that role fails. When set, keep it a plain
+# text model (rewrite and judging never see images) and override
+# vqa_model/caption_model with a vision model, e.g. qwen2.5vl/qwen3-vl or
+# gemma3, wherever images are involved.
 [llm]
 backend = "ollama"
 model = "qwen3:4b"
@@ -48,4 +77,12 @@ max_turns = 8
 [llm.ollama]
 host = "localhost"
 port = 11434
-timeout_secs = 120
+# TIT-Score's caption call can run past the default 120s on a slow VLM; 300 is a
+# safer floor once --eval tit is in use.
+timeout_secs = 300
+# A model missing locally is pulled automatically before the chat request is
+# retried. This bounds silence during that pull, not its total duration: a
+# multi-gigabyte download can run far longer than this and keep going as long as
+# it keeps making progress, including through Ollama's quiet checksum-verification
+# pass on a very large model.
+pull_stall_timeout_secs = 600

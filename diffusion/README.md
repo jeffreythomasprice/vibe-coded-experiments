@@ -48,7 +48,8 @@ cargo run -- generate "a red bicycle on a beach" \
 	--steps 4 \
 	--cfg-scale 1 \
 	--guidance 0 \
-	-o /tmp/bike.png --show
+	-o /tmp/bike.png \
+	--show
 ```
 
 `--model` (or `--diffusion-model` for standalone diffusion weights) accepts a
@@ -59,8 +60,31 @@ generates N images, turning `-o` into a filename prefix (`bike.png` → `bike0.p
 
 Flag bundles that only depend on the model can live in `config.toml` as named
 presets, reducing the above to `generate "a red bicycle on a beach" --preset
-turbo -o /tmp/bike.png --show`. Explicit flags override the preset. See
+turbo -o /tmp/bike.png --show`. `--preset` is repeatable and combines left to
+right; explicit flags, and later presets, override earlier ones. See
 `config.toml.example`.
+
+## Evaluating generated images
+
+```
+cargo run -- generate "a red bicycle on a beach" \
+	--preset turbo \
+	--eval vqa --eval tit \
+	--copies 4 -o /tmp/bike.png \
+	--json \
+	--show
+```
+
+`--eval vqa` and `--eval tit` score each copy against the prompt (repeatable,
+both may be passed); `--rewrite auto` (the default) compresses a long prompt
+before generating and scores against the original. All three need a
+vision-capable model reachable through `[llm]` in `config.toml` (see
+`config.toml.example`'s `[llm]` section). Scores land in the log per copy and,
+with `--json`, in each image's `vqa`/`tit` fields. TIT-Score is slow — a
+250–350 word caption call per image, then a judge call — so start with a small
+`--copies` and `--eval vqa` alone before reaching for `--eval tit`. If you find
+yourself passing the same `--eval`/`--rewrite*` flags often, bundle them into a
+preset (see `config.toml.example`'s `eval` preset) instead of retyping them.
 
 ## Finding models
 

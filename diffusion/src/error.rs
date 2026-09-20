@@ -44,6 +44,9 @@ pub enum AppError {
     #[error(transparent)]
     Llm(#[from] crate::llm::LlmError),
 
+    #[error(transparent)]
+    Eval(#[from] crate::eval::EvalError),
+
     #[error(
         "--backend {backend} was requested, but this binary was built without `--features {backend}`"
     )]

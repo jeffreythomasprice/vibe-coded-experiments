@@ -6,11 +6,11 @@ use serde::Deserialize;
 use crate::llm::ollama::OllamaProvider;
 use crate::llm::provider::Provider;
 
-pub const DEFAULT_MODEL: &str = "qwen3:4b";
 pub const DEFAULT_MAX_TURNS: usize = 8;
 pub const DEFAULT_OLLAMA_HOST: &str = "localhost";
 pub const DEFAULT_OLLAMA_PORT: u16 = 11434;
 pub const DEFAULT_OLLAMA_TIMEOUT_SECS: u64 = 120;
+pub const DEFAULT_OLLAMA_PULL_STALL_TIMEOUT_SECS: u64 = 600;
 
 /// The LLM backend to use. Ollama is the only one today; a second backend adds a
 /// variant here and a matching arm in `provider()`.
@@ -24,7 +24,11 @@ pub enum Backend {
 #[serde(default, deny_unknown_fields)]
 pub struct LlmConfig {
     pub backend: Backend,
-    pub model: String,
+    /// No built-in default: every role that needs a model (`--rewrite-model`,
+    /// `--vqa-model`, `--caption-model`, `--judge-model`) must resolve one from an
+    /// explicit override, a preset, or this field — falling back to a guessed
+    /// model name would silently pick one that may not even be pulled.
+    pub model: Option<String>,
     pub max_turns: usize,
     pub ollama: OllamaConfig,
 }
@@ -33,7 +37,7 @@ impl Default for LlmConfig {
     fn default() -> Self {
         Self {
             backend: Backend::Ollama,
-            model: DEFAULT_MODEL.to_owned(),
+            model: None,
             max_turns: DEFAULT_MAX_TURNS,
             ollama: OllamaConfig::default(),
         }
@@ -46,6 +50,10 @@ pub struct OllamaConfig {
     pub host: String,
     pub port: u16,
     pub timeout_secs: u64,
+    /// How long a pull may go without any data before it's considered dead, not a
+    /// budget for the whole download — a multi-gigabyte model can legitimately run
+    /// far longer than this while still making progress.
+    pub pull_stall_timeout_secs: u64,
 }
 
 impl Default for OllamaConfig {
@@ -54,6 +62,7 @@ impl Default for OllamaConfig {
             host: DEFAULT_OLLAMA_HOST.to_owned(),
             port: DEFAULT_OLLAMA_PORT,
             timeout_secs: DEFAULT_OLLAMA_TIMEOUT_SECS,
+            pull_stall_timeout_secs: DEFAULT_OLLAMA_PULL_STALL_TIMEOUT_SECS,
         }
     }
 }
@@ -66,6 +75,10 @@ impl OllamaConfig {
     pub fn timeout(&self) -> Duration {
         Duration::from_secs(self.timeout_secs)
     }
+
+    pub fn pull_stall_timeout(&self) -> Duration {
+        Duration::from_secs(self.pull_stall_timeout_secs)
+    }
 }
 
 /// Builds the configured backend's `Provider`. The only backend today is Ollama;
@@ -75,6 +88,7 @@ pub fn provider(config: &LlmConfig) -> Arc<dyn Provider> {
         Backend::Ollama => Arc::new(OllamaProvider::new(
             config.ollama.base_url(),
             config.ollama.timeout(),
+            config.ollama.pull_stall_timeout(),
         )),
     }
 }
@@ -87,6 +101,7 @@ mod tests {
     fn defaults_point_at_localhost() {
         let config = LlmConfig::default();
         assert_eq!(config.backend, Backend::Ollama);
+        assert_eq!(config.model, None);
         assert_eq!(config.ollama.host, "localhost");
         assert_eq!(config.ollama.port, 11434);
         assert_eq!(config.ollama.base_url(), "http://localhost:11434");
@@ -98,7 +113,7 @@ mod tests {
             "model = \"llama3.2\"\nmax_turns = 3\n[ollama]\nhost = \"10.0.0.5\"\nport = 9999\n",
         )
         .unwrap();
-        assert_eq!(parsed.model, "llama3.2");
+        assert_eq!(parsed.model, Some("llama3.2".to_owned()));
         assert_eq!(parsed.max_turns, 3);
         assert_eq!(parsed.ollama.base_url(), "http://10.0.0.5:9999");
     }

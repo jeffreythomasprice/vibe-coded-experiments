@@ -212,6 +212,53 @@ mod tests {
     }
 
     #[test]
+    fn preset_eval_and_rewrite_fields_are_parsed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            concat!(
+                "[presets.eval]\n",
+                "eval = [\"vqa\", \"tit\"]\n",
+                "rewrite = \"always\"\n",
+                "rewrite_threshold = 300\n",
+                "vqa_model = \"qwen3.8:latest\"\n",
+                "eval_max_px = 512\n",
+            ),
+        )
+        .unwrap();
+
+        let loaded = load_from_candidates(&[path]).unwrap();
+
+        let preset = loaded.config.presets.get("eval").unwrap();
+        assert_eq!(
+            preset.eval,
+            Some(vec![crate::cli::EvalMetric::Vqa, crate::cli::EvalMetric::Tit])
+        );
+        assert_eq!(preset.rewrite, Some(crate::cli::RewriteMode::Always));
+        assert_eq!(preset.rewrite_threshold, Some(300));
+        assert_eq!(preset.vqa_model, Some("qwen3.8:latest".to_owned()));
+        assert_eq!(preset.eval_max_px, Some(512));
+    }
+
+    #[test]
+    fn preset_invalid_eval_metric_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[presets.eval]\neval = [\"nope\"]\n").unwrap();
+
+        let err = load_from_candidates(std::slice::from_ref(&path)).unwrap_err();
+
+        match err {
+            ConfigError::Parse { source, .. } => {
+                let message = source.to_string();
+                assert!(message.contains("vqa"), "message was: {message}");
+            }
+            other => panic!("expected Parse error, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn preset_typo_key_is_rejected() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
@@ -287,7 +334,7 @@ mod tests {
 
         let loaded = load_from_candidates(&[path]).unwrap();
 
-        assert_eq!(loaded.config.llm.model, "llama3.2");
+        assert_eq!(loaded.config.llm.model, Some("llama3.2".to_owned()));
         assert_eq!(loaded.config.llm.ollama.port, 9999);
         assert_eq!(loaded.config.llm.ollama.host, "localhost");
 

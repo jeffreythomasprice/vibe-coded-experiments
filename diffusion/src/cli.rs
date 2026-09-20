@@ -69,9 +69,10 @@ pub struct GenerateArgs {
     /// The prompt to render
     pub prompt: String,
 
-    /// Apply a named preset from config.toml; explicit flags still win
+    /// Apply a named preset from config.toml; repeatable, combined left to right
+    /// (later presets win on collision); explicit flags still win over any preset
     #[arg(long, value_name = "NAME")]
-    pub preset: Option<String>,
+    pub preset: Vec<String>,
 
     /// Full checkpoint: owner/repo[:file], owner/repo@revision[:file], or a local path
     #[arg(short, long, value_name = "REF")]
@@ -182,13 +183,61 @@ pub struct GenerateArgs {
     )]
     pub copies: u32,
 
-    /// Display the generated image inline in the terminal
+    /// Display the generated image inline in the terminal; with --eval, ordered
+    /// worst-scoring first so the best is last
     #[arg(long)]
     pub show: bool,
 
-    /// Print the produced paths and total elapsed time as JSON on stdout
+    /// Print the prompt, each image's path/seed/scores, and total elapsed time as
+    /// JSON on stdout
     #[arg(long)]
     pub json: bool,
+
+    /// Score each generated image against the prompt; repeatable (an inclusive or)
+    #[arg(long = "eval", value_name = "METRIC")]
+    pub eval: Option<Vec<EvalMetric>>,
+
+    /// When to compress the prompt with an LLM before generating (default: auto)
+    #[arg(long, value_name = "MODE")]
+    pub rewrite: Option<RewriteMode>,
+
+    /// Prompt length, in characters, above which `--rewrite auto` fires (default: 300)
+    #[arg(long, value_name = "N")]
+    pub rewrite_threshold: Option<usize>,
+
+    /// Model used to rewrite the prompt (default: [llm].model)
+    #[arg(long, value_name = "MODEL")]
+    pub rewrite_model: Option<String>,
+
+    /// Vision model used for VQAScore (default: [llm].model)
+    #[arg(long, value_name = "MODEL")]
+    pub vqa_model: Option<String>,
+
+    /// Vision model used to caption images for TIT-Score (default: [llm].model)
+    #[arg(long, value_name = "MODEL")]
+    pub caption_model: Option<String>,
+
+    /// Text model used to judge TIT-Score captions against the prompt (default: [llm].model)
+    #[arg(long, value_name = "MODEL")]
+    pub judge_model: Option<String>,
+
+    /// Downscale images to at most this many pixels per side before sending to an
+    /// eval model (default: 512)
+    #[arg(long, value_name = "PX")]
+    pub eval_max_px: Option<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]
+pub enum EvalMetric {
+    Vqa,
+    Tit,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]
+pub enum RewriteMode {
+    Auto,
+    Always,
+    Never,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]
@@ -369,5 +418,40 @@ mod tests {
     #[test]
     fn models_list_rejects_json_flag() {
         assert!(Cli::try_parse_from(["diffusion", "models", "list", "--json"]).is_err());
+    }
+
+    #[test]
+    fn eval_absent_is_none_not_empty_vec() {
+        let cli = Cli::try_parse_from(["diffusion", "generate", "a prompt"]).unwrap();
+        match cli.command {
+            Command::Generate(args) => assert_eq!(args.eval, None),
+            other => panic!("expected Command::Generate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn repeated_eval_flags_combine_into_one_vec() {
+        let cli = Cli::try_parse_from([
+            "diffusion", "generate", "a prompt", "--eval", "vqa", "--eval", "tit",
+        ])
+        .unwrap();
+        match cli.command {
+            Command::Generate(args) => {
+                assert_eq!(args.eval, Some(vec![super::EvalMetric::Vqa, super::EvalMetric::Tit]));
+            }
+            other => panic!("expected Command::Generate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn repeated_preset_flags_collect_in_order() {
+        let cli = Cli::try_parse_from([
+            "diffusion", "generate", "a prompt", "--preset", "a", "--preset", "b",
+        ])
+        .unwrap();
+        match cli.command {
+            Command::Generate(args) => assert_eq!(args.preset, vec!["a", "b"]),
+            other => panic!("expected Command::Generate, got {other:?}"),
+        }
     }
 }

@@ -7,7 +7,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use diffusion::llm::{Agent, ChatRequest, FunctionTool, Message, Provider, ToolOutput, ToolRegistry};
+use diffusion::llm::{
+    Agent, ChatOptions, ChatRequest, FunctionTool, Message, Provider, StopReason, ToolOutput,
+    ToolRegistry,
+};
 use diffusion::llm::ollama::OllamaProvider;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -17,7 +20,7 @@ fn model() -> String {
 }
 
 fn provider() -> OllamaProvider {
-    OllamaProvider::new("http://localhost:11434", Duration::from_secs(120))
+    OllamaProvider::new("http://localhost:11434", Duration::from_secs(120), Duration::from_secs(600))
 }
 
 async fn require_ollama_running() {
@@ -61,6 +64,37 @@ async fn vision_round_trip() {
     };
     let response = provider().chat(&request).await.unwrap();
     assert!(!response.message.text().trim().is_empty());
+}
+
+/// Exercises the wire path VQAScore depends on: `think: false` so a reasoning
+/// model doesn't burn the single generated token on a thinking token, and
+/// `logprobs`/`top_logprobs` as top-level request keys rather than nested under
+/// `options`.
+#[tokio::test]
+async fn logprobs_round_trip() {
+    require_ollama_running().await;
+
+    let request = ChatRequest {
+        model: model(),
+        messages: vec![Message::user("Is water wet? Answer yes or no.")],
+        tools: Vec::new(),
+        options: ChatOptions {
+            max_tokens: Some(1),
+            think: Some(false),
+            temperature: Some(0.0),
+            logprobs: Some(5),
+            ..Default::default()
+        },
+    };
+    let response = provider().chat(&request).await.unwrap();
+
+    assert_eq!(response.stop_reason, StopReason::Length);
+    assert!(!response.logprobs.is_empty(), "expected at least one token of logprobs");
+    assert!(
+        !response.logprobs[0].top.is_empty(),
+        "expected top-token alternatives, got {:?}",
+        response.logprobs
+    );
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]

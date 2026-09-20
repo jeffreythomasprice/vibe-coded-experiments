@@ -10,8 +10,13 @@ use crate::cli::GenerateArgs;
 use crate::error::AppError;
 use crate::models;
 
+/// `prompt` and `seed` are taken explicitly rather than read off `args` so a
+/// caller can pass a rewritten prompt and a seed resolved once up front (so it
+/// can be reported per copy), while every other setting still comes from `args`.
 pub fn generate(
     args: &GenerateArgs,
+    prompt: &str,
+    seed: i64,
     models_dir: &Path,
     output: &Path,
     copies: u32,
@@ -68,7 +73,7 @@ pub fn generate(
     }
 
     let mut gen_config = ConfigBuilder::default();
-    gen_config.prompt(args.prompt.clone()).output(output);
+    gen_config.prompt(prompt.to_owned()).output(output).seed(seed);
     if let Some(negative) = &args.negative {
         gen_config.negative_prompt(negative.clone());
     }
@@ -86,9 +91,6 @@ pub fn generate(
     }
     if let Some(guidance) = args.guidance {
         gen_config.guidance(guidance);
-    }
-    if let Some(seed) = args.seed {
-        gen_config.seed(seed);
     }
     if let Some(sampler) = args.sampler {
         gen_config.sampling_method(sampler);

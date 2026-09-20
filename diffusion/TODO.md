@@ -1,29 +1,156 @@
 in-flight:
 
-I want to implement both VQAScore and TIT-Score. See @docs/evaluation.md for more details.
-
-Specifically I want the ability to:
-- provide a large prompt for image generation
-- have an llm model turn the large prompt into a shorter more precise propmt suitable for image generation; e.g. this might rely excise unnecessary detail or summarize a complicated prompt into something suitable
-- generate multiple images at once, basically the `--copies` argument
-- for each generated copy, run the specific evaluation algorithm (VQA or TIT) and include that output in our logging output, or in our `--json` output
-
-If it's feasible to do both evaluation metrics at once then we can treat cli args as an inclusive or, e.g. `--eval vga --eval tit` in one prompt.
-
-We will need to include any other cli args necessary to define the evaluation method, e.g. the llm models to use to summarize the prompts and another model that can be used to do the image-to-text step.
-
-We should allow the eval model specification to be done via `--preset`. Since we probably want to separate the eval cli args from the image generation cli args, we should allow multiple `--preset` arguments and have them combine silently. Warn if they both define the same arg, keep last preset. Our config.toml.example should include a preset that defines all the eval args.
-
-Our README.md should include an example of doing evals.
-
 
 todo:
 
+I want to rename this project. Currently we call this `diffusion` but I want to call it `image-gen`.
+
+This affects
+- the cargo project name
+- where config files are located, e.g. the default is `~/.config/diffusion` and should be `~/.config/image-gen`
+- exampels in the README.md maybe?
+- unit tests that hard-code paths?
+- anything else I've forgotten?
+
+
+I want to make a skill in .claude/skills that runs this project. It should expect the already built binary to be available on the path, so don't try to hard-code paths to the target dir.
+
+If the user is asking to generate an image we should try to invoke the tool and given them the path to the best image. This means we should use `--copies` and `--eval` to generate 
+
+We should expect an `image-eval-skill` preset to exist that defines the appropriate models and other parameters. If the command fails because no such preset exists propmt the user to create one. If no such preset exists we should propmt the user how to assemble one. Make sure the skill has an example of such a preset that includes our current preferred settings:
+```
+diffusion_model = "city96/FLUX.1-dev-gguf:flux1-dev-F16.gguf"
+clip_l = "comfyanonymous/flux_text_encoders:clip_l.safetensors"
+t5xxl = "comfyanonymous/flux_text_encoders:t5xxl_fp8_e4m3fn.safetensors"
+vae = "unsloth/FLUX.1-dev:ae.safetensors"
+weight_type = "q8_0"
+eval = ["vqa", "tit"]
+rewrite = "auto"
+rewrite_threshold = 300
+eval_max_px = 512
+vqa_model = "qwen3-vl:4b"
+caption_model = "qwen3-vl:4b"
+model = "qwen3:4b"
+```
+
+We should invoke with `--json` and parse the output to find the "best" image. We're looking to order by something like `.images[].borda.rank`. Example output is like:
+```
+{
+  "prompt": {
+    "original": "a red bicycle on a beach"
+  },
+  "images": [
+    {
+      "path": "/tmp/bike0.png",
+      "seed": 1449317825,
+      "vqa": {
+        "score": 0.9541667
+      },
+      "tit": {
+        "score": 1.0,
+        "claims": [
+          {
+            "claim": "a red bicycle",
+            "verdict": "supported"
+          },
+          {
+            "claim": "on a beach",
+            "verdict": "supported"
+          }
+        ]
+      },
+      "borda": {
+        "vqa": 1.0,
+        "tit": 1.5,
+        "total": 2.5,
+        "rank": 3
+      }
+    },
+    {
+      "path": "/tmp/bike1.png",
+      "seed": 1449317826,
+      "vqa": {
+        "score": 0.9683192
+      },
+      "tit": {
+        "score": 1.0,
+        "claims": [
+          {
+            "claim": "a red bicycle",
+            "verdict": "supported"
+          },
+          {
+            "claim": "on a beach",
+            "verdict": "supported"
+          }
+        ]
+      },
+      "borda": {
+        "vqa": 3.0,
+        "tit": 1.5,
+        "total": 4.5,
+        "rank": 1
+      }
+    },
+    {
+      "path": "/tmp/bike2.png",
+      "seed": 1449317827,
+      "vqa": {
+        "score": 0.9448878
+      },
+      "tit": {
+        "score": 1.0,
+        "claims": [
+          {
+            "claim": "a red bicycle",
+            "verdict": "supported"
+          },
+          {
+            "claim": "on a beach",
+            "verdict": "supported"
+          }
+        ]
+      },
+      "borda": {
+        "vqa": 0.0,
+        "tit": 1.5,
+        "total": 1.5,
+        "rank": 4
+      }
+    },
+    {
+      "path": "/tmp/bike3.png",
+      "seed": 1449317828,
+      "vqa": {
+        "score": 0.95942104
+      },
+      "tit": {
+        "score": 1.0,
+        "claims": [
+          {
+            "claim": "a red bicycle",
+            "verdict": "supported"
+          },
+          {
+            "claim": "on a beach",
+            "verdict": "supported"
+          }
+        ]
+      },
+      "borda": {
+        "vqa": 2.0,
+        "tit": 1.5,
+        "total": 3.5,
+        "rank": 2
+      }
+    }
+  ],
+  "totalTime": 290.128
+}
+```
+
+
 pipeline that uses evals to repeatedly generate images until they match some criteria
-
-
-make a skill
-use --json
 
 
 from docs/evaluation.md

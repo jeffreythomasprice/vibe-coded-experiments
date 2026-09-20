@@ -159,9 +159,10 @@ impl FunctionTool {
     }
 }
 
-/// Renders `A`'s JSON Schema for the tool-call argument object, stripping the
-/// `$schema`/`title` fields a provider's tool-calling API doesn't expect.
-fn argument_schema<A: JsonSchema>() -> Value {
+/// Renders `A`'s JSON Schema, stripping the `$schema`/`title` fields a provider's
+/// tool-calling or structured-output API doesn't expect. `pub(crate)` because
+/// `eval::tit` reuses it for `ChatOptions::format` rather than a tool argument.
+pub(crate) fn argument_schema<A: JsonSchema>() -> Value {
     let schema = schemars::schema_for!(A);
     let mut value = serde_json::to_value(schema).expect("schemars output is always valid JSON");
     if let Value::Object(map) = &mut value {

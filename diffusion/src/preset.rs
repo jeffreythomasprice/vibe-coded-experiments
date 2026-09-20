@@ -5,7 +5,7 @@ use std::str::FromStr;
 use clap::ValueEnum;
 use serde::{Deserialize, Deserializer};
 
-use crate::cli::{Backend, GenerateArgs, Sampler, WeightTypeArg};
+use crate::cli::{Backend, EvalMetric, GenerateArgs, RewriteMode, Sampler, WeightTypeArg};
 use crate::error::AppError;
 use crate::models::ModelRef;
 
@@ -48,6 +48,16 @@ pub struct Preset {
     pub steps: Option<i32>,
     pub cfg_scale: Option<f32>,
     pub guidance: Option<f32>,
+    #[serde(deserialize_with = "value_enum_vec_opt")]
+    pub eval: Option<Vec<EvalMetric>>,
+    #[serde(deserialize_with = "value_enum_opt")]
+    pub rewrite: Option<RewriteMode>,
+    pub rewrite_threshold: Option<usize>,
+    pub rewrite_model: Option<String>,
+    pub vqa_model: Option<String>,
+    pub caption_model: Option<String>,
+    pub judge_model: Option<String>,
+    pub eval_max_px: Option<u32>,
 }
 
 fn from_str_opt<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
@@ -83,6 +93,33 @@ where
         .transpose()
 }
 
+fn value_enum_vec_opt<'de, D, T>(deserializer: D) -> Result<Option<Vec<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: ValueEnum,
+{
+    let values: Option<Vec<String>> = Option::deserialize(deserializer)?;
+    values
+        .map(|list| {
+            list.into_iter()
+                .map(|s| {
+                    T::from_str(&s, false).map_err(|_| {
+                        let valid = T::value_variants()
+                            .iter()
+                            .filter_map(ValueEnum::to_possible_value)
+                            .map(|pv| pv.get_name().to_owned())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        serde::de::Error::custom(format!(
+                            "invalid value {s:?}, expected one of: {valid}"
+                        ))
+                    })
+                })
+                .collect()
+        })
+        .transpose()
+}
+
 fn clip_skip_opt<'de, D>(deserializer: D) -> Result<Option<u8>, D::Error>
 where
     D: Deserializer<'de>,
@@ -96,37 +133,59 @@ where
     }
 }
 
-/// Fill any unset field of `args` from `args.preset`, logging a warning for
-/// every field the command line already set. A no-op when `--preset` wasn't
-/// passed.
+/// Fill any unset field of `args` from `args.preset`, combining multiple presets
+/// left to right (a later preset overrides an earlier one, with a warning) and
+/// logging a warning for every field the command line already set. A no-op when
+/// no `--preset` was passed.
 pub fn apply(args: &mut GenerateArgs, presets: &BTreeMap<String, Preset>) -> Result<(), AppError> {
-    let Some(name) = args.preset.clone() else {
+    if args.preset.is_empty() {
         return Ok(());
-    };
-    let Some(preset) = presets.get(&name) else {
-        let available = if presets.is_empty() {
-            "none".to_owned()
-        } else {
-            presets.keys().cloned().collect::<Vec<_>>().join(", ")
+    }
+
+    let names = args.preset.clone();
+    let mut chain = Vec::with_capacity(names.len());
+    for name in &names {
+        let Some(preset) = presets.get(name) else {
+            let available = if presets.is_empty() {
+                "none".to_owned()
+            } else {
+                presets.keys().cloned().collect::<Vec<_>>().join(", ")
+            };
+            return Err(AppError::UnknownPreset {
+                name: name.clone(),
+                available,
+            });
         };
-        return Err(AppError::UnknownPreset { name, available });
-    };
+        chain.push((name.as_str(), preset));
+    }
 
     macro_rules! merge {
-        ($($field:ident => $flag:literal),* $(,)?) => {$(
-            if let Some(value) = &preset.$field {
-                match &args.$field {
-                    None => args.$field = Some(value.clone()),
-                    Some(cli) => tracing::warn!(
+        ($($field:ident => $flag:literal),* $(,)?) => {$({
+            let from_cli = args.$field.is_some();
+            for (name, preset) in &chain {
+                let Some(value) = &preset.$field else { continue };
+                if from_cli {
+                    tracing::warn!(
                         preset = %name,
                         arg = $flag,
                         preset_value = ?value,
-                        cli_value = ?cli,
+                        cli_value = ?args.$field,
                         "command-line argument overrides preset"
-                    ),
+                    );
+                    continue;
                 }
+                if let Some(previous) = &args.$field {
+                    tracing::warn!(
+                        preset = %name,
+                        arg = $flag,
+                        previous_value = ?previous,
+                        new_value = ?value,
+                        "later preset overrides earlier preset"
+                    );
+                }
+                args.$field = Some(value.clone());
             }
-        )*};
+        })*};
     }
 
     merge!(
@@ -150,6 +209,14 @@ pub fn apply(args: &mut GenerateArgs, presets: &BTreeMap<String, Preset>) -> Res
         steps => "--steps",
         cfg_scale => "--cfg-scale",
         guidance => "--guidance",
+        eval => "--eval",
+        rewrite => "--rewrite",
+        rewrite_threshold => "--rewrite-threshold",
+        rewrite_model => "--rewrite-model",
+        vqa_model => "--vqa-model",
+        caption_model => "--caption-model",
+        judge_model => "--judge-model",
+        eval_max_px => "--eval-max-px",
     );
 
     Ok(())
@@ -253,5 +320,113 @@ mod tests {
         apply(&mut args, &presets).unwrap();
 
         assert_eq!(args.model, None);
+    }
+
+    #[test]
+    fn multiple_presets_combine_left_to_right() {
+        let mut args = parse(&["a prompt", "--preset", "flux", "--preset", "turbo"]);
+        let mut presets = BTreeMap::new();
+        presets.insert(
+            "flux".to_owned(),
+            Preset {
+                weight_type: Some(WeightTypeArg::Q8_0),
+                steps: Some(20),
+                ..Default::default()
+            },
+        );
+        presets.insert(
+            "turbo".to_owned(),
+            Preset {
+                steps: Some(4),
+                cfg_scale: Some(1.0),
+                ..Default::default()
+            },
+        );
+
+        apply(&mut args, &presets).unwrap();
+
+        assert_eq!(args.weight_type, Some(WeightTypeArg::Q8_0));
+        assert_eq!(args.steps, Some(4));
+        assert_eq!(args.cfg_scale, Some(1.0));
+    }
+
+    #[test]
+    fn second_preset_unknown_name_errors() {
+        let mut args = parse(&["a prompt", "--preset", "flux", "--preset", "nope"]);
+        let mut presets = BTreeMap::new();
+        presets.insert("flux".to_owned(), Preset::default());
+
+        let err = apply(&mut args, &presets).unwrap_err();
+
+        match err {
+            AppError::UnknownPreset { name, .. } => assert_eq!(name, "nope"),
+            other => panic!("expected UnknownPreset, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn preset_fills_eval_and_rewrite_fields() {
+        let mut args = parse(&["a prompt", "--preset", "eval"]);
+        let mut presets = BTreeMap::new();
+        presets.insert(
+            "eval".to_owned(),
+            Preset {
+                eval: Some(vec![EvalMetric::Vqa, EvalMetric::Tit]),
+                rewrite: Some(RewriteMode::Always),
+                rewrite_threshold: Some(300),
+                vqa_model: Some("qwen3.8:latest".to_owned()),
+                ..Default::default()
+            },
+        );
+
+        apply(&mut args, &presets).unwrap();
+
+        assert_eq!(args.eval, Some(vec![EvalMetric::Vqa, EvalMetric::Tit]));
+        assert_eq!(args.rewrite, Some(RewriteMode::Always));
+        assert_eq!(args.rewrite_threshold, Some(300));
+        assert_eq!(args.vqa_model, Some("qwen3.8:latest".to_owned()));
+    }
+
+    #[test]
+    fn explicit_eval_flag_beats_preset() {
+        let mut args = parse(&["a prompt", "--preset", "eval", "--eval", "vqa"]);
+        let mut presets = BTreeMap::new();
+        presets.insert(
+            "eval".to_owned(),
+            Preset {
+                eval: Some(vec![EvalMetric::Tit]),
+                ..Default::default()
+            },
+        );
+
+        apply(&mut args, &presets).unwrap();
+
+        assert_eq!(args.eval, Some(vec![EvalMetric::Vqa]));
+    }
+
+    #[test]
+    fn explicit_flag_beats_every_preset_in_the_chain() {
+        let mut args = parse(&[
+            "a prompt", "--preset", "flux", "--preset", "turbo", "--steps", "8",
+        ]);
+        let mut presets = BTreeMap::new();
+        presets.insert(
+            "flux".to_owned(),
+            Preset {
+                steps: Some(20),
+                ..Default::default()
+            },
+        );
+        presets.insert(
+            "turbo".to_owned(),
+            Preset {
+                steps: Some(4),
+                ..Default::default()
+            },
+        );
+
+        apply(&mut args, &presets).unwrap();
+
+        assert_eq!(args.steps, Some(8));
     }
 }

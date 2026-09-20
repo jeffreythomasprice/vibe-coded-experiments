@@ -3,13 +3,17 @@ use std::time::Duration;
 
 use serde::Serialize;
 
+use crate::Outcome;
 use crate::error::AppError;
+use crate::eval::ImageEval;
+use crate::eval::rank::Borda;
 
 #[derive(Debug, Serialize)]
 #[serde(untagged, rename_all_fields = "camelCase")]
 pub enum Report {
     Success {
-        paths: Vec<PathBuf>,
+        prompt: PromptReport,
+        images: Vec<ImageReport>,
         total_time: f64,
     },
     Failure {
@@ -18,11 +22,42 @@ pub enum Report {
     },
 }
 
-pub fn build(outcome: &Result<Vec<PathBuf>, AppError>, elapsed: Duration) -> Report {
+#[derive(Debug, Serialize)]
+pub struct PromptReport {
+    pub original: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rewritten: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ImageReport {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<PathBuf>,
+    pub seed: i64,
+    #[serde(flatten)]
+    pub eval: ImageEval,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub borda: Option<Borda>,
+}
+
+pub fn build(outcome: &Result<Outcome, AppError>, elapsed: Duration) -> Report {
     let total_time = seconds(elapsed);
     match outcome {
-        Ok(paths) => Report::Success {
-            paths: paths.iter().map(|path| absolutize(path)).collect(),
+        Ok(result) => Report::Success {
+            prompt: PromptReport {
+                original: result.prompt.original.clone(),
+                rewritten: result.prompt.rewritten.clone(),
+            },
+            images: result
+                .images
+                .iter()
+                .map(|image| ImageReport {
+                    path: image.path.as_deref().map(absolutize),
+                    seed: image.seed,
+                    eval: image.eval.clone(),
+                    borda: image.borda.clone(),
+                })
+                .collect(),
             total_time,
         },
         Err(err) => Report::Failure {
@@ -33,7 +68,7 @@ pub fn build(outcome: &Result<Vec<PathBuf>, AppError>, elapsed: Duration) -> Rep
 }
 
 pub fn emit(
-    outcome: &Result<Vec<PathBuf>, AppError>,
+    outcome: &Result<Outcome, AppError>,
     elapsed: Duration,
 ) -> Result<(), serde_json::Error> {
     println!(
@@ -54,27 +89,101 @@ fn seconds(elapsed: Duration) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::eval::{Scored, VqaResult};
+    use crate::{EffectivePrompt, GeneratedImage};
     use serde_json::json;
+
+    fn outcome(images: Vec<GeneratedImage>, rewritten: Option<&str>) -> Result<Outcome, AppError> {
+        Ok(Outcome {
+            images,
+            prompt: EffectivePrompt {
+                original: "a bicycle".to_owned(),
+                rewritten: rewritten.map(str::to_owned),
+            },
+        })
+    }
+
+    fn image(path: Option<&str>, seed: i64) -> GeneratedImage {
+        GeneratedImage {
+            path: path.map(PathBuf::from),
+            seed,
+            eval: ImageEval::default(),
+            borda: None,
+        }
+    }
 
     #[test]
     fn success_shape() {
-        let outcome: Result<Vec<PathBuf>, AppError> = Ok(vec![
-            PathBuf::from("/tmp/path0.png"),
-            PathBuf::from("/tmp/path1.png"),
-        ]);
-        let report = build(&outcome, Duration::from_micros(123_456_000));
+        let result = outcome(
+            vec![
+                image(Some("/tmp/path0.png"), 1),
+                image(Some("/tmp/path1.png"), 2),
+            ],
+            None,
+        );
+        let report = build(&result, Duration::from_micros(123_456_000));
         assert_eq!(
             serde_json::to_value(&report).unwrap(),
             json!({
-                "paths": ["/tmp/path0.png", "/tmp/path1.png"],
+                "prompt": {"original": "a bicycle"},
+                "images": [
+                    {"path": "/tmp/path0.png", "seed": 1},
+                    {"path": "/tmp/path1.png", "seed": 2},
+                ],
                 "totalTime": 123.456,
             })
         );
     }
 
     #[test]
+    fn rewritten_prompt_and_scores_are_included() {
+        let eval_with_vqa = ImageEval {
+            vqa: Some(Scored::Score(VqaResult { score: 0.9 })),
+            ..ImageEval::default()
+        };
+        let result = outcome(
+            vec![GeneratedImage {
+                path: Some(PathBuf::from("/tmp/shot0.png")),
+                seed: 41,
+                eval: eval_with_vqa,
+                borda: Some(Borda {
+                    vqa: Some(0.0),
+                    tit: None,
+                    total: 0.0,
+                    rank: 1,
+                }),
+            }],
+            Some("a tidy prompt"),
+        );
+
+        let report = build(&result, Duration::ZERO);
+        let value = serde_json::to_value(&report).unwrap();
+
+        assert_eq!(value["prompt"]["rewritten"], "a tidy prompt");
+        assert!((value["images"][0]["vqa"]["score"].as_f64().unwrap() - 0.9).abs() < 1e-6);
+        assert_eq!(value["images"][0]["borda"]["rank"], 1);
+    }
+
+    #[test]
+    fn borda_is_absent_without_eval() {
+        let result = outcome(vec![image(Some("/tmp/path0.png"), 1)], None);
+        let report = build(&result, Duration::ZERO);
+        let value = serde_json::to_value(&report).unwrap();
+        assert!(value["images"][0].get("borda").is_none());
+    }
+
+    #[test]
+    fn non_durable_image_has_no_path() {
+        let result = outcome(vec![image(None, 7)], None);
+        let report = build(&result, Duration::ZERO);
+        let value = serde_json::to_value(&report).unwrap();
+        assert!(value["images"][0].get("path").is_none());
+        assert_eq!(value["images"][0]["seed"], 7);
+    }
+
+    #[test]
     fn failure_shape() {
-        let outcome: Result<Vec<PathBuf>, AppError> = Err(AppError::NoCheckpoint);
+        let outcome: Result<Outcome, AppError> = Err(AppError::NoCheckpoint);
         let report = build(&outcome, Duration::from_micros(412_000));
         assert_eq!(
             serde_json::to_value(&report).unwrap(),
@@ -92,12 +201,13 @@ mod tests {
 
     #[test]
     fn relative_path_becomes_absolute() {
-        let outcome: Result<Vec<PathBuf>, AppError> = Ok(vec![PathBuf::from("bike.png")]);
-        let report = build(&outcome, Duration::ZERO);
+        let result = outcome(vec![image(Some("bike.png"), 0)], None);
+        let report = build(&result, Duration::ZERO);
         match report {
-            Report::Success { paths, .. } => {
-                assert!(paths[0].is_absolute());
-                assert!(paths[0].ends_with("bike.png"));
+            Report::Success { images, .. } => {
+                let path = images[0].path.as_ref().unwrap();
+                assert!(path.is_absolute());
+                assert!(path.ends_with("bike.png"));
             }
             Report::Failure { .. } => panic!("expected Success"),
         }

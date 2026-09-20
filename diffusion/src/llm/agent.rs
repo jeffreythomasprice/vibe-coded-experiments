@@ -135,6 +135,7 @@ mod tests {
             message: Message::assistant(text),
             stop_reason: StopReason::Stop,
             usage: Usage::default(),
+            logprobs: Vec::new(),
         }
     }
 
@@ -152,6 +153,7 @@ mod tests {
             message: Message::assistant_with_tool_calls("", tool_calls),
             stop_reason: StopReason::ToolCalls,
             usage: Usage::default(),
+            logprobs: Vec::new(),
         }
     }
 
