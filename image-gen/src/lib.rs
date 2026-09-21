@@ -174,6 +174,7 @@ fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcome, App
         max_px: args.eval_max_px.unwrap_or(DEFAULT_EVAL_MAX_PX),
     };
 
+    let total_images = produced.paths.len();
     let scored: Vec<(Option<PathBuf>, i64, ImageEval)> = produced
         .paths
         .iter()
@@ -181,7 +182,9 @@ fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcome, App
         .map(|(index, path)| {
             let seed = produced.seed + index as i64;
             let eval = match &llm {
-                Some(llm) if eval_requested => eval::run(llm, &eval_config, &args.prompt, path),
+                Some(llm) if eval_requested => {
+                    eval::run(llm, &eval_config, &args.prompt, path, index, total_images)
+                }
                 _ => ImageEval::default(),
             };
             let reported_path = produced.durable.then(|| path.clone());
@@ -287,7 +290,7 @@ fn produce_to_file(
 
     if args.copies == 1 {
         generate::generate(args, prompt, seed, models_dir, &dests[0], 1)?;
-        tracing::info!(path = %dests[0].display(), "wrote image");
+        tracing::info!(path = %dests[0].display(), step = 1, total_steps = 1, "wrote image");
     } else {
         let scratch_parent = path
             .parent()
@@ -298,9 +301,10 @@ fn produce_to_file(
             .tempdir_in(scratch_parent)?;
         generate::generate(args, prompt, seed, models_dir, scratch.path(), args.copies)?;
         let sources = output::collect(scratch.path(), args.copies)?;
-        for (src, dest) in sources.iter().zip(&dests) {
+        let total_steps = dests.len();
+        for (index, (src, dest)) in sources.iter().zip(&dests).enumerate() {
             output::place(src, dest)?;
-            tracing::info!(path = %dest.display(), "wrote image");
+            tracing::info!(path = %dest.display(), step = index + 1, total_steps, "wrote image");
         }
     }
 

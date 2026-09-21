@@ -73,15 +73,27 @@ pub struct EvalConfig<'a> {
 
 /// Runs every requested metric against one image, logging progress per metric
 /// since a `--copies N --eval tit` run can take minutes and would otherwise sit
-/// silent. `docs/evaluation.md` notes VQAScore is the weaker choice once a prompt
-/// is long enough to trigger `--rewrite`; that tradeoff is documented, not enforced
-/// here — both metrics still run if both are requested.
-pub fn run(llm: &Llm, config: &EvalConfig, prompt: &str, path: &Path) -> ImageEval {
+/// silent. `image_index` (0-based, out of `total_images`) locates this image
+/// within the whole `--copies` run, letting each metric report its overall
+/// step out of the run's total scoring steps. `docs/evaluation.md` notes
+/// VQAScore is the weaker choice once a prompt is long enough to trigger
+/// `--rewrite`; that tradeoff is documented, not enforced here — both metrics
+/// still run if both are requested.
+pub fn run(
+    llm: &Llm,
+    config: &EvalConfig,
+    prompt: &str,
+    path: &Path,
+    image_index: usize,
+    total_images: usize,
+) -> ImageEval {
     let mut result = ImageEval::default();
-    for metric in config.metrics {
+    let total_steps = total_images * config.metrics.len();
+    for (metric_index, metric) in config.metrics.iter().enumerate() {
+        let step = image_index * config.metrics.len() + metric_index + 1;
         match metric {
             EvalMetric::Vqa => {
-                tracing::info!(path = %path.display(), metric = "vqa", "scoring image");
+                tracing::info!(path = %path.display(), metric = "vqa", step, total_steps, "scoring image");
                 let outcome = vqa::score(llm, config.vqa_model, prompt, path, config.max_px);
                 if let Err(err) = &outcome {
                     tracing::warn!(path = %path.display(), metric = "vqa", error = %err, "scoring failed");
@@ -89,7 +101,7 @@ pub fn run(llm: &Llm, config: &EvalConfig, prompt: &str, path: &Path) -> ImageEv
                 result.vqa = Some(Scored::from_result(outcome));
             }
             EvalMetric::Tit => {
-                tracing::info!(path = %path.display(), metric = "tit", "scoring image");
+                tracing::info!(path = %path.display(), metric = "tit", step, total_steps, "scoring image");
                 let outcome = tit::score(
                     llm,
                     config.caption_model,

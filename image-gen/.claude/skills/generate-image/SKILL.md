@@ -86,10 +86,10 @@ generation failed — see Troubleshooting below instead of parsing further.
 
 ## 3. Report back
 
-- State the winning image's path plainly, its rank, and its vqa/tit scores.
-- Read the winning PNG so it renders inline in the conversation.
-- List the other copies' paths (don't delete them) in case the user wants to
-  compare.
+- State the winning image's full absolute path plainly, its rank, and its
+  vqa/tit scores.
+- List the other copies' full absolute paths (don't delete them) in case the
+  user wants to compare.
 - If `prompt.rewritten` is present, mention the prompt was compressed before
   generating (it still gets scored against the original).
 
@@ -110,6 +110,8 @@ clip_l = "comfyanonymous/flux_text_encoders:clip_l.safetensors"
 t5xxl = "comfyanonymous/flux_text_encoders:t5xxl_fp8_e4m3fn.safetensors"
 vae = "unsloth/FLUX.1-dev:ae.safetensors"
 weight_type = "q8_0"
+flash_attn = true
+vae_tiling = true
 eval = ["vqa", "tit"]
 rewrite = "auto"
 rewrite_threshold = 300
@@ -118,6 +120,10 @@ vqa_model = "qwen3-vl:4b"
 caption_model = "qwen3-vl:4b"
 rewrite_model = "qwen3:4b"
 judge_model = "qwen3:4b"
+
+# flash_attn cuts the flux compute buffer from ~5.3GB to ~230MB — without it
+# this preset OOMs on a 24GB GPU (F16 diffusion weights + text encoders alone
+# take ~17GB). vae_tiling adds headroom for generations above 512x512.
 
 # Not a preset key — --eval/--rewrite need Ollama reachable here, and TIT-Score's
 # caption call often runs past the 120s default.
