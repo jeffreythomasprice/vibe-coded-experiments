@@ -77,6 +77,9 @@ pub fn generate(
     if let Some(negative) = &args.negative {
         gen_config.negative_prompt(negative.clone());
     }
+    if !args.ref_image.is_empty() {
+        gen_config.ref_images(args.ref_image.clone());
+    }
     if let Some(width) = args.width {
         gen_config.width(width);
     }

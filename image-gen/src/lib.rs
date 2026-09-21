@@ -113,6 +113,7 @@ fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcome, App
         tracing::warn!("--show writes image data to stdout, corrupting --json output");
     }
     require_checkpoint(args)?;
+    require_ref_images_exist(args)?;
 
     let metrics: &[EvalMetric] = args.eval.as_deref().unwrap_or_default();
     let eval_requested = !metrics.is_empty();
@@ -256,6 +257,18 @@ fn require_checkpoint(args: &GenerateArgs) -> Result<(), AppError> {
     Ok(())
 }
 
+/// `diffusion-rs` silently drops a `--ref-image` path that doesn't exist rather
+/// than erroring, so a typo would otherwise generate as if no reference had been
+/// passed at all; check up front instead.
+fn require_ref_images_exist(args: &GenerateArgs) -> Result<(), AppError> {
+    for path in &args.ref_image {
+        if !path.is_file() {
+            return Err(AppError::RefImageNotFound { path: path.clone() });
+        }
+    }
+    Ok(())
+}
+
 /// Generate `args.copies` images of `prompt` (the effective prompt: rewritten, if
 /// a rewrite happened, otherwise `args.prompt`), writing them to `args.output`
 /// when set (a plain file for one copy, a filename prefix for more) or into a
@@ -387,5 +400,29 @@ mod tests {
             require_checkpoint(&args),
             Err(AppError::NoCheckpoint)
         ));
+    }
+
+    #[test]
+    fn no_ref_images_is_fine() {
+        let args = parse(&["a prompt"]);
+        require_ref_images_exist(&args).unwrap();
+    }
+
+    #[test]
+    fn existing_ref_image_is_fine() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let args = parse(&["a prompt", "--ref-image", file.path().to_str().unwrap()]);
+        require_ref_images_exist(&args).unwrap();
+    }
+
+    #[test]
+    fn missing_ref_image_errors() {
+        let args = parse(&["a prompt", "--ref-image", "/no/such/file.png"]);
+        match require_ref_images_exist(&args) {
+            Err(AppError::RefImageNotFound { path }) => {
+                assert_eq!(path, PathBuf::from("/no/such/file.png"));
+            }
+            other => panic!("expected RefImageNotFound, got {other:?}"),
+        }
     }
 }

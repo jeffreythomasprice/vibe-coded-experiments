@@ -65,6 +65,23 @@ turbo -o /tmp/bike.png --show`. `--preset` is repeatable and combines left to
 right; explicit flags, and later presets, override earlier ones. See
 `config.toml.example`.
 
+## Generating from reference images
+
+```
+cargo run -- generate "put the logo on the mug" \
+	--diffusion-model <a FLUX.1 Kontext, FLUX.2, or Qwen-Image-Edit checkpoint> \
+	--ref-image /tmp/logo.png \
+	--ref-image /tmp/mug.png \
+	-o /tmp/mug-with-logo.png \
+	--show
+```
+
+`--ref-image` is repeatable and passes each image to the model as in-context
+conditioning alongside the prompt. It only does something with a model built for
+it (FLUX.1 Kontext, FLUX.2, Qwen-Image-Edit); other models ignore it. These are
+tagged `image-to-image` on HuggingFace, so find one with `models search --all`
+rather than the default `models search`, which only looks at `text-to-image`.
+
 ## Evaluating generated images
 
 ```

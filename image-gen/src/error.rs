@@ -55,6 +55,9 @@ pub enum AppError {
     #[error("no checkpoint: pass --model or --diffusion-model, or a --preset that sets one")]
     NoCheckpoint,
 
+    #[error("--ref-image {} does not exist", .path.display())]
+    RefImageNotFound { path: PathBuf },
+
     #[error("unknown preset '{name}'; config defines: {available}")]
     UnknownPreset { name: String, available: String },
 }

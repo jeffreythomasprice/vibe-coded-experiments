@@ -138,6 +138,11 @@ pub struct GenerateArgs {
     #[arg(short = 'n', long, value_name = "TEXT")]
     pub negative: Option<String>,
 
+    /// Reference image for in-context conditioning; repeatable. Needs a model
+    /// that supports it (e.g. FLUX.1 Kontext, FLUX.2, Qwen-Image-Edit)
+    #[arg(long, value_name = "PATH")]
+    pub ref_image: Vec<PathBuf>,
+
     /// Image width, in pixels (default: 512)
     #[arg(short = 'W', long, value_name = "PX")]
     pub width: Option<i32>,
@@ -451,6 +456,38 @@ mod tests {
         .unwrap();
         match cli.command {
             Command::Generate(args) => assert_eq!(args.preset, vec!["a", "b"]),
+            other => panic!("expected Command::Generate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ref_image_absent_is_empty_vec() {
+        let cli = Cli::try_parse_from(["image-gen", "generate", "a prompt"]).unwrap();
+        match cli.command {
+            Command::Generate(args) => assert!(args.ref_image.is_empty()),
+            other => panic!("expected Command::Generate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn repeated_ref_image_flags_collect_in_order() {
+        let cli = Cli::try_parse_from([
+            "image-gen",
+            "generate",
+            "a prompt",
+            "--ref-image",
+            "a.png",
+            "--ref-image",
+            "b.png",
+        ])
+        .unwrap();
+        match cli.command {
+            Command::Generate(args) => {
+                assert_eq!(
+                    args.ref_image,
+                    vec![std::path::PathBuf::from("a.png"), std::path::PathBuf::from("b.png")]
+                );
+            }
             other => panic!("expected Command::Generate, got {other:?}"),
         }
     }
