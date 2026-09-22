@@ -1,16 +1,17 @@
 ---
 name: generate-image
-description: Generate an image from a text prompt using the image-gen CLI. Produces several candidates, scores them with VQA and TIT-Score, and returns the best-ranked one. Use whenever the user asks to generate, render, draw, or make an image or picture from a description.
+description: Generate an image from a text prompt using the image-gen CLI. Produces several candidates and reports where they were saved; scores/ranks them with VQA and TIT-Score only if the user asks. Use whenever the user asks to generate, render, draw, or make an image or picture from a description.
 argument-hint: "<image prompt>"
 ---
 
 # Generate an image with image-gen
 
 Turns an image request into one `image-gen generate` invocation that produces
-several candidates, scores them, and hands back the best one. Assumes the
-`image-gen` binary is already built and on `PATH` — never hard-code a path
-into `target/debug` or `target/release`, and never fall back to
-`cargo run --`.
+several candidates and reports where they landed. Only score or rank the
+candidates (VQA + TIT-Score) when the user explicitly asks to score, rank,
+judge, or pick the best one — see step 1b. Assumes the `image-gen` binary is
+already built and on `PATH` — never hard-code a path into `target/debug` or
+`target/release`, and never fall back to `cargo run --`.
 
 ## 1. Invoke it
 
@@ -39,16 +40,33 @@ Rules:
 - With `--copies N > 1`, `-o` becomes a filename **prefix**: `slug.png`
   becomes `slug0.png` … `slug{N-1}.png` (zero-padded once N > 10).
 - Pass through any per-invocation flags the user explicitly asks for
-  (`-W`/`-H`, `--steps`, `--seed`, `--negative`, etc.). Model choice and eval
-  settings belong in the preset (see below), not on the command line.
+  (`-W`/`-H`, `--steps`, `--seed`, `--negative`, etc.). Model choice belongs
+  in the preset (see below), not on the command line.
+- **Do not add `--eval`** unless the user explicitly asks to score, rank,
+  judge, or pick the best candidate — see step 1b. Without it this is plain
+  generation: no VQA/TIT-Score calls, no Ollama dependency, no ranking.
 - **Run this in the background** (`run_in_background: true` on the Bash
-  call). A `--copies 5` run with `--eval tit` is 5 diffusion passes plus 2
-  LLM calls per image; a cold model cache also means a multi-gigabyte
-  HuggingFace download and/or an Ollama model pull first. This routinely
-  exceeds a foreground command timeout. Poll or wait for completion, then
-  read `$outdir/result.json`.
+  call). Even without eval, a cold model cache means a multi-gigabyte
+  HuggingFace download first, which routinely exceeds a foreground command
+  timeout. Poll or wait for completion, then read `$outdir/result.json`.
 
-## 2. Parse the result and pick the winner
+## 1b. Only if the user asks to score, rank, judge, or pick the best image
+
+Add `--eval vqa --eval tit` to the command above (or just the metric(s) they
+name, e.g. `--eval vqa`). This is what turns on VQA/TIT-Score scoring,
+Borda ranking, and the "best image" concept in step 2 — it costs 2 extra LLM
+calls per image via Ollama on top of the diffusion passes, so only pay for it
+when asked.
+
+**Known gap:** the CLI can't force eval back off once a preset sets it — a
+preset's `eval = [...]` only yields to an *explicit* `--eval` on the command
+line, never to its absence. If `$outdir/result.json` shows `vqa`/`tit`/`borda`
+on images even though you didn't pass `--eval`, the user's `config.toml` has
+`eval = [...]` baked into the `image-eval-skill` preset (or whichever preset
+they're using) from before this default changed. Point that out and ask
+whether to remove it from the preset — don't silently work around it.
+
+## 2. Parse the result
 
 `--json` prints a report to stdout. On success:
 
@@ -71,18 +89,27 @@ only when jitter (or an explicit flag) set at least one of the three. The
 first image has no `params` key (the unjittered baseline) and the rest each
 carry all three, varied by `--jitter`'s default.
 
-**`borda.rank` is 1-based, and rank 1 is the BEST image** (descending by
-`borda.total`; ties share a rank). `borda.vqa`/`borda.tit` are Borda points,
-not the raw metric scores — the raw scores are the sibling `vqa.score` /
-`tit.score` on the same image. `borda` is entirely absent from an image if
-eval wasn't requested or every scoring call for it failed; treat those as
-unranked, not rank-1.
+`vqa`, `tit`, and `borda` are only present on an image if `--eval` was passed
+(step 1b). Without it, just report each image's path — there's no ranking to
+parse:
 
 ```bash
-# best image's path
+# no --eval: every copy's path, in generation order
+jq -r '.images[].path' "$outdir/result.json"
+```
+
+If eval was requested, **`borda.rank` is 1-based, and rank 1 is the BEST
+image** (descending by `borda.total`; ties share a rank). `borda.vqa`/`borda.tit`
+are Borda points, not the raw metric scores — the raw scores are the sibling
+`vqa.score` / `tit.score` on the same image. `borda` is entirely absent from
+an image if every scoring call for it failed; treat those as unranked, not
+rank-1.
+
+```bash
+# --eval was passed: best image's path
 jq -r '.images | sort_by(.borda.rank // 1e9) | .[0].path' "$outdir/result.json"
 
-# full ranked table
+# --eval was passed: full ranked table
 jq -r '.images | sort_by(.borda.rank // 1e9)[]
        | "rank \(.borda.rank // "-")  vqa \(.vqa.score // "-")  tit \(.tit.score // "-")  \(.path // "(not saved)")"' \
   "$outdir/result.json"
@@ -93,12 +120,13 @@ generation failed — see Troubleshooting below instead of parsing further.
 
 ## 3. Report back
 
-- State the winning image's full absolute path plainly, its rank, and its
-  vqa/tit scores.
-- List the other copies' full absolute paths (don't delete them) in case the
-  user wants to compare.
+- No eval (default): list each generated copy's full absolute path plainly.
+  Don't call any of them "best" or cite scores — nothing was scored.
+- Eval requested (step 1b): state the winning image's full absolute path,
+  its rank, and its vqa/tit scores. List the other copies' full absolute
+  paths (don't delete them) in case the user wants to compare.
 - If `prompt.rewritten` is present, mention the prompt was compressed before
-  generating (it still gets scored against the original).
+  generating (it still gets scored against the original when eval runs).
 
 ## 4. The `image-eval-skill` preset
 
@@ -119,7 +147,6 @@ vae = "unsloth/FLUX.1-dev:ae.safetensors"
 weight_type = "q8_0"
 flash_attn = true
 vae_tiling = true
-eval = ["vqa", "tit"]
 rewrite = "auto"
 rewrite_threshold = 300
 eval_max_px = 512
@@ -131,6 +158,9 @@ judge_model = "qwen3:4b"
 # flash_attn cuts the flux compute buffer from ~5.3GB to ~230MB — without it
 # this preset OOMs on a 24GB GPU (F16 diffusion weights + text encoders alone
 # take ~17GB). vae_tiling adds headroom for generations above 512x512.
+
+# No `eval` key here on purpose — eval is opt-in per step 1b, passed as
+# --eval on the command line, not baked into the preset.
 
 # Not a preset key — --eval/--rewrite need Ollama reachable here, and TIT-Score's
 # caption call often runs past the 120s default.
