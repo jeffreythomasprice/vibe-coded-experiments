@@ -5,12 +5,13 @@ use clap::Parser;
 use image_gen::cli::{self, Command};
 use image_gen::{report, run};
 
-fn main() -> ExitCode {
+#[tokio::main]
+async fn main() -> ExitCode {
     let started = Instant::now();
     let cli = cli::Cli::parse();
     let json = matches!(&cli.command, Command::Generate(args) if args.json);
 
-    let outcome = run(cli);
+    let outcome = run(cli).await;
     let code = match &outcome {
         Ok(_) => ExitCode::SUCCESS,
         Err(err) => {

@@ -41,6 +41,20 @@ steps = 4
 cfg_scale = 1.0
 guidance = 0.0
 
+# Qwen-Image-2.1 needs three separate weight files — the diffusion model alone
+# is not enough. `--model`/`model =` (a single combined checkpoint) is the
+# wrong flag for this; use `diffusion_model` as below. `vae` MUST be
+# `qwen_image_2.1_vae_bf16.safetensors` specifically: earlier Qwen-Image and
+# Wan 2.2 VAE weights are not interchangeable with it. `text_encoder` is the
+# Qwen3-VL-8B-Instruct text encoder (GGUF works); add `vision_encoder` (its
+# mmproj file) too if you also want image-editing mode.
+[presets.qwen]
+diffusion_model = "leejet/Qwen-Image-2.1-GGUF:qwen_image_2.1-Q8_0.gguf"
+vae = "Comfy-Org/Qwen-Image-2.1:vae/qwen_image_2.1_vae_bf16.safetensors"
+text_encoder = "Qwen/Qwen3-VL-8B-Instruct-GGUF:Qwen3VL-8B-Instruct-Q4_K_M.gguf"
+cfg_scale = 6.0
+sampler = "euler"
+
 # Everything --eval and --rewrite need, bundled so `--preset eval` turns both on
 # with one flag. Four model overrides exist, all falling back to [llm].model
 # when unset: rewrite_model (text only), vqa_model (vision), caption_model
@@ -86,3 +100,31 @@ timeout_secs = 300
 # it keeps making progress, including through Ollama's quiet checksum-verification
 # pass on a very large model.
 pull_stall_timeout_secs = 600
+
+# The sd-server sidecar that actually runs generation (see `image-gen server
+# --help`). The first `generate` with a given set of model flags downloads a
+# matching release and spawns it as a background daemon; later runs with the
+# same flags reuse that process instead of reloading the model. Changing any
+# model path, --weight-type, --backend, --threads, --vae-tiling, or
+# --flash-attn restarts it.
+[sd_server]
+host = "127.0.0.1"
+port = 1234
+# Which prebuilt release asset to download: "vulkan", "cpu", or "rocm". There
+# is no "cuda" asset for Linux (Windows-only upstream); --backend cuda fails
+# regardless of this setting.
+backend = "vulkan"
+# A specific upstream tag (e.g. "master-890-74988b2"), or "latest" to resolve
+# the newest release each time a download is actually needed. A literal tag
+# that's already downloaded needs no network access at all.
+release_tag = "latest"
+auto_download = true
+# Where downloaded releases are extracted, one directory per tag.
+server_dir = "/tmp/image-gen/sd-server"
+# Daemon lock file and status record (see `image-gen server status`).
+state_dir = "/tmp/image-gen/run"
+# How long to wait for the daemon to report ready after spawning it — generous
+# by default since loading a large checkpoint can take minutes.
+startup_timeout_secs = 300
+request_timeout_secs = 1800
+poll_interval_ms = 250

@@ -161,9 +161,10 @@ The blocker is that this needs a VLM, not an encoder. Three options:
    VQAScore needs. No FFI, no ggml symbol collision, crashes are isolated and
    restartable, and `hub.rs` already does the model + mmproj download.
 2. **`llama-cpp-2` with the `mtmd` feature in-process.** Cleanest UX, typed
-   error enums that match this repo's style. Risk: this binary already
-   statically links stable-diffusion.cpp's ggml, and llama.cpp vendors a
-   different ggml revision — a real duplicate-symbol hazard.
+   error enums that match this repo's style. Image generation itself now runs
+   out-of-process (`sd-server`, driven over HTTP — see `src/sd/`), so the old
+   ggml-symbol-collision risk from statically linking stable-diffusion.cpp no
+   longer applies; llama.cpp's own ggml would be the only copy in this binary.
 3. **A cloud VLM API.** Roughly $1–2 per 1000 images on a small model,
    downscaling to 512² first and using a batch endpoint. For a hobby project
    this is often cheaper than the engineering cost of the local path.
@@ -341,15 +342,16 @@ inline metadata that exports a checkpoint to ONNX. Never at runtime.
 
 ## What is *not* available from stable-diffusion.cpp
 
-Verified against the vendored source: the CLIP vision tower exists
+Verified against upstream source: the CLIP vision tower exists
 (`src/model/te/clip.hpp` defines `CLIPVisionModel` and
 `CLIPVisionModelProjection`) and `sd_ctx_params_t` accepts a `clip_vision_path`
 — but it is wired internally for PhotoMaker / PuLID / IP-Adapter conditioning.
 **None of the 53 `SD_API` functions returns an embedding or feature vector.**
 
-Exposing one would mean adding an export to the C++, regenerating bindings, and
-threading a patch through `fetch-source.sh`, which re-downloads pristine
-source. Not worth it against a 3-line ONNX download.
+Exposing one would mean patching and building a custom `sd-server` fork
+upstream — this project no longer builds stable-diffusion.cpp itself at all
+(see `src/sd/`), only downloads prebuilt releases. Not worth it against a
+3-line ONNX download.
 
 ---
 

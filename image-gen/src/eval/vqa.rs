@@ -19,7 +19,7 @@ pub struct VqaResult {
 /// (arXiv 2404.01291): ask a VLM a yes/no question about the image and read the
 /// probability of "yes" straight off the logprobs of a single generated token,
 /// rather than generating and parsing any text.
-pub fn score(
+pub async fn score(
     llm: &Llm,
     model: &str,
     prompt: &str,
@@ -45,7 +45,7 @@ pub fn score(
     };
     // A 1-token request stops on `StopReason::Length`, not `Stop` — deliberately
     // not checked here; only the logprobs matter.
-    let response = llm.chat(&request)?;
+    let response = llm.chat(&request).await?;
     score_from_logprobs(&response.logprobs)
 }
 
@@ -159,8 +159,8 @@ mod tests {
         assert!(matches!(err, EvalError::NoAnswerToken { .. }));
     }
 
-    #[test]
-    fn scoring_ignores_stop_reason_length_from_a_one_token_request() {
+    #[tokio::test]
+    async fn scoring_ignores_stop_reason_length_from_a_one_token_request() {
         let provider = Arc::new(ScriptedProvider::new(vec![ChatResponse {
             message: Message::assistant("Yes"),
             stop_reason: StopReason::Length,
@@ -175,12 +175,14 @@ mod tests {
             .save(&path)
             .unwrap();
 
-        let result = score(&llm, "test-model", "a red square", &path, 512).unwrap();
+        let result = score(&llm, "test-model", "a red square", &path, 512)
+            .await
+            .unwrap();
         assert!(result.score > 0.99);
     }
 
-    #[test]
-    fn scoring_sends_think_false_and_one_max_token() {
+    #[tokio::test]
+    async fn scoring_sends_think_false_and_one_max_token() {
         let provider = Arc::new(ScriptedProvider::new(vec![ChatResponse {
             message: Message::assistant("Yes"),
             stop_reason: StopReason::Length,
@@ -195,7 +197,9 @@ mod tests {
             .save(&path)
             .unwrap();
 
-        score(&llm, "test-model", "a red square", &path, 512).unwrap();
+        score(&llm, "test-model", "a red square", &path, 512)
+            .await
+            .unwrap();
 
         let sent = &provider.requests()[0];
         assert_eq!(sent.options.think, Some(false));

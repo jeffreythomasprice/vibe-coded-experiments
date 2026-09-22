@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use diffusion_rs::api::{BackendDevice, SampleMethod, WeightType};
 
 use crate::models::ModelRef;
 
@@ -24,6 +23,27 @@ pub enum Command {
     Models {
         #[command(subcommand)]
         command: ModelsCommand,
+    },
+    /// Manage the sd-server sidecar process
+    Server {
+        #[command(subcommand)]
+        command: ServerCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ServerCommand {
+    /// Show whether a daemon is running, and which model set it has loaded
+    Status,
+    /// Stop the running daemon, if any
+    Stop,
+    /// Stop the running daemon; the next `generate` starts a fresh one
+    Restart,
+    /// Print the daemon's log file
+    Logs {
+        /// Keep printing new log lines as they arrive
+        #[arg(short, long)]
+        follow: bool,
     },
 }
 
@@ -101,6 +121,16 @@ pub struct GenerateArgs {
     /// Tiny AutoEncoder for fast, low-quality decoding; same REF syntax as --model
     #[arg(long, value_name = "REF")]
     pub taesd: Option<ModelRef>,
+
+    /// Text encoder for models that need one loaded separately (e.g.
+    /// Qwen-Image-2.1's Qwen3-VL-8B); same REF syntax as --model
+    #[arg(long, value_name = "REF")]
+    pub text_encoder: Option<ModelRef>,
+
+    /// Vision weights (mmproj) for the text encoder, needed for image-editing
+    /// modes; same REF syntax as --model
+    #[arg(long, value_name = "REF")]
+    pub vision_encoder: Option<ModelRef>,
 
     /// Weight precision override (default: the type stored in the weight file)
     #[arg(long, value_name = "TYPE")]
@@ -252,29 +282,7 @@ pub enum Backend {
     Cuda,
 }
 
-impl From<Backend> for BackendDevice {
-    fn from(value: Backend) -> Self {
-        match value {
-            Backend::Cpu => BackendDevice::CPU,
-            Backend::Vulkan => BackendDevice::VULKAN0,
-            Backend::Cuda => BackendDevice::CUDA0,
-        }
-    }
-}
-
 impl Backend {
-    /// The `--features` name needed to compile this backend in, or `None` if it's
-    /// always available (cpu) or was compiled in for this binary.
-    pub fn missing_feature(self) -> Option<&'static str> {
-        match self {
-            Backend::Cpu => None,
-            Backend::Vulkan if cfg!(feature = "vulkan") => None,
-            Backend::Vulkan => Some("vulkan"),
-            Backend::Cuda if cfg!(feature = "cuda") => None,
-            Backend::Cuda => Some("cuda"),
-        }
-    }
-
     pub fn as_str(self) -> &'static str {
         match self {
             Backend::Cpu => "cpu",
@@ -324,31 +332,6 @@ pub enum Sampler {
     EulerGe,
 }
 
-impl From<Sampler> for SampleMethod {
-    fn from(value: Sampler) -> Self {
-        match value {
-            Sampler::Euler => SampleMethod::EULER_SAMPLE_METHOD,
-            Sampler::EulerA => SampleMethod::EULER_A_SAMPLE_METHOD,
-            Sampler::Heun => SampleMethod::HEUN_SAMPLE_METHOD,
-            Sampler::Dpm2 => SampleMethod::DPM2_SAMPLE_METHOD,
-            Sampler::Dpmpp2sA => SampleMethod::DPMPP2S_A_SAMPLE_METHOD,
-            Sampler::Dpmpp2m => SampleMethod::DPMPP2M_SAMPLE_METHOD,
-            Sampler::Dpmpp2mV2 => SampleMethod::DPMPP2Mv2_SAMPLE_METHOD,
-            Sampler::Ipndm => SampleMethod::IPNDM_SAMPLE_METHOD,
-            Sampler::IpndmV => SampleMethod::IPNDM_V_SAMPLE_METHOD,
-            Sampler::Lcm => SampleMethod::LCM_SAMPLE_METHOD,
-            Sampler::DdimTrailing => SampleMethod::DDIM_TRAILING_SAMPLE_METHOD,
-            Sampler::Tcd => SampleMethod::TCD_SAMPLE_METHOD,
-            Sampler::ResMultistep => SampleMethod::RES_MULTISTEP_SAMPLE_METHOD,
-            Sampler::Res2s => SampleMethod::RES_2S_SAMPLE_METHOD,
-            Sampler::ErSde => SampleMethod::ER_SDE_SAMPLE_METHOD,
-            Sampler::EulerCfgPp => SampleMethod::EULER_CFG_PP_SAMPLE_METHOD,
-            Sampler::EulerACfgPp => SampleMethod::EULER_A_CFG_PP_SAMPLE_METHOD,
-            Sampler::EulerGe => SampleMethod::EULER_GE_SAMPLE_METHOD,
-        }
-    }
-}
-
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]
 pub enum WeightTypeArg {
@@ -378,26 +361,6 @@ pub enum WeightTypeArg {
     Q3K,
     #[value(name = "q2_k")]
     Q2K,
-}
-
-impl From<WeightTypeArg> for WeightType {
-    fn from(value: WeightTypeArg) -> Self {
-        match value {
-            WeightTypeArg::F32 => WeightType::SD_TYPE_F32,
-            WeightTypeArg::F16 => WeightType::SD_TYPE_F16,
-            WeightTypeArg::Bf16 => WeightType::SD_TYPE_BF16,
-            WeightTypeArg::Q8_0 => WeightType::SD_TYPE_Q8_0,
-            WeightTypeArg::Q5_1 => WeightType::SD_TYPE_Q5_1,
-            WeightTypeArg::Q5_0 => WeightType::SD_TYPE_Q5_0,
-            WeightTypeArg::Q4_1 => WeightType::SD_TYPE_Q4_1,
-            WeightTypeArg::Q4_0 => WeightType::SD_TYPE_Q4_0,
-            WeightTypeArg::Q6K => WeightType::SD_TYPE_Q6_K,
-            WeightTypeArg::Q5K => WeightType::SD_TYPE_Q5_K,
-            WeightTypeArg::Q4K => WeightType::SD_TYPE_Q4_K,
-            WeightTypeArg::Q3K => WeightType::SD_TYPE_Q3_K,
-            WeightTypeArg::Q2K => WeightType::SD_TYPE_Q2_K,
-        }
-    }
 }
 
 #[cfg(test)]

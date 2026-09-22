@@ -20,7 +20,7 @@ pub fn should_rewrite(mode: RewriteMode, prompt: &str, threshold: usize) -> bool
 /// Compresses `prompt` with `model`. Falls back to the original prompt (with a
 /// warning) rather than erroring when the model replies with nothing usable —
 /// a failed rewrite should degrade to "no rewrite", not abort generation.
-pub fn rewrite(llm: &Llm, model: &str, prompt: &str) -> Result<String, LlmError> {
+pub async fn rewrite(llm: &Llm, model: &str, prompt: &str) -> Result<String, LlmError> {
     let request = ChatRequest {
         model: model.to_owned(),
         messages: vec![Message::system(SYSTEM_PROMPT), Message::user(prompt)],
@@ -31,7 +31,7 @@ pub fn rewrite(llm: &Llm, model: &str, prompt: &str) -> Result<String, LlmError>
             ..Default::default()
         },
     };
-    let response = llm.chat(&request)?;
+    let response = llm.chat(&request).await?;
     let rewritten = response.message.text().trim().to_owned();
     if rewritten.is_empty() {
         tracing::warn!(model, "rewrite returned no text; using the original prompt");
@@ -57,27 +57,29 @@ mod tests {
         }
     }
 
-    #[test]
-    fn rewrite_returns_trimmed_model_text() {
+    #[tokio::test]
+    async fn rewrite_returns_trimmed_model_text() {
         let provider = Arc::new(ScriptedProvider::new(vec![reply("  a tidy prompt  ")]));
         let llm = Llm::test_with_provider(provider);
-        let result = rewrite(&llm, "test-model", "a very long messy prompt").unwrap();
+        let result = rewrite(&llm, "test-model", "a very long messy prompt")
+            .await
+            .unwrap();
         assert_eq!(result, "a tidy prompt");
     }
 
-    #[test]
-    fn empty_rewrite_falls_back_to_the_original_prompt() {
+    #[tokio::test]
+    async fn empty_rewrite_falls_back_to_the_original_prompt() {
         let provider = Arc::new(ScriptedProvider::new(vec![reply("   ")]));
         let llm = Llm::test_with_provider(provider);
-        let result = rewrite(&llm, "test-model", "the original").unwrap();
+        let result = rewrite(&llm, "test-model", "the original").await.unwrap();
         assert_eq!(result, "the original");
     }
 
-    #[test]
-    fn rewrite_sends_think_false_and_low_temperature() {
+    #[tokio::test]
+    async fn rewrite_sends_think_false_and_low_temperature() {
         let provider = Arc::new(ScriptedProvider::new(vec![reply("ok")]));
         let llm = Llm::test_with_provider(provider.clone());
-        rewrite(&llm, "test-model", "prompt").unwrap();
+        rewrite(&llm, "test-model", "prompt").await.unwrap();
         let sent = &provider.requests()[0];
         assert_eq!(sent.options.think, Some(false));
         assert_eq!(sent.options.temperature, Some(0.2));

@@ -6,6 +6,7 @@ use thiserror::Error;
 
 use crate::llm::LlmConfig;
 use crate::preset::Preset;
+use crate::sd::SdConfig;
 
 pub const DEFAULT_LOG_FILTER: &str = "warn,image_gen=trace";
 pub const DEFAULT_LOG_DIR: &str = "/tmp/image-gen/logs";
@@ -24,6 +25,7 @@ pub struct Config {
     pub models_dir: PathBuf,
     pub presets: BTreeMap<String, Preset>,
     pub llm: LlmConfig,
+    pub sd_server: SdConfig,
 }
 
 impl Default for Config {
@@ -36,6 +38,7 @@ impl Default for Config {
             models_dir: PathBuf::from(DEFAULT_MODELS_DIR),
             presets: BTreeMap::new(),
             llm: LlmConfig::default(),
+            sd_server: SdConfig::default(),
         }
     }
 }
@@ -342,6 +345,26 @@ mod tests {
         let missing = dir.path().join("missing.toml");
         let defaulted = load_from_candidates(&[missing]).unwrap();
         assert_eq!(defaulted.config.llm, crate::llm::LlmConfig::default());
+    }
+
+    #[test]
+    fn sd_server_section_is_parsed_and_defaults_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[sd_server]\nport = 5000\nbackend = \"cpu\"\n").unwrap();
+
+        let loaded = load_from_candidates(&[path]).unwrap();
+
+        assert_eq!(loaded.config.sd_server.port, 5000);
+        assert_eq!(
+            loaded.config.sd_server.backend,
+            crate::sd::config::ReleaseBackend::Cpu
+        );
+
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("missing.toml");
+        let defaulted = load_from_candidates(&[missing]).unwrap();
+        assert_eq!(defaulted.config.sd_server, SdConfig::default());
     }
 
     #[test]

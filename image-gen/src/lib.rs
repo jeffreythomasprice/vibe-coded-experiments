@@ -14,11 +14,11 @@ pub mod output;
 pub mod preset;
 pub mod report;
 pub mod rewrite;
-pub mod sdlog;
+pub mod sd;
 
 use std::path::{Path, PathBuf};
 
-use cli::{Command, EvalMetric, GenerateArgs, ModelsCommand, RewriteMode};
+use cli::{Command, EvalMetric, GenerateArgs, ModelsCommand, RewriteMode, ServerCommand};
 use config::Config;
 use error::AppError;
 use eval::rank::{self, Borda};
@@ -49,7 +49,7 @@ pub struct Outcome {
     pub prompt: EffectivePrompt,
 }
 
-pub fn run(mut cli: cli::Cli) -> Result<Outcome, AppError> {
+pub async fn run(mut cli: cli::Cli) -> Result<Outcome, AppError> {
     let loaded = config::load(cli.config.as_deref())?;
     logging::init(&loaded.config)?;
 
@@ -66,14 +66,17 @@ pub fn run(mut cli: cli::Cli) -> Result<Outcome, AppError> {
     match &mut cli.command {
         Command::Generate(args) => {
             preset::apply(args, &loaded.config.presets)?;
-            sdlog::init();
-            generate_command(args, &loaded.config)
+            generate_command(args, &loaded.config).await
         }
         Command::Models { command } => {
             match command {
                 ModelsCommand::Search(args) => catalog::search(args, &loaded.config.models_dir)?,
                 ModelsCommand::List(args) => catalog::list(args, &loaded.config.models_dir)?,
             }
+            Ok(Outcome::default())
+        }
+        Command::Server { command } => {
+            server_command(command, &loaded.config.sd_server, &loaded.config.log_dir).await?;
             Ok(Outcome::default())
         }
     }
@@ -108,7 +111,7 @@ fn random_seed() -> i64 {
 
 const DEFAULT_EVAL_MAX_PX: u32 = 512;
 
-fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcome, AppError> {
+async fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcome, AppError> {
     if args.json && args.show {
         tracing::warn!("--show writes image data to stdout, corrupting --json output");
     }
@@ -128,7 +131,7 @@ fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcome, App
     let will_rewrite = rewrite::should_rewrite(rewrite_mode, &args.prompt, rewrite_threshold);
 
     let llm = if eval_requested || will_rewrite {
-        Some(Llm::new(&config.llm)?)
+        Some(Llm::new(&config.llm))
     } else {
         None
     };
@@ -136,7 +139,7 @@ fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcome, App
     let rewritten = match (&llm, will_rewrite) {
         (Some(llm), true) => {
             let model = llm.model(args.rewrite_model.as_deref(), "rewrite-model")?;
-            let text = rewrite::rewrite(llm, &model, &args.prompt)?;
+            let text = rewrite::rewrite(llm, &model, &args.prompt).await?;
             tracing::info!(original = %args.prompt, rewritten = %text, "rewrote prompt");
             Some(text)
         }
@@ -144,7 +147,7 @@ fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcome, App
     };
     let effective_prompt = rewritten.as_deref().unwrap_or(&args.prompt);
 
-    let produced = produce(args, effective_prompt, &config.models_dir)?;
+    let produced = produce(args, effective_prompt, config).await?;
 
     // Only the metrics actually requested need a model resolved for them: a model
     // missing for an unrequested role (e.g. no `--judge-model` and no `[llm].model`
@@ -176,23 +179,19 @@ fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcome, App
     };
 
     let total_images = produced.paths.len();
-    let scored: Vec<(Option<PathBuf>, i64, ImageEval)> = produced
-        .paths
-        .iter()
-        .enumerate()
-        .map(|(index, path)| {
-            let seed = produced.seed + index as i64;
-            let eval = match &llm {
-                Some(llm) if eval_requested => {
-                    eval::run(llm, &eval_config, &args.prompt, path, index, total_images)
-                }
-                _ => ImageEval::default(),
-            };
-            let reported_path = produced.durable.then(|| path.clone());
-            log_scored_image(reported_path.as_deref(), seed, &eval);
-            (reported_path, seed, eval)
-        })
-        .collect();
+    let mut scored: Vec<(Option<PathBuf>, i64, ImageEval)> = Vec::with_capacity(total_images);
+    for (index, path) in produced.paths.iter().enumerate() {
+        let seed = produced.seed + index as i64;
+        let eval = match &llm {
+            Some(llm) if eval_requested => {
+                eval::run(llm, &eval_config, &args.prompt, path, index, total_images).await
+            }
+            _ => ImageEval::default(),
+        };
+        let reported_path = produced.durable.then(|| path.clone());
+        log_scored_image(reported_path.as_deref(), seed, &eval);
+        scored.push((reported_path, seed, eval));
+    }
 
     let evals: Vec<ImageEval> = scored.iter().map(|(_, _, eval)| eval.clone()).collect();
     let borda = rank::aggregate(&evals);
@@ -257,9 +256,9 @@ fn require_checkpoint(args: &GenerateArgs) -> Result<(), AppError> {
     Ok(())
 }
 
-/// `diffusion-rs` silently drops a `--ref-image` path that doesn't exist rather
-/// than erroring, so a typo would otherwise generate as if no reference had been
-/// passed at all; check up front instead.
+/// Checked up front so a typo'd `--ref-image` path fails fast with a clear
+/// local error, rather than surfacing later as an opaque read error after a
+/// daemon may already have been spawned for this generation.
 fn require_ref_images_exist(args: &GenerateArgs) -> Result<(), AppError> {
     for path in &args.ref_image {
         if !path.is_file() {
@@ -274,17 +273,17 @@ fn require_ref_images_exist(args: &GenerateArgs) -> Result<(), AppError> {
 /// when set (a plain file for one copy, a filename prefix for more) or into a
 /// scratch directory otherwise, so the caller can rely on `paths` being live
 /// files either way.
-fn produce(args: &GenerateArgs, prompt: &str, models_dir: &Path) -> Result<Produced, AppError> {
+async fn produce(args: &GenerateArgs, prompt: &str, config: &Config) -> Result<Produced, AppError> {
     match &args.output {
-        Some(path) => produce_to_file(args, prompt, models_dir, path),
-        None => produce_to_scratch(args, prompt, models_dir),
+        Some(path) => produce_to_file(args, prompt, config, path).await,
+        None => produce_to_scratch(args, prompt, config).await,
     }
 }
 
-fn produce_to_file(
+async fn produce_to_file(
     args: &GenerateArgs,
     prompt: &str,
-    models_dir: &Path,
+    config: &Config,
     path: &Path,
 ) -> Result<Produced, AppError> {
     if path.is_dir() {
@@ -300,25 +299,12 @@ fn produce_to_file(
 
     let seed = resolve_seed(args.seed);
     let dests = output::destinations(path, args.copies);
+    let images = generate::generate(args, prompt, seed, config, args.copies).await?;
 
-    if args.copies == 1 {
-        generate::generate(args, prompt, seed, models_dir, &dests[0], 1)?;
-        tracing::info!(path = %dests[0].display(), step = 1, total_steps = 1, "wrote image");
-    } else {
-        let scratch_parent = path
-            .parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-            .unwrap_or_else(|| Path::new("."));
-        let scratch = tempfile::Builder::new()
-            .prefix(".image-gen-")
-            .tempdir_in(scratch_parent)?;
-        generate::generate(args, prompt, seed, models_dir, scratch.path(), args.copies)?;
-        let sources = output::collect(scratch.path(), args.copies)?;
-        let total_steps = dests.len();
-        for (index, (src, dest)) in sources.iter().zip(&dests).enumerate() {
-            output::place(src, dest)?;
-            tracing::info!(path = %dest.display(), step = index + 1, total_steps, "wrote image");
-        }
+    let total_steps = dests.len();
+    for (index, (dest, bytes)) in dests.iter().zip(&images).enumerate() {
+        output::write_image(dest, bytes)?;
+        tracing::info!(path = %dest.display(), step = index + 1, total_steps, "wrote image");
     }
 
     Ok(Produced {
@@ -331,18 +317,17 @@ fn produce_to_file(
 
 /// Generate into a scratch directory that is deleted once the returned `Produced`
 /// drops. Used for `--show` with no `-o`, and for score-only `--eval` runs.
-fn produce_to_scratch(args: &GenerateArgs, prompt: &str, models_dir: &Path) -> Result<Produced, AppError> {
+async fn produce_to_scratch(args: &GenerateArgs, prompt: &str, config: &Config) -> Result<Produced, AppError> {
     let scratch = tempfile::tempdir()?;
     let seed = resolve_seed(args.seed);
+    let images = generate::generate(args, prompt, seed, config, args.copies).await?;
 
-    let paths = if args.copies == 1 {
-        let path = scratch.path().join("image.png");
-        generate::generate(args, prompt, seed, models_dir, &path, 1)?;
-        vec![path]
-    } else {
-        generate::generate(args, prompt, seed, models_dir, scratch.path(), args.copies)?;
-        output::collect(scratch.path(), args.copies)?
-    };
+    let mut paths = Vec::with_capacity(images.len());
+    for (index, bytes) in images.iter().enumerate() {
+        let path = scratch.path().join(format!("image{index}.png"));
+        output::write_image(&path, bytes)?;
+        paths.push(path);
+    }
 
     Ok(Produced {
         paths,
@@ -364,6 +349,78 @@ fn display_all(paths: &[&Path], durable: bool) -> Result<(), AppError> {
         }
     }
     Ok(())
+}
+
+async fn server_command(command: &ServerCommand, config: &sd::SdConfig, log_dir: &Path) -> Result<(), AppError> {
+    match command {
+        ServerCommand::Status => match sd::daemon::status(config).await {
+            Some(status) if status.alive => {
+                println!("running (pid {})", status.state.pid);
+                println!("release tag: {}", status.state.tag);
+                println!("fingerprint: {}", status.state.fingerprint);
+                println!("log file: {}", status.state.log_path.display());
+            }
+            Some(status) => {
+                println!(
+                    "recorded daemon (pid {}) is not responding; run `image-gen server stop` to clear it",
+                    status.state.pid
+                );
+            }
+            None => println!("not running"),
+        },
+        ServerCommand::Stop => {
+            if sd::daemon::stop(config).await? {
+                println!("stopped");
+            } else {
+                println!("not running");
+            }
+        }
+        ServerCommand::Restart => {
+            if sd::daemon::stop(config).await? {
+                println!("stopped; the next `generate` will start a fresh daemon");
+            } else {
+                println!("not running; the next `generate` will start one");
+            }
+        }
+        ServerCommand::Logs { follow } => print_logs(config, log_dir, *follow).await?,
+    }
+    Ok(())
+}
+
+async fn print_logs(config: &sd::SdConfig, log_dir: &Path, follow: bool) -> Result<(), AppError> {
+    let path = match sd::daemon::status(config).await {
+        Some(status) => status.state.log_path,
+        None => log_dir.join("sd-server.log"),
+    };
+
+    let contents = tokio::fs::read_to_string(&path).await.unwrap_or_default();
+    print!("{contents}");
+    if !follow {
+        return Ok(());
+    }
+
+    let mut offset = contents.len() as u64;
+    loop {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        let Ok(metadata) = tokio::fs::metadata(&path).await else {
+            continue;
+        };
+        if metadata.len() <= offset {
+            continue;
+        }
+        let Ok(mut file) = tokio::fs::File::open(&path).await else {
+            continue;
+        };
+        use tokio::io::{AsyncReadExt, AsyncSeekExt};
+        if file.seek(std::io::SeekFrom::Start(offset)).await.is_err() {
+            continue;
+        }
+        let mut buf = Vec::new();
+        if file.read_to_end(&mut buf).await.is_ok() {
+            print!("{}", String::from_utf8_lossy(&buf));
+            offset = metadata.len();
+        }
+    }
 }
 
 #[cfg(test)]

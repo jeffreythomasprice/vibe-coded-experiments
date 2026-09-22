@@ -79,9 +79,9 @@ pub struct EvalConfig<'a> {
 /// VQAScore is the weaker choice once a prompt is long enough to trigger
 /// `--rewrite`; that tradeoff is documented, not enforced here — both metrics
 /// still run if both are requested.
-pub fn run(
+pub async fn run(
     llm: &Llm,
-    config: &EvalConfig,
+    config: &EvalConfig<'_>,
     prompt: &str,
     path: &Path,
     image_index: usize,
@@ -94,7 +94,7 @@ pub fn run(
         match metric {
             EvalMetric::Vqa => {
                 tracing::info!(path = %path.display(), metric = "vqa", step, total_steps, "scoring image");
-                let outcome = vqa::score(llm, config.vqa_model, prompt, path, config.max_px);
+                let outcome = vqa::score(llm, config.vqa_model, prompt, path, config.max_px).await;
                 if let Err(err) = &outcome {
                     tracing::warn!(path = %path.display(), metric = "vqa", error = %err, "scoring failed");
                 }
@@ -109,7 +109,8 @@ pub fn run(
                     prompt,
                     path,
                     config.max_px,
-                );
+                )
+                .await;
                 if let Err(err) = &outcome {
                     tracing::warn!(path = %path.display(), metric = "tit", error = %err, "scoring failed");
                 }

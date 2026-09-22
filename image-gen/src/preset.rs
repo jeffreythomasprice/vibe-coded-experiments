@@ -31,6 +31,10 @@ pub struct Preset {
     pub t5xxl: Option<ModelRef>,
     #[serde(deserialize_with = "from_str_opt")]
     pub taesd: Option<ModelRef>,
+    #[serde(deserialize_with = "from_str_opt")]
+    pub text_encoder: Option<ModelRef>,
+    #[serde(deserialize_with = "from_str_opt")]
+    pub vision_encoder: Option<ModelRef>,
     #[serde(deserialize_with = "value_enum_opt")]
     pub weight_type: Option<WeightTypeArg>,
     #[serde(deserialize_with = "value_enum_opt")]
@@ -196,6 +200,8 @@ pub fn apply(args: &mut GenerateArgs, presets: &BTreeMap<String, Preset>) -> Res
         clip_g => "--clip-g",
         t5xxl => "--t5xxl",
         taesd => "--taesd",
+        text_encoder => "--text-encoder",
+        vision_encoder => "--vision-encoder",
         weight_type => "--weight-type",
         backend => "--backend",
         sampler => "--sampler",
@@ -258,6 +264,31 @@ mod tests {
         assert_eq!(args.steps, Some(4));
         assert_eq!(args.cfg_scale, Some(1.0));
         assert_eq!(args.guidance, Some(0.0));
+    }
+
+    #[test]
+    fn preset_fills_text_and_vision_encoder() {
+        let mut args = parse(&["a prompt", "--preset", "qwen"]);
+        let mut presets = BTreeMap::new();
+        presets.insert(
+            "qwen".to_owned(),
+            Preset {
+                text_encoder: Some("Qwen/Qwen3-VL-8B-Instruct-GGUF:Qwen3VL-8B-Instruct-Q4_K_M.gguf".parse().unwrap()),
+                vision_encoder: Some("Qwen/Qwen3-VL-8B-Instruct-GGUF:mmproj-Qwen3VL-8B-Instruct-F16.gguf".parse().unwrap()),
+                ..Default::default()
+            },
+        );
+
+        apply(&mut args, &presets).unwrap();
+
+        assert_eq!(
+            args.text_encoder,
+            Some("Qwen/Qwen3-VL-8B-Instruct-GGUF:Qwen3VL-8B-Instruct-Q4_K_M.gguf".parse().unwrap())
+        );
+        assert_eq!(
+            args.vision_encoder,
+            Some("Qwen/Qwen3-VL-8B-Instruct-GGUF:mmproj-Qwen3VL-8B-Instruct-F16.gguf".parse().unwrap())
+        );
     }
 
     #[test]

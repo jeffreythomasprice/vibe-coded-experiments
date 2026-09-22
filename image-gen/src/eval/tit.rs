@@ -46,7 +46,7 @@ pub struct TitResult {
 /// caption. That decoupling — the captioner never sees what answer is wanted —
 /// is what keeps this metric from yes-biasing the way a single combined
 /// caption-and-score call would.
-pub fn score(
+pub async fn score(
     llm: &Llm,
     caption_model: &str,
     judge_model: &str,
@@ -54,12 +54,12 @@ pub fn score(
     path: &Path,
     max_px: u32,
 ) -> Result<TitResult, EvalError> {
-    let caption_text = caption(llm, caption_model, path, max_px)?;
+    let caption_text = caption(llm, caption_model, path, max_px).await?;
     tracing::debug!(caption = %caption_text, "captioned image for TIT-Score");
-    judge(llm, judge_model, prompt, &caption_text)
+    judge(llm, judge_model, prompt, &caption_text).await
 }
 
-fn caption(llm: &Llm, model: &str, path: &Path, max_px: u32) -> Result<String, EvalError> {
+async fn caption(llm: &Llm, model: &str, path: &Path, max_px: u32) -> Result<String, EvalError> {
     let image = crate::eval::load_scaled(path, max_px)?;
     let request = ChatRequest {
         model: model.to_owned(),
@@ -72,11 +72,11 @@ fn caption(llm: &Llm, model: &str, path: &Path, max_px: u32) -> Result<String, E
             ..Default::default()
         },
     };
-    let response = llm.chat(&request)?;
+    let response = llm.chat(&request).await?;
     Ok(response.message.text().trim().to_owned())
 }
 
-fn judge(llm: &Llm, model: &str, prompt: &str, caption: &str) -> Result<TitResult, EvalError> {
+async fn judge(llm: &Llm, model: &str, prompt: &str, caption: &str) -> Result<TitResult, EvalError> {
     let user = format!("Prompt:\n{prompt}\n\nCaption:\n{caption}");
     let request = ChatRequest {
         model: model.to_owned(),
@@ -89,7 +89,7 @@ fn judge(llm: &Llm, model: &str, prompt: &str, caption: &str) -> Result<TitResul
             ..Default::default()
         },
     };
-    let response = llm.chat(&request)?;
+    let response = llm.chat(&request).await?;
     let judgment: Judgment = serde_json::from_str(&response.message.text())
         .map_err(|source| EvalError::Decode { source })?;
     claims_to_result(judgment.claims)
@@ -155,8 +155,8 @@ mod tests {
         assert!(matches!(err, EvalError::NoClaims));
     }
 
-    #[test]
-    fn judge_parses_structured_json_reply() {
+    #[tokio::test]
+    async fn judge_parses_structured_json_reply() {
         let body = json!({
             "claims": [
                 {"claim": "a red bicycle", "verdict": "supported"},
@@ -172,6 +172,7 @@ mod tests {
             "a red bicycle",
             "a blue car sits on a beach",
         )
+        .await
         .unwrap();
 
         assert_eq!(result.score, 0.5);
@@ -179,32 +180,36 @@ mod tests {
         assert_eq!(result.claims[0].verdict, Verdict::Supported);
     }
 
-    #[test]
-    fn judge_sends_a_json_schema_format_and_think_false() {
+    #[tokio::test]
+    async fn judge_sends_a_json_schema_format_and_think_false() {
         let provider = Arc::new(ScriptedProvider::new(vec![reply(
             json!({"claims": [{"claim": "x", "verdict": "supported"}]}).to_string(),
         )]));
         let llm = Llm::test_with_provider(provider.clone());
 
-        judge(&llm, "test-model", "a prompt", "a caption").unwrap();
+        judge(&llm, "test-model", "a prompt", "a caption")
+            .await
+            .unwrap();
 
         let sent = &provider.requests()[0];
         assert_eq!(sent.options.think, Some(false));
         assert!(sent.options.format.is_some());
     }
 
-    #[test]
-    fn malformed_judge_reply_is_a_decode_error() {
+    #[tokio::test]
+    async fn malformed_judge_reply_is_a_decode_error() {
         let provider = Arc::new(ScriptedProvider::new(vec![reply("not json")]));
         let llm = Llm::test_with_provider(provider);
 
-        let err = judge(&llm, "test-model", "a prompt", "a caption").unwrap_err();
+        let err = judge(&llm, "test-model", "a prompt", "a caption")
+            .await
+            .unwrap_err();
 
         assert!(matches!(err, EvalError::Decode { .. }));
     }
 
-    #[test]
-    fn caption_step_never_sees_the_prompt() {
+    #[tokio::test]
+    async fn caption_step_never_sees_the_prompt() {
         let provider = Arc::new(ScriptedProvider::new(vec![reply("a caption of the image")]));
         let llm = Llm::test_with_provider(provider.clone());
 
@@ -214,7 +219,7 @@ mod tests {
             .save(&path)
             .unwrap();
 
-        caption(&llm, "test-model", &path, 512).unwrap();
+        caption(&llm, "test-model", &path, 512).await.unwrap();
 
         let sent = &provider.requests()[0];
         let text = sent.messages[0].text();

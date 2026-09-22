@@ -1,36 +1,21 @@
 # image-gen
 
-Generate images with diffusion-rs.
+Generate images by driving a local `sd-server` process.
 
 ## Build
 
-The CPU backend is always compiled in. The default build also compiles in Vulkan,
-which needs Vulkan and SPIR-V headers installed (`glslc` and `libvulkan.so` are not
-enough on their own):
-
 ```
-sudo pacman -S vulkan-headers spirv-headers   # or your distro's equivalent
-vendor/diffusion-rs-sys/fetch-source.sh   # once, after cloning
 cargo build
 cargo build --release
 ```
 
-For a CPU-only build, or to also compile in CUDA (needs the CUDA Toolkit), or both:
-
-```
-cargo build --no-default-features
-cargo build --features cuda            # vulkan + cuda, since vulkan is a default feature
-cargo build --no-default-features --features cuda
-```
-
-Whichever backends a build compiles in are all selectable at runtime with
-`--backend cpu|vulkan|cuda` (see Run below); no rebuild needed to switch. Leaving
-`--backend` unset picks the best available GPU backend, falling back to CPU.
-
-The first build of each feature set compiles stable-diffusion.cpp and is slow.
-Cargo caches that build per feature set in `target/`, so once you've built a given
-combination of features at least once, rebuilding it is fast; only `cargo clean` or
-editing anything under `vendor/diffusion-rs-sys/` forces a rebuild.
+Generation talks over HTTP to `sd-server`, from
+[leejet/stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp). The first
+`generate` run downloads a prebuilt release automatically and keeps it running in the
+background as a daemon so later runs skip reloading the model; see `image-gen server
+--help` to check on it, stop it, or follow its log. `--backend cpu|vulkan|cuda` selects
+the compute device an already-running daemon uses; there is no `cuda` release for
+Linux, so that value only works on Windows builds.
 
 ## Run
 
@@ -118,3 +103,5 @@ cargo run -- models list              # list only what's already downloaded, no 
 
 `cargo test` runs the unit suite. `cargo test --features ollama-tests` also runs
 integration tests against a real Ollama server expected at `localhost:11434`.
+`cargo test --features sd-server-tests` runs the `sd-server` daemon lifecycle suite
+against a lightweight stand-in binary — no download or real model needed.
