@@ -4,6 +4,7 @@ pub mod vqa;
 
 use std::io::Cursor;
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use thiserror::Error;
@@ -71,6 +72,15 @@ pub struct EvalConfig<'a> {
     pub max_px: u32,
 }
 
+/// Wall time [`run`] spent on each metric, for a caller that aggregates across
+/// many images to report per-metric totals without re-deriving them from
+/// timestamps. `None` for a metric that was not requested.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct EvalTiming {
+    pub vqa: Option<Duration>,
+    pub tit: Option<Duration>,
+}
+
 /// Runs every requested metric against one image, logging progress per metric
 /// since a `--copies N --eval tit` run can take minutes and would otherwise sit
 /// silent. `image_index` (0-based, out of `total_images`) locates this image
@@ -86,15 +96,18 @@ pub async fn run(
     path: &Path,
     image_index: usize,
     total_images: usize,
-) -> ImageEval {
+) -> (ImageEval, EvalTiming) {
     let mut result = ImageEval::default();
+    let mut timing = EvalTiming::default();
     let total_steps = total_images * config.metrics.len();
     for (metric_index, metric) in config.metrics.iter().enumerate() {
         let step = image_index * config.metrics.len() + metric_index + 1;
         match metric {
             EvalMetric::Vqa => {
                 tracing::info!(path = %path.display(), metric = "vqa", step, total_steps, "scoring image");
+                let started = Instant::now();
                 let outcome = vqa::score(llm, config.vqa_model, prompt, path, config.max_px).await;
+                timing.vqa = Some(started.elapsed());
                 if let Err(err) = &outcome {
                     tracing::warn!(path = %path.display(), metric = "vqa", error = %err, "scoring failed");
                 }
@@ -102,6 +115,7 @@ pub async fn run(
             }
             EvalMetric::Tit => {
                 tracing::info!(path = %path.display(), metric = "tit", step, total_steps, "scoring image");
+                let started = Instant::now();
                 let outcome = tit::score(
                     llm,
                     config.caption_model,
@@ -111,6 +125,7 @@ pub async fn run(
                     config.max_px,
                 )
                 .await;
+                timing.tit = Some(started.elapsed());
                 if let Err(err) = &outcome {
                     tracing::warn!(path = %path.display(), metric = "tit", error = %err, "scoring failed");
                 }
@@ -118,7 +133,7 @@ pub async fn run(
             }
         }
     }
-    result
+    (result, timing)
 }
 
 /// Downscales the image at `path` to at most `max_px` per side and re-encodes it

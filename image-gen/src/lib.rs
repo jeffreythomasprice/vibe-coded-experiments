@@ -17,6 +17,7 @@ pub mod rewrite;
 pub mod sd;
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use cli::{Command, EvalMetric, GenerateArgs, ModelsCommand, RewriteMode, ServerCommand};
 use config::Config;
@@ -112,6 +113,7 @@ fn random_seed() -> i64 {
 const DEFAULT_EVAL_MAX_PX: u32 = 512;
 
 async fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcome, AppError> {
+    let command_started = Instant::now();
     if args.json && args.show {
         tracing::warn!("--show writes image data to stdout, corrupting --json output");
     }
@@ -147,7 +149,9 @@ async fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcom
     };
     let effective_prompt = rewritten.as_deref().unwrap_or(&args.prompt);
 
+    let gen_started = Instant::now();
     let produced = produce(args, effective_prompt, config).await?;
+    let gen_elapsed = gen_started.elapsed();
 
     // Only the metrics actually requested need a model resolved for them: a model
     // missing for an unrequested role (e.g. no `--judge-model` and no `[llm].model`
@@ -180,11 +184,25 @@ async fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcom
 
     let total_images = produced.paths.len();
     let mut scored: Vec<(Option<PathBuf>, i64, ImageEval)> = Vec::with_capacity(total_images);
+    let mut vqa_total = Duration::ZERO;
+    let mut vqa_count = 0u32;
+    let mut tit_total = Duration::ZERO;
+    let mut tit_count = 0u32;
     for (index, path) in produced.paths.iter().enumerate() {
         let seed = produced.seed + index as i64;
         let eval = match &llm {
             Some(llm) if eval_requested => {
-                eval::run(llm, &eval_config, &args.prompt, path, index, total_images).await
+                let (eval, timing) =
+                    eval::run(llm, &eval_config, &args.prompt, path, index, total_images).await;
+                if let Some(elapsed) = timing.vqa {
+                    vqa_total += elapsed;
+                    vqa_count += 1;
+                }
+                if let Some(elapsed) = timing.tit {
+                    tit_total += elapsed;
+                    tit_count += 1;
+                }
+                eval
             }
             _ => ImageEval::default(),
         };
@@ -210,6 +228,16 @@ async fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcom
     if let Some(best) = best_scoring(&images) {
         tracing::info!(index = best, "best-scoring copy");
     }
+
+    log_timing_summary(
+        command_started.elapsed(),
+        gen_elapsed,
+        total_images,
+        vqa_total,
+        vqa_count,
+        tit_total,
+        tit_count,
+    );
 
     if args.show {
         let order = rank::display_order(&evals);
@@ -237,6 +265,51 @@ fn log_scored_image(path: Option<&Path>, seed: i64, eval: &ImageEval) {
         tit = ?eval.tit,
         "scored image"
     );
+}
+
+/// Logs the run's timing breakdown once image generation and scoring are both
+/// done: an overall total, image generation's total and per-image average,
+/// and — only when at least one image was scored — evaluation's total and
+/// per-image average, further split out per metric.
+fn log_timing_summary(
+    total: Duration,
+    image_gen: Duration,
+    image_count: usize,
+    vqa_total: Duration,
+    vqa_count: u32,
+    tit_total: Duration,
+    tit_count: u32,
+) {
+    tracing::info!(
+        total_secs = total.as_secs_f64(),
+        image_gen_secs = image_gen.as_secs_f64(),
+        image_gen_avg_secs = image_gen.as_secs_f64() / image_count as f64,
+        "generation timing"
+    );
+
+    if vqa_count == 0 && tit_count == 0 {
+        return;
+    }
+    let eval_total = vqa_total + tit_total;
+    tracing::info!(
+        eval_secs = eval_total.as_secs_f64(),
+        eval_avg_secs = eval_total.as_secs_f64() / image_count as f64,
+        "eval timing"
+    );
+    if vqa_count > 0 {
+        tracing::info!(
+            vqa_secs = vqa_total.as_secs_f64(),
+            vqa_avg_secs = vqa_total.as_secs_f64() / vqa_count as f64,
+            "vqa eval timing"
+        );
+    }
+    if tit_count > 0 {
+        tracing::info!(
+            tit_secs = tit_total.as_secs_f64(),
+            tit_avg_secs = tit_total.as_secs_f64() / tit_count as f64,
+            "tit eval timing"
+        );
+    }
 }
 
 /// The index of the image with Borda rank 1 (see `eval::rank`); `None` when no
