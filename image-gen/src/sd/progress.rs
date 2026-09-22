@@ -1,11 +1,18 @@
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 
 const TRACING_TARGET: &str = "image_gen::sd";
+
+/// How often to log a progress line when stderr isn't a terminal (piped to a
+/// file, running as a daemon, etc). A live bar is useless there, but a long
+/// download or generation should still leave a breadcrumb trail rather than
+/// going silent or, worse, logging every redraw.
+const HEADLESS_LOG_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Reconstructs the per-step progress bar for one generation by tailing
 /// `sd-server`'s log file for new output written after `offset` — the file's
@@ -52,8 +59,12 @@ pub fn spawn(log_path: PathBuf, offset: u64, poll_interval: Duration) -> Tailer 
     let stop = Arc::new(AtomicBool::new(false));
     let stop_for_task = Arc::clone(&stop);
 
+    let interactive = std::io::stderr().is_terminal();
+
     let task = tokio::spawn(async move {
-        let bar = ProgressBar::with_draw_target(Some(0), ProgressDrawTarget::stderr());
+        let draw_target =
+            if interactive { ProgressDrawTarget::stderr() } else { ProgressDrawTarget::hidden() };
+        let bar = ProgressBar::with_draw_target(Some(0), draw_target);
         bar.set_style(
             ProgressStyle::with_template("  [{bar:50}] {pos}/{len} - {msg}")
                 .expect("static template is always valid")
@@ -61,6 +72,7 @@ pub fn spawn(log_path: PathBuf, offset: u64, poll_interval: Duration) -> Tailer 
         );
         let mut bar_started = false;
         let mut offset = offset;
+        let mut last_logged: Option<Instant> = None;
 
         while !stop_for_task.load(Ordering::Relaxed) {
             if let Ok((bytes, new_offset)) = read_new(&log_path, offset).await
@@ -75,6 +87,23 @@ pub fn spawn(log_path: PathBuf, offset: u64, poll_interval: Duration) -> Tailer 
                         }
                         bar.set_position(progress.step);
                         bar.set_message(format!("{:.2}{}", progress.rate, progress.unit));
+
+                        if !interactive {
+                            let now = Instant::now();
+                            let due = last_logged
+                                .is_none_or(|last| now.duration_since(last) >= HEADLESS_LOG_INTERVAL);
+                            if due || progress.step >= progress.total {
+                                last_logged = Some(now);
+                                tracing::debug!(
+                                    target: TRACING_TARGET,
+                                    "{}/{} - {:.2}{}",
+                                    progress.step,
+                                    progress.total,
+                                    progress.rate,
+                                    progress.unit,
+                                );
+                            }
+                        }
                     } else if let Some((level, message)) = classify_log_line(&segment) {
                         emit(level, message);
                     } else if !segment.trim().is_empty() {
@@ -125,13 +154,17 @@ struct ProgressLine {
     step: u64,
     total: u64,
     rate: f64,
-    unit: &'static str,
+    unit: String,
 }
 
-/// Parses a line shaped like `|===...>   | 5/20 - 2.34it/s`, stripping the
+/// Parses a line shaped like `|===...>   | 5/20 - 2.34it/s` (per-step
+/// generation progress) or `|===...>   | 99/265 - 55.36MB/s` (model download
+/// progress — step/total there are megabytes, not iterations), stripping the
 /// trailing `\x1b[K` (erase-to-end-of-line) `print_progress_line` appends to
 /// every redraw. Returns `None` for anything else, including log lines.
 fn parse_progress_line(segment: &str) -> Option<ProgressLine> {
+    const KNOWN_UNITS: [&str; 6] = ["it/s", "s/it", "B/s", "KB/s", "MB/s", "GB/s"];
+
     let trimmed = segment.trim();
     let trimmed = trimmed.strip_suffix("\x1b[K").unwrap_or(trimmed).trim();
 
@@ -141,15 +174,14 @@ fn parse_progress_line(segment: &str) -> Option<ProgressLine> {
     let step: u64 = step.parse().ok()?;
     let total: u64 = total.parse().ok()?;
 
-    let (rate, unit) = if let Some(number) = rate_text.strip_suffix("it/s") {
-        (number, "it/s")
-    } else {
-        let number = rate_text.strip_suffix("s/it")?;
-        (number, "s/it")
-    };
+    let unit_start = rate_text.find(|c: char| !c.is_ascii_digit() && c != '.')?;
+    let (rate, unit) = rate_text.split_at(unit_start);
+    if !KNOWN_UNITS.contains(&unit) {
+        return None;
+    }
     let rate: f64 = rate.parse().ok()?;
 
-    Some(ProgressLine { step, total, rate, unit })
+    Some(ProgressLine { step, total, rate, unit: unit.to_string() })
 }
 
 /// Parses a line shaped like `[INFO   ] model_loader.cpp:227  - message`, the
@@ -199,6 +231,15 @@ mod tests {
         assert_eq!(line.total, 20);
         assert!((line.rate - 0.87).abs() < 1e-9);
         assert_eq!(line.unit, "s/it");
+    }
+
+    #[test]
+    fn parses_a_download_progress_line_in_megabytes_per_second() {
+        let line = parse_progress_line("|###          | 99/265 - 55.36MB/s\x1b[K").unwrap();
+        assert_eq!(line.step, 99);
+        assert_eq!(line.total, 265);
+        assert!((line.rate - 55.36).abs() < 1e-9);
+        assert_eq!(line.unit, "MB/s");
     }
 
     #[test]
