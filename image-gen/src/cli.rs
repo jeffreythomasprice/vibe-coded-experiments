@@ -193,6 +193,11 @@ pub struct GenerateArgs {
     #[arg(long, value_name = "F")]
     pub guidance: Option<f32>,
 
+    /// Vary steps/cfg-scale/guidance by up to ±this fraction on each copy after
+    /// the first; 0 disables (default: 0.12)
+    #[arg(long, value_name = "F")]
+    pub jitter: Option<f32>,
+
     /// RNG seed (default: random)
     #[arg(long, value_name = "N")]
     pub seed: Option<i64>,
@@ -223,8 +228,8 @@ pub struct GenerateArgs {
     #[arg(long)]
     pub show: bool,
 
-    /// Print the prompt, each image's path/seed/scores, and total elapsed time as
-    /// JSON on stdout
+    /// Print the prompt, each image's path/seed/params/scores, and total elapsed
+    /// time as JSON on stdout
     #[arg(long)]
     pub json: bool,
 

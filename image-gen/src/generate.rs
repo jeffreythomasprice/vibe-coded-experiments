@@ -1,3 +1,5 @@
+mod jitter;
+
 use std::path::PathBuf;
 
 use base64::Engine;
@@ -10,26 +12,47 @@ use crate::models::{self, ModelRef};
 use crate::sd::client::{Guidance, ImgGenRequest, SampleParams};
 use crate::sd::modelset::ModelSet;
 use crate::sd::{SdError, daemon, progress};
+pub use jitter::UsedParams;
+
+/// The seed and sampling params actually sent for one copy.
+#[derive(Debug, Clone, Copy)]
+pub struct CopyParams {
+    pub seed: i64,
+    pub params: UsedParams,
+}
+
+/// One generated image alongside the params that produced it.
+pub struct Generated {
+    pub bytes: Vec<u8>,
+    pub copy: CopyParams,
+}
 
 /// Generates `copies` images of `prompt`, seeded `seed..seed+copies`, against a
 /// `sd-server` process matching `args`'s model flags — spawning or reusing a
 /// daemon as needed. Requests are sequential, not one server-side batch: the
 /// model stays resident across all of them (the point of the daemon), while
-/// each copy's progress and failures stay independently visible.
+/// each copy's progress and failures stay independently visible. Copy 0 uses
+/// `args`'s params exactly; later copies also get steps/cfg_scale/guidance
+/// jittered by `args.jitter` (see `jitter::params_for`).
 pub async fn generate(
     args: &GenerateArgs,
     prompt: &str,
     seed: i64,
     config: &Config,
     copies: u32,
-) -> Result<Vec<Vec<u8>>, AppError> {
+) -> Result<Vec<Generated>, AppError> {
     let model_set = build_model_set(args, config)?;
     let client = daemon::ensure_ready(&config.sd_server, &config.log_dir, &model_set).await?;
     let log_path = daemon::log_path(&config.log_dir);
+    let jitter_amount = args.jitter.unwrap_or(jitter::DEFAULT_JITTER);
 
     let mut images = Vec::with_capacity(copies as usize);
     for index in 0..copies {
-        let request = build_request(args, prompt, seed + i64::from(index))?;
+        let copy = CopyParams {
+            seed: seed + i64::from(index),
+            params: jitter::params_for(args, seed, index, jitter_amount),
+        };
+        let request = build_request(args, prompt, &copy)?;
 
         // `--json` writes the report to stdout; the bar lives on stderr, so
         // nothing would corrupt, but suppressing it keeps a scripted
@@ -54,8 +77,19 @@ pub async fn generate(
             }
             .into());
         }
-        images.push(result.remove(0));
-        tracing::info!(index = index + 1, copies, "generated image");
+        tracing::info!(
+            index = index + 1,
+            copies,
+            seed = copy.seed,
+            steps = ?copy.params.steps,
+            cfg_scale = ?copy.params.cfg_scale,
+            guidance = ?copy.params.guidance,
+            "generated image"
+        );
+        images.push(Generated {
+            bytes: result.remove(0),
+            copy,
+        });
     }
     Ok(images)
 }
@@ -101,20 +135,21 @@ fn build_model_set(args: &GenerateArgs, config: &Config) -> Result<ModelSet, App
     })
 }
 
-fn build_request(args: &GenerateArgs, prompt: &str, seed: i64) -> Result<ImgGenRequest, AppError> {
+fn build_request(args: &GenerateArgs, prompt: &str, copy: &CopyParams) -> Result<ImgGenRequest, AppError> {
     let mut ref_images = Vec::with_capacity(args.ref_image.len());
     for path in &args.ref_image {
         let bytes = std::fs::read(path)?;
         ref_images.push(BASE64.encode(bytes));
     }
 
-    let guidance = (args.cfg_scale.is_some() || args.guidance.is_some()).then_some(Guidance {
-        txt_cfg: args.cfg_scale,
-        distilled_guidance: args.guidance,
+    let params = &copy.params;
+    let guidance = (params.cfg_scale.is_some() || params.guidance.is_some()).then_some(Guidance {
+        txt_cfg: params.cfg_scale,
+        distilled_guidance: params.guidance,
     });
-    let sample_params = (args.steps.is_some() || args.sampler.is_some() || guidance.is_some()).then(|| SampleParams {
+    let sample_params = (params.steps.is_some() || args.sampler.is_some() || guidance.is_some()).then(|| SampleParams {
         sample_method: args.sampler.map(|sampler| server_sampler_name(sampler).to_owned()),
-        sample_steps: args.steps,
+        sample_steps: params.steps,
         guidance,
     });
 
@@ -124,7 +159,7 @@ fn build_request(args: &GenerateArgs, prompt: &str, seed: i64) -> Result<ImgGenR
         clip_skip: args.clip_skip.map(i32::from),
         width: args.width,
         height: args.height,
-        seed: Some(seed),
+        seed: Some(copy.seed),
         batch_count: 1,
         ref_images,
         sample_params,
@@ -176,10 +211,18 @@ mod tests {
         }
     }
 
+    /// Copy 0's params for `args`: today's exact behavior, jitter never applied.
+    fn copy0(args: &GenerateArgs, seed: i64) -> CopyParams {
+        CopyParams {
+            seed,
+            params: jitter::params_for(args, seed, 0, jitter::DEFAULT_JITTER),
+        }
+    }
+
     #[test]
     fn request_omits_sample_params_when_nothing_was_set() {
         let args = parse(&["a prompt"]);
-        let request = build_request(&args, "a prompt", 42).unwrap();
+        let request = build_request(&args, "a prompt", &copy0(&args, 42)).unwrap();
         assert!(request.sample_params.is_none());
         assert_eq!(request.seed, Some(42));
         assert_eq!(request.batch_count, 1);
@@ -189,7 +232,7 @@ mod tests {
     #[test]
     fn request_carries_steps_and_sampler() {
         let args = parse(&["a prompt", "--steps", "12", "--sampler", "dpmpp2s-a"]);
-        let request = build_request(&args, "a prompt", 1).unwrap();
+        let request = build_request(&args, "a prompt", &copy0(&args, 1)).unwrap();
         let sample_params = request.sample_params.unwrap();
         assert_eq!(sample_params.sample_steps, Some(12));
         assert_eq!(sample_params.sample_method.as_deref(), Some("dpm++2s_a"));
@@ -198,10 +241,25 @@ mod tests {
     #[test]
     fn request_carries_cfg_and_guidance_scale() {
         let args = parse(&["a prompt", "--cfg-scale", "6.0", "--guidance", "3.5"]);
-        let request = build_request(&args, "a prompt", 1).unwrap();
+        let request = build_request(&args, "a prompt", &copy0(&args, 1)).unwrap();
         let guidance = request.sample_params.unwrap().guidance.unwrap();
         assert_eq!(guidance.txt_cfg, Some(6.0));
         assert_eq!(guidance.distilled_guidance, Some(3.5));
+    }
+
+    #[test]
+    fn jittered_copy_carries_materialized_sample_params() {
+        let args = parse(&["a prompt"]);
+        let copy = CopyParams {
+            seed: 1,
+            params: jitter::params_for(&args, 42, 1, 0.12),
+        };
+        let request = build_request(&args, "a prompt", &copy).unwrap();
+        let sample_params = request.sample_params.unwrap();
+        assert!(sample_params.sample_steps.is_some());
+        let guidance = sample_params.guidance.unwrap();
+        assert!(guidance.txt_cfg.is_some());
+        assert!(guidance.distilled_guidance.is_some());
     }
 
     #[test]
@@ -263,7 +321,7 @@ mod tests {
 
         let mut args = parse(&["a prompt"]);
         args.ref_image = vec![path];
-        let request = build_request(&args, "a prompt", 1).unwrap();
+        let request = build_request(&args, "a prompt", &copy0(&args, 1)).unwrap();
 
         assert_eq!(request.ref_images, vec![BASE64.encode(b"fake png bytes")]);
     }

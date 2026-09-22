@@ -1,10 +1,14 @@
 in-flight:
 
-
 todo:
 
-when we do copies >= 2, they all look basically the same
-inject some variance in the prompt? or via some other random factor?
+eval timing never shows up in logs?
+we should have code already that does comprehensive summary at the end with a bunch of different timing pieces
+e.g. time to generate images, time to do evals, breakdown per eval method, etc.
+but I don't see any of this
+
+
+default skill use has evals on but this is slow and provides no value?
 
 
 support a cloud image gen diffusion provider

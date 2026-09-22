@@ -24,6 +24,7 @@ use config::Config;
 use error::AppError;
 use eval::rank::{self, Borda};
 use eval::{EvalConfig, ImageEval};
+use generate::{CopyParams, UsedParams};
 use llm::Llm;
 
 /// One scored (or unscored, if `--eval` was not passed) generated image.
@@ -33,9 +34,17 @@ pub struct GeneratedImage {
     /// `--show` only), mirroring the pre-existing `--json --show` empty-paths case.
     pub path: Option<PathBuf>,
     pub seed: i64,
+    pub params: UsedParams,
     pub eval: ImageEval,
     /// `None` when neither `--eval` metric was requested (or both failed).
     pub borda: Option<Borda>,
+}
+
+struct ScoredImage {
+    path: Option<PathBuf>,
+    seed: i64,
+    params: UsedParams,
+    eval: ImageEval,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -85,11 +94,11 @@ pub async fn run(mut cli: cli::Cli) -> Result<Outcome, AppError> {
 
 /// Images that exist on disk right now. `_scratch` keeps the backing tempdir alive
 /// for exactly as long as `paths` are valid; `None` when they are durable (written
-/// to a user-chosen `--output`). `seed` is the base seed passed to `generate`;
-/// `stable-diffusion.cpp` resolves copy `i`'s seed as `seed + i`.
+/// to a user-chosen `--output`). `copies[i]` is the seed and params actually used
+/// for `paths[i]`, in order.
 struct Produced {
     paths: Vec<PathBuf>,
-    seed: i64,
+    copies: Vec<CopyParams>,
     durable: bool,
     _scratch: Option<tempfile::TempDir>,
 }
@@ -119,6 +128,7 @@ async fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcom
     }
     require_checkpoint(args)?;
     require_ref_images_exist(args)?;
+    require_valid_jitter(args)?;
 
     let metrics: &[EvalMetric] = args.eval.as_deref().unwrap_or_default();
     let eval_requested = !metrics.is_empty();
@@ -183,13 +193,13 @@ async fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcom
     };
 
     let total_images = produced.paths.len();
-    let mut scored: Vec<(Option<PathBuf>, i64, ImageEval)> = Vec::with_capacity(total_images);
+    let mut scored: Vec<ScoredImage> = Vec::with_capacity(total_images);
     let mut vqa_total = Duration::ZERO;
     let mut vqa_count = 0u32;
     let mut tit_total = Duration::ZERO;
     let mut tit_count = 0u32;
     for (index, path) in produced.paths.iter().enumerate() {
-        let seed = produced.seed + index as i64;
+        let copy = produced.copies[index];
         let eval = match &llm {
             Some(llm) if eval_requested => {
                 let (eval, timing) =
@@ -207,20 +217,26 @@ async fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcom
             _ => ImageEval::default(),
         };
         let reported_path = produced.durable.then(|| path.clone());
-        log_scored_image(reported_path.as_deref(), seed, &eval);
-        scored.push((reported_path, seed, eval));
+        log_scored_image(reported_path.as_deref(), copy.seed, &eval);
+        scored.push(ScoredImage {
+            path: reported_path,
+            seed: copy.seed,
+            params: copy.params,
+            eval,
+        });
     }
 
-    let evals: Vec<ImageEval> = scored.iter().map(|(_, _, eval)| eval.clone()).collect();
+    let evals: Vec<ImageEval> = scored.iter().map(|image| image.eval.clone()).collect();
     let borda = rank::aggregate(&evals);
 
     let images: Vec<GeneratedImage> = scored
         .into_iter()
         .enumerate()
-        .map(|(index, (path, seed, eval))| GeneratedImage {
-            path,
-            seed,
-            eval,
+        .map(|(index, scored)| GeneratedImage {
+            path: scored.path,
+            seed: scored.seed,
+            params: scored.params,
+            eval: scored.eval,
             borda: borda.as_ref().map(|scores| scores[index].clone()),
         })
         .collect();
@@ -341,6 +357,17 @@ fn require_ref_images_exist(args: &GenerateArgs) -> Result<(), AppError> {
     Ok(())
 }
 
+/// A preset can supply `jitter` too, bypassing clap's range checking, so this
+/// runs post-merge like `require_checkpoint`.
+fn require_valid_jitter(args: &GenerateArgs) -> Result<(), AppError> {
+    if let Some(value) = args.jitter
+        && !(0.0..=1.0).contains(&value)
+    {
+        return Err(AppError::JitterOutOfRange { value });
+    }
+    Ok(())
+}
+
 /// Generate `args.copies` images of `prompt` (the effective prompt: rewritten, if
 /// a rewrite happened, otherwise `args.prompt`), writing them to `args.output`
 /// when set (a plain file for one copy, a filename prefix for more) or into a
@@ -372,17 +399,17 @@ async fn produce_to_file(
 
     let seed = resolve_seed(args.seed);
     let dests = output::destinations(path, args.copies);
-    let images = generate::generate(args, prompt, seed, config, args.copies).await?;
+    let generated = generate::generate(args, prompt, seed, config, args.copies).await?;
 
     let total_steps = dests.len();
-    for (index, (dest, bytes)) in dests.iter().zip(&images).enumerate() {
-        output::write_image(dest, bytes)?;
+    for (index, (dest, image)) in dests.iter().zip(&generated).enumerate() {
+        output::write_image(dest, &image.bytes)?;
         tracing::info!(path = %dest.display(), step = index + 1, total_steps, "wrote image");
     }
 
     Ok(Produced {
         paths: dests,
-        seed,
+        copies: generated.into_iter().map(|image| image.copy).collect(),
         durable: true,
         _scratch: None,
     })
@@ -393,18 +420,18 @@ async fn produce_to_file(
 async fn produce_to_scratch(args: &GenerateArgs, prompt: &str, config: &Config) -> Result<Produced, AppError> {
     let scratch = tempfile::tempdir()?;
     let seed = resolve_seed(args.seed);
-    let images = generate::generate(args, prompt, seed, config, args.copies).await?;
+    let generated = generate::generate(args, prompt, seed, config, args.copies).await?;
 
-    let mut paths = Vec::with_capacity(images.len());
-    for (index, bytes) in images.iter().enumerate() {
+    let mut paths = Vec::with_capacity(generated.len());
+    for (index, image) in generated.iter().enumerate() {
         let path = scratch.path().join(format!("image{index}.png"));
-        output::write_image(&path, bytes)?;
+        output::write_image(&path, &image.bytes)?;
         paths.push(path);
     }
 
     Ok(Produced {
         paths,
-        seed,
+        copies: generated.into_iter().map(|image| image.copy).collect(),
         durable: false,
         _scratch: Some(scratch),
     })
@@ -553,6 +580,36 @@ mod tests {
                 assert_eq!(path, PathBuf::from("/no/such/file.png"));
             }
             other => panic!("expected RefImageNotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn no_jitter_is_valid() {
+        let args = parse(&["a prompt"]);
+        require_valid_jitter(&args).unwrap();
+    }
+
+    #[test]
+    fn jitter_zero_is_valid() {
+        let args = parse(&["a prompt", "--jitter", "0"]);
+        require_valid_jitter(&args).unwrap();
+    }
+
+    #[test]
+    fn negative_jitter_errors() {
+        let args = parse(&["a prompt", "--jitter=-0.1"]);
+        match require_valid_jitter(&args) {
+            Err(AppError::JitterOutOfRange { value }) => assert_eq!(value, -0.1),
+            other => panic!("expected JitterOutOfRange, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn jitter_above_one_errors() {
+        let args = parse(&["a prompt", "--jitter", "1.5"]);
+        match require_valid_jitter(&args) {
+            Err(AppError::JitterOutOfRange { value }) => assert_eq!(value, 1.5),
+            other => panic!("expected JitterOutOfRange, got {other:?}"),
         }
     }
 }

@@ -7,6 +7,7 @@ use crate::Outcome;
 use crate::error::AppError;
 use crate::eval::ImageEval;
 use crate::eval::rank::Borda;
+use crate::generate::UsedParams;
 
 #[derive(Debug, Serialize)]
 #[serde(untagged, rename_all_fields = "camelCase")]
@@ -34,10 +35,34 @@ pub struct ImageReport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<PathBuf>,
     pub seed: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<ParamsReport>,
     #[serde(flatten)]
     pub eval: ImageEval,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub borda: Option<Borda>,
+}
+
+/// The steps/cfg_scale/guidance actually sent for one image — present only when
+/// at least one of the three was set (explicitly or by jitter's materialized
+/// defaults), so an unjittered copy 0 reports no `params` at all.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParamsReport {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub steps: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cfg_scale: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guidance: Option<f32>,
+}
+
+fn params_report(params: &UsedParams) -> Option<ParamsReport> {
+    (params.steps.is_some() || params.cfg_scale.is_some() || params.guidance.is_some()).then_some(ParamsReport {
+        steps: params.steps,
+        cfg_scale: params.cfg_scale,
+        guidance: params.guidance,
+    })
 }
 
 pub fn build(outcome: &Result<Outcome, AppError>, elapsed: Duration) -> Report {
@@ -54,6 +79,7 @@ pub fn build(outcome: &Result<Outcome, AppError>, elapsed: Duration) -> Report {
                 .map(|image| ImageReport {
                     path: image.path.as_deref().map(absolutize),
                     seed: image.seed,
+                    params: params_report(&image.params),
                     eval: image.eval.clone(),
                     borda: image.borda.clone(),
                 })
@@ -107,6 +133,7 @@ mod tests {
         GeneratedImage {
             path: path.map(PathBuf::from),
             seed,
+            params: UsedParams::default(),
             eval: ImageEval::default(),
             borda: None,
         }
@@ -145,6 +172,7 @@ mod tests {
             vec![GeneratedImage {
                 path: Some(PathBuf::from("/tmp/shot0.png")),
                 seed: 41,
+                params: UsedParams::default(),
                 eval: eval_with_vqa,
                 borda: Some(Borda {
                     vqa: Some(0.0),
@@ -170,6 +198,32 @@ mod tests {
         let report = build(&result, Duration::ZERO);
         let value = serde_json::to_value(&report).unwrap();
         assert!(value["images"][0].get("borda").is_none());
+    }
+
+    #[test]
+    fn params_are_absent_when_unset() {
+        let result = outcome(vec![image(Some("/tmp/path0.png"), 1)], None);
+        let report = build(&result, Duration::ZERO);
+        let value = serde_json::to_value(&report).unwrap();
+        assert!(value["images"][0].get("params").is_none());
+    }
+
+    #[test]
+    fn jittered_params_appear_per_image() {
+        let mut jittered = image(Some("/tmp/path1.png"), 2);
+        jittered.params = UsedParams {
+            steps: Some(22),
+            cfg_scale: Some(6.4),
+            guidance: Some(3.9),
+        };
+        let result = outcome(vec![image(Some("/tmp/path0.png"), 1), jittered], None);
+        let report = build(&result, Duration::ZERO);
+        let value = serde_json::to_value(&report).unwrap();
+
+        assert!(value["images"][0].get("params").is_none());
+        assert_eq!(value["images"][1]["params"]["steps"], 22);
+        assert!((value["images"][1]["params"]["cfgScale"].as_f64().unwrap() - 6.4).abs() < 1e-6);
+        assert!((value["images"][1]["params"]["guidance"].as_f64().unwrap() - 3.9).abs() < 1e-6);
     }
 
     #[test]

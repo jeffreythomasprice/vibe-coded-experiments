@@ -43,6 +43,9 @@ pub enum AppError {
     #[error("--ref-image {} does not exist", .path.display())]
     RefImageNotFound { path: PathBuf },
 
+    #[error("--jitter {value} is out of range; pass a fraction from 0.0 to 1.0")]
+    JitterOutOfRange { value: f32 },
+
     #[error("unknown preset '{name}'; config defines: {available}")]
     UnknownPreset { name: String, available: String },
 }

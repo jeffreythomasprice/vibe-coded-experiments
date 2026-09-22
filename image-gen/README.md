@@ -42,7 +42,9 @@ cargo run -- generate "a red bicycle on a beach" \
 HuggingFace ref (`owner/repo`, `owner/repo:file`, `owner/repo@revision:file`) or a
 local path; weights auto-download into `models_dir` on first use. `--copies N`
 generates N images, turning `-o` into a filename prefix (`bike.png` → `bike0.png`,
-`bike1.png`, …). See `cargo run -- generate --help` for the full flag list.
+`bike1.png`, …); every copy after the first also gets its sampling params
+jittered for variety (`--jitter 0` turns that off). See `cargo run -- generate
+--help` for the full flag list.
 
 Flag bundles that only depend on the model can live in `config.toml` as named
 presets, reducing the above to `generate "a red bicycle on a beach" --preset

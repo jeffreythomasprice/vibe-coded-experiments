@@ -56,13 +56,20 @@ Rules:
 {
   "prompt": {"original": "...", "rewritten": "... (only if the prompt was compressed)"},
   "images": [
-    {"path": "...", "seed": 123, "vqa": {"score": 0.95}, "tit": {"score": 1.0, "claims": [...]},
+    {"path": "...", "seed": 123, "params": {"steps": 22, "cfgScale": 6.4, "guidance": 3.9},
+     "vqa": {"score": 0.95}, "tit": {"score": 1.0, "claims": [...]},
      "borda": {"vqa": 3.0, "tit": 1.5, "total": 4.5, "rank": 1}},
     ...
   ],
   "totalTime": 290.128
 }
 ```
+
+`params` is the steps/cfg_scale/guidance actually used for that copy — present
+only when jitter (or an explicit flag) set at least one of the three. The
+`image-eval-skill` preset above sets none of them, so with `--copies 5` the
+first image has no `params` key (the unjittered baseline) and the rest each
+carry all three, varied by `--jitter`'s default.
 
 **`borda.rank` is 1-based, and rank 1 is the BEST image** (descending by
 `borda.total`; ties share a rank). `borda.vqa`/`borda.tit` are Borda points,

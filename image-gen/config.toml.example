@@ -27,6 +27,10 @@ models_dir = "/tmp/image-gen"
 # generate flag is allowed except the per-invocation ones: the prompt, --output,
 # --copies, --show, --json and --seed. Note floats need a decimal point:
 # cfg_scale = 1.0, not 1.
+#
+# `jitter` (varies each copy's steps/cfg_scale/guidance by up to ±this fraction;
+# see `--jitter` in `generate --help`) already has a sensible default, so most
+# presets don't need to set it — `turbo` below is the one exception.
 
 [presets.flux]
 diffusion_model = "city96/FLUX.1-dev-gguf:flux1-dev-F16.gguf"
@@ -40,6 +44,10 @@ model = "stabilityai/sd-turbo"
 steps = 4
 cfg_scale = 1.0
 guidance = 0.0
+# `--jitter` (default 0.12, see below) barely moves a 4-step count — ±12% of 4
+# always rounds back to 4 — so turbo's per-copy variance comes from cfg_scale
+# alone. Uncomment to turn it off for this preset instead:
+# jitter = 0.0
 
 # Qwen-Image-2.1 needs three separate weight files — the diffusion model alone
 # is not enough. `--model`/`model =` (a single combined checkpoint) is the

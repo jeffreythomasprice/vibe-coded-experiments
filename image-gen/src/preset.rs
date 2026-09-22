@@ -52,6 +52,7 @@ pub struct Preset {
     pub steps: Option<i32>,
     pub cfg_scale: Option<f32>,
     pub guidance: Option<f32>,
+    pub jitter: Option<f32>,
     #[serde(deserialize_with = "value_enum_vec_opt")]
     pub eval: Option<Vec<EvalMetric>>,
     #[serde(deserialize_with = "value_enum_opt")]
@@ -215,6 +216,7 @@ pub fn apply(args: &mut GenerateArgs, presets: &BTreeMap<String, Preset>) -> Res
         steps => "--steps",
         cfg_scale => "--cfg-scale",
         guidance => "--guidance",
+        jitter => "--jitter",
         eval => "--eval",
         rewrite => "--rewrite",
         rewrite_threshold => "--rewrite-threshold",
@@ -264,6 +266,40 @@ mod tests {
         assert_eq!(args.steps, Some(4));
         assert_eq!(args.cfg_scale, Some(1.0));
         assert_eq!(args.guidance, Some(0.0));
+    }
+
+    #[test]
+    fn preset_fills_jitter() {
+        let mut args = parse(&["a prompt", "--preset", "turbo"]);
+        let mut presets = BTreeMap::new();
+        presets.insert(
+            "turbo".to_owned(),
+            Preset {
+                jitter: Some(0.0),
+                ..Default::default()
+            },
+        );
+
+        apply(&mut args, &presets).unwrap();
+
+        assert_eq!(args.jitter, Some(0.0));
+    }
+
+    #[test]
+    fn explicit_jitter_flag_beats_preset() {
+        let mut args = parse(&["a prompt", "--preset", "turbo", "--jitter", "0.3"]);
+        let mut presets = BTreeMap::new();
+        presets.insert(
+            "turbo".to_owned(),
+            Preset {
+                jitter: Some(0.0),
+                ..Default::default()
+            },
+        );
+
+        apply(&mut args, &presets).unwrap();
+
+        assert_eq!(args.jitter, Some(0.3));
     }
 
     #[test]
