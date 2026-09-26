@@ -88,7 +88,7 @@ bun start search --tags worm --keywords taylor --favorites-only -u 30d
 bun start search --sites ao3
 
 # One particular useful combination of terms
-bun start search --sites spacebattles,sufficientvelocity --updated-within 8d --show-urls -v | less
+bun start search --sites spacebattles,sufficientvelocity --updated-within 8d --show-urls -v | tee ~/downloads/fanfic.txt
 ```
 
 ### Favorites & Ignore Lists
