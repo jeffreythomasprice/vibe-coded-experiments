@@ -24,10 +24,14 @@ pub fn wasm_main() {
     }
     tracing::debug!(?origin, %filter, "logging configured");
 
-    if let Err(err) = engine::run(
-        wasm_bindgen_futures::spawn_local,
-        engine::EngineConfig::default(),
-    ) {
+    // `config::load` (the file-reading path) is desktop-only, so `config`
+    // here is always `Config::default()` — bindings are always defaults on
+    // web for now.
+    let engine_config = engine::EngineConfig {
+        input: config.input,
+        ..engine::EngineConfig::default()
+    };
+    if let Err(err) = engine::run(wasm_bindgen_futures::spawn_local, engine_config) {
         tracing::error!("engine exited with error: {err}");
     }
 }

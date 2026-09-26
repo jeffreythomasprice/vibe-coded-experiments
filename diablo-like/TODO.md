@@ -1,16 +1,11 @@
 in flight:
 
-I'd like to build a robust input system. I want these features:
-- keyboard, mouse, gamepad
-- I want to be able to refer to a particular input mode in an enum, e.g. KeyboardKey(KeyboardKey::Escape) or MouseAxis(MouseAxis::X), joypad buttons, joypad axes, mouse buttons, etc.
-- I want to be able to turn these enums into human-readable descriptions, e.g. to populate a UI for configuring this later
-- I want the config to be optionally serialized to config.toml, with sensible defaults; our example config should include the defaults commented out
-- all the existing inputs should go through this system, with sensibly named actions in the config file
-
 
 todo:
 
-/init
+needs a configuration UI for setting inputs
+including some visual feedback for what key or axis or joypad or whatever is being pressed
+like display in text what inputs are currently pressed
 
 
 physics needs to have sliding, e.g. moving into an angled wall should slide instead of locking the player's circle

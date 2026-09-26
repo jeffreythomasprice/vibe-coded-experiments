@@ -6,9 +6,8 @@ use std::sync::Arc;
 
 use web_time::Instant;
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, WindowEvent};
+use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
-use winit::keyboard::PhysicalKey;
 use winit::window::{Window, WindowAttributes, WindowId};
 
 use glam::Vec2;
@@ -17,7 +16,7 @@ use crate::error::Error;
 use crate::geom::contour;
 use crate::geom::parts::Level;
 use crate::geom::tess;
-use crate::input::InputState;
+use crate::input::{Action, Gamepad, Input, InputState, KeyboardKey};
 use crate::physics::{Actor, World};
 use crate::render::camera_ubo::CameraUbo;
 use crate::render::chunks::{ChunkAtlas, ChunkPipeline, ChunkStats};
@@ -47,12 +46,14 @@ pub type SpawnFn = fn(Pin<Box<dyn Future<Output = ()> + 'static>>);
 
 pub struct EngineConfig {
     pub title: &'static str,
+    pub input: crate::input::Settings,
 }
 
 impl Default for EngineConfig {
     fn default() -> Self {
         Self {
             title: "diablo-like",
+            input: crate::input::Settings::default(),
         }
     }
 }
@@ -208,12 +209,37 @@ const CAMERA_HALF_EXTENT_Y: f32 = 6.0;
 const HUD_FONT_PX: f32 = 22.0;
 const HUD_MARGIN: f32 = 10.0;
 const HUD_LINE_HEIGHT: f32 = 26.0;
+/// Mouse axes are per-frame deltas — a scroll notch reads nonzero for one
+/// frame and is zeroed again in `InputState::end_frame` — so the input
+/// readout holds them this long after they stop reading. Every other source
+/// is a level and is shown exactly while it's active.
+const HUD_INPUT_LINGER: f32 = 0.4;
 const STROKE_WIDTH: f32 = 0.08;
 const ACTOR_RADIUS: f32 = 0.4;
 const ACTOR_SPEED: f32 = 5.0;
 const ACTOR_MARKER_SEGMENTS: u32 = 16;
 const CONTACT_NORMAL_LENGTH: f32 = 0.6;
 const CONTACT_NORMAL_WIDTH: f32 = 0.04;
+/// Fraction of the current half-extent that one frame of full-strength zoom
+/// input (a scroll notch, or a fully-pressed trigger) changes it by. Tuned
+/// by feel, not derived; a held trigger zooms continuously since it reads
+/// as a level every frame, while a scroll notch reads as one pulse (its
+/// delta is zeroed again in `InputState::end_frame`).
+const ZOOM_STEP: f32 = 0.05;
+const ZOOM_MIN_HALF_EXTENT_Y: f32 = 2.0;
+const ZOOM_MAX_HALF_EXTENT_Y: f32 = 20.0;
+/// Converts a `MouseScrollDelta::PixelDelta` (touchpad) into the same
+/// "lines" unit as `LineDelta`, so both drive zoom by comparable amounts.
+const PIXELS_PER_SCROLL_LINE: f32 = 24.0;
+
+/// A mouse-axis entry in the HUD's active-input readout, held on screen for
+/// `HUD_INPUT_LINGER` seconds after `InputState::active` stops reporting it —
+/// see the constant's doc comment for why only mouse axes need this.
+struct LingeringInput {
+    input: Input,
+    value: f32,
+    remaining: f32,
+}
 
 struct App {
     spawn: SpawnFn,
@@ -221,6 +247,7 @@ struct App {
     window: Option<Arc<Window>>,
     renderer: Rc<RefCell<Option<Renderer>>>,
     input: InputState,
+    gamepad: Gamepad,
     camera: Camera,
     start: Instant,
     last_update: Instant,
@@ -234,17 +261,21 @@ struct App {
     render_mode: RenderMode,
     world: World,
     chunk_stats: ChunkStats,
+    hud_inputs: Vec<(Input, f32)>,
+    hud_input_linger: Vec<LingeringInput>,
 }
 
 impl App {
     fn new(spawn: SpawnFn, config: EngineConfig) -> Self {
         let now = Instant::now();
+        let input = InputState::new(config.input.clone());
         Self {
             spawn,
             config,
             window: None,
             renderer: Rc::new(RefCell::new(None)),
-            input: InputState::default(),
+            input,
+            gamepad: Gamepad::new(),
             camera: Camera::new(CAMERA_HALF_EXTENT_Y),
             start: now,
             last_update: now,
@@ -258,6 +289,8 @@ impl App {
             render_mode: RenderMode::Both,
             world: World::new(Actor::new(Vec2::ZERO, ACTOR_RADIUS)),
             chunk_stats: ChunkStats::default(),
+            hud_inputs: Vec::new(),
+            hud_input_linger: Vec::new(),
         }
     }
 
@@ -272,7 +305,37 @@ impl App {
         }
     }
 
-    fn update(&mut self) {
+    fn zoom(&mut self, amount: f32) {
+        let factor = 1.0 - amount * ZOOM_STEP;
+        self.camera.half_extent_y = (self.camera.half_extent_y * factor)
+            .clamp(ZOOM_MIN_HALF_EXTENT_Y, ZOOM_MAX_HALF_EXTENT_Y);
+    }
+
+    /// Actions read as edges (`Quit`, the two cycle actions) or as a level
+    /// read once per real frame (`ZoomIn`/`ZoomOut`) rather than inside
+    /// `step()`, which the fixed-timestep accumulator below can run zero,
+    /// one, or many times per frame — see the input design plan's note on
+    /// why that would either drop or repeat an edge-triggered action.
+    fn handle_actions(&mut self, event_loop: &ActiveEventLoop) {
+        if self.input.just_pressed(Action::Quit) {
+            event_loop.exit();
+        }
+        if self.input.just_pressed(Action::CycleRenderScale) {
+            self.cycle_render_scale();
+        }
+        if self.input.just_pressed(Action::CycleRenderMode) {
+            self.render_mode = self.render_mode.next();
+        }
+        let zoom = self.input.value(Action::ZoomIn) - self.input.value(Action::ZoomOut);
+        if zoom != 0.0 {
+            self.zoom(zoom);
+        }
+    }
+
+    fn update(&mut self, event_loop: &ActiveEventLoop) {
+        self.gamepad.pump(&mut self.input);
+        self.handle_actions(event_loop);
+
         let now = Instant::now();
         // Clamped so a backgrounded tab/window doesn't run hundreds of ticks
         // in one go when it regains focus.
@@ -285,6 +348,9 @@ impl App {
             self.accumulator -= FIXED_DT;
             self.tick_count += 1;
         }
+
+        self.update_hud_inputs(frame_dt as f32);
+        self.input.end_frame();
 
         let since_log = now.duration_since(self.last_log).as_secs_f64();
         if since_log >= 2.0 {
@@ -301,6 +367,41 @@ impl App {
             self.last_log = now;
             self.last_log_frame_count = self.frame_count;
         }
+    }
+
+    /// Snapshots `InputState::active()` for the HUD. Has to run before
+    /// `end_frame`, which zeroes the mouse/scroll deltas the mouse-axis
+    /// sources read from — `render` happens after that and would see none of
+    /// them.
+    fn update_hud_inputs(&mut self, frame_dt: f32) {
+        for lingering in &mut self.hud_input_linger {
+            lingering.remaining -= frame_dt;
+        }
+        self.hud_input_linger.retain(|l| l.remaining > 0.0);
+
+        self.hud_inputs = self.input.active();
+        for &(input, value) in &self.hud_inputs {
+            if matches!(input, Input::MouseAxis(..)) {
+                match self.hud_input_linger.iter_mut().find(|l| l.input == input) {
+                    Some(lingering) => {
+                        lingering.value = value;
+                        lingering.remaining = HUD_INPUT_LINGER;
+                    }
+                    None => self.hud_input_linger.push(LingeringInput {
+                        input,
+                        value,
+                        remaining: HUD_INPUT_LINGER,
+                    }),
+                }
+            }
+        }
+
+        self.hud_inputs
+            .retain(|&(input, _)| !matches!(input, Input::MouseAxis(..)));
+        self.hud_inputs
+            .extend(self.hud_input_linger.iter().map(|l| (l.input, l.value)));
+        self.hud_inputs
+            .sort_by_key(|&(input, _)| input.display_order());
     }
 
     fn step(&mut self, dt: f32) {
@@ -455,11 +556,12 @@ impl App {
 
             let screen_w = renderer.gpu.config.width as f32;
             let screen_h = renderer.gpu.config.height as f32;
-            let hud = [
+            let mut hud = vec![
                 format!("FPS  {:.0}", self.hud_fps),
                 format!("TICK {}", self.tick_count),
                 format!("CAM  {:.2}, {:.2}", self.camera.position.x, self.camera.position.y),
                 format!("SCALE {:.2}", self.render_scale),
+                format!("ZOOM {:.2}", self.camera.half_extent_y),
                 format!("MODE {}", self.render_mode.label()),
                 format!("RES  {}", self.chunk_stats.resident),
                 format!("QUE  {}", self.chunk_stats.queued),
@@ -467,6 +569,15 @@ impl App {
                 format!("EVICT {}", self.chunk_stats.evicted_total),
                 format!("TRACE {}", self.world.max_trace_iterations),
             ];
+            for &(input, value) in &self.hud_inputs {
+                // Digital sources always read exactly 1.0; "W 1.00" would be
+                // noise, so only analog values carry a number.
+                hud.push(if value >= 1.0 {
+                    format!("IN   {}", input.label())
+                } else {
+                    format!("IN   {} {value:.2}", input.label())
+                });
+            }
             for (i, line) in hud.iter().enumerate() {
                 let vertices = crate::text::layout(
                     &renderer.atlas,
@@ -544,19 +655,30 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                if let PhysicalKey::Code(code) = event.physical_key {
-                    self.input.set_key(code, event.state == ElementState::Pressed);
-                    if event.state == ElementState::Pressed && !event.repeat {
-                        match code {
-                            winit::keyboard::KeyCode::KeyR => self.cycle_render_scale(),
-                            winit::keyboard::KeyCode::KeyM => {
-                                self.render_mode = self.render_mode.next();
-                            }
-                            _ => {}
-                        }
-                    }
-                }
+                // Covers `PhysicalKey::Unidentified` too (not just
+                // `Code`) — that's the whole point of `KeyboardKey::Native`,
+                // the escape hatch for keys winit can't map to a `KeyCode`.
+                let key = KeyboardKey::from(event.physical_key);
+                self.input.on_key(key, event.state == ElementState::Pressed);
             }
+            WindowEvent::MouseInput { state, button, .. } => {
+                self.input
+                    .on_mouse_button(button.into(), state == ElementState::Pressed);
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.input
+                    .on_cursor_moved(Vec2::new(position.x as f32, position.y as f32));
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                let lines = match delta {
+                    MouseScrollDelta::LineDelta(x, y) => Vec2::new(x, y),
+                    MouseScrollDelta::PixelDelta(pos) => {
+                        Vec2::new(pos.x as f32, pos.y as f32) / PIXELS_PER_SCROLL_LINE
+                    }
+                };
+                self.input.on_scroll(lines);
+            }
+            WindowEvent::Focused(false) => self.input.on_focus_lost(),
             WindowEvent::RedrawRequested => {
                 self.render();
             }
@@ -564,8 +686,8 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        self.update();
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.update(event_loop);
         if let Some(window) = &self.window {
             window.request_redraw();
         }

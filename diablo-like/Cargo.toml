@@ -8,15 +8,16 @@ edition = "2024"
 [workspace.dependencies]
 engine = { path = "engine" }
 wgpu = "29"
-winit = "0.30.13"
+winit = { version = "0.30.13", features = ["serde"] }
 glam = { version = "0.33", features = ["bytemuck"] }
 bytemuck = { version = "1", features = ["derive"] }
 lyon = "1"
 i_overlay = { version = "9", features = ["glam"] }
 fontdue = "0.9"
+gilrs = "0.11"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
-toml = { version = "1", default-features = false, features = ["std", "parse", "serde"] }
+toml = { version = "1", default-features = false, features = ["std", "parse", "serde", "display"] }
 tracing = "0.1"
 web-time = "1"
 half = { version = "2", default-features = false, features = ["std"] }

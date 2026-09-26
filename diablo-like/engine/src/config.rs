@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub const DEFAULT_FILTER: &str = "warn,engine=trace,desktop=trace,web=trace";
@@ -19,15 +19,26 @@ pub enum ConfigError {
     },
     #[error("failed to locate the running executable: {0}")]
     ExePath(std::io::Error),
+    #[error("failed to serialize config: {0}")]
+    Serialize(#[from] toml::ser::Error),
+    #[error("failed to write config to {}: {source}", path.display())]
+    Write {
+        path: PathBuf,
+        source: std::io::Error,
+    },
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub logging: Logging,
+    // Lives in `crate::input` rather than here so the binding-parsing code
+    // sits next to the types it parses; `Logging` above is the exception,
+    // not the rule this struct otherwise follows.
+    pub input: crate::input::Settings,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Logging {
     pub filter: Option<String>,
@@ -44,6 +55,25 @@ pub enum FilterOrigin {
 impl Config {
     pub fn parse(text: &str) -> Result<Self, ConfigError> {
         Ok(toml::from_str(text)?)
+    }
+
+    pub fn to_toml(&self) -> Result<String, ConfigError> {
+        Ok(toml::to_string(self)?)
+    }
+
+    /// Writes a fresh, machine-generated config to `path`. Deliberately not
+    /// wired to overwrite the checked-in `config.toml`: serializing loses
+    /// every hand-written comment, which is the entire point of that file's
+    /// "defaults commented out" example. A comment-preserving rewrite would
+    /// need `toml_edit` in place of `toml`, not worth it until something
+    /// (e.g. a rebinding UI) actually needs to save over a user's own file.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn save(&self, path: &std::path::Path) -> Result<(), ConfigError> {
+        let text = self.to_toml()?;
+        std::fs::write(path, text).map_err(|source| ConfigError::Write {
+            path: path.to_path_buf(),
+            source,
+        })
     }
 }
 
@@ -130,6 +160,13 @@ mod tests {
     #[test]
     fn unknown_key_is_rejected() {
         assert!(Config::parse("[logging]\nfliter = \"warn\"\n").is_err());
+    }
+
+    #[test]
+    fn to_toml_round_trips_through_parse() {
+        let config = Config::default();
+        let text = config.to_toml().unwrap();
+        assert_eq!(Config::parse(&text).unwrap(), config);
     }
 
     #[test]

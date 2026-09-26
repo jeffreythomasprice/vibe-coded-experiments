@@ -53,7 +53,11 @@ fn main() {
         None => tracing::info!(?origin, %filter, "no config file found, using defaults"),
     }
 
-    if let Err(err) = engine::run(pollster::block_on, engine::EngineConfig::default()) {
+    let engine_config = engine::EngineConfig {
+        input: loaded.config.input,
+        ..engine::EngineConfig::default()
+    };
+    if let Err(err) = engine::run(pollster::block_on, engine_config) {
         tracing::error!("engine exited with error: {err}");
         std::process::exit(1);
     }

@@ -2,7 +2,7 @@ mod app;
 pub mod config;
 mod error;
 mod geom;
-mod input;
+pub mod input;
 mod physics;
 pub mod render;
 mod sim;

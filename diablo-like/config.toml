@@ -4,3 +4,23 @@
 [logging]
 filter = "warn,engine=trace,desktop=trace,web=trace"
 # file = "diablo-like.log"
+
+# Bindings listed for an action replace that action's defaults; omit an action to
+# keep its defaults, or give it [] to unbind it. Axis sources need a +/- suffix.
+#
+# Keys winit cannot name, and pad buttons gilrs cannot name, are still bindable by
+# their raw platform code: key:native.xkb.38, pad_button:code.704. Press the input
+# with debug logging on and the code is printed for you.
+[input]
+# gamepad_deadzone = 0.15
+
+[input.bindings]
+# move_up            = ["key:W", "key:Up", "pad_axis:LeftStickY+"]
+# move_down          = ["key:S", "key:Down", "pad_axis:LeftStickY-"]
+# move_left          = ["key:A", "key:Left", "pad_axis:LeftStickX-"]
+# move_right         = ["key:D", "key:Right", "pad_axis:LeftStickX+"]
+# cycle_render_scale = ["key:R", "pad_button:North"]
+# cycle_render_mode  = ["key:M", "pad_button:West"]
+# quit               = ["key:Escape", "pad_button:Start"]
+# zoom_in            = ["mouse_axis:ScrollY+", "pad_button:RT"]
+# zoom_out           = ["mouse_axis:ScrollY-", "pad_button:LT"]
