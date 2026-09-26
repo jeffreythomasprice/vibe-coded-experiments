@@ -1,0 +1,6 @@
+# Read from ./config.toml first, then from the directory holding the executable.
+# RUST_LOG overrides `filter`. Use `filter = "off"` to silence everything.
+
+[logging]
+filter = "warn,engine=trace,desktop=trace,web=trace"
+# file = "diablo-like.log"

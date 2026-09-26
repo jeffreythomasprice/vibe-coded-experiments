@@ -1,4 +1,5 @@
 mod app;
+pub mod config;
 mod error;
 mod geom;
 mod input;

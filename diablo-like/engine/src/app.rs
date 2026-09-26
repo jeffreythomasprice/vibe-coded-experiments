@@ -291,7 +291,7 @@ impl App {
             let wall_seconds = now.duration_since(self.start).as_secs_f64();
             let expected_ticks = (wall_seconds / FIXED_DT) as u64;
             self.hud_fps = ((self.frame_count - self.last_log_frame_count) as f64 / since_log) as f32;
-            tracing::info!(
+            tracing::trace!(
                 ticks = self.tick_count,
                 expected_ticks,
                 wall_seconds,

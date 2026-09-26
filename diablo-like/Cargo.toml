@@ -14,7 +14,9 @@ bytemuck = { version = "1", features = ["derive"] }
 lyon = "1"
 i_overlay = { version = "9", features = ["glam"] }
 fontdue = "0.9"
+serde = { version = "1", features = ["derive"] }
 thiserror = "2"
+toml = { version = "1", default-features = false, features = ["std", "parse", "serde"] }
 tracing = "0.1"
 web-time = "1"
 half = { version = "2", default-features = false, features = ["std"] }
