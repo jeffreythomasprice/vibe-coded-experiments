@@ -1,0 +1,33 @@
+[package]
+name = "engine"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+wgpu.workspace = true
+winit.workspace = true
+glam.workspace = true
+bytemuck.workspace = true
+lyon.workspace = true
+i_overlay.workspace = true
+fontdue.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+web-time.workspace = true
+half.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# `default-features = false` deliberately drops wgpu's "webgpu" feature (in
+# defaults): with it enabled, `Instance::new` auto-detects WebGPU whenever
+# `navigator.gpu` merely *exists*, even if it cannot produce an adapter (as
+# in this sandbox's Chrome), and never falls back to the WebGL2 path at all.
+# This project targets WebGL2 for v1, so WebGPU is left out entirely.
+wgpu = { version = "29", default-features = false, features = ["webgl", "wgsl", "std"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+    "Document",
+    "Element",
+    "HtmlCanvasElement",
+    "Window",
+] }

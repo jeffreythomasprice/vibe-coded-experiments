@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = ["engine", "desktop", "web"]
+
+[workspace.package]
+edition = "2024"
+
+[workspace.dependencies]
+engine = { path = "engine" }
+wgpu = "29"
+winit = "0.30.13"
+glam = { version = "0.33", features = ["bytemuck"] }
+bytemuck = { version = "1", features = ["derive"] }
+lyon = "1"
+i_overlay = { version = "9", features = ["glam"] }
+fontdue = "0.9"
+thiserror = "2"
+tracing = "0.1"
+web-time = "1"
+half = { version = "2", default-features = false, features = ["std"] }
+
+[profile.dev]
+opt-level = 2
+debug = true
