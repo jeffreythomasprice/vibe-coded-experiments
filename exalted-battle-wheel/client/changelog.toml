@@ -1,5 +1,10 @@
 # The change log shown in the app's "Change Log" dialog (src/ui/changelog.rs bakes this file in).
 # Append each new release at the bottom, oldest first, dates ISO 8601 (UTC).
+#
+# Each change is either a plain string, or a labelled group with its own nested changes:
+#   [[release.changes]]
+#   text = "Group label"
+#   changes = ["...", "..."]
 
 [[release]]
 date = "2026-09-12"
@@ -8,3 +13,21 @@ changes = ["Initial release"]
 [[release]]
 date = "2026-09-16"
 changes = ["Multiplayer"]
+
+[[release]]
+date = "2026-09-27"
+
+[[release.changes]]
+text = "Bug fixes"
+changes = [
+    "There were various ways for UI elements to overlap and hide other UI elements, depending on window size",
+]
+
+[[release.changes]]
+text = "User experience"
+changes = [
+    "Can edit names and teams of existing combatants",
+    'Tooltips for "Move" and "Dash" are more helpful',
+    "Attack speed doesn't default to 5",
+    "Various conveniences for concurrent actions",
+]

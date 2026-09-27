@@ -3,16 +3,6 @@ in-flight:
 
 todo:
 
-new change:
-- bug fixes:
-   - there were various ways for UI elements to overlap and hide other UI elements, depending on window size
-- user experience:
-   - can edit names and teams of existing combatants
-   - tooltips for "Move" and "Dash" are more helpful
-   - attack speed doesn't default to 5
-   - various conveniences for concurrent actions
-
-
 show other people's cursors
 but how to do this when the windows can be different sizes?
 

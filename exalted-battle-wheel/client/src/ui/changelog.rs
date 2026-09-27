@@ -16,7 +16,16 @@ struct Changelog {
 #[derive(Debug, serde::Deserialize)]
 struct Release {
     date: String,
-    changes: Vec<String>,
+    changes: Vec<Change>,
+}
+
+/// A change entry: either a plain bullet, or a labelled group with its own nested bullets.
+/// Untagged so a plain TOML string still deserializes as `Item` -- flat releases need no changes.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(untagged)]
+enum Change {
+    Item(String),
+    Group { text: String, changes: Vec<Change> },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -38,6 +47,27 @@ fn releases() -> Result<Vec<Release>, ChangelogError> {
     Ok(releases)
 }
 
+fn change_list(changes: Vec<Change>) -> impl IntoView {
+    view! {
+        <ul class="changelog-changes">
+            {changes.into_iter().map(change_item).collect_view()}
+        </ul>
+    }
+}
+
+fn change_item(change: Change) -> impl IntoView {
+    match change {
+        Change::Item(text) => view! { <li>{text}</li> }.into_any(),
+        Change::Group { text, changes } => view! {
+            <li>
+                <span class="changelog-group">{text}</span>
+                {change_list(changes)}
+            </li>
+        }
+        .into_any(),
+    }
+}
+
 #[component]
 pub fn ChangelogModal(open: RwSignal<bool>) -> impl IntoView {
     view! {
@@ -50,11 +80,7 @@ pub fn ChangelogModal(open: RwSignal<bool>) -> impl IntoView {
                                 {releases.into_iter().map(|release| view! {
                                     <li class="changelog-release">
                                         <div class="changelog-date">{release.date}</div>
-                                        <ul class="changelog-changes">
-                                            {release.changes.into_iter()
-                                                .map(|change| view! { <li>{change}</li> })
-                                                .collect_view()}
-                                        </ul>
+                                        {change_list(release.changes)}
                                     </li>
                                 }).collect_view()}
                             </ul>
@@ -110,7 +136,22 @@ mod tests {
         for release in releases().expect("changelog.toml should parse") {
             assert!(!release.changes.is_empty(), "{:?} lists no changes", release.date);
             for change in &release.changes {
-                assert!(!change.trim().is_empty(), "{:?} has a blank change entry", release.date);
+                assert_change_nonblank(change, &release.date);
+            }
+        }
+    }
+
+    fn assert_change_nonblank(change: &Change, date: &str) {
+        match change {
+            Change::Item(text) => {
+                assert!(!text.trim().is_empty(), "{date:?} has a blank change entry");
+            }
+            Change::Group { text, changes } => {
+                assert!(!text.trim().is_empty(), "{date:?} has a blank group label");
+                assert!(!changes.is_empty(), "{date:?} has a group with no changes");
+                for change in changes {
+                    assert_change_nonblank(change, date);
+                }
             }
         }
     }

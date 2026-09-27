@@ -451,7 +451,7 @@ impl Topic {
             Topic::Changelog => Entry {
                 term: "Change Log",
                 what: "What has changed in this app, newest release first.",
-                interacts: "Pulled straight from the same list every deploy adds to \u{2014} it's the app's own release history, not a rules reference.",
+                interacts: "",
                 source: Source::AppConvention,
             },
             Topic::Room => Entry {
