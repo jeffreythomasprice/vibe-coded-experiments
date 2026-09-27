@@ -145,9 +145,11 @@ body {
   opacity: 0.6;
 }
 
-/* Below this the four columns can no longer sit side by side without crushing the wheel; the
-   rail moves under it full-width, sharing a row with the action panel. */
-@media (max-width: 1500px) {
+/* Below this the centre track can no longer hold a full 560px wheel plus its 2.25rem title-spine
+   gutter (100vw minus 71rem of fixed columns/gaps/padding must reach 560px + 2.25rem — hence the
+   mixed-unit calc(), since a bare rem or px figure would be wrong at a non-16px root font size);
+   the rail moves under it full-width, sharing a row with the action panel. */
+@media (max-width: calc(73.25rem + 560px)) {
   .app-body {
     grid-template-columns: minmax(0, 22rem) minmax(0, 1fr) minmax(0, 22rem);
   }
@@ -176,6 +178,15 @@ body {
   border-radius: 8px;
   padding: 1rem;
   min-width: 0;
+}
+
+/* Above whatever the centre track holds, so a wheel or title spine that ever spills sideways
+   passes underneath these instead of covering their controls — see the layering note above
+   .toast-layer. */
+.side-column,
+.action-panel {
+  position: relative;
+  z-index: 1;
 }
 
 .side-column {
@@ -470,14 +481,19 @@ button {
   width: 7rem;
 }
 
+/* Stretched to the grid track so the percentage cap below has something definite to resolve
+   against, with the spine's gutter (1.5rem bar + 0.75rem gap) reserved on the left so the bar
+   tracks the wheel's edge without ever widening the composition or reaching the roster. */
 .wheel-panel {
+  align-self: stretch;
   display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  gap: 0.75rem;
+  justify-content: center;
+  padding-left: 2.25rem;
 }
 
 .wheel-column-inner {
+  position: relative;
+  width: min(clamp(340px, 42vw, 560px), 100%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -488,11 +504,16 @@ button {
 /* An ink bar with knockout vertical type down the wheel's left edge, echoing the printed
    poster's title spine. Purely decorative — screen readers get the wheel's own labels. */
 .wheel-spine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: calc(100% + 0.75rem);
+  width: 1.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.5rem;
-  flex-shrink: 0;
+  overflow: hidden;
+  pointer-events: none;
   background: var(--wheel-ink);
   border-radius: 4px;
 }
@@ -510,7 +531,7 @@ button {
 }
 
 .wheel {
-  width: clamp(340px, 42vw, 560px);
+  width: 100%;
   height: auto;
 }
 
@@ -1095,6 +1116,37 @@ button {
   overflow-y: auto;
 }
 
+.changelog-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.changelog-release {
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.changelog-release:last-child {
+  border-bottom: none;
+}
+
+.changelog-date {
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 0.3rem;
+}
+
+.changelog-changes {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--text-dim);
+}
+
+.changelog-error {
+  color: var(--danger);
+}
+
 .reset-warning {
   color: var(--text-dim);
   margin: 0 0 1rem;
@@ -1304,7 +1356,9 @@ button {
 }
 
 /* Layered above the modal backdrop (900) so a failure raised while a modal is open stays
-   readable, below the tip layer (1000) so a teaching tooltip is never hidden behind one. */
+   readable, below the tip layer (1000) so a teaching tooltip is never hidden behind one. The
+   full convention, low to high: panel columns (1, see .side-column above) < combobox dropdowns
+   (20) < modal backdrop (900) < toast layer (950) < tip layer (1000). */
 .toast-layer {
   position: fixed;
   right: 1rem;

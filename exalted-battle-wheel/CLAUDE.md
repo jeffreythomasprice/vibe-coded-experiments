@@ -113,7 +113,11 @@ mechanism referenced in "Game rules / references" below.
 
 Every timestamp shown in the UI (access-code "Created", room "Last active", ...) goes through the
 single `format_timestamp` in `ui/config.rs`, rendered as ISO 8601 UTC (`2026-09-17T14:30:05Z`) —
-never relative ("2 hours ago") and never converted to the viewer's local timezone.
+never relative ("2 hours ago") and never converted to the viewer's local timezone. The one
+exception is the "Change Log" dialog (`ui/changelog.rs`): its dates are authored, date-only ISO
+8601 strings from `client/changelog.toml` (baked in with `include_str!`, parsed at runtime), shown
+verbatim rather than through `format_timestamp` since there's no `Timestamp` to format. Add a new
+release there, oldest-first at the bottom of the file.
 
 # Hosting
 

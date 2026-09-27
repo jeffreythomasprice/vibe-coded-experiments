@@ -14,7 +14,10 @@ pub use action::{
     DeclaredAction, DeclaredEffect, DvPenaltySpec, Label, Note, SpeedSpec, MASS_ONLY_CATALOG, MAX_LABEL_LEN,
     MAX_NOTE_LEN, PERSONAL_CATALOG, SOCIAL_CATALOG,
 };
-pub use combatant::{Combatant, CombatantState, Commitment, DvState, JoinBattleResult, Side};
+pub use combatant::{
+    combatant_name, Combatant, CombatantName, CombatantState, Commitment, DvState, JoinBattleResult, Side,
+    MAX_COMBATANT_NAME_LEN,
+};
 pub use error::{BattleError, RestoreError};
 pub use event::{BattleEvent, InterruptReason};
 pub use ids::{CombatantId, MarkerId, Tick};

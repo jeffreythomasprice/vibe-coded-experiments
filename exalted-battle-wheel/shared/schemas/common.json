@@ -76,6 +76,11 @@
       "description": "Free-form user text attached to a revision or a declared action.",
       "type": "string",
       "maxLength": 1000
+    },
+    "CombatantName": {
+      "description": "A combatant's display name. Mirrors `MAX_COMBATANT_NAME_LEN` (see `shared/src/battle/combatant.rs`) -- a test asserts the two stay equal.",
+      "type": "string",
+      "maxLength": 250
     }
   }
 }

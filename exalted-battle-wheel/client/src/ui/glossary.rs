@@ -77,6 +77,10 @@ fn book_range_unquoted(first: u16, last: u16) -> Source {
     Source::Book { quote: None, cite: Citation::range(Book::Core, first, last) }
 }
 
+fn book_range(first: u16, last: u16, quote: &'static str) -> Source {
+    Source::Book { quote: Some(quote), cite: Citation::range(Book::Core, first, last) }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Topic {
     // Header
@@ -90,6 +94,7 @@ pub enum Topic {
     Theme,
     Reset,
     ReactionCount,
+    Changelog,
     Room,
     RoomRandomName,
     RoomEveryoneWrites,
@@ -216,6 +221,7 @@ pub enum Topic {
     JoinDebate,
     SocialMonologue,
     SocialAttack,
+    SocialMove,
     SocialDash,
     SocialInactive,
     SocialMiscellaneous,
@@ -283,7 +289,7 @@ const fn topics_for(kind: ActionKind) -> ModeTopics {
         ActionKind::Guard => ModeTopics::shared(Topic::ActionGuard),
         ActionKind::Inactive => ModeTopics::split(Topic::ActionInactive, Topic::SocialInactive),
         ActionKind::Miscellaneous => ModeTopics::split(Topic::ActionMiscellaneous, Topic::SocialMiscellaneous),
-        ActionKind::Move => ModeTopics::shared(Topic::ActionMove),
+        ActionKind::Move => ModeTopics::split(Topic::ActionMove, Topic::SocialMove),
         ActionKind::Flurry => ModeTopics::split(Topic::ActionFlurry, Topic::SocialFlurry),
         ActionKind::ActivateCharm => ModeTopics::shared(Topic::ActionActivateCharm),
         ActionKind::JoinBattleInProgress => ModeTopics::split(Topic::ActionJoinBattleInProgress, Topic::ActionJoinDebateInProgress),
@@ -385,6 +391,12 @@ impl Topic {
                 what: "The highest number of successes rolled by anyone who simultaneously joined the fight at its start.",
                 interacts: "It is fixed once the battle starts and used ever after: every combatant's First Action is (reaction count − her Join Battle successes), and anyone joining a fight already in progress uses this same frozen number.",
                 source: book(141, "The reaction count for the combat scene is a value equal to the highest number of successes rolled by anyone who simultaneously joins at the start of combat."),
+            },
+            Topic::Changelog => Entry {
+                term: "Change Log",
+                what: "What has changed in this app, newest release first.",
+                interacts: "Pulled straight from the same list every deploy adds to \u{2014} it's the app's own release history, not a rules reference.",
+                source: Source::AppConvention,
             },
             Topic::Room => Entry {
                 term: "Multiplayer",
@@ -510,7 +522,7 @@ impl Topic {
             Topic::CombatantName => Entry {
                 term: "Name",
                 what: "How this combatant is labelled on the roster, wheel, and hover card.",
-                interacts: "Purely for your own reference; it has no mechanical effect.",
+                interacts: "Purely for your own reference; it has no mechanical effect. Change it at any time from the queue's Revise combatant dialog.",
                 source: Source::AppConvention,
             },
             Topic::Side => Entry {
@@ -734,7 +746,7 @@ impl Topic {
                 source: book(143, "In the case of attacks, a weapon cannot be used to attack more times in a flurry than its rate."),
             },
             Topic::SpeedOverride => Entry {
-                term: "Speed override",
+                term: "Speed",
                 what: "Lets you enter a Speed other than this action's default — needed whenever the actual Speed isn't fixed.",
                 interacts: "What it means depends on the action selected: for Attack, the weapon or maneuver's own Speed (a weapon missing any of its trait minimums adds one to its Speed per missing dot, up to a ceiling of 6); for Flurry, the highest Speed among the flurried actions; for Activate Charm, whatever Speed the Charm specifies; for Join Battle in progress, the roll result. Ignored for any action whose Speed is fixed.",
                 source: book(373, "For each dot the character is missing from any minimum, subtract one from the Accuracy and Defense of the weapon, and add one to its Speed (to a maximum total of Speed rating 6)."),
@@ -782,7 +794,7 @@ impl Topic {
                 source: book_range_unquoted(251, 252),
             },
             Topic::CastSpeedOverride => Entry {
-                term: "Sequence speed override",
+                term: "Sequence speed",
                 what: "Overrides the Speed of this combatant's next sorcery step. Only meaningful on the final Cast Sorcery step, where the Speed is rolled via Join Battle rather than fixed.",
                 interacts: "Enter the result of the Cast step's Join Battle roll while the display still shows the last Shape step, then click Advance — that click both moves the sorcerer onto Cast Sorcery and consumes this value to schedule it. Once the display already reads \"Cast Sorcery,\" this field no longer does anything; on any earlier Shape step it's likewise ignored, since Shape's Speed is always a fixed 5.",
                 source: book_unquoted(252),
@@ -857,9 +869,9 @@ impl Topic {
             },
             Topic::ActionDash => Entry {
                 term: "Dash (3/-2)",
-                what: "A full sprint, covering much more ground than a Move.",
-                interacts: "Cannot be parried at all without a stunt or magic, on top of the -2 DV. A combatant can either Move or Dash on a given tick, never both.",
-                source: book_range_unquoted(143, 145),
+                what: "A flat-out sprint at Dexterity + 6 yards per tick.",
+                interacts: "The rate is (Dexterity + 6) yards per tick, minus wound penalties and her armor's mobility penalty, and never below 2 yards per tick; swimming or climbing instead covers a flat Dexterity yards per tick. Cannot be parried at all without a stunt or magic, on top of the -2 DV. A combatant can either Move or Dash on a given tick, never both.",
+                source: book_range(143, 145, "The character runs flat out, sprinting at speeds up to (Dexterity + 6 \u{2212} current wound penalties \u{2212} armor mobility penalty) yards per tick. The minimum rate of a dash is two yards per tick."),
             },
             Topic::ActionGuard => Entry {
                 term: "Guard (3/-0)",
@@ -881,9 +893,9 @@ impl Topic {
             },
             Topic::ActionMove => Entry {
                 term: "Move (0/None)",
-                what: "Ordinary movement at Dexterity yards per tick.",
-                interacts: "Reflexive: it never refreshes DV, doesn't count as a true action, and is available even on ticks she couldn't otherwise act. A combatant can either Move or Dash on a given tick, never both.",
-                source: book_range_unquoted(141, 145),
+                what: "Ordinary movement, up to Dexterity yards per tick.",
+                interacts: "The rate is Dexterity yards per tick over land, minus wound penalties and her armor's mobility penalty, and never below 1 yard per tick; swimming or climbing halves it (rounded down). Reflexive: it never refreshes DV, doesn't count as a true action, and is available even on ticks she couldn't otherwise act. A combatant can either Move or Dash on a given tick, never both \u{2014} a Dash supersedes lesser movement.",
+                source: book_range(141, 145, "The character sprints up to (Dexterity) yards per tick over land. Wound penalties subtract from this speed, as does the mobility penalty of any armor worn. The value cannot drop below a speed of one yard per tick."),
             },
             Topic::ActionFlurry => Entry {
                 term: "Flurry (Varies/Varies)",
@@ -1027,11 +1039,17 @@ impl Topic {
                 interacts: "Speed and Rate are set by the Ability used: Presence is Speed 4, Rate 2; Investigation is Speed 5, Rate 2; Performance is Speed 6, Rate 1. Presence and Investigation each reach a single target (a person or one organized social unit); Performance reaches everyone who can perceive it, with no way to exclude anyone.",
                 source: book_range_unquoted(171, 172),
             },
+            Topic::SocialMove => Entry {
+                term: "Move (0/-0)",
+                what: "Drifting around while the exchange goes on; distance barely matters here.",
+                interacts: "A long tick covers ten times the ground a second-long tick does, but position has no effect on a debate \u{2014} the only movement that matters is leaving the encounter entirely. Reflexive and Speed 0, so it never refreshes MDV and never costs her place in the cycle.",
+                source: book(171, "although characters can move at 10 times the speed in a long tick that they can cover in second-based ticks, moving has no significance unless they move out of the encounter entirely"),
+            },
             Topic::SocialDash => Entry {
                 term: "Dash (3/-3)",
                 what: "A social combat sprint away from the exchange \u{2014} disengaging attention rather than covering ground.",
-                interacts: "Carries a steeper DV penalty than physical Dash (-3, not -2), and like its physical counterpart cannot be parried at all without a stunt or magic.",
-                source: book_unquoted(171),
+                interacts: "Covers ten times the ground over a long tick that a physical Dash does in a normal tick, but the distance is beside the point: unlike a social Move, a Dash is a real action, so it forfeits any chance to rebut \u{2014} which is why the book reserves it for literally running away. Carries a steeper DV penalty than physical Dash (-3, not -2), and like its physical counterpart cannot be parried at all without a stunt or magic.",
+                source: book(171, "Because dashing actually counts as an action and forfeits opportunities for rebuttal, taking the dash action (see p. 143) is generally only used for literally running away."),
             },
             Topic::SocialInactive => Entry {
                 term: "Inactive (3/Special)",
@@ -1083,6 +1101,7 @@ mod tests {
         Topic::Theme,
         Topic::Reset,
         Topic::ReactionCount,
+        Topic::Changelog,
         Topic::Room,
         Topic::RoomRandomName,
         Topic::RoomEveryoneWrites,
@@ -1188,6 +1207,7 @@ mod tests {
         Topic::JoinDebate,
         Topic::SocialMonologue,
         Topic::SocialAttack,
+        Topic::SocialMove,
         Topic::SocialDash,
         Topic::SocialInactive,
         Topic::SocialMiscellaneous,

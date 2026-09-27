@@ -50,7 +50,7 @@ pub fn queue(battle: &Battle) -> Vec<QueueRow> {
 mod tests {
     use super::*;
     use crate::battle::action::{label, template, ActionKind, ActionTemplate, Declaration};
-    use crate::battle::combatant::{JoinBattleResult, Side};
+    use crate::battle::combatant::{combatant_name, JoinBattleResult, Side};
     use crate::battle::event::BattleEvent;
     use crate::battle::mode::BattleMode;
     use crate::battle::state::apply;
@@ -63,7 +63,7 @@ mod tests {
         let cid = CombatantId(id);
         apply(
             battle,
-            &BattleEvent::AddCombatant { id: cid, name: format!("C{id}"), side: Side("A".to_string()), join_battle: JoinBattleResult::Successes(successes) },
+            &BattleEvent::AddCombatant { id: cid, name: combatant_name(format!("C{id}")), side: Side("A".to_string()), join_battle: JoinBattleResult::Successes(successes) },
         )
         .unwrap();
         cid

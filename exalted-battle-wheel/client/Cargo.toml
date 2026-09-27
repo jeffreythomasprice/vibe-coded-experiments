@@ -18,6 +18,8 @@ serde_json.workspace = true
 shared.workspace = true
 thiserror.workspace = true
 time.workspace = true
+# Already pulled in by leptos_config -> config, so this pins no new crate to the graph.
+toml = "1"
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-web = "0.1.3"

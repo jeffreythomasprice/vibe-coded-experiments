@@ -1,9 +1,10 @@
-//! The header's hamburger menu: the one entry point to the Multiplayer and Settings dialogs, sitting
-//! at the top-right edge of the menu bar in place of what used to be two separate header buttons.
+//! The header's hamburger menu: the one entry point to the Change Log, Multiplayer, and Settings
+//! dialogs, sitting at the top-right edge of the menu bar in place of what used to be two separate
+//! header buttons.
 
 use crate::battle_net::Battles;
 use crate::ui::glossary::Topic;
-use crate::ui::{room_label, ConfigModal, ConfigOpen, RoomModal, RoomOpen, Tip};
+use crate::ui::{room_label, ChangelogModal, ConfigModal, ConfigOpen, RoomModal, RoomOpen, Tip};
 use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
 use leptos::web_sys;
@@ -13,6 +14,7 @@ pub fn HamburgerMenu() -> impl IntoView {
     let battles = expect_context::<Battles>();
     let room_open = expect_context::<RoomOpen>().0;
     let config_open = expect_context::<ConfigOpen>().0;
+    let changelog_open = RwSignal::new(false);
     let expanded = RwSignal::new(false);
     let root = NodeRef::<leptos::html::Div>::new();
 
@@ -44,6 +46,17 @@ pub fn HamburgerMenu() -> impl IntoView {
             {move || {
                 expanded.get().then(|| view! {
                     <div class="hamburger-dropdown">
+                        <Tip topic=Topic::Changelog>
+                            <button
+                                class="hamburger-item"
+                                on:click=move |_| {
+                                    changelog_open.set(true);
+                                    expanded.set(false);
+                                }
+                            >
+                                "Change Log"
+                            </button>
+                        </Tip>
                         <Tip topic=Topic::Room>
                             <button
                                 class="hamburger-item"
@@ -70,6 +83,7 @@ pub fn HamburgerMenu() -> impl IntoView {
                 })
             }}
         </div>
+        <ChangelogModal open=changelog_open />
         <RoomModal />
         <ConfigModal />
     }

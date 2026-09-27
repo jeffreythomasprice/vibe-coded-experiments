@@ -1,7 +1,9 @@
 use crate::battle_net::Battles;
 use crate::ui::glossary::Topic;
 use crate::ui::{Combobox, DetailTip, Tip};
-use shared::battle::{Battle, BattleEvent, BattleMode, CombatantId, JoinBattleResult, Phase, Side};
+use shared::battle::{
+    combatant_name, Battle, BattleEvent, BattleMode, CombatantId, JoinBattleResult, Phase, Side, MAX_COMBATANT_NAME_LEN,
+};
 use leptos::prelude::*;
 
 #[component]
@@ -38,7 +40,7 @@ pub fn Roster() -> impl IntoView {
             .unwrap_or_else(|| Side(typed_side.trim().to_string()));
         battles.push_minting(BattleEvent::AddCombatant {
             id: CombatantId(0),
-            name: entered_name,
+            name: combatant_name(entered_name.trim()),
             side: entered_side.clone(),
             join_battle,
         });
@@ -89,6 +91,7 @@ pub fn Roster() -> impl IntoView {
                 <Tip topic=Topic::CombatantName>
                     <input
                         placeholder="Name"
+                        maxlength=MAX_COMBATANT_NAME_LEN.to_string()
                         prop:value=move || name.get()
                         on:input=move |ev| name.set(event_target_value(&ev))
                     />

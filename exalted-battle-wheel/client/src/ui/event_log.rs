@@ -52,7 +52,7 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
     match event {
         BattleEvent::SetMode { mode } => EventLine { text: format!("Mode set to {}", mode.label()), detail: None },
         BattleEvent::AddCombatant { name, side, join_battle, .. } => EventLine {
-            text: format!("Added {name} ({})", side.0),
+            text: format!("Added {} ({})", name.to_string(), side.0),
             detail: Some(join_battle_detail(*join_battle)),
         },
         BattleEvent::RemoveCombatant { id } => {
@@ -106,7 +106,7 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
                 ),
                 None => format!("{} advances their sequence", name(battle, *actor)),
             };
-            EventLine { text, detail: speed_override.map(|speed| format!("Speed override {speed}")) }
+            EventLine { text, detail: speed_override.map(|speed| format!("Speed {speed}")) }
         }
         BattleEvent::InterruptSequence { actor, reason, rejoin } => {
             let combatant = battle.find(*actor);
@@ -142,7 +142,7 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
             };
             EventLine { text, detail: None }
         }
-        BattleEvent::ReviseCombatant { actor, next_action_tick, state, dv, commitment, note } => {
+        BattleEvent::ReviseCombatant { actor, next_action_tick, state, dv, commitment, note, name: new_name } => {
             let before = battle.find(*actor);
             let mut parts = Vec::new();
             if let Some(before) = before {
@@ -162,6 +162,11 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
                         parts.push(format!("{} \u{2192} {}", prev.label.to_string(), next.label.to_string()));
                     }
                     _ => {}
+                }
+                if let Some(new_name) = new_name
+                    && before.name != new_name.to_string()
+                {
+                    parts.push(format!("\"{}\" \u{2192} \"{}\"", before.name, new_name.to_string()));
                 }
             }
             if !note.is_empty() {

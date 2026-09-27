@@ -260,7 +260,7 @@ impl Default for BattleLog {
 mod tests {
     use super::*;
     use crate::battle::action::{label, note, template, ActionKind, ActionTemplate, Declaration, DeclaredEffect};
-    use crate::battle::combatant::{CombatantState, DvState, JoinBattleResult, Side};
+    use crate::battle::combatant::{combatant_name, CombatantState, DvState, JoinBattleResult, Side};
     use crate::battle::event::InterruptReason;
     use crate::battle::mode::BattleMode;
     use crate::battle::sequence::Sequence;
@@ -269,7 +269,7 @@ mod tests {
         let id = log.alloc_combatant_id();
         log.push(BattleEvent::AddCombatant {
             id,
-            name: format!("C{}", id.0),
+            name: combatant_name(format!("C{}", id.0)),
             side: Side("A".to_string()),
             join_battle: JoinBattleResult::Successes(successes),
         })
@@ -340,7 +340,7 @@ mod tests {
         let mut log = BattleLog::new();
         log.push(BattleEvent::AddCombatant {
             id: CombatantId(41),
-            name: "Remote".to_string(),
+            name: combatant_name("Remote"),
             side: Side("A".to_string()),
             join_battle: JoinBattleResult::Successes(0),
         })
@@ -353,7 +353,7 @@ mod tests {
         let mut log = BattleLog::new();
         log.push(BattleEvent::AddCombatant {
             id: CombatantId(5),
-            name: "First".to_string(),
+            name: combatant_name("First"),
             side: Side("A".to_string()),
             join_battle: JoinBattleResult::Successes(0),
         })
@@ -361,7 +361,7 @@ mod tests {
         // Same id again: rejected as a duplicate, so the watermark must not move.
         log.push(BattleEvent::AddCombatant {
             id: CombatantId(99),
-            name: "Second".to_string(),
+            name: combatant_name("Second"),
             side: Side("A".to_string()),
             join_battle: JoinBattleResult::Successes(0),
         })
@@ -375,7 +375,7 @@ mod tests {
         add_event(&mut log, 5);
         let placeholder = BattleEvent::AddCombatant {
             id: CombatantId(0),
-            name: "Newcomer".to_string(),
+            name: combatant_name("Newcomer"),
             side: Side("A".to_string()),
             join_battle: JoinBattleResult::Successes(0),
         };
@@ -384,7 +384,7 @@ mod tests {
         // Calling it again from the same log produces the same id: restamp only peeks.
         let placeholder_again = BattleEvent::AddCombatant {
             id: CombatantId(0),
-            name: "Newcomer".to_string(),
+            name: combatant_name("Newcomer"),
             side: Side("A".to_string()),
             join_battle: JoinBattleResult::Successes(0),
         };
@@ -428,6 +428,7 @@ mod tests {
             dv: DvState::default(),
             commitment: None,
             note: note(""),
+            name: None,
         };
         let BattleEvent::ReviseCombatant { state: CombatantState::InSequence(stamped), .. } = log.restamp(event) else {
             unreachable!()
@@ -459,6 +460,7 @@ mod tests {
             dv: DvState { penalty: -1, refreshes_at: Some(2) },
             commitment: None,
             note: note("retconned to resolve sooner"),
+            name: None,
         })
         .unwrap();
         assert_eq!(log.battle().find(id).unwrap().next_action_tick, 2);
@@ -484,6 +486,7 @@ mod tests {
             dv: DvState::default(),
             commitment: None,
             note: note(""),
+            name: None,
         })
         .unwrap();
 
@@ -606,6 +609,7 @@ mod tests {
             dv: DvState { penalty: -1, refreshes_at: Some(100) },
             commitment: None,
             note: note("parked while b resolves its sorcery"),
+            name: Some(combatant_name("Renamed")),
         })
         .unwrap();
 
@@ -642,6 +646,33 @@ mod tests {
         assert!(restored.can_redo(), "the redo tail must survive the round trip");
     }
 
+    /// The exact shape every already-saved battle has: a `ReviseCombatant` with no `name` key at
+    /// all, since it was written before that field existed. Must still restore, with the name
+    /// left unchanged, or adding an optional field to a persisted event silently breaks every
+    /// saved battle.
+    #[test]
+    fn revise_combatant_without_a_name_key_still_restores() {
+        let json = r#"{
+            "events": [
+                {"AddCombatant": {"id": 0, "name": "Rin", "side": "A", "join_battle": {"Successes": 5}}},
+                "StartBattle",
+                {"ReviseCombatant": {
+                    "actor": 0,
+                    "next_action_tick": 3,
+                    "state": "Guarding",
+                    "dv": {"penalty": 0, "refreshes_at": null},
+                    "commitment": null,
+                    "note": ""
+                }}
+            ],
+            "cursor": 3,
+            "next_combatant_id": 1,
+            "next_marker_id": 0
+        }"#;
+        let restored: BattleLog = serde_json::from_str(json).unwrap();
+        assert_eq!(restored.battle().find(CombatantId(0)).unwrap().name, "Rin");
+    }
+
     #[test]
     fn a_fresh_log_serializes_to_a_stable_default() {
         // Load-or-default (`persist.rs`'s save effect) compares this JSON against a fresh
@@ -671,7 +702,7 @@ mod tests {
     fn restoring_rejects_a_stale_combatant_counter() {
         let events = vec![BattleEvent::AddCombatant {
             id: CombatantId(2),
-            name: "C2".to_string(),
+            name: combatant_name("C2"),
             side: Side("A".to_string()),
             join_battle: JoinBattleResult::Successes(0),
         }];
@@ -685,7 +716,7 @@ mod tests {
         let events = vec![
             BattleEvent::AddCombatant {
                 id: CombatantId(0),
-                name: "C0".to_string(),
+                name: combatant_name("C0"),
                 side: Side("A".to_string()),
                 join_battle: JoinBattleResult::Successes(0),
             },

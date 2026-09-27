@@ -392,7 +392,7 @@ pub const MAX_LABEL_LEN: usize = 120;
 /// Mirrors `Note`'s `maxLength` in `shared/schemas/common.json` -- see `MAX_LABEL_LEN`.
 pub const MAX_NOTE_LEN: usize = 1000;
 
-fn truncate_chars(text: &str, max: usize) -> &str {
+pub(super) fn truncate_chars(text: &str, max: usize) -> &str {
     match text.char_indices().nth(max) {
         Some((end, _)) => &text[..end],
         None => text,

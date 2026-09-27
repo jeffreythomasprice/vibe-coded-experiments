@@ -270,10 +270,10 @@ pub fn Wheel() -> impl IntoView {
 
     view! {
         <div class="wheel-panel">
+            <div class="wheel-column-inner">
             <div class="wheel-spine" aria-hidden="true">
                 <span>"Exalted 2nd Edition Battlewheel"</span>
             </div>
-            <div class="wheel-column-inner">
             <svg viewBox=format!("0 0 {VIEW_SIZE} {VIEW_SIZE}") class="wheel">
                 <circle cx=CENTER cy=CENTER r=RIM_RADIUS class="wheel-paper" />
                 <circle

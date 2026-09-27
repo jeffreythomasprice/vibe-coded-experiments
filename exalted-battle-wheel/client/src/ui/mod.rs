@@ -1,4 +1,5 @@
 pub mod action_panel;
+pub mod changelog;
 pub mod combobox;
 pub mod config;
 pub mod event_log;
@@ -21,6 +22,7 @@ pub mod tooltip;
 pub mod wheel;
 
 pub use action_panel::{ActionPanel, RailSelection};
+pub use changelog::ChangelogModal;
 pub use combobox::Combobox;
 pub use config::{ConfigModal, ConfigOpen};
 pub use event_log::EventLogButton;

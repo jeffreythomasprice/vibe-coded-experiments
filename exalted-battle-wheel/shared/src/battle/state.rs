@@ -153,7 +153,7 @@ pub fn apply(battle: &mut Battle, event: &BattleEvent) -> Result<(), BattleError
             }
             battle.combatants.push(Combatant {
                 id: *id,
-                name: name.clone(),
+                name: name.to_string(),
                 side: side.clone(),
                 join_battle: *join_battle,
                 next_action_tick: 0,
@@ -305,7 +305,7 @@ pub fn apply(battle: &mut Battle, event: &BattleEvent) -> Result<(), BattleError
             Ok(())
         }
 
-        BattleEvent::ReviseCombatant { actor, next_action_tick, state, dv, commitment, note: _ } => {
+        BattleEvent::ReviseCombatant { actor, next_action_tick, state, dv, commitment, note: _, name } => {
             if let CombatantState::InSequence(sequence) = state
                 && sequence.current >= sequence.steps.len()
             {
@@ -320,6 +320,9 @@ pub fn apply(battle: &mut Battle, event: &BattleEvent) -> Result<(), BattleError
             combatant.state = state.clone();
             combatant.dv = *dv;
             combatant.commitment = commitment.clone();
+            if let Some(name) = name {
+                combatant.name = name.to_string();
+            }
             Ok(())
         }
 
@@ -391,6 +394,7 @@ fn apply_declare_action(battle: &mut Battle, actor: CombatantId, action: &Declar
 mod tests {
     use super::*;
     use crate::battle::action::{label, note, template, ActionTemplate, Declaration};
+    use crate::battle::combatant::combatant_name;
     use crate::battle::event::InterruptReason;
     use crate::battle::ids::CombatantId;
     use crate::battle::sequence::Sequence;
@@ -405,7 +409,7 @@ mod tests {
             battle,
             &BattleEvent::AddCombatant {
                 id: cid,
-                name: format!("C{id}"),
+                name: combatant_name(format!("C{id}")),
                 side: Side("A".to_string()),
                 join_battle: JoinBattleResult::Successes(successes),
             },
@@ -420,7 +424,7 @@ mod tests {
             battle,
             &BattleEvent::AddCombatant {
                 id: cid,
-                name: format!("C{id}"),
+                name: combatant_name(format!("C{id}")),
                 side: Side(side.to_string()),
                 join_battle: JoinBattleResult::Successes(0),
             },
@@ -451,7 +455,7 @@ mod tests {
             &mut battle,
             &BattleEvent::AddCombatant {
                 id: cid,
-                name: "Botcher".to_string(),
+                name: combatant_name("Botcher"),
                 side: Side("A".to_string()),
                 join_battle: JoinBattleResult::Botch,
             },
@@ -689,7 +693,7 @@ mod tests {
         let cid = add(&mut battle, 1, 5);
         let err = apply(
             &mut battle,
-            &BattleEvent::AddCombatant { id: cid, name: "Impostor".to_string(), side: Side("A".to_string()), join_battle: JoinBattleResult::Successes(0) },
+            &BattleEvent::AddCombatant { id: cid, name: combatant_name("Impostor"), side: Side("A".to_string()), join_battle: JoinBattleResult::Successes(0) },
         )
         .unwrap_err();
         assert_eq!(err, BattleError::DuplicateCombatant(cid));
@@ -802,11 +806,57 @@ mod tests {
                 dv: DvState { penalty: -1, refreshes_at: Some(2) },
                 commitment: None,
                 note: note("retconned to resolve sooner"),
+                name: None,
             },
         )
         .unwrap();
         assert_eq!(battle.find(cid).unwrap().next_action_tick, 2);
         assert_eq!(battle.find(cid).unwrap().dv.penalty, -1);
+    }
+
+    #[test]
+    fn revise_combatant_with_a_name_renames_the_combatant() {
+        let mut battle = Battle::genesis();
+        let cid = add(&mut battle, 1, 5);
+        apply(&mut battle, &BattleEvent::StartBattle).unwrap();
+
+        apply(
+            &mut battle,
+            &BattleEvent::ReviseCombatant {
+                actor: cid,
+                next_action_tick: 0,
+                state: CombatantState::Normal,
+                dv: DvState::default(),
+                commitment: None,
+                note: note(""),
+                name: Some(combatant_name("Renamed")),
+            },
+        )
+        .unwrap();
+        assert_eq!(battle.find(cid).unwrap().name, "Renamed");
+    }
+
+    #[test]
+    fn revise_combatant_without_a_name_leaves_it_unchanged() {
+        let mut battle = Battle::genesis();
+        let cid = add(&mut battle, 1, 5);
+        apply(&mut battle, &BattleEvent::StartBattle).unwrap();
+        let original_name = battle.find(cid).unwrap().name.clone();
+
+        apply(
+            &mut battle,
+            &BattleEvent::ReviseCombatant {
+                actor: cid,
+                next_action_tick: 2,
+                state: CombatantState::Normal,
+                dv: DvState::default(),
+                commitment: None,
+                note: note(""),
+                name: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(battle.find(cid).unwrap().name, original_name);
     }
 
     #[test]
@@ -828,6 +878,7 @@ mod tests {
                 dv: DvState::default(),
                 commitment: None,
                 note: note(""),
+                name: None,
             },
         )
         .unwrap();
@@ -853,6 +904,7 @@ mod tests {
                 dv: DvState::default(),
                 commitment: None,
                 note: note(""),
+                name: None,
             },
         )
         .unwrap_err();
@@ -871,6 +923,7 @@ mod tests {
                 dv: DvState::default(),
                 commitment: None,
                 note: note(""),
+                name: None,
             },
         )
         .unwrap_err();

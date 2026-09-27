@@ -1,6 +1,18 @@
+use crate::battle::action::truncate_chars;
 use crate::battle::ids::{CombatantId, Tick};
 
-pub use crate::generated::{CombatantState, Commitment, DvState, JoinBattleResult, Side};
+pub use crate::generated::{CombatantName, CombatantState, Commitment, DvState, JoinBattleResult, Side};
+
+/// Mirrors `CombatantName`'s `maxLength` in `shared/schemas/common.json` -- a test asserts the two
+/// stay equal. Free-form text is truncated to fit rather than rejected, the same policy
+/// `label()`/`note()` and `protocol::name::sanitize_name` use for other user-typed text.
+pub const MAX_COMBATANT_NAME_LEN: usize = 250;
+
+/// Truncates to `CombatantName`'s bound rather than rejecting -- see `MAX_COMBATANT_NAME_LEN`.
+pub fn combatant_name(text: impl AsRef<str>) -> CombatantName {
+    CombatantName::try_from(truncate_chars(text.as_ref(), MAX_COMBATANT_NAME_LEN))
+        .expect("truncated to fit CombatantName's bound")
+}
 
 impl JoinBattleResult {
     /// Speed used to schedule this result against a scene's reaction count
@@ -49,5 +61,21 @@ mod tests {
     #[test]
     fn fastest_successes_land_on_tick_zero() {
         assert_eq!(JoinBattleResult::Successes(5).speed(5), 0);
+    }
+
+    /// `CombatantName` is generated from `shared/schemas/common.json`'s `maxLength`;
+    /// `MAX_COMBATANT_NAME_LEN` must never drift from that bound, since `combatant_name()`'s
+    /// truncation assumes they match exactly. Same reasoning as `action.rs`'s equivalent test for
+    /// `Label`/`Note`.
+    #[test]
+    fn combatant_name_bound_matches_the_local_constant() {
+        assert!(CombatantName::try_from("a".repeat(MAX_COMBATANT_NAME_LEN)).is_ok());
+        assert!(CombatantName::try_from("a".repeat(MAX_COMBATANT_NAME_LEN + 1)).is_err());
+    }
+
+    #[test]
+    fn combatant_name_truncates_rather_than_rejecting() {
+        let long = "a".repeat(MAX_COMBATANT_NAME_LEN + 10);
+        assert_eq!(combatant_name(&long).chars().count(), MAX_COMBATANT_NAME_LEN);
     }
 }

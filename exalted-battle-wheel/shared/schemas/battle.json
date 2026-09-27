@@ -42,7 +42,7 @@
                   "$ref": "#/$defs/JoinBattleResult"
                 },
                 "name": {
-                  "type": "string"
+                  "$ref": "#/$defs/CombatantName"
                 },
                 "side": {
                   "$ref": "#/$defs/Side"
@@ -248,7 +248,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "The escape hatch: a full-override correction to a combatant's queue state, appended as a normal event so Undo/Redo covers it for free (see `BattleLog`). Every field is set, not patched, so one user edit is exactly one event.",
+          "description": "The escape hatch: a full-override correction to a combatant's queue state, appended as a normal event so Undo/Redo covers it for free (see `BattleLog`). Every field but `name` is set, not patched, so one user edit is exactly one event; `name` is optional -- `None` leaves it unchanged -- purely so a log written before this field existed still replays. Every writer sets it (to `Some`, to actually rename, or to the unchanged current name).",
           "properties": {
             "ReviseCombatant": {
               "properties": {
@@ -267,6 +267,16 @@
                 },
                 "dv": {
                   "$ref": "#/$defs/DvState"
+                },
+                "name": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/CombatantName"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "next_action_tick": {
                   "format": "uint32",

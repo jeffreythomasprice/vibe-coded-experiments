@@ -536,7 +536,7 @@ fn NormalControls(actor_id: CombatantId, battles: Battles, battle: Memo<Battle>)
                     </Tip>
                     <Tip topic=Topic::SpeedOverride>
                         <input
-                            placeholder="speed override"
+                            placeholder="speed"
                             prop:value=move || speed_override.get()
                             on:input=move |ev| speed_override.set(event_target_value(&ev))
                         />
@@ -593,7 +593,7 @@ fn SequenceControls(actor_id: CombatantId, battles: Battles, battle: Memo<Battle
         <InterruptControls actor_id=actor_id battles=battles battle=battle />
         <Tip topic=Topic::CastSpeedOverride>
             <input
-                placeholder="speed override (Cast)"
+                placeholder="speed (Cast)"
                 prop:value=move || speed_override.get()
                 on:input=move |ev| speed_override.set(event_target_value(&ev))
             />
@@ -664,7 +664,7 @@ fn InterruptControls(actor_id: CombatantId, battles: Battles, battle: Memo<Battl
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shared::battle::{apply, template, SequenceKind, Side};
+    use shared::battle::{apply, combatant_name, template, SequenceKind, Side};
 
     #[test]
     fn choice_key_round_trips_through_its_encoding() {
@@ -767,7 +767,7 @@ mod tests {
             battle,
             &BattleEvent::AddCombatant {
                 id: cid,
-                name: format!("C{id}"),
+                name: combatant_name(format!("C{id}")),
                 side: Side("A".to_string()),
                 join_battle: JoinBattleResult::Successes(successes),
             },

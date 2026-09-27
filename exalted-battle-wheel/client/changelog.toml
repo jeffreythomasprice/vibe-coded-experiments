@@ -1,0 +1,10 @@
+# The change log shown in the app's "Change Log" dialog (src/ui/changelog.rs bakes this file in).
+# Append each new release at the bottom, oldest first, dates ISO 8601 (UTC).
+
+[[release]]
+date = "2026-09-12"
+changes = ["Initial release"]
+
+[[release]]
+date = "2026-09-16"
+changes = ["Multiplayer"]

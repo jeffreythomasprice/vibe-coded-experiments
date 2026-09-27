@@ -2,8 +2,8 @@ use crate::battle_net::Battles;
 use crate::ui::glossary::Topic;
 use crate::ui::{ticks, DetailTip, MarkerForm, Modal, Tip};
 use shared::battle::{
-    queue, Battle, BattleEvent, BattleMode, Combatant, CombatantId, CombatantState, DvState, Marker, MarkerId,
-    QueueItem, Tick,
+    combatant_name, queue, Battle, BattleEvent, BattleMode, Combatant, CombatantId, CombatantState, DvState, Marker,
+    MarkerId, QueueItem, Tick, MAX_COMBATANT_NAME_LEN,
 };
 use leptos::prelude::*;
 
@@ -198,6 +198,9 @@ fn CombatantEditor(
     let has_sequence = original_sequence.is_some();
     let sequence_for_view = original_sequence.clone();
 
+    let initial_name = initial.name.clone();
+    let name = RwSignal::new(initial_name.clone());
+
     let next_tick = RwSignal::new(initial.next_action_tick.to_string());
     let dv_penalty = RwSignal::new(initial.dv.penalty.to_string());
     let no_refresh = RwSignal::new(initial.dv.refreshes_at.is_none());
@@ -211,11 +214,17 @@ fn CombatantEditor(
     let clear_commitment = RwSignal::new(false);
     let note = RwSignal::new(String::new());
 
+    // A blank field keeps the current name rather than clearing it, matching the add form's
+    // refusal to add a nameless combatant (roster.rs).
+    let cancel_initial_name = initial_name.clone();
     let cancel_action = move |_| {
         let dv = DvState {
             penalty: dv_penalty.get().trim().parse().unwrap_or(0),
             refreshes_at: if no_refresh.get() { None } else { dv_refreshes.get().trim().parse().ok() },
         };
+        let typed_name = name.get();
+        let trimmed_name = typed_name.trim();
+        let revised_name = if trimmed_name.is_empty() { cancel_initial_name.clone() } else { trimmed_name.to_string() };
         battles.push(BattleEvent::ReviseCombatant {
             actor: actor_id,
             next_action_tick: current_tick,
@@ -223,6 +232,7 @@ fn CombatantEditor(
             dv,
             commitment: None,
             note: shared::battle::note(note.get()),
+            name: Some(combatant_name(revised_name)),
         });
         on_close();
     };
@@ -248,6 +258,9 @@ fn CombatantEditor(
             refreshes_at: if no_refresh.get() { None } else { dv_refreshes.get().trim().parse().ok() },
         };
         let commitment = if clear_commitment.get() { None } else { initial_commitment.clone() };
+        let typed_name = name.get();
+        let trimmed_name = typed_name.trim();
+        let revised_name = if trimmed_name.is_empty() { initial_name.clone() } else { trimmed_name.to_string() };
         battles.push(BattleEvent::ReviseCombatant {
             actor: actor_id,
             next_action_tick: parsed_tick,
@@ -255,6 +268,7 @@ fn CombatantEditor(
             dv,
             commitment,
             note: shared::battle::note(note.get()),
+            name: Some(combatant_name(revised_name)),
         });
         on_close();
     };
@@ -263,6 +277,16 @@ fn CombatantEditor(
         <div class="queue-editor">
             <Tip topic=Topic::ReviseCombatant>
                 <div class="queue-editor-hint">"Applying this appends a correction event \u{2014} Undo reverts it."</div>
+            </Tip>
+            <Tip topic=Topic::CombatantName>
+                <label class="queue-field">
+                    "Name"
+                    <input
+                        maxlength=MAX_COMBATANT_NAME_LEN.to_string()
+                        prop:value=move || name.get()
+                        on:input=move |ev| name.set(event_target_value(&ev))
+                    />
+                </label>
             </Tip>
             <label class="queue-field">
                 "Next action tick"

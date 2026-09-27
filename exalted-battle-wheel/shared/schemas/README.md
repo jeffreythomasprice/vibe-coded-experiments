@@ -54,7 +54,8 @@ If you add a new def that needs the same treatment, add it here and to the `REPL
 ## Constrained scalars, and what enforces them
 
 `common.json` also defines a handful of bounded string scalars -- `MemberName`, `RoomName`,
-`AccessKey`, `Label`, `Note` -- reused by `$ref` wherever the corresponding kind of text appears.
+`AccessKey`, `Label`, `Note`, `CombatantName` -- reused by `$ref` wherever the corresponding kind
+of text appears.
 Unlike the replaced types above, these *are* generated: a named string def with `minLength`/
 `maxLength` gets typify's constrained-newtype treatment (a private-field wrapper with a hand-written
 validating `Deserialize`, `FromStr`, and `TryFrom`, but no public constructor), so the bound is
@@ -77,4 +78,5 @@ Two of these bounds mirror constants that predate the schema and must not drift 
 inlines the literal bound into generated code with no way to export it as a constant to compare
 against directly. `Label`'s and `Note`'s bounds (120 and 1000 characters) have their own mirrored
 constants in `shared::battle` (`MAX_LABEL_LEN`, `MAX_NOTE_LEN`), used by the `label()`/`note()`
-truncating helpers there rather than by a generated type's own comparison test.
+truncating helpers there rather than by a generated type's own comparison test. `CombatantName`'s
+bound (250 characters) mirrors `MAX_COMBATANT_NAME_LEN` the same way, via `combatant_name()`.
