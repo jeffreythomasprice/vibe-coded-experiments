@@ -1,17 +1,17 @@
-use super::{generate_key, AccessCode, AccessCodeStore, ItemError, StoreError};
+use super::{AccessCode, AccessCodeStore, ItemError, StoreError, generate_key};
 use crate::config::Config;
 use crate::dynamo_client::{self, format_timestamp};
+use aws_sdk_dynamodb::Client;
 use aws_sdk_dynamodb::operation::delete_item::DeleteItemError;
 use aws_sdk_dynamodb::operation::put_item::PutItemError;
 use aws_sdk_dynamodb::operation::update_item::UpdateItemError;
 use aws_sdk_dynamodb::types::{AttributeValue, ReturnValue};
-use aws_sdk_dynamodb::Client;
 use shared::access::AccessKey;
 use shared::timestamp::Timestamp;
 use std::collections::HashMap;
 use std::sync::Arc;
-use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
+use time::format_description::well_known::Rfc3339;
 
 const ACCESS_KEY: &str = "access_key";
 const IS_ADMIN: &str = "is_admin";
@@ -24,7 +24,10 @@ pub struct DynamoAccessCodeStore {
 }
 
 pub async fn connect(config: &Config) -> DynamoAccessCodeStore {
-    DynamoAccessCodeStore { client: dynamo_client::client(config).await, table: Arc::from(config.access_codes_table.as_str()) }
+    DynamoAccessCodeStore {
+        client: dynamo_client::client(config).await,
+        table: Arc::from(config.access_codes_table.as_str()),
+    }
 }
 
 impl AccessCodeStore for DynamoAccessCodeStore {
@@ -61,7 +64,11 @@ impl AccessCodeStore for DynamoAccessCodeStore {
         let access_key: AccessKey = access_key
             .try_into()
             .expect("non-empty by construction: routes.rs filters blanks, generate_key() always returns a UUID");
-        let code = AccessCode { access_key, is_admin, created_at: Timestamp(OffsetDateTime::now_utc()) };
+        let code = AccessCode {
+            access_key,
+            is_admin,
+            created_at: Timestamp(OffsetDateTime::now_utc()),
+        };
 
         let result = self
             .client
@@ -75,7 +82,11 @@ impl AccessCodeStore for DynamoAccessCodeStore {
 
         match result {
             Ok(_) => Ok(code),
-            Err(error) if error.as_service_error().is_some_and(PutItemError::is_conditional_check_failed_exception) => {
+            Err(error)
+                if error
+                    .as_service_error()
+                    .is_some_and(PutItemError::is_conditional_check_failed_exception) =>
+            {
                 Err(StoreError::AlreadyExists)
             }
             Err(error) => Err(StoreError::PutItem(error)),
@@ -100,7 +111,9 @@ impl AccessCodeStore for DynamoAccessCodeStore {
         let output = match result {
             Ok(output) => output,
             Err(error)
-                if error.as_service_error().is_some_and(UpdateItemError::is_conditional_check_failed_exception) =>
+                if error
+                    .as_service_error()
+                    .is_some_and(UpdateItemError::is_conditional_check_failed_exception) =>
             {
                 return Err(StoreError::NotFound);
             }
@@ -124,7 +137,9 @@ impl AccessCodeStore for DynamoAccessCodeStore {
         match result {
             Ok(_) => Ok(()),
             Err(error)
-                if error.as_service_error().is_some_and(DeleteItemError::is_conditional_check_failed_exception) =>
+                if error
+                    .as_service_error()
+                    .is_some_and(DeleteItemError::is_conditional_check_failed_exception) =>
             {
                 Err(StoreError::NotFound)
             }
@@ -144,8 +159,11 @@ fn access_code_to_item(code: &AccessCode) -> HashMap<String, AttributeValue> {
 fn item_to_access_code(item: &HashMap<String, AttributeValue>) -> Result<AccessCode, ItemError> {
     let access_key = string_attr(item, ACCESS_KEY)?;
     Ok(AccessCode {
-        access_key: AccessKey::try_from(access_key.clone())
-            .map_err(|error| ItemError::Invalid { name: ACCESS_KEY, value: access_key, reason: error.to_string() })?,
+        access_key: AccessKey::try_from(access_key.clone()).map_err(|error| ItemError::Invalid {
+            name: ACCESS_KEY,
+            value: access_key,
+            reason: error.to_string(),
+        })?,
         is_admin: bool_attr(item, IS_ADMIN)?,
         created_at: Timestamp(timestamp_attr(item, CREATED_AT)?),
     })
@@ -201,13 +219,19 @@ mod tests {
     fn wrong_typed_attribute_is_an_error() {
         let mut item = access_code_to_item(&sample());
         item.insert(IS_ADMIN.to_string(), AttributeValue::S("true".to_string()));
-        assert!(matches!(item_to_access_code(&item), Err(ItemError::WrongType { name: IS_ADMIN, .. })));
+        assert!(matches!(
+            item_to_access_code(&item),
+            Err(ItemError::WrongType { name: IS_ADMIN, .. })
+        ));
     }
 
     #[test]
     fn unparseable_timestamp_is_an_error() {
         let mut item = access_code_to_item(&sample());
         item.insert(CREATED_AT.to_string(), AttributeValue::S("not a date".to_string()));
-        assert!(matches!(item_to_access_code(&item), Err(ItemError::Timestamp { name: CREATED_AT, .. })));
+        assert!(matches!(
+            item_to_access_code(&item),
+            Err(ItemError::Timestamp { name: CREATED_AT, .. })
+        ));
     }
 }

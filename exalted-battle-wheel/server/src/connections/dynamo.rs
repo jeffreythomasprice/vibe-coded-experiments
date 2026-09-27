@@ -1,8 +1,8 @@
-use super::{ConnectionStore, ConnectionStoreError, CONNECTION_TTL};
+use super::{CONNECTION_TTL, ConnectionStore, ConnectionStoreError};
 use crate::config::Config;
 use crate::dynamo_client::{self, format_timestamp};
-use aws_sdk_dynamodb::types::AttributeValue;
 use aws_sdk_dynamodb::Client;
+use aws_sdk_dynamodb::types::AttributeValue;
 use shared::protocol::ConnectionId;
 use std::sync::Arc;
 use time::OffsetDateTime;
@@ -20,7 +20,10 @@ pub struct DynamoConnectionStore {
 }
 
 pub async fn connect(config: &Config) -> DynamoConnectionStore {
-    DynamoConnectionStore { client: dynamo_client::client(config).await, table: Arc::from(config.connections_table.as_str()) }
+    DynamoConnectionStore {
+        client: dynamo_client::client(config).await,
+        table: Arc::from(config.connections_table.as_str()),
+    }
 }
 
 impl ConnectionStore for DynamoConnectionStore {

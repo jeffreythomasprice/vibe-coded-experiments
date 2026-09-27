@@ -46,8 +46,12 @@ impl BattleMode {
     pub fn tick_note(self) -> Option<&'static str> {
         match self {
             BattleMode::Personal => None,
-            BattleMode::Mass => Some("In mass combat a \u{201c}long tick\u{201d} is roughly one minute, not one second (RULES.md \u{a7}11.1, p. 158)."),
-            BattleMode::Social => Some("In social combat a \u{201c}long tick\u{201d} is roughly one minute, not one second (RULES.md \u{a7}11.2, p. 169)."),
+            BattleMode::Mass => {
+                Some("In mass combat a \u{201c}long tick\u{201d} is roughly one minute, not one second (RULES.md \u{a7}11.1, p. 158).")
+            }
+            BattleMode::Social => {
+                Some("In social combat a \u{201c}long tick\u{201d} is roughly one minute, not one second (RULES.md \u{a7}11.2, p. 169).")
+            }
         }
     }
 

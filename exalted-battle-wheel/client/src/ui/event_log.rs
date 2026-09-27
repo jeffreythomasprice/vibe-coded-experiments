@@ -1,11 +1,10 @@
 use crate::battle_net::{BattleView, Battles};
 use crate::ui::glossary::Topic;
-use crate::ui::{ticks, Modal, TextTip, Tip};
-use shared::battle::{
-    apply, template, Battle, BattleEvent, BattleLog, BattleMode, CombatantId, CombatantState, InterruptReason,
-    JoinBattleResult,
-};
+use crate::ui::{Modal, TextTip, Tip, ticks};
 use leptos::prelude::*;
+use shared::battle::{
+    Battle, BattleEvent, BattleLog, BattleMode, CombatantId, CombatantState, InterruptReason, JoinBattleResult, apply, template,
+};
 
 struct EventLine {
     text: String,
@@ -13,7 +12,10 @@ struct EventLine {
 }
 
 fn name(battle: &Battle, id: CombatantId) -> String {
-    battle.find(id).map(|c| c.name.clone()).unwrap_or_else(|| format!("combatant #{}", id.0))
+    battle
+        .find(id)
+        .map(|c| c.name.clone())
+        .unwrap_or_else(|| format!("combatant #{}", id.0))
 }
 
 fn join_battle_detail(join_battle: JoinBattleResult) -> String {
@@ -50,14 +52,20 @@ fn interrupt_reason(reason: &InterruptReason) -> String {
 
 fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
     match event {
-        BattleEvent::SetMode { mode } => EventLine { text: format!("Mode set to {}", mode.label()), detail: None },
-        BattleEvent::AddCombatant { name, side, join_battle, .. } => EventLine {
+        BattleEvent::SetMode { mode } => EventLine {
+            text: format!("Mode set to {}", mode.label()),
+            detail: None,
+        },
+        BattleEvent::AddCombatant {
+            name, side, join_battle, ..
+        } => EventLine {
             text: format!("Added {} ({})", name.to_string(), side.0),
             detail: Some(join_battle_detail(*join_battle)),
         },
-        BattleEvent::RemoveCombatant { id } => {
-            EventLine { text: format!("Removed {}", name(battle, *id)), detail: None }
-        }
+        BattleEvent::RemoveCombatant { id } => EventLine {
+            text: format!("Removed {}", name(battle, *id)),
+            detail: None,
+        },
         BattleEvent::StartBattle => EventLine {
             text: "Battle started".to_string(),
             detail: Some(format!("Reaction count {}", battle.reaction_count())),
@@ -75,6 +83,19 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
             if action.reflexive {
                 detail.push_str(", reflexive");
             }
+            if let Some(flurry) = &action.flurry {
+                let rule = match flurry.rule {
+                    shared::battle::FlurryDvRule::Stacked => "DV stacked",
+                    shared::battle::FlurryDvRule::WorstOnly => "worst DV only",
+                };
+                let components = flurry
+                    .actions
+                    .iter()
+                    .map(|part| format!("{} {}/{}", part.label.to_string(), part.speed, part.dv_penalty))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                detail.push_str(&format!(" — {components} ({rule})"));
+            }
             if !action.note.is_empty() {
                 detail.push_str(&format!(" — {}", action.note.to_string()));
             }
@@ -84,7 +105,12 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
             }
         }
         BattleEvent::StartSequence { actor, sequence } => {
-            let detail = sequence.steps.iter().map(|step| step.label.as_str()).collect::<Vec<_>>().join(" \u{2192} ");
+            let detail = sequence
+                .steps
+                .iter()
+                .map(|step| step.label.as_str())
+                .collect::<Vec<_>>()
+                .join(" \u{2192} ");
             EventLine {
                 text: format!("{} starts {}", name(battle, *actor), sequence.name),
                 detail: Some(detail),
@@ -106,7 +132,10 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
                 ),
                 None => format!("{} advances their sequence", name(battle, *actor)),
             };
-            EventLine { text, detail: speed_override.map(|speed| format!("Speed {speed}")) }
+            EventLine {
+                text,
+                detail: speed_override.map(|speed| format!("Speed {speed}")),
+            }
         }
         BattleEvent::InterruptSequence { actor, reason, rejoin } => {
             let combatant = battle.find(*actor);
@@ -116,7 +145,11 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
             });
             let text = match sequence_name {
                 Some(sequence_name) => {
-                    format!("{}'s {sequence_name} is interrupted ({})", name(battle, *actor), interrupt_reason(reason))
+                    format!(
+                        "{}'s {sequence_name} is interrupted ({})",
+                        name(battle, *actor),
+                        interrupt_reason(reason)
+                    )
                 }
                 None => format!("{} is interrupted ({})", name(battle, *actor), interrupt_reason(reason)),
             };
@@ -124,15 +157,27 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
                 JoinBattleResult::Successes(successes) => format!("Rejoins with {successes} successes"),
                 JoinBattleResult::Botch => "Rejoins on a botch".to_string(),
             };
-            EventLine { text, detail: Some(detail) }
+            EventLine {
+                text,
+                detail: Some(detail),
+            }
         }
         BattleEvent::AdvanceTick => EventLine {
             text: format!("Advanced to {}", ticks::at(battle.mode, battle.current_tick + 1)),
             detail: None,
         },
-        BattleEvent::AddMarker { label, source, at_tick, ticks: span_ticks, .. } => {
+        BattleEvent::AddMarker {
+            label,
+            source,
+            at_tick,
+            ticks: span_ticks,
+            ..
+        } => {
             let span = marker_span(battle.mode, *at_tick, *span_ticks);
-            EventLine { text: format!("Marker \"{}\" on {span} (from {})", label.to_string(), name(battle, *source)), detail: None }
+            EventLine {
+                text: format!("Marker \"{}\" on {span} (from {})", label.to_string(), name(battle, *source)),
+                detail: None,
+            }
         }
         BattleEvent::RemoveMarker { id } => {
             let label = battle.markers.iter().find(|m| m.id == *id).map(|m| m.label.clone());
@@ -142,12 +187,25 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
             };
             EventLine { text, detail: None }
         }
-        BattleEvent::ReviseCombatant { actor, next_action_tick, state, dv, commitment, note, name: new_name } => {
+        BattleEvent::ReviseCombatant {
+            actor,
+            next_action_tick,
+            state,
+            dv,
+            commitment,
+            note,
+            name: new_name,
+            side: new_side,
+        } => {
             let before = battle.find(*actor);
             let mut parts = Vec::new();
             if let Some(before) = before {
                 if before.next_action_tick != *next_action_tick {
-                    parts.push(format!("{} \u{2192} {}", ticks::at(battle.mode, before.next_action_tick), ticks::at(battle.mode, *next_action_tick)));
+                    parts.push(format!(
+                        "{} \u{2192} {}",
+                        ticks::at(battle.mode, before.next_action_tick),
+                        ticks::at(battle.mode, *next_action_tick)
+                    ));
                 }
                 if before.dv.penalty != dv.penalty {
                     parts.push(format!("DV {} \u{2192} {}", before.dv.penalty, dv.penalty));
@@ -168,12 +226,24 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
                 {
                     parts.push(format!("\"{}\" \u{2192} \"{}\"", before.name, new_name.to_string()));
                 }
+                if let Some(new_side) = new_side
+                    && before.side != *new_side
+                {
+                    parts.push(format!("side {} \u{2192} {}", before.side.0, new_side.0));
+                }
             }
             if !note.is_empty() {
                 parts.push(note.to_string());
             }
-            let detail = if parts.is_empty() { "No changes".to_string() } else { parts.join("; ") };
-            EventLine { text: format!("Revised {}", name(battle, *actor)), detail: Some(detail) }
+            let detail = if parts.is_empty() {
+                "No changes".to_string()
+            } else {
+                parts.join("; ")
+            };
+            EventLine {
+                text: format!("Revised {}", name(battle, *actor)),
+                detail: Some(detail),
+            }
         }
         BattleEvent::ReviseMarker { id, label, at_tick, ticks } => {
             let before = battle.markers.iter().find(|m| m.id == *id);
@@ -189,8 +259,15 @@ fn describe(battle: &Battle, event: &BattleEvent) -> EventLine {
                     parts.push(format!("{before_span} \u{2192} {after_span}"));
                 }
             }
-            let detail = if parts.is_empty() { "No changes".to_string() } else { parts.join("; ") };
-            EventLine { text: format!("Retimed \"{title}\""), detail: Some(detail) }
+            let detail = if parts.is_empty() {
+                "No changes".to_string()
+            } else {
+                parts.join("; ")
+            };
+            EventLine {
+                text: format!("Retimed \"{title}\""),
+                detail: Some(detail),
+            }
         }
     }
 }

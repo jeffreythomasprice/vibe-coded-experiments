@@ -2,8 +2,8 @@
 //! preference: JSON in localStorage, kept in sync across tabs by the `storage` event.
 
 use crate::battle::{
-    label, template, ActionError, ActionKind, BattleMode, Declaration, DeclaredAction, DeclaredEffect, MarkerId,
-    Sequence, SequenceStep,
+    ActionError, ActionKind, BattleMode, Declaration, DeclaredAction, DeclaredEffect, MarkerId, Sequence, SequenceStep, SpeedRequired,
+    label, template,
 };
 use serde::{Deserialize, Serialize};
 
@@ -19,6 +19,8 @@ pub enum LibraryError {
     ZeroDuration,
     #[error(transparent)]
     Action(#[from] ActionError),
+    #[error(transparent)]
+    Speed(#[from] SpeedRequired),
 }
 
 /// The saved, editable form of an effect — unlike `DeclaredEffect`, it carries no `MarkerId`: one
@@ -70,11 +72,21 @@ impl SavedAction {
             .effects
             .iter()
             .zip(ids)
-            .map(|(effect, id)| DeclaredEffect { id: *id, label: label(&effect.label), delay: effect.delay, ticks: effect.ticks })
+            .map(|(effect, id)| DeclaredEffect {
+                id: *id,
+                label: label(&effect.label),
+                delay: effect.delay,
+                ticks: effect.ticks,
+            })
             .collect();
 
         match &self.shape {
-            SavedShape::Single { mode, kind, speed, dv_penalty } => {
+            SavedShape::Single {
+                mode,
+                kind,
+                speed,
+                dv_penalty,
+            } => {
                 let declaration = Declaration {
                     name: Some(self.name.clone()),
                     speed: Some(*speed),
@@ -83,11 +95,14 @@ impl SavedAction {
                     effects,
                     ..Default::default()
                 };
-                Ok(SavedDeclaration::Action(template(*mode, *kind)?.declare(declaration)))
+                Ok(SavedDeclaration::Action(template(*mode, *kind)?.declare(declaration)?))
             }
-            SavedShape::Sequence { steps } => {
-                Ok(SavedDeclaration::Sequence(Sequence { name: self.name.clone(), steps: steps.clone(), current: 0, effects }))
-            }
+            SavedShape::Sequence { steps } => Ok(SavedDeclaration::Sequence(Sequence {
+                name: self.name.clone(),
+                steps: steps.clone(),
+                current: 0,
+                effects,
+            })),
         }
     }
 }
@@ -125,13 +140,23 @@ impl Library {
         validate(&name, &effects)?;
         let id = self.next_id;
         self.next_id += 1;
-        self.actions.push(SavedAction { id, name, note, shape, effects });
+        self.actions.push(SavedAction {
+            id,
+            name,
+            note,
+            shape,
+            effects,
+        });
         Ok(id)
     }
 
     pub fn replace(&mut self, action: SavedAction) -> Result<(), LibraryError> {
         validate(&action.name, &action.effects)?;
-        let existing = self.actions.iter_mut().find(|a| a.id == action.id).ok_or(LibraryError::Unknown(action.id))?;
+        let existing = self
+            .actions
+            .iter_mut()
+            .find(|a| a.id == action.id)
+            .ok_or(LibraryError::Unknown(action.id))?;
         *existing = action;
         Ok(())
     }
@@ -155,7 +180,12 @@ mod tests {
         (
             name.to_string(),
             String::new(),
-            SavedShape::Single { mode: BattleMode::Personal, kind: ActionKind::Attack, speed: 4, dv_penalty: -1 },
+            SavedShape::Single {
+                mode: BattleMode::Personal,
+                kind: ActionKind::Attack,
+                speed: 4,
+                dv_penalty: -1,
+            },
             Vec::new(),
         )
     }
@@ -183,7 +213,11 @@ mod tests {
     fn add_rejects_a_zero_duration_effect() {
         let mut library = Library::default();
         let (name, note, shape, _) = single("Butterflies");
-        let effects = vec![SavedEffect { label: "Mark".to_string(), delay: 0, ticks: 0 }];
+        let effects = vec![SavedEffect {
+            label: "Mark".to_string(),
+            delay: 0,
+            ticks: 0,
+        }];
         let err = library.add(name, note, shape, effects).unwrap_err();
         assert_eq!(err, LibraryError::ZeroDuration);
     }
@@ -203,7 +237,13 @@ mod tests {
     fn replace_rejects_an_unknown_id() {
         let mut library = Library::default();
         let (name, note, shape, effects) = single("Sweeping Blow");
-        let action = SavedAction { id: 99, name, note, shape, effects };
+        let action = SavedAction {
+            id: 99,
+            name,
+            note,
+            shape,
+            effects,
+        };
         let err = library.replace(action).unwrap_err();
         assert_eq!(err, LibraryError::Unknown(99));
     }
@@ -248,10 +288,25 @@ mod tests {
     #[test]
     fn single_action_round_trips_through_json() {
         let mut library = Library::default();
-        let effects = vec![SavedEffect { label: "Butterflies".to_string(), delay: 1, ticks: 3 }];
-        let id = library.add("Death of Obsidian Butterflies".to_string(), "note".to_string(), SavedShape::Sequence {
-            steps: vec![SequenceStep { label: "Shape".to_string(), speed: SpeedSpec::Fixed(5), dv_penalty: -3 }],
-        }, effects).unwrap();
+        let effects = vec![SavedEffect {
+            label: "Butterflies".to_string(),
+            delay: 1,
+            ticks: 3,
+        }];
+        let id = library
+            .add(
+                "Death of Obsidian Butterflies".to_string(),
+                "note".to_string(),
+                SavedShape::Sequence {
+                    steps: vec![SequenceStep {
+                        label: "Shape".to_string(),
+                        speed: SpeedSpec::Fixed(5),
+                        dv_penalty: -3,
+                    }],
+                },
+                effects,
+            )
+            .unwrap();
 
         let json = serde_json::to_string(&library).unwrap();
         let decoded: Library = serde_json::from_str(&json).unwrap();
@@ -261,8 +316,16 @@ mod tests {
     #[test]
     fn build_single_uses_the_saved_speed_and_dv_and_name() {
         let (name, note, shape, effects) = single("Sweeping Blow");
-        let action = SavedAction { id: 0, name, note, shape, effects };
-        let SavedDeclaration::Action(declared) = action.build(&[]).unwrap() else { panic!("expected a single action") };
+        let action = SavedAction {
+            id: 0,
+            name,
+            note,
+            shape,
+            effects,
+        };
+        let SavedDeclaration::Action(declared) = action.build(&[]).unwrap() else {
+            panic!("expected a single action")
+        };
         assert_eq!(declared.label.to_string(), "Sweeping Blow");
         assert_eq!(declared.speed, 4);
         assert_eq!(declared.dv_penalty, -1);
@@ -274,10 +337,22 @@ mod tests {
             id: 0,
             name: "Death of Obsidian Butterflies".to_string(),
             note: String::new(),
-            shape: SavedShape::Sequence { steps: vec![SequenceStep { label: "Cast".to_string(), speed: SpeedSpec::Variable { default: 5 }, dv_penalty: 0 }] },
-            effects: vec![SavedEffect { label: "Butterflies".to_string(), delay: 0, ticks: 3 }],
+            shape: SavedShape::Sequence {
+                steps: vec![SequenceStep {
+                    label: "Cast".to_string(),
+                    speed: SpeedSpec::Variable { default: 5 },
+                    dv_penalty: 0,
+                }],
+            },
+            effects: vec![SavedEffect {
+                label: "Butterflies".to_string(),
+                delay: 0,
+                ticks: 3,
+            }],
         };
-        let SavedDeclaration::Sequence(sequence) = action.build(&[MarkerId(7)]).unwrap() else { panic!("expected a sequence") };
+        let SavedDeclaration::Sequence(sequence) = action.build(&[MarkerId(7)]).unwrap() else {
+            panic!("expected a sequence")
+        };
         assert_eq!(sequence.effects.len(), 1);
         assert_eq!(sequence.effects[0].id, MarkerId(7));
         assert_eq!(sequence.effects[0].ticks, 3);

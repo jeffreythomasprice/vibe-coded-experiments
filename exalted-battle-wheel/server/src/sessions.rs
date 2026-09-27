@@ -6,7 +6,7 @@
 
 use crate::rooms::RoomId;
 use jsonwebtoken::errors::ErrorKind;
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 use shared::protocol::SessionRejection;
 use std::sync::Arc;
@@ -44,12 +44,19 @@ pub struct Sessions {
 
 impl Sessions {
     pub fn new(secret: &str) -> Self {
-        Self { encoding: Arc::new(EncodingKey::from_secret(secret.as_bytes())), decoding: Arc::new(DecodingKey::from_secret(secret.as_bytes())) }
+        Self {
+            encoding: Arc::new(EncodingKey::from_secret(secret.as_bytes())),
+            decoding: Arc::new(DecodingKey::from_secret(secret.as_bytes())),
+        }
     }
 
     pub fn issue(&self, room: &RoomId, host: bool) -> Result<String, SessionError> {
         let exp = (OffsetDateTime::now_utc() + SESSION_TTL).unix_timestamp();
-        let claims = Claims { rid: room.0.clone(), host, exp };
+        let claims = Claims {
+            rid: room.0.clone(),
+            host,
+            exp,
+        };
         encode(&Header::new(Algorithm::HS256), &claims, &self.encoding).map_err(SessionError::Sign)
     }
 
@@ -102,7 +109,11 @@ mod tests {
     #[test]
     fn an_expired_token_is_reported_as_expired() {
         let sessions = Sessions::new("test-secret");
-        let claims = Claims { rid: "room-1".to_string(), host: false, exp: (OffsetDateTime::now_utc() - time::Duration::hours(1)).unix_timestamp() };
+        let claims = Claims {
+            rid: "room-1".to_string(),
+            host: false,
+            exp: (OffsetDateTime::now_utc() - time::Duration::hours(1)).unix_timestamp(),
+        };
         let token = encode(&Header::new(Algorithm::HS256), &claims, &sessions.encoding).unwrap();
         assert_eq!(sessions.verify(&token, &room("room-1")), Err(SessionRejection::Expired));
     }

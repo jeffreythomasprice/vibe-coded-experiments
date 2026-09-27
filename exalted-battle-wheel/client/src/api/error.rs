@@ -25,7 +25,9 @@ pub enum ApiError {
 /// The server's own message, if the body parses as `{"error": "..."}`; otherwise the raw body,
 /// trimmed, so a proxy's plain-text error page is still readable rather than silently dropped.
 fn message(body: &str) -> String {
-    serde_json::from_str::<ApiErrorBody>(body).map(|error| error.error).unwrap_or_else(|_| body.trim().to_string())
+    serde_json::from_str::<ApiErrorBody>(body)
+        .map(|error| error.error)
+        .unwrap_or_else(|_| body.trim().to_string())
 }
 
 pub fn error_for(status: u16, body: &str) -> ApiError {
@@ -55,7 +57,10 @@ mod tests {
     #[test]
     fn forbidden_carries_the_servers_message() {
         let error = error_for(403, r#"{"error":"cannot modify or delete your own access code"}"#);
-        assert_eq!(error, ApiError::Forbidden("cannot modify or delete your own access code".to_string()));
+        assert_eq!(
+            error,
+            ApiError::Forbidden("cannot modify or delete your own access code".to_string())
+        );
     }
 
     #[test]

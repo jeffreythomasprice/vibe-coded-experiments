@@ -8,8 +8,8 @@ use crate::rooms::{Room, RoomMember, RoomStore, RoomStoreError};
 use crate::sessions::Sessions;
 use shared::battle::BattleLog;
 use shared::protocol::{
-    apply_command, room_key as validate_room_key, sanitize_name, BattleCommand, BattleRequest, ClientMessage, ConnectionId,
-    LeaveReason, Member, ProtocolError, ServerMessage,
+    BattleCommand, BattleRequest, ClientMessage, ConnectionId, LeaveReason, Member, ProtocolError, ServerMessage, apply_command,
+    room_key as validate_room_key, sanitize_name,
 };
 
 /// Every message an action results in sending, to every connection it reaches. The caller matches
@@ -27,7 +27,10 @@ pub enum RoomTransition {
 }
 
 fn just_reply(connection_id: &ConnectionId, message: ServerMessage) -> Handled {
-    Handled { sends: vec![(connection_id.clone(), message)], room_transition: None }
+    Handled {
+        sends: vec![(connection_id.clone(), message)],
+        room_transition: None,
+    }
 }
 
 fn members_of(room: &Room) -> Vec<Member> {
@@ -35,7 +38,11 @@ fn members_of(room: &Room) -> Vec<Member> {
         .iter()
         .map(|member| Member {
             id: member.connection_id.clone(),
-            name: member.name.clone().try_into().expect("valid by construction: sanitize_name enforces the bound"),
+            name: member
+                .name
+                .clone()
+                .try_into()
+                .expect("valid by construction: sanitize_name enforces the bound"),
             can_write: member.can_write,
             is_host: member.is_host,
         })
@@ -52,7 +59,11 @@ fn joined_message(room: &Room, you: &ConnectionId, sessions: &Sessions) -> Resul
         ProtocolError::Internal
     })?;
     Ok(ServerMessage::Joined {
-        room: room.display_name.clone().try_into().expect("valid by construction: see ws/handler.rs's room_key validation"),
+        room: room
+            .display_name
+            .clone()
+            .try_into()
+            .expect("valid by construction: see ws/handler.rs's room_key validation"),
         you: you.clone(),
         can_write: member.can_write,
         everyone_writes: room.everyone_writes,
@@ -64,17 +75,30 @@ fn joined_message(room: &Room, you: &ConnectionId, sessions: &Sessions) -> Resul
 }
 
 fn members_broadcast(room: &Room) -> Vec<(ConnectionId, ServerMessage)> {
-    let message = ServerMessage::Members { members: members_of(room), everyone_writes: room.everyone_writes };
-    room.members.iter().map(|member| (member.connection_id.clone(), message.clone())).collect()
+    let message = ServerMessage::Members {
+        members: members_of(room),
+        everyone_writes: room.everyone_writes,
+    };
+    room.members
+        .iter()
+        .map(|member| (member.connection_id.clone(), message.clone()))
+        .collect()
 }
 
 fn state_broadcast(room: &Room) -> Vec<(ConnectionId, ServerMessage)> {
     let message = ServerMessage::State {
-        room: room.display_name.clone().try_into().expect("valid by construction: see ws/handler.rs's room_key validation"),
+        room: room
+            .display_name
+            .clone()
+            .try_into()
+            .expect("valid by construction: see ws/handler.rs's room_key validation"),
         version: room.version,
         log: room.log.clone(),
     };
-    room.members.iter().map(|member| (member.connection_id.clone(), message.clone())).collect()
+    room.members
+        .iter()
+        .map(|member| (member.connection_id.clone(), message.clone()))
+        .collect()
 }
 
 /// Every caller reaches here through the same path regardless of which `ClientMessage` it's
@@ -103,9 +127,7 @@ fn store_error(error: RoomStoreError) -> ProtocolError {
         | RoomStoreError::GetItem(_)
         | RoomStoreError::PutItem(_)
         | RoomStoreError::Scan(_)
-        | RoomStoreError::DeleteItem(_) => {
-            ProtocolError::Internal
-        }
+        | RoomStoreError::DeleteItem(_) => ProtocolError::Internal,
     }
 }
 
@@ -132,17 +154,40 @@ where
     require_valid_token(access_codes, token).await?;
 
     match message {
-        ClientMessage::Create { room, name, everyone_writes, log } => {
-            let create = CreateRoom { room_name: room.to_string(), name: name.to_string(), everyone_writes, log };
+        ClientMessage::Create {
+            room,
+            name,
+            everyone_writes,
+            log,
+        } => {
+            let create = CreateRoom {
+                room_name: room.to_string(),
+                name: name.to_string(),
+                everyone_writes,
+                log,
+            };
             handle_create(rooms, sessions, connection_id, current_room, create).await
         }
         ClientMessage::Join { room, name, session } => {
-            handle_join(rooms, sessions, connection_id, current_room, room.to_string(), name.to_string(), session).await
+            handle_join(
+                rooms,
+                sessions,
+                connection_id,
+                current_room,
+                room.to_string(),
+                name.to_string(),
+                session,
+            )
+            .await
         }
         ClientMessage::Leave => handle_leave(rooms, connection_id, current_room).await,
         ClientMessage::Rename { name } => handle_rename(rooms, connection_id, current_room, name.to_string()).await,
-        ClientMessage::SetWritable { member, can_write } => handle_set_writable(rooms, connection_id, current_room, member, can_write).await,
-        ClientMessage::SetEveryoneWrites { everyone_writes } => handle_set_everyone_writes(rooms, connection_id, current_room, everyone_writes).await,
+        ClientMessage::SetWritable { member, can_write } => {
+            handle_set_writable(rooms, connection_id, current_room, member, can_write).await
+        }
+        ClientMessage::SetEveryoneWrites { everyone_writes } => {
+            handle_set_everyone_writes(rooms, connection_id, current_room, everyone_writes).await
+        }
         ClientMessage::Kick { member } => handle_kick(rooms, connection_id, current_room, member).await,
         ClientMessage::Request(request) => handle_request(rooms, connection_id, current_room, request).await,
         ClientMessage::Resync => handle_resync(rooms, sessions, connection_id, current_room).await,
@@ -182,7 +227,10 @@ async fn handle_create<R: RoomStore>(
     let room = rooms.create(new_room).await.map_err(store_error)?;
 
     let message = joined_message(&room, connection_id, sessions)?;
-    Ok(Handled { sends: vec![(connection_id.clone(), message)], room_transition: Some(RoomTransition::Entered(key)) })
+    Ok(Handled {
+        sends: vec![(connection_id.clone(), message)],
+        room_transition: Some(RoomTransition::Entered(key)),
+    })
 }
 
 async fn handle_join<R: RoomStore>(
@@ -208,7 +256,12 @@ async fn handle_join<R: RoomStore>(
         Some(token) => sessions.verify(&token, &room.id).map_err(ProtocolError::InvalidSession)?.host,
     };
     let can_write = is_host || room.everyone_writes;
-    room.members.push(RoomMember { connection_id: connection_id.clone(), name: sanitize_name(&name).to_string(), can_write, is_host });
+    room.members.push(RoomMember {
+        connection_id: connection_id.clone(),
+        name: sanitize_name(&name).to_string(),
+        can_write,
+        is_host,
+    });
     let room = rooms.save(room).await.map_err(store_error)?;
 
     let mut sends = members_broadcast(&room);
@@ -217,7 +270,10 @@ async fn handle_join<R: RoomStore>(
     sends.retain(|(id, _)| id != connection_id);
     sends.push((connection_id.clone(), joined_message(&room, connection_id, sessions)?));
 
-    Ok(Handled { sends, room_transition: Some(RoomTransition::Entered(key)) })
+    Ok(Handled {
+        sends,
+        room_transition: Some(RoomTransition::Entered(key)),
+    })
 }
 
 /// Removes `connection_id` from `room_key`, without requiring a token — used only by the socket's
@@ -238,22 +294,41 @@ async fn handle_leave<R: RoomStore>(rooms: &R, connection_id: &ConnectionId, cur
     let room = rooms.save(room).await.map_err(store_error)?;
 
     let mut sends = members_broadcast(&room);
-    sends.push((connection_id.clone(), ServerMessage::Left { reason: LeaveReason::Requested }));
-    Ok(Handled { sends, room_transition: Some(RoomTransition::Left) })
+    sends.push((
+        connection_id.clone(),
+        ServerMessage::Left {
+            reason: LeaveReason::Requested,
+        },
+    ));
+    Ok(Handled {
+        sends,
+        room_transition: Some(RoomTransition::Left),
+    })
 }
 
-async fn handle_rename<R: RoomStore>(rooms: &R, connection_id: &ConnectionId, current_room: Option<&str>, name: String) -> Result<Handled, ProtocolError> {
+async fn handle_rename<R: RoomStore>(
+    rooms: &R,
+    connection_id: &ConnectionId,
+    current_room: Option<&str>,
+    name: String,
+) -> Result<Handled, ProtocolError> {
     let mut room = load_current_room(rooms, current_room).await?;
     let name = sanitize_name(&name).to_string();
     let Some(member) = room.members.iter_mut().find(|member| &member.connection_id == connection_id) else {
         return Err(ProtocolError::NotInRoom);
     };
     if member.name == name {
-        return Ok(Handled { sends: Vec::new(), room_transition: None });
+        return Ok(Handled {
+            sends: Vec::new(),
+            room_transition: None,
+        });
     }
     member.name = name;
     let room = rooms.save(room).await.map_err(store_error)?;
-    Ok(Handled { sends: members_broadcast(&room), room_transition: None })
+    Ok(Handled {
+        sends: members_broadcast(&room),
+        room_transition: None,
+    })
 }
 
 /// Shared by `SetWritable` and `Kick`: the actor must currently have write access, and neither
@@ -281,10 +356,17 @@ async fn handle_set_writable<R: RoomStore>(
 ) -> Result<Handled, ProtocolError> {
     let mut room = load_current_room(rooms, current_room).await?;
     require_can_administer(&room, connection_id, &target)?;
-    let member = room.members.iter_mut().find(|member| member.connection_id == target).expect("checked above");
+    let member = room
+        .members
+        .iter_mut()
+        .find(|member| member.connection_id == target)
+        .expect("checked above");
     member.can_write = can_write;
     let room = rooms.save(room).await.map_err(store_error)?;
-    Ok(Handled { sends: members_broadcast(&room), room_transition: None })
+    Ok(Handled {
+        sends: members_broadcast(&room),
+        room_transition: None,
+    })
 }
 
 async fn handle_set_everyone_writes<R: RoomStore>(
@@ -299,21 +381,42 @@ async fn handle_set_everyone_writes<R: RoomStore>(
     }
     room.everyone_writes = everyone_writes;
     let room = rooms.save(room).await.map_err(store_error)?;
-    Ok(Handled { sends: members_broadcast(&room), room_transition: None })
+    Ok(Handled {
+        sends: members_broadcast(&room),
+        room_transition: None,
+    })
 }
 
-async fn handle_kick<R: RoomStore>(rooms: &R, connection_id: &ConnectionId, current_room: Option<&str>, target: ConnectionId) -> Result<Handled, ProtocolError> {
+async fn handle_kick<R: RoomStore>(
+    rooms: &R,
+    connection_id: &ConnectionId,
+    current_room: Option<&str>,
+    target: ConnectionId,
+) -> Result<Handled, ProtocolError> {
     let mut room = load_current_room(rooms, current_room).await?;
     require_can_administer(&room, connection_id, &target)?;
     room.members.retain(|member| member.connection_id != target);
     let room = rooms.save(room).await.map_err(store_error)?;
 
     let mut sends = members_broadcast(&room);
-    sends.push((target, ServerMessage::Left { reason: LeaveReason::Kicked }));
-    Ok(Handled { sends, room_transition: None })
+    sends.push((
+        target,
+        ServerMessage::Left {
+            reason: LeaveReason::Kicked,
+        },
+    ));
+    Ok(Handled {
+        sends,
+        room_transition: None,
+    })
 }
 
-async fn handle_request<R: RoomStore>(rooms: &R, connection_id: &ConnectionId, current_room: Option<&str>, request: BattleRequest) -> Result<Handled, ProtocolError> {
+async fn handle_request<R: RoomStore>(
+    rooms: &R,
+    connection_id: &ConnectionId,
+    current_room: Option<&str>,
+    request: BattleRequest,
+) -> Result<Handled, ProtocolError> {
     let mut room = load_current_room(rooms, current_room).await?;
     if !room.member(connection_id).is_some_and(|member| member.can_write) {
         return Err(ProtocolError::ReadOnly);
@@ -333,14 +436,22 @@ async fn handle_request<R: RoomStore>(rooms: &R, connection_id: &ConnectionId, c
     apply_command(&mut room.log, &command).map_err(|error| ProtocolError::IllegalMove(error.to_string()))?;
 
     let room = rooms.save(room).await.map_err(store_error)?;
-    Ok(Handled { sends: state_broadcast(&room), room_transition: None })
+    Ok(Handled {
+        sends: state_broadcast(&room),
+        room_transition: None,
+    })
 }
 
 /// Available to a readonly member too — it changes nothing, it only asks. Answered with the same
 /// `Joined` shape a fresh `Join` gets, since that already carries everything a resync needs
 /// (membership, permission, a fresh session token, and the current battle) with no second message
 /// type to invent.
-async fn handle_resync<R: RoomStore>(rooms: &R, sessions: &Sessions, connection_id: &ConnectionId, current_room: Option<&str>) -> Result<Handled, ProtocolError> {
+async fn handle_resync<R: RoomStore>(
+    rooms: &R,
+    sessions: &Sessions,
+    connection_id: &ConnectionId,
+    current_room: Option<&str>,
+) -> Result<Handled, ProtocolError> {
     let room = load_current_room(rooms, current_room).await?;
     Ok(just_reply(connection_id, joined_message(&room, connection_id, sessions)?))
 }
@@ -381,13 +492,24 @@ mod tests {
             host,
             None,
             "token",
-            ClientMessage::Create { room: room.try_into().unwrap(), name: "Host".try_into().unwrap(), everyone_writes, log: BattleLog::new() },
+            ClientMessage::Create {
+                room: room.try_into().unwrap(),
+                name: "Host".try_into().unwrap(),
+                everyone_writes,
+                log: BattleLog::new(),
+            },
         )
         .await
         .unwrap()
     }
 
-    async fn join(access: &MemoryAccessCodeStore, rooms: &MemoryRoomStore, sessions: &Sessions, member: &ConnectionId, room: &str) -> Handled {
+    async fn join(
+        access: &MemoryAccessCodeStore,
+        rooms: &MemoryRoomStore,
+        sessions: &Sessions,
+        member: &ConnectionId,
+        room: &str,
+    ) -> Handled {
         join_with_session(access, rooms, sessions, member, room, None).await.unwrap()
     }
 
@@ -406,7 +528,11 @@ mod tests {
             member,
             None,
             "token",
-            ClientMessage::Join { room: room.try_into().unwrap(), name: "Member".try_into().unwrap(), session },
+            ClientMessage::Join {
+                room: room.try_into().unwrap(),
+                name: "Member".try_into().unwrap(),
+                session,
+            },
         )
         .await
     }
@@ -437,7 +563,16 @@ mod tests {
         let access = access();
         let rooms = MemoryRoomStore::default();
         let sessions = sessions();
-        let result = handle(&access, &rooms, &sessions, &conn("host"), None, "not-a-real-token", ClientMessage::Leave).await;
+        let result = handle(
+            &access,
+            &rooms,
+            &sessions,
+            &conn("host"),
+            None,
+            "not-a-real-token",
+            ClientMessage::Leave,
+        )
+        .await;
         assert_eq!(result.err(), Some(ProtocolError::Unauthorized));
     }
 
@@ -455,7 +590,12 @@ mod tests {
             &conn("other"),
             None,
             "token",
-            ClientMessage::Create { room: "test room".try_into().unwrap(), name: "Other".try_into().unwrap(), everyone_writes: true, log: BattleLog::new() },
+            ClientMessage::Create {
+                room: "test room".try_into().unwrap(),
+                name: "Other".try_into().unwrap(),
+                everyone_writes: true,
+                log: BattleLog::new(),
+            },
         )
         .await;
         assert_eq!(result.err(), Some(ProtocolError::RoomExists));
@@ -476,7 +616,12 @@ mod tests {
             &host,
             Some("room"),
             "token",
-            ClientMessage::Create { room: "other".try_into().unwrap(), name: "Host".try_into().unwrap(), everyone_writes: true, log: BattleLog::new() },
+            ClientMessage::Create {
+                room: "other".try_into().unwrap(),
+                name: "Host".try_into().unwrap(),
+                everyone_writes: true,
+                log: BattleLog::new(),
+            },
         )
         .await;
         assert_eq!(result.err(), Some(ProtocolError::AlreadyInRoom));
@@ -500,11 +645,30 @@ mod tests {
         let joiner = conn("joiner");
         join(&access, &rooms, &sessions, &joiner, "room").await;
 
-        let move_result = handle(&access, &rooms, &sessions, &joiner, Some("room"), "token", ClientMessage::Request(BattleRequest::Undo)).await;
+        let move_result = handle(
+            &access,
+            &rooms,
+            &sessions,
+            &joiner,
+            Some("room"),
+            "token",
+            ClientMessage::Request(BattleRequest::Undo),
+        )
+        .await;
         assert_eq!(move_result.err(), Some(ProtocolError::ReadOnly));
 
-        let rename_result =
-            handle(&access, &rooms, &sessions, &joiner, Some("room"), "token", ClientMessage::Rename { name: "New Name".try_into().unwrap() }).await;
+        let rename_result = handle(
+            &access,
+            &rooms,
+            &sessions,
+            &joiner,
+            Some("room"),
+            "token",
+            ClientMessage::Rename {
+                name: "New Name".try_into().unwrap(),
+            },
+        )
+        .await;
         assert!(rename_result.is_ok());
     }
 
@@ -518,9 +682,19 @@ mod tests {
         let joiner = conn("joiner");
         join(&access, &rooms, &sessions, &joiner, "room").await;
 
-        let host_self_demote =
-            handle(&access, &rooms, &sessions, &host, Some("room"), "token", ClientMessage::SetWritable { member: host.clone(), can_write: false })
-                .await;
+        let host_self_demote = handle(
+            &access,
+            &rooms,
+            &sessions,
+            &host,
+            Some("room"),
+            "token",
+            ClientMessage::SetWritable {
+                member: host.clone(),
+                can_write: false,
+            },
+        )
+        .await;
         assert_eq!(host_self_demote.err(), Some(ProtocolError::NotAllowed));
 
         let readonly_self_promote = handle(
@@ -530,18 +704,42 @@ mod tests {
             &joiner,
             Some("room"),
             "token",
-            ClientMessage::SetWritable { member: joiner.clone(), can_write: true },
+            ClientMessage::SetWritable {
+                member: joiner.clone(),
+                can_write: true,
+            },
         )
         .await;
         assert_eq!(readonly_self_promote.err(), Some(ProtocolError::ReadOnly));
 
-        handle(&access, &rooms, &sessions, &host, Some("room"), "token", ClientMessage::SetWritable { member: joiner.clone(), can_write: true })
-            .await
-            .unwrap();
+        handle(
+            &access,
+            &rooms,
+            &sessions,
+            &host,
+            Some("room"),
+            "token",
+            ClientMessage::SetWritable {
+                member: joiner.clone(),
+                can_write: true,
+            },
+        )
+        .await
+        .unwrap();
 
-        let demote_host =
-            handle(&access, &rooms, &sessions, &joiner, Some("room"), "token", ClientMessage::SetWritable { member: host.clone(), can_write: false })
-                .await;
+        let demote_host = handle(
+            &access,
+            &rooms,
+            &sessions,
+            &joiner,
+            Some("room"),
+            "token",
+            ClientMessage::SetWritable {
+                member: host.clone(),
+                can_write: false,
+            },
+        )
+        .await;
         assert_eq!(demote_host.err(), Some(ProtocolError::NotAllowed));
     }
 
@@ -555,8 +753,24 @@ mod tests {
         let joiner = conn("joiner");
         join(&access, &rooms, &sessions, &joiner, "room").await;
 
-        let handled = handle(&access, &rooms, &sessions, &host, Some("room"), "token", ClientMessage::Kick { member: joiner.clone() }).await.unwrap();
-        assert!(handled.sends.iter().any(|(id, message)| id == &joiner && matches!(message, ServerMessage::Left { reason: LeaveReason::Kicked })));
+        let handled = handle(
+            &access,
+            &rooms,
+            &sessions,
+            &host,
+            Some("room"),
+            "token",
+            ClientMessage::Kick { member: joiner.clone() },
+        )
+        .await
+        .unwrap();
+        assert!(handled.sends.iter().any(|(id, message)| id == &joiner
+            && matches!(
+                message,
+                ServerMessage::Left {
+                    reason: LeaveReason::Kicked
+                }
+            )));
 
         let room = rooms.get("room").await.unwrap().unwrap();
         assert!(room.member(&joiner).is_none());
@@ -571,7 +785,16 @@ mod tests {
         create(&access, &rooms, &sessions, &host, "room", true).await;
         let before = rooms.get("room").await.unwrap().unwrap().version;
 
-        let result = handle(&access, &rooms, &sessions, &host, Some("room"), "token", ClientMessage::Request(BattleRequest::Undo)).await;
+        let result = handle(
+            &access,
+            &rooms,
+            &sessions,
+            &host,
+            Some("room"),
+            "token",
+            ClientMessage::Request(BattleRequest::Undo),
+        )
+        .await;
         assert!(matches!(result, Err(ProtocolError::IllegalMove(_))));
 
         let after = rooms.get("room").await.unwrap().unwrap().version;
@@ -585,7 +808,9 @@ mod tests {
         let sessions = sessions();
         let host = conn("host");
         create(&access, &rooms, &sessions, &host, "room", false).await;
-        handle(&access, &rooms, &sessions, &host, Some("room"), "token", ClientMessage::Leave).await.unwrap();
+        handle(&access, &rooms, &sessions, &host, Some("room"), "token", ClientMessage::Leave)
+            .await
+            .unwrap();
 
         let room = rooms.get("room").await.unwrap().unwrap();
         assert!(!room.members.iter().any(|member| member.is_host));
@@ -605,7 +830,10 @@ mod tests {
             &joiner,
             Some("room"),
             "token",
-            ClientMessage::SetWritable { member: joiner.clone(), can_write: true },
+            ClientMessage::SetWritable {
+                member: joiner.clone(),
+                can_write: true,
+            },
         )
         .await;
         assert_eq!(promote.err(), Some(ProtocolError::ReadOnly));
@@ -620,10 +848,14 @@ mod tests {
         let created = create(&access, &rooms, &sessions, &host, "room", false).await;
         let host_session = session_of(&created);
 
-        handle(&access, &rooms, &sessions, &host, Some("room"), "token", ClientMessage::Leave).await.unwrap();
+        handle(&access, &rooms, &sessions, &host, Some("room"), "token", ClientMessage::Leave)
+            .await
+            .unwrap();
 
         let rejoined = conn("host-again");
-        let joined = join_with_session(&access, &rooms, &sessions, &rejoined, "room", Some(host_session)).await.unwrap();
+        let joined = join_with_session(&access, &rooms, &sessions, &rejoined, "room", Some(host_session))
+            .await
+            .unwrap();
         match joined_of(&joined) {
             ServerMessage::Joined { can_write, .. } => assert!(can_write),
             other => panic!("expected a Joined reply, got {other:?}"),
@@ -635,9 +867,19 @@ mod tests {
         // The reclaimed host can administer another member, same as an original host could.
         let joiner = conn("joiner");
         join(&access, &rooms, &sessions, &joiner, "room").await;
-        let promote =
-            handle(&access, &rooms, &sessions, &rejoined, Some("room"), "token", ClientMessage::SetWritable { member: joiner, can_write: true })
-                .await;
+        let promote = handle(
+            &access,
+            &rooms,
+            &sessions,
+            &rejoined,
+            Some("room"),
+            "token",
+            ClientMessage::SetWritable {
+                member: joiner,
+                can_write: true,
+            },
+        )
+        .await;
         assert!(promote.is_ok());
     }
 
@@ -666,12 +908,16 @@ mod tests {
         let joined = join(&access, &rooms, &sessions, &joiner, "room").await;
         let joiner_session = session_of(&joined);
 
-        handle(&access, &rooms, &sessions, &joiner, Some("room"), "token", ClientMessage::Leave).await.unwrap();
+        handle(&access, &rooms, &sessions, &joiner, Some("room"), "token", ClientMessage::Leave)
+            .await
+            .unwrap();
 
         // `everyone_writes` is still off, so a non-host rejoin comes back read-only even though
         // it presents a valid session for this exact room.
         let rejoined = conn("joiner-again");
-        let joined = join_with_session(&access, &rooms, &sessions, &rejoined, "room", Some(joiner_session)).await.unwrap();
+        let joined = join_with_session(&access, &rooms, &sessions, &rejoined, "room", Some(joiner_session))
+            .await
+            .unwrap();
         match joined_of(&joined) {
             ServerMessage::Joined { can_write, .. } => assert!(!can_write),
             other => panic!("expected a Joined reply, got {other:?}"),
@@ -691,7 +937,9 @@ mod tests {
         // host session anyway (the scenario a duplicate browser tab, or a reconnect racing the old
         // socket's own teardown, would produce).
         let second = conn("host-second");
-        join_with_session(&access, &rooms, &sessions, &second, "room", Some(host_session)).await.unwrap();
+        join_with_session(&access, &rooms, &sessions, &second, "room", Some(host_session))
+            .await
+            .unwrap();
 
         let room = rooms.get("room").await.unwrap().unwrap();
         assert!(room.is_host(&host));
@@ -706,8 +954,9 @@ mod tests {
         let host = conn("host");
         create(&access, &rooms, &sessions, &host, "room", true).await;
 
-        let resynced =
-            handle(&access, &rooms, &sessions, &host, Some("room"), "token", ClientMessage::Resync).await.unwrap();
+        let resynced = handle(&access, &rooms, &sessions, &host, Some("room"), "token", ClientMessage::Resync)
+            .await
+            .unwrap();
         match joined_of(&resynced) {
             ServerMessage::Joined { members, you, .. } => {
                 let member = members.iter().find(|member| &member.id == you).unwrap();

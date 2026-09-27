@@ -7,8 +7,8 @@
 //! `shared/schemas/README.md`.
 
 pub use crate::generated::{
-    ClientEnvelope, ClientMessage, ConnectionId, LeaveReason, Member, MemberName, ProtocolError, RequestId,
-    RoomName, ServerEnvelope, ServerMessage,
+    ClientEnvelope, ClientMessage, ConnectionId, LeaveReason, Member, MemberName, ProtocolError, RequestId, RoomName, ServerEnvelope,
+    ServerMessage,
 };
 
 /// Why a `Join`'s `session` token was refused — split out from `ProtocolError` so the client can

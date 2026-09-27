@@ -25,7 +25,11 @@ enum RoomAction {
 }
 
 fn stay_or_resume(stored_room: Option<&str>) -> RoomAction {
-    if stored_room.is_some() { RoomAction::Resume } else { RoomAction::Stay }
+    if stored_room.is_some() {
+        RoomAction::Resume
+    } else {
+        RoomAction::Stay
+    }
 }
 
 /// Decides what to do with an invite link's `join_room` against whatever room session this
@@ -40,11 +44,17 @@ fn stay_or_resume(stored_room: Option<&str>) -> RoomAction {
 /// its resume -- it's downgraded to a complaint instead.
 fn room_plan(stored_room: Option<&str>, join_room: Option<&str>) -> RoomPlan {
     let Some(link_room) = join_room else {
-        return RoomPlan { action: stay_or_resume(stored_room), complaint: None };
+        return RoomPlan {
+            action: stay_or_resume(stored_room),
+            complaint: None,
+        };
     };
 
     match room_key(link_room) {
-        Err(error) => RoomPlan { action: stay_or_resume(stored_room), complaint: Some(error.to_string()) },
+        Err(error) => RoomPlan {
+            action: stay_or_resume(stored_room),
+            complaint: Some(error.to_string()),
+        },
         Ok(link_key) => {
             let stored_key = stored_room.and_then(|room| room_key(room).ok());
             let action = if stored_key.as_deref() == Some(link_key.as_str()) {
@@ -98,19 +108,34 @@ mod tests {
 
     #[test]
     fn nothing_stored_and_no_link_stays_in_solo() {
-        assert_eq!(room_plan(None, None), RoomPlan { action: RoomAction::Stay, complaint: None });
+        assert_eq!(
+            room_plan(None, None),
+            RoomPlan {
+                action: RoomAction::Stay,
+                complaint: None
+            }
+        );
     }
 
     #[test]
     fn a_stored_session_with_no_link_resumes() {
-        assert_eq!(room_plan(Some("my-game"), None), RoomPlan { action: RoomAction::Resume, complaint: None });
+        assert_eq!(
+            room_plan(Some("my-game"), None),
+            RoomPlan {
+                action: RoomAction::Resume,
+                complaint: None
+            }
+        );
     }
 
     #[test]
     fn a_link_naming_the_stored_room_resumes_case_and_whitespace_insensitively() {
         assert_eq!(
             room_plan(Some("My Game"), Some("  my game  ")),
-            RoomPlan { action: RoomAction::Resume, complaint: None }
+            RoomPlan {
+                action: RoomAction::Resume,
+                complaint: None
+            }
         );
     }
 
@@ -118,7 +143,10 @@ mod tests {
     fn a_link_naming_a_different_room_joins_it_as_spelled() {
         assert_eq!(
             room_plan(Some("my-game"), Some(" Tuesday's Game ")),
-            RoomPlan { action: RoomAction::Join("Tuesday's Game".to_string()), complaint: None }
+            RoomPlan {
+                action: RoomAction::Join("Tuesday's Game".to_string()),
+                complaint: None
+            }
         );
     }
 
@@ -126,7 +154,10 @@ mod tests {
     fn a_link_with_no_stored_session_joins() {
         assert_eq!(
             room_plan(None, Some("tuesday-game")),
-            RoomPlan { action: RoomAction::Join("tuesday-game".to_string()), complaint: None }
+            RoomPlan {
+                action: RoomAction::Join("tuesday-game".to_string()),
+                complaint: None
+            }
         );
     }
 

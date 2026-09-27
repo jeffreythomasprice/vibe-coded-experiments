@@ -1,10 +1,8 @@
 use crate::battle_net::Battles;
 use crate::ui::glossary::Topic;
 use crate::ui::{Combobox, DetailTip, Tip};
-use shared::battle::{
-    combatant_name, Battle, BattleEvent, BattleMode, CombatantId, JoinBattleResult, Phase, Side, MAX_COMBATANT_NAME_LEN,
-};
 use leptos::prelude::*;
+use shared::battle::{Battle, BattleEvent, BattleMode, CombatantId, JoinBattleResult, MAX_COMBATANT_NAME_LEN, Phase, Side, combatant_name};
 
 #[component]
 pub fn Roster() -> impl IntoView {

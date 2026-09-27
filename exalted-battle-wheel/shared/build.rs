@@ -47,8 +47,10 @@ const DERIVE_PATCHES: &[(&str, &[&str])] = &[
 fn merged_defs(schema_dir: &Path) -> (BTreeMap<String, Schema>, serde_json::Map<String, serde_json::Value>) {
     let mut typed = BTreeMap::new();
     let mut raw = serde_json::Map::new();
-    let mut entries: Vec<_> =
-        std::fs::read_dir(schema_dir).expect("read shared/schemas").filter_map(|entry| entry.ok()).collect();
+    let mut entries: Vec<_> = std::fs::read_dir(schema_dir)
+        .expect("read shared/schemas")
+        .filter_map(|entry| entry.ok())
+        .collect();
     entries.sort_by_key(|entry| entry.path());
 
     for entry in entries {
@@ -59,19 +61,20 @@ fn merged_defs(schema_dir: &Path) -> (BTreeMap<String, Schema>, serde_json::Map<
         println!("cargo::rerun-if-changed={}", path.display());
 
         let text = std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
-        let document: serde_json::Value =
-            serde_json::from_str(&text).unwrap_or_else(|error| panic!("parse {}: {error}", path.display()));
+        let document: serde_json::Value = serde_json::from_str(&text).unwrap_or_else(|error| panic!("parse {}: {error}", path.display()));
         let defs = document
             .get("$defs")
             .and_then(serde_json::Value::as_object)
             .unwrap_or_else(|| panic!("{}: expected a top-level \"$defs\" object", path.display()));
 
         for (name, schema) in defs {
-            let typed_schema: Schema = serde_json::from_value(schema.clone())
-                .unwrap_or_else(|error| panic!("{}: def {name}: {error}", path.display()));
-            if typed.insert(name.clone(), typed_schema).is_some() || raw.insert(name.clone(), schema.clone()).is_some()
-            {
-                panic!("def {name} is defined in more than one schema file (last seen in {})", path.display());
+            let typed_schema: Schema =
+                serde_json::from_value(schema.clone()).unwrap_or_else(|error| panic!("{}: def {name}: {error}", path.display()));
+            if typed.insert(name.clone(), typed_schema).is_some() || raw.insert(name.clone(), schema.clone()).is_some() {
+                panic!(
+                    "def {name} is defined in more than one schema file (last seen in {})",
+                    path.display()
+                );
             }
         }
     }
@@ -112,7 +115,9 @@ fn main() {
     }
 
     let mut type_space = TypeSpace::new(&settings);
-    type_space.add_ref_types(typed_defs).expect("generate Rust types from shared/schemas");
+    type_space
+        .add_ref_types(typed_defs)
+        .expect("generate Rust types from shared/schemas");
 
     let tokens = type_space.to_stream();
     let file: syn::File = syn::parse2(tokens).expect("generated code must parse as a Rust file");

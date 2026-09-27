@@ -73,8 +73,8 @@ pub fn ChangelogModal(open: RwSignal<bool>) -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use time::format_description::well_known::Iso8601;
     use time::Date;
+    use time::format_description::well_known::Iso8601;
 
     #[test]
     fn parses_and_is_nonempty() {

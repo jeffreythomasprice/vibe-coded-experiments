@@ -11,8 +11,8 @@ use crate::access_codes::AccessCodeStore;
 use crate::connections::ConnectionStore;
 use crate::rooms::RoomStore;
 use crate::routes::AppState;
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::Response;
 use futures_util::{SinkExt, StreamExt};
 use handler::RoomTransition;
@@ -123,13 +123,26 @@ where
                 continue;
             }
         };
-        let ClientEnvelope { id: request_id, token, message } = envelope;
+        let ClientEnvelope {
+            id: request_id,
+            token,
+            message,
+        } = envelope;
 
         let outcome = {
             // Held for the whole handler call, not just whichever `RoomStore` calls happen to be
             // inside it — see `Hub::lock_rooms`'s doc comment.
             let _guard = state.hub.lock_rooms().await;
-            handler::handle(&state.access_codes, &state.rooms, &state.sessions, &connection_id, current_room.as_deref(), &token, message).await
+            handler::handle(
+                &state.access_codes,
+                &state.rooms,
+                &state.sessions,
+                &connection_id,
+                current_room.as_deref(),
+                &token,
+                message,
+            )
+            .await
         };
 
         // A valid token proves this socket is a real client even if the specific action it asked
@@ -160,7 +173,9 @@ where
                 if error == ProtocolError::NoSuchRoom {
                     current_room = None;
                 }
-                state.hub.send(&connection_id, envelope_message(Some(request_id), ServerMessage::Error { error }));
+                state
+                    .hub
+                    .send(&connection_id, envelope_message(Some(request_id), ServerMessage::Error { error }));
             }
         }
 

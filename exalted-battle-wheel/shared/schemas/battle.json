@@ -248,7 +248,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "The escape hatch: a full-override correction to a combatant's queue state, appended as a normal event so Undo/Redo covers it for free (see `BattleLog`). Every field but `name` is set, not patched, so one user edit is exactly one event; `name` is optional -- `None` leaves it unchanged -- purely so a log written before this field existed still replays. Every writer sets it (to `Some`, to actually rename, or to the unchanged current name).",
+          "description": "The escape hatch: a full-override correction to a combatant's queue state, appended as a normal event so Undo/Redo covers it for free (see `BattleLog`). Every field but `name` and `side` is set, not patched, so one user edit is exactly one event; `name` and `side` are optional -- `None` leaves them unchanged -- purely so a log written before those fields existed still replays. Every writer sets them (to `Some`, to actually change something, or to the unchanged current value).",
           "properties": {
             "ReviseCombatant": {
               "properties": {
@@ -285,6 +285,16 @@
                 },
                 "note": {
                   "$ref": "#/$defs/Note"
+                },
+                "side": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Side"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "state": {
                   "$ref": "#/$defs/CombatantState"
@@ -592,6 +602,16 @@
               "type": "null"
             }
           ]
+        },
+        "flurry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlurryBreakdown"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -602,6 +622,60 @@
         "note",
         "reflexive",
         "speed"
+      ],
+      "type": "object"
+    },
+    "FlurryDvRule": {
+      "description": "How a multi-action's component DV penalties combine into one (RULES.md §4.4, p. 143; Extra Action Charms, p. 182).",
+      "enum": [
+        "Stacked",
+        "WorstOnly"
+      ],
+      "type": "string"
+    },
+    "FlurriedAction": {
+      "description": "One component of a `FlurryBreakdown` -- what a mundane flurry or GM-fiat multi-action declared as one of its actions, resolved to concrete numbers before the event is sent.",
+      "properties": {
+        "dv_penalty": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "kind": {
+          "$ref": "#/$defs/ActionKind"
+        },
+        "label": {
+          "$ref": "#/$defs/Label"
+        },
+        "speed": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "dv_penalty",
+        "kind",
+        "label",
+        "speed"
+      ],
+      "type": "object"
+    },
+    "FlurryBreakdown": {
+      "description": "Carried on a `DeclaredAction` whose `kind` is `Flurry`, recording what the resolved `speed`/`dv_penalty` were built from -- a mundane flurry (RULES.md §4.4, p. 143) or a GM-fiat multi-action tick, either declared through the app's multi-action builder rather than typed by hand.",
+      "properties": {
+        "actions": {
+          "items": {
+            "$ref": "#/$defs/FlurriedAction"
+          },
+          "type": "array"
+        },
+        "rule": {
+          "$ref": "#/$defs/FlurryDvRule"
+        }
+      },
+      "required": [
+        "actions",
+        "rule"
       ],
       "type": "object"
     },

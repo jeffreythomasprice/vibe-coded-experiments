@@ -19,11 +19,10 @@ where
     type Rejection = ApiError;
 
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        let bytes = Bytes::from_request(req, state).await.map_err(|error| {
-            ApiError::BadRequest(validate::WireError::Syntax(error.to_string()))
-        })?;
-        let text = std::str::from_utf8(&bytes)
+        let bytes = Bytes::from_request(req, state)
+            .await
             .map_err(|error| ApiError::BadRequest(validate::WireError::Syntax(error.to_string())))?;
+        let text = std::str::from_utf8(&bytes).map_err(|error| ApiError::BadRequest(validate::WireError::Syntax(error.to_string())))?;
         Ok(WireJson(validate::decode(text)?))
     }
 }

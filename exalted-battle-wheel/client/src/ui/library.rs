@@ -1,9 +1,9 @@
-use shared::library::{Library, SavedAction, SavedEffect, SavedId, SavedShape};
 use crate::persist::Persisted;
-use crate::ui::glossary::Topic;
 use crate::ui::Tip;
-use shared::battle::{catalog, ActionKind, BattleMode, SequenceStep, SpeedSpec};
+use crate::ui::glossary::Topic;
 use leptos::prelude::*;
+use shared::battle::{ActionKind, ActionSpeed, BattleMode, SequenceStep, SpeedSpec, catalog};
+use shared::library::{Library, SavedAction, SavedEffect, SavedId, SavedShape};
 
 /// A step or effect row keyed by a locally-minted id (not a `SavedId` or `MarkerId` — those are
 /// assigned only once the row is actually saved), so `<For>` can track rows through inserts and
@@ -35,6 +35,11 @@ fn next_row_id(counter: RwSignal<u32>) -> u32 {
 pub fn SavedActionEditor(
     library: Persisted<Library>,
     initial: SavedAction,
+    /// True when `initial`'s Single Speed is a placeholder rather than a real value — set by the
+    /// action panel when the selected action has no default Speed (`ActionSpeed::Required`) and
+    /// nothing was entered yet, so the editor's Speed field starts blank instead of showing "0".
+    #[prop(optional)]
+    blank_speed: bool,
     editing_id: Option<SavedId>,
     /// The battle's active mode: saving here tags the entry with it, and the catalog dropdown is
     /// filtered to it, so a saved action always names a kind that actually exists in the mode it
@@ -49,7 +54,13 @@ pub fn SavedActionEditor(
     let is_sequence = RwSignal::new(matches!(initial.shape, SavedShape::Sequence { .. }));
 
     let (initial_kind, initial_speed, initial_dv) = match &initial.shape {
-        SavedShape::Single { kind, speed, dv_penalty, .. } => (*kind, speed.to_string(), dv_penalty.to_string()),
+        SavedShape::Single {
+            kind, speed, dv_penalty, ..
+        } => (
+            *kind,
+            if blank_speed { String::new() } else { speed.to_string() },
+            dv_penalty.to_string(),
+        ),
         SavedShape::Sequence { .. } => (ActionKind::Custom, String::new(), String::new()),
     };
     let kind = RwSignal::new(initial_kind);
@@ -89,13 +100,27 @@ pub fn SavedActionEditor(
 
     let add_step = move |_| {
         let row_id = next_row_id(row_counter);
-        steps.update(|rows| rows.push(StepRow { row_id, label: RwSignal::new(String::new()), speed: RwSignal::new(String::new()), dv_penalty: RwSignal::new("0".to_string()) }));
+        steps.update(|rows| {
+            rows.push(StepRow {
+                row_id,
+                label: RwSignal::new(String::new()),
+                speed: RwSignal::new(String::new()),
+                dv_penalty: RwSignal::new("0".to_string()),
+            })
+        });
     };
     let remove_step = move |row_id: u32| steps.update(|rows| rows.retain(|row| row.row_id != row_id));
 
     let add_effect = move |_| {
         let row_id = next_row_id(row_counter);
-        effects.update(|rows| rows.push(EffectRow { row_id, label: RwSignal::new(String::new()), delay: RwSignal::new("0".to_string()), ticks: RwSignal::new("1".to_string()) }));
+        effects.update(|rows| {
+            rows.push(EffectRow {
+                row_id,
+                label: RwSignal::new(String::new()),
+                delay: RwSignal::new("0".to_string()),
+                ticks: RwSignal::new("1".to_string()),
+            })
+        });
     };
     let remove_effect = move |row_id: u32| effects.update(|rows| rows.retain(|row| row.row_id != row_id));
 
@@ -115,23 +140,41 @@ pub fn SavedActionEditor(
                 .collect();
             SavedShape::Sequence { steps: built }
         } else {
+            let selected_kind = kind.get();
+            let entered = speed.get().trim().parse::<u32>().ok();
+            if let Some(template) = catalog(mode).find(|t| t.kind == selected_kind)
+                && let Err(err) = template.resolve_speed(entered)
+            {
+                error.set(err.to_string());
+                return;
+            }
             SavedShape::Single {
                 mode,
-                kind: kind.get(),
-                speed: speed.get().trim().parse().unwrap_or(0),
+                kind: selected_kind,
+                speed: entered.unwrap_or(0),
                 dv_penalty: dv_penalty.get().trim().parse().unwrap_or(0),
             }
         };
         let built_effects: Vec<SavedEffect> = effects
             .get()
             .iter()
-            .map(|row| SavedEffect { label: row.label.get(), delay: row.delay.get().trim().parse().unwrap_or(0), ticks: row.ticks.get().trim().parse().unwrap_or(1) })
+            .map(|row| SavedEffect {
+                label: row.label.get(),
+                delay: row.delay.get().trim().parse().unwrap_or(0),
+                ticks: row.ticks.get().trim().parse().unwrap_or(1),
+            })
             .collect();
 
         let mut outcome = Ok(());
         library.update(|library| {
             outcome = match editing_id {
-                Some(id) => library.replace(SavedAction { id, name: name.get(), note: note.get(), shape, effects: built_effects }),
+                Some(id) => library.replace(SavedAction {
+                    id,
+                    name: name.get(),
+                    note: note.get(),
+                    shape,
+                    effects: built_effects,
+                }),
                 None => library.add(name.get(), note.get(), shape, built_effects).map(|_| ()),
             };
         });
@@ -190,7 +233,14 @@ pub fn SavedActionEditor(
                             </select>
                             <label class="library-field">
                                 "Speed"
-                                <input prop:value=move || speed.get() on:input=move |ev| speed.set(event_target_value(&ev)) />
+                                <input
+                                    placeholder=move || {
+                                        let required = catalog(mode).find(|t| t.kind == kind.get()).is_some_and(|t| t.speed == ActionSpeed::Required);
+                                        if required { "required" } else { "" }
+                                    }
+                                    prop:value=move || speed.get()
+                                    on:input=move |ev| speed.set(event_target_value(&ev))
+                                />
                             </label>
                             <label class="library-field">
                                 "DV"
@@ -257,7 +307,10 @@ fn SavedActionRow(id: SavedId, library: Persisted<Library>, on_edit: impl Fn(Sav
 
 fn shape_label(shape: &SavedShape) -> String {
     match shape {
-        SavedShape::Single { mode: BattleMode::Personal, .. } => "Action".to_string(),
+        SavedShape::Single {
+            mode: BattleMode::Personal,
+            ..
+        } => "Action".to_string(),
         SavedShape::Single { mode, .. } => format!("Action ({})", mode.label()),
         SavedShape::Sequence { steps } => format!("Sequence \u{00d7}{}", steps.len()),
     }
@@ -270,11 +323,22 @@ mod tests {
     #[test]
     fn shape_label_distinguishes_single_and_sequence() {
         assert_eq!(
-            shape_label(&SavedShape::Single { mode: BattleMode::Personal, kind: ActionKind::Attack, speed: 4, dv_penalty: -1 }),
+            shape_label(&SavedShape::Single {
+                mode: BattleMode::Personal,
+                kind: ActionKind::Attack,
+                speed: 4,
+                dv_penalty: -1
+            }),
             "Action"
         );
         assert_eq!(
-            shape_label(&SavedShape::Sequence { steps: vec![SequenceStep { label: "Shape".to_string(), speed: SpeedSpec::Fixed(5), dv_penalty: -2 }] }),
+            shape_label(&SavedShape::Sequence {
+                steps: vec![SequenceStep {
+                    label: "Shape".to_string(),
+                    speed: SpeedSpec::Fixed(5),
+                    dv_penalty: -2
+                }]
+            }),
             "Sequence \u{00d7}1"
         );
     }

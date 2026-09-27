@@ -7,7 +7,7 @@ use crate::access::Access;
 use crate::rooms::RoomAdmin;
 use crate::ui::config::format_timestamp;
 use crate::ui::glossary::Topic;
-use crate::ui::room::{copy_invite_link, RoomsOpen};
+use crate::ui::room::{RoomsOpen, copy_invite_link};
 use crate::ui::{Modal, Spinner, Tip};
 use leptos::prelude::*;
 use leptos::web_sys;
@@ -31,7 +31,11 @@ struct RoomsLink {
 
 impl RoomsLink {
     fn new() -> Self {
-        Self { url: RwSignal::new(None), copied: RwSignal::new(None), working: RwSignal::new(None) }
+        Self {
+            url: RwSignal::new(None),
+            copied: RwSignal::new(None),
+            working: RwSignal::new(None),
+        }
     }
 }
 

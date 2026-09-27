@@ -17,9 +17,9 @@ use std::net::SocketAddr;
 use std::process::ExitCode;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::trace::TraceLayer;
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, thiserror::Error)]
 enum StartupError {
@@ -85,11 +85,17 @@ async fn run() -> Result<(), StartupError> {
 
     let listener = tokio::net::TcpListener::bind(config.address)
         .await
-        .map_err(|source| StartupError::Bind { address: config.address, source })?;
+        .map_err(|source| StartupError::Bind {
+            address: config.address,
+            source,
+        })?;
 
     tracing::info!(address = %config.address, "listening");
 
-    axum::serve(listener, app).with_graceful_shutdown(shutdown_signal()).await.map_err(StartupError::Serve)
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .map_err(StartupError::Serve)
 }
 
 /// Deliberately not `#[tokio::main]`: `server/.env` must be loaded into the process environment

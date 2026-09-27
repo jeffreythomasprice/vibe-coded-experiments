@@ -21,7 +21,12 @@ pub type Toasts = RwSignal<Vec<Toast>>;
 pub fn error(message: impl Into<String>) {
     let Some(toasts) = use_context::<Toasts>() else { return };
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-    toasts.update(|toasts| toasts.push(Toast { id, message: message.into() }));
+    toasts.update(|toasts| {
+        toasts.push(Toast {
+            id,
+            message: message.into(),
+        })
+    });
 }
 
 fn dismiss(toasts: Toasts, id: u32) {

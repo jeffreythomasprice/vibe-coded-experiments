@@ -1,7 +1,7 @@
 use crate::ui::glossary::Topic;
-use crate::ui::{ticks, Tip};
-use shared::battle::{Battle, CombatantId, CombatantState};
+use crate::ui::{Tip, ticks};
 use leptos::prelude::*;
+use shared::battle::{Battle, CombatantId, CombatantState};
 
 pub type Hovered = RwSignal<Option<CombatantId>>;
 

@@ -14,7 +14,7 @@ mod storage;
 mod ui;
 
 use app::App;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 use tracing_web::MakeWebConsoleWriter;
 
 #[cfg(debug_assertions)]
@@ -32,10 +32,7 @@ fn init_logging() {
         .without_time()
         .with_writer(MakeWebConsoleWriter::new());
 
-    tracing_subscriber::registry()
-        .with(filter)
-        .with(fmt_layer)
-        .init();
+    tracing_subscriber::registry().with(filter).with(fmt_layer).init();
 }
 
 fn main() {

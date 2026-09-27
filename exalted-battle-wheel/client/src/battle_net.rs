@@ -8,15 +8,14 @@ use crate::access::Access;
 use crate::net::{Socket, SocketError};
 use crate::persist::Persisted;
 use leptos::prelude::*;
-use leptos::wasm_bindgen::closure::Closure;
 use leptos::wasm_bindgen::JsCast;
+use leptos::wasm_bindgen::closure::Closure;
 use leptos::web_sys;
 use serde::{Deserialize, Serialize};
 use shared::battle::{BattleError, BattleEvent, BattleLog};
 use shared::protocol::{
-    apply_command, sanitize_name, BattleCommand, BattleRequest, ClientEnvelope, ClientMessage, ConnectionId,
-    LeaveReason, Member, ProtocolError, RequestId, RoomName, ServerEnvelope, ServerMessage, SessionRejection,
-    MAX_ROOM_NAME_LEN,
+    BattleCommand, BattleRequest, ClientEnvelope, ClientMessage, ConnectionId, LeaveReason, MAX_ROOM_NAME_LEN, Member, ProtocolError,
+    RequestId, RoomName, ServerEnvelope, ServerMessage, SessionRejection, apply_command, sanitize_name,
 };
 use std::collections::HashMap;
 use std::future::Future;
@@ -133,7 +132,9 @@ const BASE_RECONNECT_DELAY_MS: i32 = 2_000;
 const MAX_RECONNECT_DELAY_MS: i32 = 30_000;
 
 fn reconnect_delay_ms(attempt: u32) -> i32 {
-    BASE_RECONNECT_DELAY_MS.saturating_mul(1 << attempt.min(4)).min(MAX_RECONNECT_DELAY_MS)
+    BASE_RECONNECT_DELAY_MS
+        .saturating_mul(1 << attempt.min(4))
+        .min(MAX_RECONNECT_DELAY_MS)
 }
 
 /// The read-only view every UI component reads the battle log through. Context is keyed by type
@@ -370,7 +371,11 @@ impl Battles {
         let Some(socket) = self.ensure_socket() else { return };
         // No `session` yet -- the server's own `Joined` reply mints one, and `handle_message`
         // rewrites this with it.
-        self.rejoin.set(Some(Rejoin { room: room.clone(), name: name.clone(), session: None }));
+        self.rejoin.set(Some(Rejoin {
+            room: room.clone(),
+            name: name.clone(),
+            session: None,
+        }));
         self.mode.set(Mode::Connecting);
         let this = *self;
         let message = ClientMessage::Create {
@@ -392,10 +397,18 @@ impl Battles {
 
     pub fn join_room(&self, room: String, name: String) {
         let Some(socket) = self.ensure_socket() else { return };
-        self.rejoin.set(Some(Rejoin { room: room.clone(), name: name.clone(), session: None }));
+        self.rejoin.set(Some(Rejoin {
+            room: room.clone(),
+            name: name.clone(),
+            session: None,
+        }));
         self.mode.set(Mode::Connecting);
         let this = *self;
-        let message = ClientMessage::Join { room: truncated_room_name(&room), name: sanitize_name(&name), session: None };
+        let message = ClientMessage::Join {
+            room: truncated_room_name(&room),
+            name: sanitize_name(&name),
+            session: None,
+        };
         self.send_with(socket, message, move |result| {
             if let Err(error) = result {
                 tracing::error!(%error, "could not join room");
@@ -422,7 +435,12 @@ impl Battles {
     }
 
     pub fn rename(&self, name: String) {
-        self.send_action(ClientMessage::Rename { name: sanitize_name(&name) }, "rename");
+        self.send_action(
+            ClientMessage::Rename {
+                name: sanitize_name(&name),
+            },
+            "rename",
+        );
     }
 
     pub fn set_writable(&self, member: ConnectionId, can_write: bool) {
@@ -524,8 +542,10 @@ impl Battles {
     /// the same way itself; a request still in flight when this fires would otherwise sit in
     /// `pending` forever, wedging `busy()` at `true` for the rest of the session.
     fn reset_to_solo(&self) {
-        let stranded: Vec<Settle> =
-            self.pending.try_update(|pending| pending.drain().map(|(_, settle)| settle).collect()).unwrap_or_default();
+        let stranded: Vec<Settle> = self
+            .pending
+            .try_update(|pending| pending.drain().map(|(_, settle)| settle).collect())
+            .unwrap_or_default();
         for settle in stranded {
             settle(Err(RequestError::Abandoned));
         }
@@ -562,13 +582,29 @@ impl Battles {
     fn handle_message(self, envelope: ServerEnvelope) {
         let ServerEnvelope { reply_to, message } = envelope;
         let result = match message {
-            ServerMessage::Joined { room, you, can_write, everyone_writes, members, version: _, log, session } => {
+            ServerMessage::Joined {
+                room,
+                you,
+                can_write,
+                everyone_writes,
+                members,
+                version: _,
+                log,
+                session,
+            } => {
                 // Rebuilt from the server's own reply, not just the `session` field -- the name a
                 // rejoin should present is this connection's own name as the server has it (found
                 // by matching `you`), which a `Rename` since the last `Joined` may have changed.
-                let name =
-                    members.iter().find(|member| member.id == you).map(|member| member.name.to_string()).unwrap_or_default();
-                self.rejoin.set(Some(Rejoin { room: room.to_string(), name, session: Some(session) }));
+                let name = members
+                    .iter()
+                    .find(|member| member.id == you)
+                    .map(|member| member.name.to_string())
+                    .unwrap_or_default();
+                self.rejoin.set(Some(Rejoin {
+                    room: room.to_string(),
+                    name,
+                    session: Some(session),
+                }));
 
                 self.log.set(log);
                 self.self_id.set(Some(you));
@@ -599,9 +635,7 @@ impl Battles {
                 match reason {
                     LeaveReason::Requested => {}
                     LeaveReason::Kicked => crate::ui::toast::error("You were removed from the room.".to_string()),
-                    LeaveReason::RoomClosed => {
-                        crate::ui::toast::error("This room was closed by an administrator.".to_string())
-                    }
+                    LeaveReason::RoomClosed => crate::ui::toast::error("This room was closed by an administrator.".to_string()),
                 }
                 self.disconnect();
                 Ok(())
@@ -630,8 +664,10 @@ impl Battles {
         spawn_local(async move {
             self.socket.set(None);
             // Anything still waiting on a reply from this connection will never hear back.
-            let stranded: Vec<Settle> =
-                self.pending.try_update(|pending| pending.drain().map(|(_, settle)| settle).collect()).unwrap_or_default();
+            let stranded: Vec<Settle> = self
+                .pending
+                .try_update(|pending| pending.drain().map(|(_, settle)| settle).collect())
+                .unwrap_or_default();
             for settle in stranded {
                 settle(Err(RequestError::Disconnected));
             }

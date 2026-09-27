@@ -106,7 +106,11 @@ fn window_size() -> (f64, f64) {
 }
 
 fn plain_topic(topic: Topic) -> TipContent {
-    TipContent::Topic(TopicTip { topic, notice: None, detail: None })
+    TipContent::Topic(TopicTip {
+        topic,
+        notice: None,
+        detail: None,
+    })
 }
 
 pub fn on_pointer_enter(topic: Topic) -> impl Fn(PointerEvent) + Clone {
@@ -263,7 +267,7 @@ fn render_topic(tip: TopicTip, teaching: bool) -> AnyView {
         {quote.map(|q| view! { <div class="tip-quote">{format!("“{q}”")}</div> })}
         {cite_label.map(|c| view! { <div class="tip-cite">{c}</div> })}
     }
-        .into_any()
+    .into_any()
 }
 
 /// Mounted once, high in the tree. Follows the most recently anchored tip and flips to stay on

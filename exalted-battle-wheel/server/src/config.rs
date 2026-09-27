@@ -76,8 +76,10 @@ pub struct Config {
 impl Config {
     pub fn from_env() -> Result<Self, ConfigError> {
         let address_raw = std::env::var("ADDRESS").unwrap_or_else(|_| DEFAULT_ADDRESS.to_string());
-        let address =
-            address_raw.parse().map_err(|source| ConfigError::Address { value: address_raw.clone(), source })?;
+        let address = address_raw.parse().map_err(|source| ConfigError::Address {
+            value: address_raw.clone(),
+            source,
+        })?;
 
         let cors_origins_raw = std::env::var("CORS_ORIGINS").unwrap_or_else(|_| DEFAULT_CORS_ORIGINS.to_string());
         let cors_origins = cors_origins_raw
@@ -85,13 +87,14 @@ impl Config {
             .map(str::trim)
             .filter(|origin| !origin.is_empty())
             .map(|origin| {
-                HeaderValue::from_str(origin)
-                    .map_err(|source| ConfigError::CorsOrigin { value: origin.to_string(), source })
+                HeaderValue::from_str(origin).map_err(|source| ConfigError::CorsOrigin {
+                    value: origin.to_string(),
+                    source,
+                })
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let access_codes_table =
-            std::env::var("ACCESS_CODES_TABLE").unwrap_or_else(|_| DEFAULT_ACCESS_CODES_TABLE.to_string());
+        let access_codes_table = std::env::var("ACCESS_CODES_TABLE").unwrap_or_else(|_| DEFAULT_ACCESS_CODES_TABLE.to_string());
         let rooms_table = std::env::var("ROOMS_TABLE").unwrap_or_else(|_| DEFAULT_ROOMS_TABLE.to_string());
         let connections_table = std::env::var("CONNECTIONS_TABLE").unwrap_or_else(|_| DEFAULT_CONNECTIONS_TABLE.to_string());
 
@@ -99,9 +102,16 @@ impl Config {
         // local DynamoDB.
         let dynamodb_endpoint = std::env::var("DYNAMODB_ENDPOINT").ok().filter(|value| !value.is_empty());
 
-        let session_secret =
-            std::env::var("SESSION_SECRET").map_err(|_| ConfigError::Missing { key: "SESSION_SECRET" })?;
+        let session_secret = std::env::var("SESSION_SECRET").map_err(|_| ConfigError::Missing { key: "SESSION_SECRET" })?;
 
-        Ok(Self { address, cors_origins, access_codes_table, rooms_table, connections_table, dynamodb_endpoint, session_secret })
+        Ok(Self {
+            address,
+            cors_origins,
+            access_codes_table,
+            rooms_table,
+            connections_table,
+            dynamodb_endpoint,
+            session_secret,
+        })
     }
 }

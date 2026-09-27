@@ -72,10 +72,16 @@ fn non_empty(value: Option<String>) -> Option<String> {
 /// failure to tidy the URL -- the values are already in Rust by then, and a link that merely fails
 /// to scrub itself isn't worth a toast.
 pub fn take_startup_params() -> StartupParams {
-    let Some(window) = web_sys::window() else { return StartupParams::default() };
+    let Some(window) = web_sys::window() else {
+        return StartupParams::default();
+    };
     let location = window.location();
-    let Ok(search) = location.search() else { return StartupParams::default() };
-    let Ok(params) = web_sys::UrlSearchParams::new_with_str(&search) else { return StartupParams::default() };
+    let Ok(search) = location.search() else {
+        return StartupParams::default();
+    };
+    let Ok(params) = web_sys::UrlSearchParams::new_with_str(&search) else {
+        return StartupParams::default();
+    };
 
     let auth_code = non_empty(params.get(AUTH_CODE_PARAM));
     let join_room = non_empty(params.get(JOIN_ROOM_PARAM));
@@ -130,7 +136,10 @@ mod tests {
     #[test]
     fn invite_url_carries_both_encoded_parameters() {
         let url = invite_url("https://exalted.jeffrey.lol", "/", "hunter 2", "tuesday's game");
-        assert_eq!(url, "https://exalted.jeffrey.lol/?auth_code=hunter%202&join_room=tuesday%27s%20game");
+        assert_eq!(
+            url,
+            "https://exalted.jeffrey.lol/?auth_code=hunter%202&join_room=tuesday%27s%20game"
+        );
     }
 
     #[test]

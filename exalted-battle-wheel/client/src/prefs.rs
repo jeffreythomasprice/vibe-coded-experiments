@@ -1,13 +1,13 @@
 //! User preferences, on top of `persist::Persisted`. Add one by adding a field to `Prefs` and one
 //! line to `Prefs::load`.
 
-use shared::library::Library;
 use crate::persist::Persisted;
 use leptos::prelude::*;
-use leptos::wasm_bindgen::closure::Closure;
 use leptos::wasm_bindgen::JsCast;
+use leptos::wasm_bindgen::closure::Closure;
 use leptos::web_sys;
 use serde::{Deserialize, Serialize};
+use shared::library::Library;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]

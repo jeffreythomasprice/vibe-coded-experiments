@@ -117,7 +117,8 @@ never relative ("2 hours ago") and never converted to the viewer's local timezon
 exception is the "Change Log" dialog (`ui/changelog.rs`): its dates are authored, date-only ISO
 8601 strings from `client/changelog.toml` (baked in with `include_str!`, parsed at runtime), shown
 verbatim rather than through `format_timestamp` since there's no `Timestamp` to format. Add a new
-release there, oldest-first at the bottom of the file.
+release there, oldest-first at the bottom of the file. Don't update the change log as a side effect
+of other work — only touch it when the user specifically asks.
 
 # Hosting
 

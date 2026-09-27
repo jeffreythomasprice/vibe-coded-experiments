@@ -13,12 +13,12 @@
 //! personal Aim's 3/-1 — so only the active section's rows can be resolved against `catalog(mode)`
 //! without guessing.
 
-use crate::ui::action_panel::{rail_target, RailSelection};
+use crate::ui::action_panel::{RailSelection, rail_target};
 use crate::ui::format::{format_dv_penalty_compact, format_speed_compact};
 use crate::ui::glossary::action_topic;
 use crate::ui::tip::{on_focus_in, on_focus_out, on_pointer_enter, on_pointer_leave};
-use shared::battle::{ActionTemplate, Battle, BattleMode, CombatantId, MASS_ONLY_CATALOG, PERSONAL_CATALOG, SOCIAL_CATALOG};
 use leptos::prelude::*;
+use shared::battle::{ActionTemplate, Battle, BattleMode, CombatantId, MASS_ONLY_CATALOG, PERSONAL_CATALOG, SOCIAL_CATALOG};
 
 #[component]
 pub fn ReferenceRail() -> impl IntoView {
@@ -79,10 +79,19 @@ fn ReferenceSection(
 }
 
 #[component]
-fn ReferenceRow(mode_for_topics: BattleMode, template: ActionTemplate, clickable: Signal<bool>, target: Memo<Option<CombatantId>>) -> impl IntoView {
+fn ReferenceRow(
+    mode_for_topics: BattleMode,
+    template: ActionTemplate,
+    clickable: Signal<bool>,
+    target: Memo<Option<CombatantId>>,
+) -> impl IntoView {
     let selection = expect_context::<RailSelection>();
     let kind = template.kind;
-    let stat = format!("{}/{}", format_speed_compact(template.speed), format_dv_penalty_compact(template.dv_penalty));
+    let stat = format!(
+        "{}/{}",
+        format_speed_compact(template.speed),
+        format_dv_penalty_compact(template.dv_penalty)
+    );
 
     let pick = move |_| {
         if !clickable.get_untracked() {
@@ -127,7 +136,7 @@ fn ReferenceRow(mode_for_topics: BattleMode, template: ActionTemplate, clickable
                 <span class="reference-stat">{stat.clone()}</span>
             </button>
         }
-            .into_any(),
+        .into_any(),
         None => button.into_any(),
     }
 }

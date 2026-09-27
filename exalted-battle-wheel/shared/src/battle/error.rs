@@ -1,10 +1,13 @@
 use crate::battle::action::ActionError;
+use crate::battle::flurry::FlurryError;
 use crate::battle::ids::{CombatantId, MarkerId, Tick};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BattleError {
     #[error(transparent)]
     Action(#[from] ActionError),
+    #[error(transparent)]
+    Flurry(#[from] FlurryError),
     #[error("no combatant with id {0:?}")]
     UnknownCombatant(CombatantId),
     #[error("no marker with id {0:?}")]
@@ -48,7 +51,11 @@ pub enum RestoreError {
     #[error("the saved cursor is {cursor} but the log has {len} events")]
     CursorOutOfRange { cursor: usize, len: usize },
     #[error("saved event {index} no longer replays: {source}")]
-    Unreplayable { index: usize, #[source] source: BattleError },
+    Unreplayable {
+        index: usize,
+        #[source]
+        source: BattleError,
+    },
     #[error("the saved combatant id counter is {counter}, but the log already uses {used:?}")]
     StaleCombatantCounter { counter: u32, used: CombatantId },
     #[error("the saved marker id counter is {counter}, but the log already uses {used:?}")]

@@ -32,11 +32,17 @@ pub struct Citation {
 
 impl Citation {
     fn page(book: Book, page: u16) -> Citation {
-        Citation { book, pages: Pages::One(page) }
+        Citation {
+            book,
+            pages: Pages::One(page),
+        }
     }
 
     fn range(book: Book, first: u16, last: u16) -> Citation {
-        Citation { book, pages: Pages::Range(first, last) }
+        Citation {
+            book,
+            pages: Pages::Range(first, last),
+        }
     }
 
     pub fn label(&self) -> String {
@@ -66,19 +72,31 @@ pub struct Entry {
 }
 
 fn book(page: u16, quote: &'static str) -> Source {
-    Source::Book { quote: Some(quote), cite: Citation::page(Book::Core, page) }
+    Source::Book {
+        quote: Some(quote),
+        cite: Citation::page(Book::Core, page),
+    }
 }
 
 fn book_unquoted(page: u16) -> Source {
-    Source::Book { quote: None, cite: Citation::page(Book::Core, page) }
+    Source::Book {
+        quote: None,
+        cite: Citation::page(Book::Core, page),
+    }
 }
 
 fn book_range_unquoted(first: u16, last: u16) -> Source {
-    Source::Book { quote: None, cite: Citation::range(Book::Core, first, last) }
+    Source::Book {
+        quote: None,
+        cite: Citation::range(Book::Core, first, last),
+    }
 }
 
 fn book_range(first: u16, last: u16, quote: &'static str) -> Source {
-    Source::Book { quote: Some(quote), cite: Citation::range(Book::Core, first, last) }
+    Source::Book {
+        quote: Some(quote),
+        cite: Citation::range(Book::Core, first, last),
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -137,6 +155,7 @@ pub enum Topic {
     SectorCountdown,
     MarkerGutter,
     Markers,
+    MarkerStart,
     MarkerDuration,
 
     // Queue
@@ -180,6 +199,11 @@ pub enum Topic {
     SavedActions,
     SavedSequenceStep,
     ActionEffects,
+    MultipleActions,
+    EffectiveSpeed,
+    FlurryDvStacked,
+    FlurryDvWorstOnly,
+    MultipleActionDice,
 
     // Battle mode
     BattleModeSelect,
@@ -243,28 +267,48 @@ struct ModeTopics {
 impl ModeTopics {
     /// The same topic in all three modes: the action's Speed/DV don't differ between them.
     const fn shared(topic: Topic) -> Self {
-        Self { personal: Some(topic), mass: Some(topic), social: Some(topic) }
+        Self {
+            personal: Some(topic),
+            mass: Some(topic),
+            social: Some(topic),
+        }
     }
 
     /// Physical combat only. Mass combat reuses `PERSONAL_CATALOG` verbatim (RULES.md §11.1,
     /// p. 166: characters there "substitute long ticks for standard ticks"), so a personal-only
     /// topic still applies there; social combat doesn't have the kind at all.
     const fn physical(topic: Topic) -> Self {
-        Self { personal: Some(topic), mass: Some(topic), social: None }
+        Self {
+            personal: Some(topic),
+            mass: Some(topic),
+            social: None,
+        }
     }
 
     const fn mass_only(topic: Topic) -> Self {
-        Self { personal: None, mass: Some(topic), social: None }
+        Self {
+            personal: None,
+            mass: Some(topic),
+            social: None,
+        }
     }
 
     const fn social_only(topic: Topic) -> Self {
-        Self { personal: None, mass: None, social: Some(topic) }
+        Self {
+            personal: None,
+            mass: None,
+            social: Some(topic),
+        }
     }
 
     /// One topic for both physical modes, a different one for social — used where the Speed
     /// and/or DV genuinely differ there (RULES.md §11.2, p. 171), not just the fiction.
     const fn split(physical: Topic, social: Topic) -> Self {
-        Self { personal: Some(physical), mass: Some(physical), social: Some(social) }
+        Self {
+            personal: Some(physical),
+            mass: Some(physical),
+            social: Some(social),
+        }
     }
 
     const fn get(self, mode: BattleMode) -> Option<Topic> {
@@ -336,7 +380,10 @@ impl Topic {
                 term: "The Battle Wheel",
                 what: "A tick tracker for Exalted 2nd Edition combat.",
                 interacts: "Combat time advances in ticks, roughly one second apiece. Rather than the book's paper, dice, or counter-pile methods, the wheel shows every combatant's next action tick at a glance and rotates as the current tick advances.",
-                source: book(141, "Combat time passes in abstract increments called ticks, each of which is approximately one second long by default, but may vary slightly depending on what happens during the tick."),
+                source: book(
+                    141,
+                    "Combat time passes in abstract increments called ticks, each of which is approximately one second long by default, but may vary slightly depending on what happens during the tick.",
+                ),
             },
             Topic::Undo => Entry {
                 term: "Undo",
@@ -360,13 +407,19 @@ impl Topic {
                 term: "Current tick",
                 what: "The tick the battle is on right now.",
                 interacts: "Combat always advances from tick 0 forward, one tick at a time. A combatant becomes eligible to act the moment the current tick reaches her next action tick.",
-                source: book(141, "Combat always advances from tick 0 forward one tick at a time until the end of battle."),
+                source: book(
+                    141,
+                    "Combat always advances from tick 0 forward one tick at a time until the end of battle.",
+                ),
             },
             Topic::AdvanceTick => Entry {
                 term: "Advance Tick",
                 what: "Moves the current tick forward by one.",
                 interacts: "All actions declared on a tick are resolved as of the start of that tick, so two combatants can act — and even kill each other — simultaneously. The tick cannot advance while someone whose next action tick has arrived still hasn't declared an action: everyone up must act before time moves on.",
-                source: book(141, "When multiple characters act on the same tick, their actions occur simultaneously. Nothing actually happens until every action is rolled and the tick is concluded, so actions disregard the effects of ‘previous’ rolls made in the same tick."),
+                source: book(
+                    141,
+                    "When multiple characters act on the same tick, their actions occur simultaneously. Nothing actually happens until every action is rolled and the tick is concluded, so actions disregard the effects of ‘previous’ rolls made in the same tick.",
+                ),
             },
             Topic::TeachingMode => Entry {
                 term: "Teaching mode",
@@ -390,7 +443,10 @@ impl Topic {
                 term: "Reaction count",
                 what: "The highest number of successes rolled by anyone who simultaneously joined the fight at its start.",
                 interacts: "It is fixed once the battle starts and used ever after: every combatant's First Action is (reaction count − her Join Battle successes), and anyone joining a fight already in progress uses this same frozen number.",
-                source: book(141, "The reaction count for the combat scene is a value equal to the highest number of successes rolled by anyone who simultaneously joins at the start of combat."),
+                source: book(
+                    141,
+                    "The reaction count for the combat scene is a value equal to the highest number of successes rolled by anyone who simultaneously joins at the start of combat.",
+                ),
             },
             Topic::Changelog => Entry {
                 term: "Change Log",
@@ -541,7 +597,10 @@ impl Topic {
                 term: "Botch",
                 what: "This combatant botched her Join Battle roll.",
                 interacts: "A botched Join Battle roll forces a First Action of tick 6 regardless of the reaction count — the worst possible result, overriding the usual formula entirely.",
-                source: book(141, "Any character who botches a Join Battle roll automatically has a First Action of 6."),
+                source: book(
+                    141,
+                    "Any character who botches a Join Battle roll automatically has a First Action of 6.",
+                ),
             },
             Topic::AddCombatant => Entry {
                 term: "Add",
@@ -559,7 +618,10 @@ impl Topic {
                 term: "Start Battle",
                 what: "Locks in the reaction count from everyone's Join Battle results and schedules each combatant's First Action.",
                 interacts: "First Action = (reaction count − successes), clamped to a maximum of 6; a botch forces First Action 6. From this point the reaction count no longer changes, even as new combatants join later.",
-                source: book(141, "The First Action of each character equals (reaction count − successes), to a maximum value of 6."),
+                source: book(
+                    141,
+                    "The First Action of each character equals (reaction count − successes), to a maximum value of 6.",
+                ),
             },
             Topic::FirstAction => Entry {
                 term: "First Action",
@@ -571,14 +633,20 @@ impl Topic {
                 term: "Next action tick",
                 what: "The tick on which this combatant is next free to act.",
                 interacts: "Set to (the tick she acted on) + (the Speed of that action). She is inactive between now and then except for reflexive actions like Move, which never change this number.",
-                source: book(141, "Once a character takes her first action in combat, she must wait a number of ticks equal to the Speed rating of her action before she acts again."),
+                source: book(
+                    141,
+                    "Once a character takes her first action in combat, she must wait a number of ticks equal to the Speed rating of her action before she acts again.",
+                ),
             },
 
             Topic::TickWheel => Entry {
                 term: "The tick wheel",
                 what: "Seven wedges counting down to \u{201c}now\u{201d} at the top, with six rings marking DV penalty from the rim (-0) inward.",
                 interacts: "A token's angular position is when she next acts; its distance from the rim is how badly her last action degraded her DV. As the current tick advances, tokens sweep toward the top wedge and slide outward as their DV penalty refreshes.",
-                source: book(141, "Combat time passes in abstract increments called ticks … Combat always advances from tick 0 forward one tick at a time until the end of battle."),
+                source: book(
+                    141,
+                    "Combat time passes in abstract increments called ticks … Combat always advances from tick 0 forward one tick at a time until the end of battle.",
+                ),
             },
             Topic::TickSlot => Entry {
                 term: "Sector",
@@ -626,13 +694,25 @@ impl Topic {
                 term: "Markers",
                 what: "A labelled span of ticks you place on the wheel by hand, for anything the app doesn't track on its own.",
                 interacts: "The book has several effects that last from a fixed tick until some future tick rather than following a combatant's own DV-refresh cycle — a coordinated attack's window of opportunity lasts from the moment it succeeds until the tick the commander next acts, and a saved action's effects (see Save) drop markers automatically when they resolve. Use a marker for anything similar: a Stunned penalty, a hazard, a standing order.",
-                source: book(144, "If the roll succeeds, the coordination opens a \u{201c}window of opportunity\u{201d} on the tick when the commander next acts."),
+                source: book(
+                    144,
+                    "If the roll succeeds, the coordination opens a \u{201c}window of opportunity\u{201d} on the tick when the commander next acts.",
+                ),
+            },
+            Topic::MarkerStart => Entry {
+                term: "Start",
+                what: "When the span begins: some ticks from now, some ticks ago, or on a specific tick.",
+                interacts: "Backdating is for a marker you forgot to place — one that started 2 ticks ago and lasts 15 ends on the same tick it would have if placed on time, so there's no need to shorten it to 13 by hand. A span that has already ended entirely can't be added, since it would never show up on the wheel or in the queue.",
+                source: Source::AppConvention,
             },
             Topic::MarkerDuration => Entry {
                 term: "Duration",
-                what: "How many ticks from now the marker starts, and how many ticks it spans once it starts.",
+                what: "How many ticks it spans once it starts.",
                 interacts: "A one-tick marker (the default) covers only its starting tick — the shape of a coordinated attack's window of opportunity. A longer span suits an effect the book anchors to a future tick instead of to whoever it affects, such as a Stunned penalty that lasts until the tick when the attacker next acts.",
-                source: book(153, "Failure leaves the victim at -2 dice to all non-reflexive rolls until the tick when the attacker next acts."),
+                source: book(
+                    153,
+                    "Failure leaves the victim at -2 dice to all non-reflexive rolls until the tick when the attacker next acts.",
+                ),
             },
 
             Topic::Queue => Entry {
@@ -643,7 +723,7 @@ impl Topic {
             },
             Topic::ReviseCombatant => Entry {
                 term: "Revise combatant",
-                what: "A full-override escape hatch: retime this combatant's next action, adjust her DV, force a state change, or clear what she's committed to.",
+                what: "A full-override escape hatch: rename this combatant, move her to another side, retime her next action, adjust her DV, force a state change, or clear what she's committed to.",
                 interacts: "Applying this appends a correction event rather than rewriting history, so Undo reverts exactly this edit and nothing else — retcon an action to resolve in fewer ticks, then undo it, and the original tick comes back.",
                 source: Source::AppConvention,
             },
@@ -670,7 +750,10 @@ impl Topic {
                 term: "DV refresh",
                 what: "The tick on which this combatant's DV penalty clears.",
                 interacts: "Refresh happens at the very start of the tick she's next permitted to act, before any new action's penalty is applied — so a Speed 5 action taken on tick 3 leaves her penalized for ticks 3–7 and clear again at the top of tick 8. Aborting out of Guard or Aim is the exception: the follow-up action does not refresh DV, it only reschedules the next action.",
-                source: book(141, "most actions also have a defense penalty, determining how much the action reduces the character's Defense Value … until her next action refreshes this trait."),
+                source: book(
+                    141,
+                    "most actions also have a defense penalty, determining how much the action reduces the character's Defense Value … until her next action refreshes this trait.",
+                ),
             },
             Topic::StateNormal => Entry {
                 term: "Normal",
@@ -682,43 +765,58 @@ impl Topic {
                 term: "Guarding",
                 what: "Holding a defensive stance, ready to abort into another action.",
                 interacts: "This is 2E's way of waiting for a better moment — there is no separate “delay” action. Guard imposes no DV penalty, and on any tick while guarding she may abort into any action except Aim or another Guard. The new action does not refresh her DV; she still has to wait out its full Speed before acting again.",
-                source: book(143, "This new action does not refresh DV but is a normal action in all other ways. Therefore, the character must wait for a number of ticks to pass according to the Speed of the new action to refresh DV and act again."),
+                source: book(
+                    143,
+                    "This new action does not refresh DV but is a normal action in all other ways. Therefore, the character must wait for a number of ticks to pass according to the Speed of the new action to refresh DV and act again.",
+                ),
             },
             Topic::StateAiming => Entry {
                 term: "Aiming",
                 what: "Studying a specific target, building toward a bonus on the attack.",
                 interacts: "Completing the full Speed 3 grants +3 bonus dice on the next attack against that target; aborting early to attack instead grants +1 die per tick spent aiming. Either way the attack does not refresh DV. Re-entering aiming instead of attacking banks the bonus for later without dropping DV any further.",
-                source: book(142, "the attack does not refresh DV, even though it counts as a normal action in all other respects."),
+                source: book(
+                    142,
+                    "the attack does not refresh DV, even though it counts as a normal action in all other respects.",
+                ),
             },
             Topic::StateInactive => Entry {
                 term: "Inactive",
                 what: "Unconscious, paralyzed, or otherwise not choosing her own actions.",
                 interacts: "Not voluntary — it interrupts whatever she was doing the instant it applies, and while inactive she cannot defend herself at all (DV 0). It ends as abruptly as it began: on the next available tick she acts normally again with fully refreshed DV.",
-                source: book(143, "On the next available tick, the character may act normally with refreshed DV and a full range of options."),
+                source: book(
+                    143,
+                    "On the next available tick, the character may act normally with refreshed DV and a full range of options.",
+                ),
             },
             Topic::StateInSequence => Entry {
                 term: "In a sorcery sequence",
                 what: "Partway through shaping a spell: one to three Speed 5 shaping actions followed by a Cast whose Speed is set by a Join Battle roll (0–6), all of which must complete unbroken.",
                 interacts: "While shaping she cannot use Charms or Combos (including reflexive ones) or take voluntary reflexive actions such as speech, Move, or Dash. If the sequence is broken, the spell is lost and she must make an immediate Join Battle roll to re-enter combat.",
-                source: book(251, "cannot use Charms or Combos, including reflexive Charms. He cannot take voluntary reflexive actions, such as speech, Move or Dash."),
+                source: book(
+                    251,
+                    "cannot use Charms or Combos, including reflexive Charms. He cannot take voluntary reflexive actions, such as speech, Move or Dash.",
+                ),
             },
 
             Topic::UpNow => Entry {
                 term: "Up now",
                 what: "Everyone whose next action tick has arrived and who must declare an action before the tick can advance.",
                 interacts: "There is no passing: doing nothing is itself an action (typically Guard), so everyone listed here needs a declared action before Advance Tick will proceed. A combatant who is Inactive is the one exception — she isn't choosing her actions at all, so she's left off this list and never blocks the tick from advancing.",
-                source: book(141, "Doing nothing is itself an action, whether a character is waiting in a guard position or paralyzed."),
+                source: book(
+                    141,
+                    "Doing nothing is itself an action, whether a character is waiting in a guard position or paralyzed.",
+                ),
             },
             Topic::ShapingSection => Entry {
                 term: "Shaping",
                 what: "Combatants partway through a sorcery sequence, even on ticks where they aren't otherwise due to act.",
-                interacts: "A shaping sorcerer can be interrupted at any time by a distraction, not only on her own tick — so she's listed here for the whole shaping sequence, separately from the Up now list.",
+                interacts: "A shaping sorcerer can be interrupted by a distraction any time before Cast Sorcery resolves, not only on her own tick — so she's listed here for the whole shaping sequence, separately from the Up now list. Once she's advanced onto Cast, the spell has already taken effect and there's nothing left to interrupt — only her own Speed left to wait out.",
                 source: book_range_unquoted(251, 252),
             },
             Topic::ActionSelect => Entry {
                 term: "Action",
                 what: "The action this combatant is about to declare.",
-                interacts: "Every action carries a Speed (ticks until her next action) and a DV penalty (how much it degrades her Dodge and Parry DV until it refreshes) — shown below once selected. Clicking a row in the reference rail selects it here for the highlighted \u{201c}Up now\u{201d} combatant, without declaring it.",
+                interacts: "Every action carries a Speed (ticks until her next action) and a DV penalty (how much it degrades her Dodge and Parry DV until it refreshes) — shown below once selected. Clicking a row in the reference rail selects it here for the highlighted \u{201c}Up now\u{201d} combatant, without declaring it. Starts on whatever this combatant last declared, including a typed name, a saved action, or a non-default Speed/DV.",
                 source: book_unquoted(141),
             },
             Topic::ActionName => Entry {
@@ -737,19 +835,28 @@ impl Topic {
                 term: "Reflexive",
                 what: "Can be taken on any tick, whether or not this combatant is otherwise due to act.",
                 interacts: "Reflexive actions never refresh DV and don't count as a “true action” for effects that last until the character's next action — Move is the only reflexive entry in the core catalog.",
-                source: book(141, "Reflexive actions do not refresh a character's DV, nor do they count as true actions for the purposes of effects that last until a character's next action."),
+                source: book(
+                    141,
+                    "Reflexive actions do not refresh a character's DV, nor do they count as true actions for the purposes of effects that last until a character's next action.",
+                ),
             },
             Topic::Flurryable => Entry {
                 term: "Flurryable",
                 what: "Whether this action can be one part of a flurry — several actions declared together on a single tick.",
                 interacts: "A flurry's Speed is the highest Speed among its actions, and each action in it still imposes its own DV penalty, cumulatively. Aim and Guard can never be part of a flurry.",
-                source: book(143, "In the case of attacks, a weapon cannot be used to attack more times in a flurry than its rate."),
+                source: book(
+                    143,
+                    "In the case of attacks, a weapon cannot be used to attack more times in a flurry than its rate.",
+                ),
             },
             Topic::SpeedOverride => Entry {
                 term: "Speed",
                 what: "Lets you enter a Speed other than this action's default — needed whenever the actual Speed isn't fixed.",
-                interacts: "What it means depends on the action selected: for Attack, the weapon or maneuver's own Speed (a weapon missing any of its trait minimums adds one to its Speed per missing dot, up to a ceiling of 6); for Flurry, the highest Speed among the flurried actions; for Activate Charm, whatever Speed the Charm specifies; for Join Battle in progress, the roll result. Ignored for any action whose Speed is fixed.",
-                source: book(373, "For each dot the character is missing from any minimum, subtract one from the Accuracy and Defense of the weapon, and add one to its Speed (to a maximum total of Speed rating 6)."),
+                interacts: "What it means depends on the action selected: for Attack and Social Attack, the weapon, maneuver, or Ability's own Speed — neither has a default, so Declare stays disabled until you enter one (a weapon missing any of its trait minimums adds one to its Speed per missing dot, up to a ceiling of 6); for Flurry, the highest Speed among the flurried actions; for Activate Charm, whatever Speed the Charm specifies; for Join Battle in progress, the roll result. Ignored for any action whose Speed is fixed.",
+                source: book(
+                    373,
+                    "For each dot the character is missing from any minimum, subtract one from the Accuracy and Defense of the weapon, and add one to its Speed (to a maximum total of Speed rating 6).",
+                ),
             },
             Topic::DvOverride => Entry {
                 term: "DV override",
@@ -760,14 +867,17 @@ impl Topic {
             Topic::Declare => Entry {
                 term: "Declare",
                 what: "Resolves this action on the current tick: schedules her next action tick and applies her DV penalty right now.",
-                interacts: "Only available once her next action tick has arrived. Contrast a sorcery selection, which instead starts a multi-tick sequence — see Declare (sorcery).",
+                interacts: "Only available once her next action tick has arrived, and — for Attack or Social Attack — once a Speed has been entered, since neither has a default to fall back on. Contrast a sorcery selection, which instead starts a multi-tick sequence — see Declare (sorcery).",
                 source: Source::AppConvention,
             },
             Topic::DeclareSequence => Entry {
                 term: "Declare (sorcery)",
                 what: "Starts a multi-tick sorcery sequence instead of resolving on this tick.",
                 interacts: "Each Shape action is Speed 5 at the Circle's DV penalty; the closing Cast Sorcery action is DV -0 and its Speed is whatever you roll for Join Battle, not fixed. The whole sequence must run unbroken or the spell is interrupted.",
-                source: book(252, "CAST SORCERY (VARIES, DV -0) … Determine the Speed of this action by making a Join Battle roll."),
+                source: book(
+                    252,
+                    "CAST SORCERY (VARIES, DV -0) … Determine the Speed of this action by making a Join Battle roll.",
+                ),
             },
             Topic::ShapeTerrestrial => Entry {
                 term: "Shape Terrestrial Circle Sorcery",
@@ -794,10 +904,10 @@ impl Topic {
                 source: book_range_unquoted(251, 252),
             },
             Topic::CastSpeedOverride => Entry {
-                term: "Sequence speed",
-                what: "Overrides the Speed of this combatant's next sorcery step. Only meaningful on the final Cast Sorcery step, where the Speed is rolled via Join Battle rather than fixed.",
-                interacts: "Enter the result of the Cast step's Join Battle roll while the display still shows the last Shape step, then click Advance — that click both moves the sorcerer onto Cast Sorcery and consumes this value to schedule it. Once the display already reads \"Cast Sorcery,\" this field no longer does anything; on any earlier Shape step it's likewise ignored, since Shape's Speed is always a fixed 5.",
-                source: book_unquoted(252),
+                term: "Cast successes",
+                what: "The Join Battle roll that sets Cast Sorcery's Speed, exactly like joining a fight already in progress.",
+                interacts: "Enter successes (or tick Botch) while the display still shows the last Shape step, then click Advance — that click both moves the sorcerer onto Cast Sorcery, releasing the spell immediately, and uses this roll to schedule her own next action afterward. This only appears when the upcoming step is Cast; a Shape step's own Speed is always a fixed 5, so there's nothing to enter for it.",
+                source: book(252, "Determine the Speed of this action by making a Join Battle roll."),
             },
             Topic::AdvanceSequence => Entry {
                 term: "Advance",
@@ -809,7 +919,10 @@ impl Topic {
                 term: "Rejoin successes",
                 what: "Successes on the immediate Join Battle roll made after a sorcery sequence is interrupted and the spell is lost.",
                 interacts: "This new Join Battle roll works exactly like joining a fight already in progress: it schedules a fresh next action tick from the frozen reaction count, same as any other combatant re-entering the fray. The book states this explicitly for a failed distraction check; the app applies the same rejoin roll when the sequence is broken voluntarily too.",
-                source: book(252, "If the character loses the spell due to distraction, he refocuses on the world, and the player makes an immediate Join Battle roll."),
+                source: book(
+                    252,
+                    "If the character loses the spell due to distraction, he refocuses on the world, and the player makes an immediate Join Battle roll.",
+                ),
             },
             Topic::InterruptSequence => Entry {
                 term: "Interrupt",
@@ -821,7 +934,10 @@ impl Topic {
                 term: "Distracted",
                 what: "Records that this combatant was distracted while shaping and failed the roll to keep her concentration, losing the spell.",
                 interacts: "The book models a distraction as a reflexive Wits + Occult roll at difficulty 1 to keep concentration; only a failed roll belongs here — a success means the sequence continues uninterrupted and there's nothing to declare. Losing the spell this way still forces an immediate Join Battle roll to re-enter combat, using the successes entered above.",
-                source: book(251, "If the character is distracted, then his player must make a reflexive (Wits + Occult) roll for the Exalt to keep his concentration. This roll is difficulty 1."),
+                source: book(
+                    251,
+                    "If the character is distracted, then his player must make a reflexive (Wits + Occult) roll for the Exalt to keep his concentration. This roll is difficulty 1.",
+                ),
             },
 
             Topic::SaveAction => Entry {
@@ -829,6 +945,52 @@ impl Topic {
                 what: "Saves the currently selected action or sorcery — with its name, Speed, DV, and any effects — to your library for reuse.",
                 interacts: "Starts from whatever is currently selected above: a renamed catalog action keeps its entered name and overrides, a sorcery keeps its Shape/Cast steps. Nothing is declared by saving — use Declare for that, or pick the saved entry later from the Saved group in the list above.",
                 source: Source::AppConvention,
+            },
+            Topic::MultipleActions => Entry {
+                term: "Multiple actions\u{2026}",
+                what: "Records several actions resolved on one tick — a mundane flurry, a Charm-based extra action, or GM fiat — as a single declare.",
+                interacts: "List the component actions, pick how their DV penalties combine (Stack every penalty for a mundane flurry, Worst DV only for an Extra Action Charm), and optionally set an effective Speed — it defaults to the highest component Speed. Commits as one event, so Undo reverts the whole multi-action in a single step.",
+                source: book(
+                    143,
+                    "The character launches a quick series of blows or otherwise performs multiple actions rolled on a single tick.",
+                ),
+            },
+            Topic::EffectiveSpeed => Entry {
+                term: "Effective speed",
+                what: "Which tick this multi-action's actor next acts on.",
+                interacts: "Defaults to the highest Speed among the component actions, per the normal flurry rule. Override it for the book's own exception (a flurry that's only drawing a weapon and attacking with it uses the weapon's own Speed even if lower than 5) or for GM fiat granting a different effective Speed outright.",
+                source: book(
+                    143,
+                    "The Speed rating of a flurry equals the highest Speed rating of any action taken as part of the cascade.",
+                ),
+            },
+            Topic::FlurryDvStacked => Entry {
+                term: "Stack every penalty",
+                what: "Sums every component action's own DV penalty — the mundane flurry rule.",
+                interacts: "Matches a normal flurry (RULES.md §4.4): each action imposes its own DV penalty, cumulatively. Contrast Worst DV only, used for Extra Action Charms.",
+                source: book(
+                    143,
+                    "Each action in the flurry imposes its own defense penalty as normal for that action.",
+                ),
+            },
+            Topic::FlurryDvWorstOnly => Entry {
+                term: "Worst DV only",
+                what: "Only the single worst component DV penalty applies; the others impose none.",
+                interacts: "The Extra Action Charm-type rule: an Extra Action Charm \"functions as a normal flurry but has no multiple action penalties. In addition, only the action with the highest DV penalty imposes a DV penalty.\" Use Stack every penalty instead for a mundane (non-Charm) flurry.",
+                source: book(
+                    182,
+                    "Each functions as a normal flurry but has no multiple action penalties. In addition, only the action with the highest DV penalty imposes a DV penalty. The others do not.",
+                ),
+            },
+            Topic::MultipleActionDice => Entry {
+                term: "Multiple-action dice penalty",
+                what: "The dice pool penalty for taking several actions in one tick, separate from the DV penalty above.",
+                interacts: "Only applies under Stack every penalty — Extra Action Charms (Worst DV only) are explicitly exempt from it. Not tracked automatically here since it applies to the dice pool, not the wheel; apply it to whatever's rolled for each component action.",
+                source: book_range(
+                    124,
+                    125,
+                    "The first action loses dice equal to the number of actions attempted, with each successive action cumulatively increasing the penalty by one die. Therefore, a character taking three actions would be at -3 dice to the first action, -4 to the second and -5 to the third.",
+                ),
             },
             Topic::ManageSavedActions => Entry {
                 term: "Manage\u{2026}",
@@ -846,13 +1008,19 @@ impl Topic {
                 term: "Step",
                 what: "One action in a saved sorcery sequence: its label, Speed, and DV penalty.",
                 interacts: "Leave Speed blank to mark a step's Speed as rolled via Join Battle rather than fixed — the same convention Cast Sorcery uses. A saved sequence isn't limited to the book's three Circles: use this to record a Charm or house rule with its own multi-action timing.",
-                source: book(252, "CAST SORCERY (VARIES, DV -0) … Determine the Speed of this action by making a Join Battle roll."),
+                source: book(
+                    252,
+                    "CAST SORCERY (VARIES, DV -0) … Determine the Speed of this action by making a Join Battle roll.",
+                ),
             },
             Topic::ActionEffects => Entry {
                 term: "Effects",
                 what: "Labelled spans this action drops onto the wheel the moment it resolves (or, for a sorcery, the moment its Cast resolves).",
                 interacts: "Each effect gets its own marker, delayed by the ticks you set and lasting the duration you set — the same tick-anchored-span shape as a coordinated attack's window of opportunity. Use this for anything a saved action should leave behind: a hazard, a standing bonus, a Charm's lingering condition.",
-                source: book(144, "If the roll succeeds, the coordination opens a \u{201c}window of opportunity\u{201d} on the tick when the commander next acts."),
+                source: book(
+                    144,
+                    "If the roll succeeds, the coordination opens a \u{201c}window of opportunity\u{201d} on the tick when the commander next acts.",
+                ),
             },
 
             Topic::ActionAim => Entry {
@@ -864,14 +1032,18 @@ impl Topic {
             Topic::ActionAttack => Entry {
                 term: "Attack (weapon Speed/-1)",
                 what: "A strike with a weapon or unarmed maneuver.",
-                interacts: "Speed is the Speed of the weapon or maneuver used, not a fixed number — enter it as a Speed override. Can be flurried up to the weapon's Rate.",
+                interacts: "Speed is the Speed of the weapon or maneuver used, not a fixed number, and there's no default to fall back on — enter it as a Speed override before Declare will accept it. Can be flurried up to the weapon's Rate.",
                 source: book(143, "The Speed of an attack is the Speed of the weapon or attack maneuver used."),
             },
             Topic::ActionDash => Entry {
                 term: "Dash (3/-2)",
                 what: "A flat-out sprint at Dexterity + 6 yards per tick.",
                 interacts: "The rate is (Dexterity + 6) yards per tick, minus wound penalties and her armor's mobility penalty, and never below 2 yards per tick; swimming or climbing instead covers a flat Dexterity yards per tick. Cannot be parried at all without a stunt or magic, on top of the -2 DV. A combatant can either Move or Dash on a given tick, never both.",
-                source: book_range(143, 145, "The character runs flat out, sprinting at speeds up to (Dexterity + 6 \u{2212} current wound penalties \u{2212} armor mobility penalty) yards per tick. The minimum rate of a dash is two yards per tick."),
+                source: book_range(
+                    143,
+                    145,
+                    "The character runs flat out, sprinting at speeds up to (Dexterity + 6 \u{2212} current wound penalties \u{2212} armor mobility penalty) yards per tick. The minimum rate of a dash is two yards per tick.",
+                ),
             },
             Topic::ActionGuard => Entry {
                 term: "Guard (3/-0)",
@@ -883,7 +1055,10 @@ impl Topic {
                 term: "Inactive (5/Special)",
                 what: "Unconscious, paralyzed, helpless, or otherwise not acting by choice.",
                 interacts: "Not voluntarily chosen — it interrupts a pending action the instant the condition arises. While inactive, DV is 0. It ends abruptly: on the next available tick she acts normally with fully refreshed DV.",
-                source: book(143, "Characters who are inactive cannot defend themselves; they start the action at DV 0."),
+                source: book(
+                    143,
+                    "Characters who are inactive cannot defend themselves; they start the action at DV 0.",
+                ),
             },
             Topic::ActionMiscellaneous => Entry {
                 term: "Miscellaneous action (5/Varies)",
@@ -895,13 +1070,20 @@ impl Topic {
                 term: "Move (0/None)",
                 what: "Ordinary movement, up to Dexterity yards per tick.",
                 interacts: "The rate is Dexterity yards per tick over land, minus wound penalties and her armor's mobility penalty, and never below 1 yard per tick; swimming or climbing halves it (rounded down). Reflexive: it never refreshes DV, doesn't count as a true action, and is available even on ticks she couldn't otherwise act. A combatant can either Move or Dash on a given tick, never both \u{2014} a Dash supersedes lesser movement.",
-                source: book_range(141, 145, "The character sprints up to (Dexterity) yards per tick over land. Wound penalties subtract from this speed, as does the mobility penalty of any armor worn. The value cannot drop below a speed of one yard per tick."),
+                source: book_range(
+                    141,
+                    145,
+                    "The character sprints up to (Dexterity) yards per tick over land. Wound penalties subtract from this speed, as does the mobility penalty of any armor worn. The value cannot drop below a speed of one yard per tick.",
+                ),
             },
             Topic::ActionFlurry => Entry {
                 term: "Flurry (Varies/Varies)",
                 what: "Several actions declared together on a single tick.",
-                interacts: "Speed is the highest Speed among the flurried actions; each action still imposes its own DV penalty, cumulatively. A weapon cannot attack more times in a flurry than its Rate, and Aim and Guard can never be flurried.",
-                source: book(143, "In the case of attacks, a weapon cannot be used to attack more times in a flurry than its rate."),
+                interacts: "Speed is the highest Speed among the flurried actions; each action still imposes its own DV penalty, cumulatively. A weapon cannot attack more times in a flurry than its Rate, and Aim and Guard can never be flurried. To have the app compute the combined Speed and DV from a list of component actions instead of typing them in by hand, use Multiple actions\u{2026} below.",
+                source: book(
+                    143,
+                    "In the case of attacks, a weapon cannot be used to attack more times in a flurry than its rate.",
+                ),
             },
             Topic::ActionActivateCharm => Entry {
                 term: "Activate Charm / Combo / Power (Varies)",
@@ -913,13 +1095,19 @@ impl Topic {
                 term: "Clinch (6/-1)",
                 what: "A grapple attempt: Speed 6, Rate 1, no damage on the initial hit.",
                 interacts: "On a hit the attacker controls the clinch and the victim's action shifts immediately to Inactive. Maintaining the clinch requires using every subsequent action to renew it; the controller cannot block or dodge without a stunt or magic while doing so. The -1 DV is the standard Attack penalty (p.143), not something specific to grappling — the maneuver's own rules (cited below) only fix its Speed, Accuracy, and Rate.",
-                source: book(157, "The maneuver has Speed 6, Accuracy +0 and Rate 1. This attack can be dodged or parried normally, and it inflicts no damage if it hits."),
+                source: book(
+                    157,
+                    "The maneuver has Speed 6, Accuracy +0 and Rate 1. This attack can be dodged or parried normally, and it inflicts no damage if it hits.",
+                ),
             },
             Topic::ActionJoinBattleInProgress => Entry {
                 term: "Join Battle, in progress (Varies/-0)",
                 what: "How a combatant joins a fight that has already started.",
                 interacts: "Speed is (the scene's frozen reaction count − her Wits + Awareness successes), clamped to 0–6 — the same formula used for everyone's original First Action, reusing the reaction count set when the battle began. On Speed 0 she isn't held back to a future tick at all: she proceeds immediately to declare another action for that tick, as if Join Battle itself had been reflexive.",
-                source: book(144, "the character proceeds immediately to declare another action for that tick as if Join Battle was a reflexive action"),
+                source: book(
+                    144,
+                    "the character proceeds immediately to declare another action for that tick as if Join Battle was a reflexive action",
+                ),
             },
             Topic::ActionCustom => Entry {
                 term: "Custom",
@@ -951,7 +1139,10 @@ impl Topic {
                 term: "Draw / Ready Weapons (5/-1)",
                 what: "Draws or readies as many weapons as the character has hands.",
                 interacts: "Ready is normally automatic and diceless, sized to as many weapons as the character has hands and weapons available — the book gives it this exact -1 DV entry directly. A natural weapon like a punch or kick never needs readying; only the most extreme conditions (numb, frostbitten hands) call for a Dexterity + combat Ability roll at difficulty 1 instead.",
-                source: book(144, "A character may use a miscellaneous action to unsheathe, draw or otherwise ready as many weapons as she has hands and weapons available."),
+                source: book(
+                    144,
+                    "A character may use a miscellaneous action to unsheathe, draw or otherwise ready as many weapons as she has hands and weapons available.",
+                ),
             },
             Topic::ActionRiseFromProne => Entry {
                 term: "Rise From Prone (5/-1)",
@@ -1025,7 +1216,10 @@ impl Topic {
                 term: "Join Debate",
                 what: "Social combat's version of Join Battle: schedules a debater's First Action.",
                 interacts: "Rolled as plain Wits + Awareness, identical to personal combat's Join Battle \u{2014} only the scale of the resulting ticks (long ticks, roughly a minute each) differs.",
-                source: book(169, "The Join Debate action replaces Join Battle, with the roll using (Wits + Awareness) being made as normal. Time progresses forward in long ticks lasting one minute each, the same time frame used in mass combat."),
+                source: book(
+                    169,
+                    "The Join Debate action replaces Join Battle, with the roll using (Wits + Awareness) being made as normal. Time progresses forward in long ticks lasting one minute each, the same time frame used in mass combat.",
+                ),
             },
             Topic::SocialMonologue => Entry {
                 term: "Monologue / Study (3/-2)",
@@ -1036,26 +1230,35 @@ impl Topic {
             Topic::SocialAttack => Entry {
                 term: "Social Attack (by Ability/-2)",
                 what: "A push against someone's Mental Defense Value, using Presence, Investigation, or Performance.",
-                interacts: "Speed and Rate are set by the Ability used: Presence is Speed 4, Rate 2; Investigation is Speed 5, Rate 2; Performance is Speed 6, Rate 1. Presence and Investigation each reach a single target (a person or one organized social unit); Performance reaches everyone who can perceive it, with no way to exclude anyone.",
+                interacts: "Speed and Rate are set by the Ability used: Presence is Speed 4, Rate 2; Investigation is Speed 5, Rate 2; Performance is Speed 6, Rate 1. There's no default Speed to fall back on — enter it as a Speed override before Declare will accept it. Presence and Investigation each reach a single target (a person or one organized social unit); Performance reaches everyone who can perceive it, with no way to exclude anyone.",
                 source: book_range_unquoted(171, 172),
             },
             Topic::SocialMove => Entry {
                 term: "Move (0/-0)",
                 what: "Drifting around while the exchange goes on; distance barely matters here.",
                 interacts: "A long tick covers ten times the ground a second-long tick does, but position has no effect on a debate \u{2014} the only movement that matters is leaving the encounter entirely. Reflexive and Speed 0, so it never refreshes MDV and never costs her place in the cycle.",
-                source: book(171, "although characters can move at 10 times the speed in a long tick that they can cover in second-based ticks, moving has no significance unless they move out of the encounter entirely"),
+                source: book(
+                    171,
+                    "although characters can move at 10 times the speed in a long tick that they can cover in second-based ticks, moving has no significance unless they move out of the encounter entirely",
+                ),
             },
             Topic::SocialDash => Entry {
                 term: "Dash (3/-3)",
                 what: "A social combat sprint away from the exchange \u{2014} disengaging attention rather than covering ground.",
                 interacts: "Covers ten times the ground over a long tick that a physical Dash does in a normal tick, but the distance is beside the point: unlike a social Move, a Dash is a real action, so it forfeits any chance to rebut \u{2014} which is why the book reserves it for literally running away. Carries a steeper DV penalty than physical Dash (-3, not -2), and like its physical counterpart cannot be parried at all without a stunt or magic.",
-                source: book(171, "Because dashing actually counts as an action and forfeits opportunities for rebuttal, taking the dash action (see p. 143) is generally only used for literally running away."),
+                source: book(
+                    171,
+                    "Because dashing actually counts as an action and forfeits opportunities for rebuttal, taking the dash action (see p. 143) is generally only used for literally running away.",
+                ),
             },
             Topic::SocialInactive => Entry {
                 term: "Inactive (3/Special)",
                 what: "Not participating in the exchange at all \u{2014} distracted, unconscious, or otherwise unable to engage socially.",
                 interacts: "Unlike physical Inactive (DV 0, wide open), the book runs this the other way: being unreachable for conversation makes a character socially invulnerable rather than defenseless, since there's no way to argue with someone who can't hear you. The Speed/refresh shape otherwise follows the standard Inactive action.",
-                source: book(171, "while unconsciousness makes characters physically vulnerable, such a state generally serves to make them socially invulnerable by making it impossible to communicate with them"),
+                source: book(
+                    171,
+                    "while unconsciousness makes characters physically vulnerable, such a state generally serves to make them socially invulnerable by making it impossible to communicate with them",
+                ),
             },
             Topic::SocialMiscellaneous => Entry {
                 term: "Miscellaneous Action (5/-2)",
@@ -1066,7 +1269,7 @@ impl Topic {
             Topic::SocialFlurry => Entry {
                 term: "Flurry (varies/varies)",
                 what: "Several social actions declared together on one tick.",
-                interacts: "The default here (Speed 4, DV -4) models two Presence attacks flurried together \u{2014} an app convention for the common case, not a fixed book value; Speed is still the highest Speed among the flurried actions and each still applies its own DV penalty, cumulatively.",
+                interacts: "The default here (Speed 4, DV -4) models two Presence attacks flurried together \u{2014} an app convention for the common case, not a fixed book value; Speed is still the highest Speed among the flurried actions and each still applies its own DV penalty, cumulatively. To have the app compute the combined Speed and DV from a list of component actions instead of typing them in by hand, use Multiple actions\u{2026} below.",
                 source: Source::AppConvention,
             },
             Topic::ActionJoinDebateInProgress => Entry {
@@ -1140,6 +1343,7 @@ mod tests {
         Topic::SectorCountdown,
         Topic::MarkerGutter,
         Topic::Markers,
+        Topic::MarkerStart,
         Topic::MarkerDuration,
         Topic::Queue,
         Topic::ReviseCombatant,
@@ -1177,6 +1381,11 @@ mod tests {
         Topic::SavedActions,
         Topic::SavedSequenceStep,
         Topic::ActionEffects,
+        Topic::MultipleActions,
+        Topic::EffectiveSpeed,
+        Topic::FlurryDvStacked,
+        Topic::FlurryDvWorstOnly,
+        Topic::MultipleActionDice,
         Topic::ActionAim,
         Topic::ActionAttack,
         Topic::ActionDash,
@@ -1229,7 +1438,9 @@ mod tests {
     #[test]
     fn every_book_citation_has_a_plausible_page_and_nonempty_quote() {
         for topic in ALL {
-            let Source::Book { quote, cite } = topic.entry().source else { continue };
+            let Source::Book { quote, cite } = topic.entry().source else {
+                continue;
+            };
             if let Some(quote) = quote {
                 assert!(!quote.is_empty(), "{topic:?} has an empty quote");
             }
@@ -1261,7 +1472,11 @@ mod tests {
 
     #[test]
     fn every_sequence_kind_has_a_topic() {
-        for kind in [SequenceKind::ShapeTerrestrial, SequenceKind::ShapeCelestial, SequenceKind::ShapeSolar] {
+        for kind in [
+            SequenceKind::ShapeTerrestrial,
+            SequenceKind::ShapeCelestial,
+            SequenceKind::ShapeSolar,
+        ] {
             // Panics via the exhaustive match in `sequence_topic` if a variant is ever unhandled.
             let _ = sequence_topic(kind).entry();
         }

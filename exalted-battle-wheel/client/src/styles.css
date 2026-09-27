@@ -416,9 +416,15 @@ button {
   font-family: inherit;
 }
 
+/* `.queue-editor` (Revise combatant/marker) and `.library-list`/`.library-editor` (Saved Actions)
+   are `Modal` content, portaled to `<body>` and so outside `.queue-panel`/`.action-panel` — listed
+   here explicitly rather than inheriting the look from an ancestor that's no longer one. */
 .roster button,
 .action-panel button,
-.queue-panel button {
+.queue-panel button,
+.queue-editor button,
+.library-list button,
+.library-editor button {
   background: var(--panel-border);
   color: var(--text);
   border: 1px solid var(--panel-border);
@@ -430,13 +436,19 @@ button {
 
 .roster button:hover:not(:disabled),
 .action-panel button:hover:not(:disabled),
-.queue-panel button:hover:not(:disabled) {
+.queue-panel button:hover:not(:disabled),
+.queue-editor button:hover:not(:disabled),
+.library-list button:hover:not(:disabled),
+.library-editor button:hover:not(:disabled) {
   border-color: var(--accent);
 }
 
 .roster button:disabled,
 .action-panel button:disabled,
-.queue-panel button:disabled {
+.queue-panel button:disabled,
+.queue-editor button:disabled,
+.library-list button:disabled,
+.library-editor button:disabled {
   opacity: 0.4;
   cursor: default;
 }
@@ -464,7 +476,10 @@ button {
   min-width: 5rem;
 }
 
-.actor-row select {
+/* `.library-editor select` (the saved-action kind picker) shares this look — see the
+   `.queue-editor button` comment above for why `Modal` content is listed explicitly. */
+.actor-row select,
+.library-editor select {
   background: var(--bg);
   color: var(--text);
   border: 1px solid var(--panel-border);
@@ -479,6 +494,26 @@ button {
   border-radius: 4px;
   padding: 0.25rem 0.4rem;
   width: 7rem;
+}
+
+/* Flags the Speed field of a no-default action (Attack, Social Attack) until a Speed is entered —
+   Declare stays disabled the whole time. Also used by a Multiple actions… row for the same
+   reason. */
+.actor-row input.speed-missing,
+.library-row input.speed-missing {
+  border-color: var(--danger);
+}
+
+.multi-action-rule {
+  display: flex;
+  gap: 1rem;
+  color: var(--text-dim);
+}
+
+.multi-action-rule label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 /* Stretched to the grid track so the percentage cap below has something definite to resolve
@@ -712,7 +747,8 @@ button {
 
 .marker-list-form input[type="text"],
 .marker-list-form input:not([type]),
-.marker-list-form input[type="number"] {
+.marker-list-form input[type="number"],
+.marker-list-form select {
   background: var(--bg);
   border: 1px solid var(--panel-border);
   color: var(--text);
@@ -730,6 +766,16 @@ button {
   align-items: center;
   gap: 0.3rem;
   color: var(--text-dim);
+}
+
+.marker-form-preview {
+  flex-basis: 100%;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.marker-form-preview-error {
+  color: var(--danger);
 }
 
 .queue-list {
@@ -1059,7 +1105,10 @@ button {
   text-align: right;
 }
 
-/* Generic modal widget, reusable beyond the event log. */
+/* Generic modal widget, reusable beyond the event log. `Modal` portals this to `<body>` (see its
+   doc comment) so a panel's own stacking context can never cover it — which also means modal
+   content can't lean on a panel ancestor's selectors and must style itself, or be listed
+   explicitly alongside that ancestor's rule (e.g. `.queue-editor button` above `.roster button`). */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1463,6 +1512,7 @@ button {
 
 .library-list .name {
   font-weight: 600;
+  min-width: 5rem;
 }
 
 .library-shape {

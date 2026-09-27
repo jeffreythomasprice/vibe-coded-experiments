@@ -22,13 +22,14 @@ pub fn queue(battle: &Battle) -> Vec<QueueRow> {
     let mut rows: Vec<QueueRow> = battle
         .combatants
         .iter()
-        .map(|combatant| QueueRow { at_tick: combatant.next_action_tick, item: QueueItem::Combatant(combatant.id) })
-        .chain(
-            battle
-                .active_markers()
-                .chain(battle.pending_markers())
-                .map(|marker| QueueRow { at_tick: marker.at_tick, item: QueueItem::Marker(marker.id) }),
-        )
+        .map(|combatant| QueueRow {
+            at_tick: combatant.next_action_tick,
+            item: QueueItem::Combatant(combatant.id),
+        })
+        .chain(battle.active_markers().chain(battle.pending_markers()).map(|marker| QueueRow {
+            at_tick: marker.at_tick,
+            item: QueueItem::Marker(marker.id),
+        }))
         .collect();
 
     rows.sort_by_key(|row| {
@@ -49,8 +50,8 @@ pub fn queue(battle: &Battle) -> Vec<QueueRow> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::battle::action::{label, template, ActionKind, ActionTemplate, Declaration};
-    use crate::battle::combatant::{combatant_name, JoinBattleResult, Side};
+    use crate::battle::action::{ActionKind, ActionTemplate, Declaration, label, template};
+    use crate::battle::combatant::{JoinBattleResult, Side, combatant_name};
     use crate::battle::event::BattleEvent;
     use crate::battle::mode::BattleMode;
     use crate::battle::state::apply;
@@ -63,7 +64,12 @@ mod tests {
         let cid = CombatantId(id);
         apply(
             battle,
-            &BattleEvent::AddCombatant { id: cid, name: combatant_name(format!("C{id}")), side: Side("A".to_string()), join_battle: JoinBattleResult::Successes(successes) },
+            &BattleEvent::AddCombatant {
+                id: cid,
+                name: combatant_name(format!("C{id}")),
+                side: Side("A".to_string()),
+                join_battle: JoinBattleResult::Successes(successes),
+            },
         )
         .unwrap();
         cid
@@ -91,7 +97,10 @@ mod tests {
 
         let rows = queue(&battle);
         let items: Vec<QueueItem> = rows.iter().map(|r| r.item).collect();
-        assert_eq!(items, vec![QueueItem::Combatant(fast), QueueItem::Combatant(mid), QueueItem::Combatant(slow)]);
+        assert_eq!(
+            items,
+            vec![QueueItem::Combatant(fast), QueueItem::Combatant(mid), QueueItem::Combatant(slow)]
+        );
     }
 
     #[test]
@@ -99,9 +108,19 @@ mod tests {
         let mut battle = Battle::genesis();
         let cid = add(&mut battle, 1, 0);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
-        let dash = personal(ActionKind::Dash).declare(Declaration::default());
+        let dash = personal(ActionKind::Dash).declare(Declaration::default()).unwrap();
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: dash }).unwrap();
-        apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: label("Ambush"), source: cid, at_tick: 3, ticks: 1 }).unwrap();
+        apply(
+            &mut battle,
+            &BattleEvent::AddMarker {
+                id: MarkerId(0),
+                label: label("Ambush"),
+                source: cid,
+                at_tick: 3,
+                ticks: 1,
+            },
+        )
+        .unwrap();
 
         let rows = queue(&battle);
         let at_tick_3: Vec<QueueItem> = rows.iter().filter(|r| r.at_tick == 3).map(|r| r.item).collect();
@@ -113,7 +132,17 @@ mod tests {
         let mut battle = Battle::genesis();
         let cid = add(&mut battle, 1, 0);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
-        apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: label("Later"), source: cid, at_tick: 10, ticks: 2 }).unwrap();
+        apply(
+            &mut battle,
+            &BattleEvent::AddMarker {
+                id: MarkerId(0),
+                label: label("Later"),
+                source: cid,
+                at_tick: 10,
+                ticks: 2,
+            },
+        )
+        .unwrap();
 
         let rows = queue(&battle);
         assert!(rows.iter().any(|r| r.item == QueueItem::Marker(MarkerId(0))));
@@ -124,8 +153,18 @@ mod tests {
         let mut battle = Battle::genesis();
         let cid = add(&mut battle, 1, 5);
         apply(&mut battle, &BattleEvent::StartBattle).unwrap();
-        apply(&mut battle, &BattleEvent::AddMarker { id: MarkerId(0), label: label("Gone"), source: cid, at_tick: 0, ticks: 1 }).unwrap();
-        let guard = personal(ActionKind::Guard).declare(Declaration::default());
+        apply(
+            &mut battle,
+            &BattleEvent::AddMarker {
+                id: MarkerId(0),
+                label: label("Gone"),
+                source: cid,
+                at_tick: 0,
+                ticks: 1,
+            },
+        )
+        .unwrap();
+        let guard = personal(ActionKind::Guard).declare(Declaration::default()).unwrap();
         apply(&mut battle, &BattleEvent::DeclareAction { actor: cid, action: guard }).unwrap();
         apply(&mut battle, &BattleEvent::AdvanceTick).unwrap();
 

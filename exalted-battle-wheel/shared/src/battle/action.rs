@@ -1,7 +1,9 @@
 use crate::battle::ids::CombatantId;
 use crate::battle::mode::BattleMode;
 
-pub use crate::generated::{ActionKind, DeclaredAction, DeclaredEffect, DvPenaltySpec, Label, Note, SpeedSpec};
+pub use crate::generated::{
+    ActionKind, DeclaredAction, DeclaredEffect, DvPenaltySpec, FlurriedAction, FlurryBreakdown, FlurryDvRule, Label, Note, SpeedSpec,
+};
 
 impl SpeedSpec {
     pub fn resolve(self, override_value: Option<u32>) -> u32 {
@@ -21,11 +23,42 @@ impl DvPenaltySpec {
     }
 }
 
+/// A template's Speed, unlike `SpeedSpec` (a wire type shared with persisted sequence steps),
+/// admits a third case: no default at all. Attack's Speed is the weapon or maneuver used (RULES.md
+/// §4.4, p. 143) and Social Attack's is set by the Ability used (§11.2, pp. 171-172) — there's no
+/// sensible number to declare with if the user hasn't entered one, so `Required` has none to fall
+/// back to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActionSpeed {
+    Fixed(u32),
+    Variable { default: u32 },
+    Required,
+}
+
+impl ActionSpeed {
+    /// `None` only for `Required` with no `entered` value; every other case always resolves.
+    pub fn resolve(self, entered: Option<u32>) -> Option<u32> {
+        match self {
+            ActionSpeed::Fixed(speed) => Some(speed),
+            ActionSpeed::Variable { default } => Some(entered.unwrap_or(default)),
+            ActionSpeed::Required => entered,
+        }
+    }
+}
+
+/// An action whose Speed has no default (see `ActionSpeed::Required`) was declared without one
+/// entered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("{name} has no default Speed; enter one to declare it")]
+pub struct SpeedRequired {
+    pub name: &'static str,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ActionTemplate {
     pub kind: ActionKind,
     pub name: &'static str,
-    pub speed: SpeedSpec,
+    pub speed: ActionSpeed,
     pub dv_penalty: DvPenaltySpec,
     pub reflexive: bool,
     pub flurryable: bool,
@@ -39,7 +72,7 @@ pub const PERSONAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Aim,
         name: "Aim",
-        speed: SpeedSpec::Fixed(3),
+        speed: ActionSpeed::Fixed(3),
         dv_penalty: DvPenaltySpec::Fixed(-1),
         reflexive: false,
         flurryable: false,
@@ -47,7 +80,7 @@ pub const PERSONAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Attack,
         name: "Attack",
-        speed: SpeedSpec::Variable { default: 5 },
+        speed: ActionSpeed::Required,
         dv_penalty: DvPenaltySpec::Fixed(-1),
         reflexive: false,
         flurryable: true,
@@ -55,7 +88,7 @@ pub const PERSONAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Dash,
         name: "Dash",
-        speed: SpeedSpec::Fixed(3),
+        speed: ActionSpeed::Fixed(3),
         dv_penalty: DvPenaltySpec::Fixed(-2),
         reflexive: false,
         flurryable: false,
@@ -63,7 +96,7 @@ pub const PERSONAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Guard,
         name: "Guard",
-        speed: SpeedSpec::Fixed(3),
+        speed: ActionSpeed::Fixed(3),
         dv_penalty: DvPenaltySpec::Fixed(0),
         reflexive: false,
         flurryable: false,
@@ -71,7 +104,7 @@ pub const PERSONAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Inactive,
         name: "Inactive",
-        speed: SpeedSpec::Fixed(5),
+        speed: ActionSpeed::Fixed(5),
         dv_penalty: DvPenaltySpec::Fixed(0),
         reflexive: false,
         flurryable: false,
@@ -79,7 +112,7 @@ pub const PERSONAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Miscellaneous,
         name: "Miscellaneous Action",
-        speed: SpeedSpec::Fixed(5),
+        speed: ActionSpeed::Fixed(5),
         dv_penalty: DvPenaltySpec::Variable { default: -1 },
         reflexive: false,
         flurryable: true,
@@ -87,7 +120,7 @@ pub const PERSONAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Move,
         name: "Move",
-        speed: SpeedSpec::Fixed(0),
+        speed: ActionSpeed::Fixed(0),
         dv_penalty: DvPenaltySpec::Fixed(0),
         reflexive: true,
         flurryable: false,
@@ -95,7 +128,7 @@ pub const PERSONAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Flurry,
         name: "Flurry",
-        speed: SpeedSpec::Variable { default: 5 },
+        speed: ActionSpeed::Variable { default: 5 },
         dv_penalty: DvPenaltySpec::Variable { default: -3 },
         reflexive: false,
         flurryable: false,
@@ -103,7 +136,7 @@ pub const PERSONAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::ActivateCharm,
         name: "Activate Charm",
-        speed: SpeedSpec::Variable { default: 6 },
+        speed: ActionSpeed::Variable { default: 6 },
         dv_penalty: DvPenaltySpec::Variable { default: 0 },
         reflexive: false,
         flurryable: false,
@@ -111,7 +144,7 @@ pub const PERSONAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Clinch,
         name: "Clinch",
-        speed: SpeedSpec::Fixed(6),
+        speed: ActionSpeed::Fixed(6),
         dv_penalty: DvPenaltySpec::Fixed(-1),
         reflexive: false,
         flurryable: true,
@@ -119,7 +152,7 @@ pub const PERSONAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::JoinBattleInProgress,
         name: "Join Battle (in progress)",
-        speed: SpeedSpec::Variable { default: 0 },
+        speed: ActionSpeed::Variable { default: 0 },
         dv_penalty: DvPenaltySpec::Fixed(0),
         reflexive: false,
         flurryable: false,
@@ -127,7 +160,7 @@ pub const PERSONAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Custom,
         name: "Custom",
-        speed: SpeedSpec::Variable { default: 5 },
+        speed: ActionSpeed::Variable { default: 5 },
         dv_penalty: DvPenaltySpec::Variable { default: 0 },
         reflexive: false,
         flurryable: false,
@@ -135,7 +168,7 @@ pub const PERSONAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::CoordinateAttacks,
         name: "Coordinate Attacks",
-        speed: SpeedSpec::Fixed(5),
+        speed: ActionSpeed::Fixed(5),
         dv_penalty: DvPenaltySpec::Variable { default: -1 },
         reflexive: false,
         flurryable: false,
@@ -143,7 +176,7 @@ pub const PERSONAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::ReadyWeapons,
         name: "Draw / Ready Weapons",
-        speed: SpeedSpec::Fixed(5),
+        speed: ActionSpeed::Fixed(5),
         dv_penalty: DvPenaltySpec::Fixed(-1),
         reflexive: false,
         flurryable: false,
@@ -151,7 +184,7 @@ pub const PERSONAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::RiseFromProne,
         name: "Rise From Prone",
-        speed: SpeedSpec::Fixed(5),
+        speed: ActionSpeed::Fixed(5),
         dv_penalty: DvPenaltySpec::Fixed(-1),
         reflexive: false,
         flurryable: false,
@@ -159,7 +192,7 @@ pub const PERSONAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Jump,
         name: "Jump",
-        speed: SpeedSpec::Fixed(5),
+        speed: ActionSpeed::Fixed(5),
         dv_penalty: DvPenaltySpec::Fixed(-1),
         reflexive: false,
         flurryable: false,
@@ -173,7 +206,7 @@ pub const MASS_ONLY_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::ChangeFormation,
         name: "Change Formation",
-        speed: SpeedSpec::Fixed(5),
+        speed: ActionSpeed::Fixed(5),
         dv_penalty: DvPenaltySpec::Fixed(-1),
         reflexive: false,
         flurryable: false,
@@ -181,7 +214,7 @@ pub const MASS_ONLY_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Disengage,
         name: "Disengage",
-        speed: SpeedSpec::Fixed(0),
+        speed: ActionSpeed::Fixed(0),
         dv_penalty: DvPenaltySpec::Fixed(0),
         reflexive: true,
         flurryable: false,
@@ -189,7 +222,7 @@ pub const MASS_ONLY_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Turn,
         name: "Turn (over 90\u{b0})",
-        speed: SpeedSpec::Fixed(3),
+        speed: ActionSpeed::Fixed(3),
         dv_penalty: DvPenaltySpec::Fixed(-1),
         reflexive: false,
         flurryable: false,
@@ -197,7 +230,7 @@ pub const MASS_ONLY_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::SplitUnit,
         name: "Split Unit",
-        speed: SpeedSpec::Fixed(3),
+        speed: ActionSpeed::Fixed(3),
         dv_penalty: DvPenaltySpec::Fixed(-1),
         reflexive: false,
         flurryable: false,
@@ -205,7 +238,7 @@ pub const MASS_ONLY_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::ExpelSpecialCharacter,
         name: "Expel a Special Character",
-        speed: SpeedSpec::Fixed(0),
+        speed: ActionSpeed::Fixed(0),
         dv_penalty: DvPenaltySpec::Fixed(0),
         reflexive: true,
         flurryable: false,
@@ -213,7 +246,7 @@ pub const MASS_ONLY_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::MergeUnits,
         name: "Merge Units",
-        speed: SpeedSpec::Fixed(3),
+        speed: ActionSpeed::Fixed(3),
         dv_penalty: DvPenaltySpec::Fixed(-1),
         reflexive: false,
         flurryable: false,
@@ -221,7 +254,7 @@ pub const MASS_ONLY_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::SignalUnits,
         name: "Signal Units",
-        speed: SpeedSpec::Fixed(3),
+        speed: ActionSpeed::Fixed(3),
         dv_penalty: DvPenaltySpec::Fixed(0),
         reflexive: false,
         flurryable: false,
@@ -229,7 +262,7 @@ pub const MASS_ONLY_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Rally,
         name: "Rally",
-        speed: SpeedSpec::Fixed(4),
+        speed: ActionSpeed::Fixed(4),
         dv_penalty: DvPenaltySpec::Fixed(-1),
         reflexive: false,
         flurryable: false,
@@ -244,7 +277,7 @@ pub const SOCIAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Move,
         name: "Move",
-        speed: SpeedSpec::Fixed(0),
+        speed: ActionSpeed::Fixed(0),
         dv_penalty: DvPenaltySpec::Fixed(0),
         reflexive: true,
         flurryable: false,
@@ -252,7 +285,7 @@ pub const SOCIAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Dash,
         name: "Dash",
-        speed: SpeedSpec::Fixed(3),
+        speed: ActionSpeed::Fixed(3),
         dv_penalty: DvPenaltySpec::Fixed(-3),
         reflexive: false,
         flurryable: false,
@@ -260,7 +293,7 @@ pub const SOCIAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Guard,
         name: "Guard",
-        speed: SpeedSpec::Fixed(3),
+        speed: ActionSpeed::Fixed(3),
         dv_penalty: DvPenaltySpec::Fixed(0),
         reflexive: false,
         flurryable: false,
@@ -268,7 +301,7 @@ pub const SOCIAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Inactive,
         name: "Inactive",
-        speed: SpeedSpec::Fixed(3),
+        speed: ActionSpeed::Fixed(3),
         dv_penalty: DvPenaltySpec::Fixed(0),
         reflexive: false,
         flurryable: false,
@@ -276,7 +309,7 @@ pub const SOCIAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Aim,
         name: "Monologue / Study",
-        speed: SpeedSpec::Fixed(3),
+        speed: ActionSpeed::Fixed(3),
         dv_penalty: DvPenaltySpec::Fixed(-2),
         reflexive: false,
         flurryable: false,
@@ -284,7 +317,7 @@ pub const SOCIAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Miscellaneous,
         name: "Miscellaneous Action",
-        speed: SpeedSpec::Fixed(5),
+        speed: ActionSpeed::Fixed(5),
         dv_penalty: DvPenaltySpec::Variable { default: -2 },
         reflexive: false,
         flurryable: true,
@@ -292,7 +325,7 @@ pub const SOCIAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::JoinBattleInProgress,
         name: "Join Debate (in progress)",
-        speed: SpeedSpec::Variable { default: 5 },
+        speed: ActionSpeed::Variable { default: 5 },
         dv_penalty: DvPenaltySpec::Fixed(0),
         reflexive: false,
         flurryable: false,
@@ -300,7 +333,7 @@ pub const SOCIAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::ReadMotivation,
         name: "Read Motivation",
-        speed: SpeedSpec::Fixed(5),
+        speed: ActionSpeed::Fixed(5),
         dv_penalty: DvPenaltySpec::Variable { default: 0 },
         reflexive: false,
         flurryable: false,
@@ -308,7 +341,7 @@ pub const SOCIAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Flurry,
         name: "Flurry",
-        speed: SpeedSpec::Variable { default: 4 },
+        speed: ActionSpeed::Variable { default: 4 },
         dv_penalty: DvPenaltySpec::Variable { default: -4 },
         reflexive: false,
         flurryable: false,
@@ -316,7 +349,7 @@ pub const SOCIAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::ActivateCharm,
         name: "Activate Charm",
-        speed: SpeedSpec::Variable { default: 6 },
+        speed: ActionSpeed::Variable { default: 6 },
         dv_penalty: DvPenaltySpec::Variable { default: 0 },
         reflexive: false,
         flurryable: false,
@@ -324,7 +357,7 @@ pub const SOCIAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Attack,
         name: "Social Attack",
-        speed: SpeedSpec::Variable { default: 4 },
+        speed: ActionSpeed::Required,
         dv_penalty: DvPenaltySpec::Fixed(-2),
         reflexive: false,
         flurryable: true,
@@ -332,7 +365,7 @@ pub const SOCIAL_CATALOG: &[ActionTemplate] = &[
     ActionTemplate {
         kind: ActionKind::Custom,
         name: "Custom",
-        speed: SpeedSpec::Variable { default: 5 },
+        speed: ActionSpeed::Variable { default: 5 },
         dv_penalty: DvPenaltySpec::Variable { default: 0 },
         reflexive: false,
         flurryable: false,
@@ -361,7 +394,9 @@ pub struct ActionError {
 
 /// Looks up an action's template within a mode.
 pub fn template(mode: BattleMode, kind: ActionKind) -> Result<&'static ActionTemplate, ActionError> {
-    catalog_index(mode, kind).and_then(|index| catalog(mode).nth(index)).ok_or(ActionError { mode, kind })
+    catalog_index(mode, kind)
+        .and_then(|index| catalog(mode).nth(index))
+        .ok_or(ActionError { mode, kind })
 }
 
 /// The position of `kind` within `catalog(mode)` — the same index the action panel's `<select>`
@@ -410,21 +445,29 @@ pub fn note(text: impl AsRef<str>) -> Note {
 }
 
 impl ActionTemplate {
-    pub fn declare(&self, declaration: Declaration) -> DeclaredAction {
+    /// The Speed a `Declaration` would resolve to, or the reason it can't: only fails for an
+    /// `ActionSpeed::Required` template (Attack, Social Attack) given no `entered` value.
+    pub fn resolve_speed(&self, entered: Option<u32>) -> Result<u32, SpeedRequired> {
+        self.speed.resolve(entered).ok_or(SpeedRequired { name: self.name })
+    }
+
+    pub fn declare(&self, declaration: Declaration) -> Result<DeclaredAction, SpeedRequired> {
         let label_text = match declaration.name {
             Some(name) if !name.trim().is_empty() => name.trim().to_string(),
             _ => self.name.to_string(),
         };
-        DeclaredAction {
+        let speed = self.resolve_speed(declaration.speed)?;
+        Ok(DeclaredAction {
             kind: self.kind,
             label: label(label_text),
-            speed: self.speed.resolve(declaration.speed),
+            speed,
             dv_penalty: self.dv_penalty.resolve(declaration.dv_penalty),
             reflexive: self.reflexive,
             target: declaration.target,
             note: note(declaration.note),
             effects: declaration.effects,
-        }
+            flurry: None,
+        })
     }
 }
 
@@ -476,22 +519,78 @@ mod tests {
     }
 
     #[test]
+    fn action_speed_fixed_ignores_entered() {
+        assert_eq!(ActionSpeed::Fixed(3).resolve(Some(4)), Some(3));
+    }
+
+    #[test]
+    fn action_speed_variable_uses_default_without_entered() {
+        assert_eq!(ActionSpeed::Variable { default: 5 }.resolve(None), Some(5));
+    }
+
+    #[test]
+    fn action_speed_variable_uses_entered_when_given() {
+        assert_eq!(ActionSpeed::Variable { default: 5 }.resolve(Some(4)), Some(4));
+    }
+
+    #[test]
+    fn action_speed_required_has_no_default() {
+        assert_eq!(ActionSpeed::Required.resolve(None), None);
+        assert_eq!(ActionSpeed::Required.resolve(Some(4)), Some(4));
+    }
+
+    #[test]
+    fn declare_refuses_a_required_speed_action_with_no_speed_entered() {
+        let err = personal(ActionKind::Attack).declare(Declaration::default()).unwrap_err();
+        assert_eq!(err, SpeedRequired { name: "Attack" });
+    }
+
+    #[test]
+    fn declare_accepts_a_required_speed_action_once_a_speed_is_entered() {
+        let action = personal(ActionKind::Attack)
+            .declare(Declaration {
+                speed: Some(4),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(action.speed, 4);
+    }
+
+    #[test]
     fn declare_uses_a_given_name_over_the_template_name() {
-        let action = personal(ActionKind::Attack).declare(Declaration { name: Some("Sweeping Blow".to_string()), ..Default::default() });
+        let action = personal(ActionKind::Attack)
+            .declare(Declaration {
+                name: Some("Sweeping Blow".to_string()),
+                speed: Some(5),
+                ..Default::default()
+            })
+            .unwrap();
         assert_eq!(action.label.to_string(), "Sweeping Blow");
     }
 
     #[test]
     fn declare_falls_back_to_the_template_name_when_blank() {
-        let blank = personal(ActionKind::Attack).declare(Declaration { name: Some("   ".to_string()), ..Default::default() });
+        let blank = personal(ActionKind::Attack)
+            .declare(Declaration {
+                name: Some("   ".to_string()),
+                speed: Some(5),
+                ..Default::default()
+            })
+            .unwrap();
         assert_eq!(blank.label.to_string(), "Attack");
-        let none = personal(ActionKind::Attack).declare(Declaration::default());
-        assert_eq!(none.label.to_string(), "Attack");
+        let none = personal(ActionKind::Guard).declare(Declaration::default()).unwrap();
+        assert_eq!(none.label.to_string(), "Guard");
     }
 
     #[test]
     fn declare_trims_a_given_name() {
-        let action = personal(ActionKind::Attack).declare(Declaration { name: Some("  Sweeping Blow  ".to_string()), ..Default::default() });
+        let action = personal(ActionKind::Attack)
+            .declare(Declaration {
+                name: Some("  Sweeping Blow  ".to_string()),
+                speed: Some(5),
+                ..Default::default()
+            })
+            .unwrap();
         assert_eq!(action.label.to_string(), "Sweeping Blow");
     }
 
@@ -517,16 +616,32 @@ mod tests {
     fn mass_catalog_contains_every_personal_action() {
         let mass: Vec<ActionKind> = catalog(BattleMode::Mass).map(|t| t.kind).collect();
         for entry in PERSONAL_CATALOG {
-            assert!(mass.contains(&entry.kind), "mass catalog is missing personal action {:?}", entry.kind);
+            assert!(
+                mass.contains(&entry.kind),
+                "mass catalog is missing personal action {:?}",
+                entry.kind
+            );
         }
     }
 
     #[test]
     fn template_rejects_a_kind_outside_its_mode() {
         let err = template(BattleMode::Social, ActionKind::Clinch).unwrap_err();
-        assert_eq!(err, ActionError { mode: BattleMode::Social, kind: ActionKind::Clinch });
+        assert_eq!(
+            err,
+            ActionError {
+                mode: BattleMode::Social,
+                kind: ActionKind::Clinch
+            }
+        );
         let err = template(BattleMode::Personal, ActionKind::Rally).unwrap_err();
-        assert_eq!(err, ActionError { mode: BattleMode::Personal, kind: ActionKind::Rally });
+        assert_eq!(
+            err,
+            ActionError {
+                mode: BattleMode::Personal,
+                kind: ActionKind::Rally
+            }
+        );
     }
 
     #[test]
@@ -554,7 +669,10 @@ mod tests {
 
     #[test]
     fn catalog_index_offsets_mass_only_actions_past_the_personal_catalog() {
-        assert_eq!(catalog_index(BattleMode::Mass, ActionKind::ChangeFormation), Some(PERSONAL_CATALOG.len()));
+        assert_eq!(
+            catalog_index(BattleMode::Mass, ActionKind::ChangeFormation),
+            Some(PERSONAL_CATALOG.len())
+        );
     }
 
     #[test]

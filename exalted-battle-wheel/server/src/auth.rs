@@ -9,9 +9,9 @@ use crate::error::ApiError;
 use crate::rooms::RoomStore;
 use crate::routes::AppState;
 use axum::extract::{FromRequestParts, Request, State};
+use axum::http::HeaderMap;
 use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;
-use axum::http::HeaderMap;
 use axum::middleware::Next;
 use axum::response::Response;
 
@@ -58,7 +58,12 @@ where
     type Rejection = ApiError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        parts.extensions.get::<AccessCode>().cloned().map(Caller).ok_or(ApiError::Unauthorized)
+        parts
+            .extensions
+            .get::<AccessCode>()
+            .cloned()
+            .map(Caller)
+            .ok_or(ApiError::Unauthorized)
     }
 }
 

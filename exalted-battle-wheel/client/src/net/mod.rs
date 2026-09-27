@@ -51,10 +51,7 @@ impl Socket {
     /// a failed connection attempt alike (a `WebSocket` that fails to open still transitions
     /// through `close`), so callers only ever need the one handler to detect "not connected
     /// anymore."
-    pub fn connect(
-        on_message: impl Fn(ServerEnvelope) + 'static,
-        on_close: impl Fn() + 'static,
-    ) -> Result<Self, SocketError> {
+    pub fn connect(on_message: impl Fn(ServerEnvelope) + 'static, on_close: impl Fn() + 'static) -> Result<Self, SocketError> {
         let ws = web_sys::WebSocket::new(&ws_url()).map_err(|error| SocketError::Connect(js_message(&error)))?;
         let pending: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
 
@@ -85,13 +82,23 @@ impl Socket {
         let on_error = Closure::<dyn FnMut(web_sys::Event)>::new(|_event: web_sys::Event| {});
         ws.set_onerror(Some(on_error.as_ref().unchecked_ref()));
 
-        Ok(Self(Rc::new(SocketInner { ws, pending, _on_open: on_open, _on_message: on_message, _on_close: on_close, _on_error: on_error })))
+        Ok(Self(Rc::new(SocketInner {
+            ws,
+            pending,
+            _on_open: on_open,
+            _on_message: on_message,
+            _on_close: on_close,
+            _on_error: on_error,
+        })))
     }
 
     pub fn send(&self, envelope: &ClientEnvelope) -> Result<(), SocketError> {
         let json = serde_json::to_string(envelope).map_err(|error| SocketError::Encode(error.to_string()))?;
         if self.0.ws.ready_state() == web_sys::WebSocket::OPEN {
-            self.0.ws.send_with_str(&json).map_err(|error| SocketError::Send(js_message(&error)))?;
+            self.0
+                .ws
+                .send_with_str(&json)
+                .map_err(|error| SocketError::Send(js_message(&error)))?;
         } else {
             self.0.pending.borrow_mut().push(json);
         }

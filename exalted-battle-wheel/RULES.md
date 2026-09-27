@@ -225,6 +225,11 @@ for weapon data.
 - **Special-case Speed exception:** "a flurry that only involves a character drawing a weapon and
   using it for attacks uses **the Speed of the weapon**, even if the Speed is less than 5. This is
   an exception to the usual rules for determining flurry Speed." (p. 144)
+- **Extra Action Charms are an exception to both penalties above:** an Extra Action Charm
+  "functions as a normal flurry but has no multiple action penalties. In addition, only the action
+  with the highest DV penalty imposes a DV penalty. The others do not." (p. 182, §5 "Charm
+  timing types") So a magical multi-action skips both the cumulative DV stacking and the dice
+  penalty a mundane flurry takes.
 
 ### 4.5 Guard (3/-0)
 

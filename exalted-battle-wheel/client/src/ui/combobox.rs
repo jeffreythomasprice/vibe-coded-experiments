@@ -26,7 +26,11 @@ fn filter_options(options: &[String], typed: &str) -> Vec<String> {
     if needle.is_empty() {
         return options.to_vec();
     }
-    options.iter().filter(|option| option.to_lowercase().contains(&needle)).cloned().collect()
+    options
+        .iter()
+        .filter(|option| option.to_lowercase().contains(&needle))
+        .cloned()
+        .collect()
 }
 
 /// `value` is free text: typing anything and leaving it as-is is always valid. `options` is

@@ -35,7 +35,9 @@ enum StoredPlan {
 fn stored_plan(outcome: CheckOutcome, has_incoming: bool) -> StoredPlan {
     match outcome {
         CheckOutcome::Valid => StoredPlan::Keep,
-        CheckOutcome::Revoked => StoredPlan::Drop { try_incoming: has_incoming },
+        CheckOutcome::Revoked => StoredPlan::Drop {
+            try_incoming: has_incoming,
+        },
         // A failure to *reach* the server is not a revocation: burning a good code on a network
         // blip would sign someone out of their own browser because their wifi hiccuped, and
         // adopting a link's code on the strength of it would let an invite silently replace a
@@ -220,8 +222,7 @@ impl Access {
 
     pub fn create(&self, access_key: Option<String>, is_admin: bool) {
         let Some(token) = self.token.get_untracked() else { return };
-        let access_key =
-            access_key.map(|key| key.try_into().expect("non-empty by construction: ui/config.rs filters blanks"));
+        let access_key = access_key.map(|key| key.try_into().expect("non-empty by construction: ui/config.rs filters blanks"));
         let this = *self;
         self.run_toasting("create access code", async move {
             api::create(&token, &CreateAccessCode { access_key, is_admin }).await?;
@@ -350,7 +351,10 @@ mod tests {
     fn sorts_newest_first() {
         let mut codes = vec![code_at("a", 100), code_at("b", 300), code_at("c", 200)];
         sort_newest_first(&mut codes);
-        assert_eq!(codes.iter().map(|code| code.access_key.as_str()).collect::<Vec<_>>(), ["b", "c", "a"]);
+        assert_eq!(
+            codes.iter().map(|code| code.access_key.as_str()).collect::<Vec<_>>(),
+            ["b", "c", "a"]
+        );
     }
 
     #[test]

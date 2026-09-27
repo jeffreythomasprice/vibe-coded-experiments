@@ -2,7 +2,7 @@ use crate::battle::combatant::CombatantState;
 use crate::battle::error::{BattleError, RestoreError};
 use crate::battle::event::BattleEvent;
 use crate::battle::ids::{CombatantId, MarkerId};
-use crate::battle::state::{apply, Battle};
+use crate::battle::state::{Battle, apply};
 use serde::{Deserialize, Serialize};
 
 /// Event-sourced battle state. `Battle` is always derived by replaying `events[..cursor]` from
@@ -135,7 +135,12 @@ impl TryFrom<RestoredLog> for BattleLog {
     type Error = RestoreError;
 
     fn try_from(restored: RestoredLog) -> Result<Self, Self::Error> {
-        let RestoredLog { events, cursor, next_combatant_id, next_marker_id } = restored;
+        let RestoredLog {
+            events,
+            cursor,
+            next_combatant_id,
+            next_marker_id,
+        } = restored;
 
         if cursor > events.len() {
             return Err(RestoreError::CursorOutOfRange { cursor, len: events.len() });
@@ -148,22 +153,38 @@ impl TryFrom<RestoredLog> for BattleLog {
             if let Some(id) = minted_combatant_id(event)
                 && id.0 >= next_combatant_id
             {
-                return Err(RestoreError::StaleCombatantCounter { counter: next_combatant_id, used: id });
+                return Err(RestoreError::StaleCombatantCounter {
+                    counter: next_combatant_id,
+                    used: id,
+                });
             }
             for id in minted_marker_ids(event) {
                 if id.0 >= next_marker_id {
-                    return Err(RestoreError::StaleMarkerCounter { counter: next_marker_id, used: id });
+                    return Err(RestoreError::StaleMarkerCounter {
+                        counter: next_marker_id,
+                        used: id,
+                    });
                 }
             }
         }
 
-        Ok(BattleLog { events, cursor, next_combatant_id, next_marker_id })
+        Ok(BattleLog {
+            events,
+            cursor,
+            next_combatant_id,
+            next_marker_id,
+        })
     }
 }
 
 impl BattleLog {
     pub fn new() -> Self {
-        Self { events: Vec::new(), cursor: 0, next_combatant_id: 0, next_marker_id: 0 }
+        Self {
+            events: Vec::new(),
+            cursor: 0,
+            next_combatant_id: 0,
+            next_marker_id: 0,
+        }
     }
 
     pub fn battle(&self) -> Battle {
@@ -231,7 +252,10 @@ impl BattleLog {
 
     pub fn seek(&mut self, cursor: usize) -> Result<(), BattleError> {
         if cursor > self.events.len() {
-            return Err(BattleError::CursorOutOfRange { requested: cursor, len: self.events.len() });
+            return Err(BattleError::CursorOutOfRange {
+                requested: cursor,
+                len: self.events.len(),
+            });
         }
         self.cursor = cursor;
         Ok(())
@@ -259,8 +283,8 @@ impl Default for BattleLog {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::battle::action::{label, note, template, ActionKind, ActionTemplate, Declaration, DeclaredEffect};
-    use crate::battle::combatant::{combatant_name, CombatantState, DvState, JoinBattleResult, Side};
+    use crate::battle::action::{ActionKind, ActionTemplate, Declaration, DeclaredEffect, label, note, template};
+    use crate::battle::combatant::{CombatantState, DvState, JoinBattleResult, Side, combatant_name};
     use crate::battle::event::InterruptReason;
     use crate::battle::mode::BattleMode;
     use crate::battle::sequence::Sequence;
@@ -396,16 +420,27 @@ mod tests {
         let mut log = BattleLog::new();
         let cid = add_event(&mut log, 5);
         log.push(BattleEvent::StartBattle).unwrap();
-        let action = personal(ActionKind::Attack).declare(Declaration {
-            effects: vec![
-                DeclaredEffect { id: MarkerId(0), label: label("A"), delay: 0, ticks: 1 },
-                DeclaredEffect { id: MarkerId(0), label: label("B"), delay: 0, ticks: 1 },
-            ],
-            ..Default::default()
-        });
-        let BattleEvent::DeclareAction { action: stamped, .. } =
-            log.restamp(BattleEvent::DeclareAction { actor: cid, action })
-        else {
+        let action = personal(ActionKind::Attack)
+            .declare(Declaration {
+                speed: Some(5),
+                effects: vec![
+                    DeclaredEffect {
+                        id: MarkerId(0),
+                        label: label("A"),
+                        delay: 0,
+                        ticks: 1,
+                    },
+                    DeclaredEffect {
+                        id: MarkerId(0),
+                        label: label("B"),
+                        delay: 0,
+                        ticks: 1,
+                    },
+                ],
+                ..Default::default()
+            })
+            .unwrap();
+        let BattleEvent::DeclareAction { action: stamped, .. } = log.restamp(BattleEvent::DeclareAction { actor: cid, action }) else {
             unreachable!()
         };
         assert_eq!(stamped.effects[0].id, MarkerId(0));
@@ -420,7 +455,12 @@ mod tests {
         let cid = add_event(&mut log, 5);
         log.push(BattleEvent::StartBattle).unwrap();
         let mut sequence = Sequence::shape_terrestrial();
-        sequence.effects = vec![DeclaredEffect { id: MarkerId(7), label: label("Cast"), delay: 0, ticks: 1 }];
+        sequence.effects = vec![DeclaredEffect {
+            id: MarkerId(7),
+            label: label("Cast"),
+            delay: 0,
+            ticks: 1,
+        }];
         let event = BattleEvent::ReviseCombatant {
             actor: cid,
             next_action_tick: 0,
@@ -429,8 +469,13 @@ mod tests {
             commitment: None,
             note: note(""),
             name: None,
+            side: None,
         };
-        let BattleEvent::ReviseCombatant { state: CombatantState::InSequence(stamped), .. } = log.restamp(event) else {
+        let BattleEvent::ReviseCombatant {
+            state: CombatantState::InSequence(stamped),
+            ..
+        } = log.restamp(event)
+        else {
             unreachable!()
         };
         assert_eq!(stamped.effects[0].id, MarkerId(7));
@@ -442,14 +487,20 @@ mod tests {
 
     #[test]
     fn revising_an_action_then_undo_restores_the_original_tick_and_redo_reapplies_it() {
-        use crate::battle::action::{template, ActionKind, Declaration};
+        use crate::battle::action::{ActionKind, Declaration, template};
         use crate::battle::combatant::{CombatantState, DvState};
         use crate::battle::mode::BattleMode;
 
         let mut log = BattleLog::new();
         let id = add_event(&mut log, 5);
         log.push(BattleEvent::StartBattle).unwrap();
-        let attack = template(BattleMode::Personal, ActionKind::Attack).unwrap().declare(Declaration { speed: Some(5), ..Default::default() });
+        let attack = template(BattleMode::Personal, ActionKind::Attack)
+            .unwrap()
+            .declare(Declaration {
+                speed: Some(5),
+                ..Default::default()
+            })
+            .unwrap();
         log.push(BattleEvent::DeclareAction { actor: id, action: attack }).unwrap();
         assert_eq!(log.battle().find(id).unwrap().next_action_tick, 5);
 
@@ -457,19 +508,31 @@ mod tests {
             actor: id,
             next_action_tick: 2,
             state: CombatantState::Normal,
-            dv: DvState { penalty: -1, refreshes_at: Some(2) },
+            dv: DvState {
+                penalty: -1,
+                refreshes_at: Some(2),
+            },
             commitment: None,
             note: note("retconned to resolve sooner"),
             name: None,
+            side: None,
         })
         .unwrap();
         assert_eq!(log.battle().find(id).unwrap().next_action_tick, 2);
 
         log.undo().unwrap();
-        assert_eq!(log.battle().find(id).unwrap().next_action_tick, 5, "undo should restore the pre-revision tick");
+        assert_eq!(
+            log.battle().find(id).unwrap().next_action_tick,
+            5,
+            "undo should restore the pre-revision tick"
+        );
 
         log.redo().unwrap();
-        assert_eq!(log.battle().find(id).unwrap().next_action_tick, 2, "redo should reapply the revision");
+        assert_eq!(
+            log.battle().find(id).unwrap().next_action_tick,
+            2,
+            "redo should reapply the revision"
+        );
     }
 
     #[test]
@@ -487,6 +550,7 @@ mod tests {
             commitment: None,
             note: note(""),
             name: None,
+            side: None,
         })
         .unwrap();
 
@@ -586,7 +650,10 @@ mod tests {
         ];
 
         let mut log = BattleLog::new();
-        log.push(BattleEvent::SetMode { mode: BattleMode::Personal }).unwrap();
+        log.push(BattleEvent::SetMode {
+            mode: BattleMode::Personal,
+        })
+        .unwrap();
         let a = add_event(&mut log, 5);
         let stale_b = add_event(&mut log, 2);
         log.push(BattleEvent::RemoveCombatant { id: stale_b }).unwrap();
@@ -598,29 +665,47 @@ mod tests {
             .unwrap()
             .declare(Declaration {
                 speed: Some(5),
-                effects: vec![DeclaredEffect { id: effect_id, label: label("Bleed"), delay: 1, ticks: 2 }],
+                effects: vec![DeclaredEffect {
+                    id: effect_id,
+                    label: label("Bleed"),
+                    delay: 1,
+                    ticks: 2,
+                }],
                 ..Default::default()
-            });
+            })
+            .unwrap();
         log.push(BattleEvent::DeclareAction { actor: a, action: attack }).unwrap();
         log.push(BattleEvent::ReviseCombatant {
             actor: a,
             next_action_tick: 100,
             state: CombatantState::Guarding,
-            dv: DvState { penalty: -1, refreshes_at: Some(100) },
+            dv: DvState {
+                penalty: -1,
+                refreshes_at: Some(100),
+            },
             commitment: None,
             note: note("parked while b resolves its sorcery"),
             name: Some(combatant_name("Renamed")),
+            side: Some(Side("B".to_string())),
         })
         .unwrap();
 
         for _ in 0..3 {
             log.push(BattleEvent::AdvanceTick).unwrap();
         }
-        log.push(BattleEvent::StartSequence { actor: b, sequence: Sequence::shape_terrestrial() }).unwrap();
+        log.push(BattleEvent::StartSequence {
+            actor: b,
+            sequence: Sequence::shape_terrestrial(),
+        })
+        .unwrap();
         for _ in 0..5 {
             log.push(BattleEvent::AdvanceTick).unwrap();
         }
-        log.push(BattleEvent::AdvanceSequence { actor: b, speed_override: Some(4) }).unwrap();
+        log.push(BattleEvent::AdvanceSequence {
+            actor: b,
+            speed_override: Some(4),
+        })
+        .unwrap();
         log.push(BattleEvent::InterruptSequence {
             actor: b,
             reason: InterruptReason::Voluntary,
@@ -629,15 +714,32 @@ mod tests {
         .unwrap();
 
         let marker_id = log.alloc_marker_id();
-        log.push(BattleEvent::AddMarker { id: marker_id, label: label("Window"), source: a, at_tick: 0, ticks: 3 }).unwrap();
-        log.push(BattleEvent::ReviseMarker { id: marker_id, label: label("Wider window"), at_tick: 1, ticks: 4 }).unwrap();
+        log.push(BattleEvent::AddMarker {
+            id: marker_id,
+            label: label("Window"),
+            source: a,
+            at_tick: 0,
+            ticks: 3,
+        })
+        .unwrap();
+        log.push(BattleEvent::ReviseMarker {
+            id: marker_id,
+            label: label("Wider window"),
+            at_tick: 1,
+            ticks: 4,
+        })
+        .unwrap();
         log.push(BattleEvent::RemoveMarker { id: marker_id }).unwrap();
 
         log.undo().unwrap();
         log.undo().unwrap();
 
         let observed: std::collections::HashSet<&str> = log.events().iter().map(kind).collect();
-        assert_eq!(observed, ALL_KINDS.iter().copied().collect(), "must exercise every BattleEvent variant");
+        assert_eq!(
+            observed,
+            ALL_KINDS.iter().copied().collect(),
+            "must exercise every BattleEvent variant"
+        );
 
         let json = serde_json::to_string(&log).unwrap();
         let restored: BattleLog = serde_json::from_str(&json).unwrap();
@@ -646,10 +748,10 @@ mod tests {
         assert!(restored.can_redo(), "the redo tail must survive the round trip");
     }
 
-    /// The exact shape every already-saved battle has: a `ReviseCombatant` with no `name` key at
-    /// all, since it was written before that field existed. Must still restore, with the name
-    /// left unchanged, or adding an optional field to a persisted event silently breaks every
-    /// saved battle.
+    /// The exact shape every already-saved battle has: a `ReviseCombatant` with no `name` or
+    /// `side` key at all, since it was written before those fields existed. Must still restore,
+    /// with the name and side left unchanged, or adding an optional field to a persisted event
+    /// silently breaks every saved battle.
     #[test]
     fn revise_combatant_without_a_name_key_still_restores() {
         let json = r#"{
@@ -670,7 +772,10 @@ mod tests {
             "next_marker_id": 0
         }"#;
         let restored: BattleLog = serde_json::from_str(json).unwrap();
-        assert_eq!(restored.battle().find(CombatantId(0)).unwrap().name, "Rin");
+        let battle = restored.battle();
+        let combatant = battle.find(CombatantId(0)).unwrap();
+        assert_eq!(combatant.name, "Rin");
+        assert_eq!(combatant.side, Side("A".to_string()));
     }
 
     #[test]
@@ -684,16 +789,28 @@ mod tests {
 
     #[test]
     fn restoring_rejects_a_cursor_past_the_end() {
-        let restored = RestoredLog { events: Vec::new(), cursor: 1, next_combatant_id: 0, next_marker_id: 0 };
+        let restored = RestoredLog {
+            events: Vec::new(),
+            cursor: 1,
+            next_combatant_id: 0,
+            next_marker_id: 0,
+        };
         let error = BattleLog::try_from(restored).unwrap_err();
         assert_eq!(error, RestoreError::CursorOutOfRange { cursor: 1, len: 0 });
     }
 
     #[test]
     fn restoring_rejects_an_event_that_no_longer_replays() {
-        let events =
-            vec![BattleEvent::StartSequence { actor: CombatantId(999), sequence: Sequence::shape_terrestrial() }];
-        let restored = RestoredLog { events, cursor: 1, next_combatant_id: 0, next_marker_id: 0 };
+        let events = vec![BattleEvent::StartSequence {
+            actor: CombatantId(999),
+            sequence: Sequence::shape_terrestrial(),
+        }];
+        let restored = RestoredLog {
+            events,
+            cursor: 1,
+            next_combatant_id: 0,
+            next_marker_id: 0,
+        };
         let error = BattleLog::try_from(restored).unwrap_err();
         assert!(matches!(error, RestoreError::Unreplayable { index: 0, .. }));
     }
@@ -706,9 +823,20 @@ mod tests {
             side: Side("A".to_string()),
             join_battle: JoinBattleResult::Successes(0),
         }];
-        let restored = RestoredLog { events, cursor: 1, next_combatant_id: 2, next_marker_id: 0 };
+        let restored = RestoredLog {
+            events,
+            cursor: 1,
+            next_combatant_id: 2,
+            next_marker_id: 0,
+        };
         let error = BattleLog::try_from(restored).unwrap_err();
-        assert_eq!(error, RestoreError::StaleCombatantCounter { counter: 2, used: CombatantId(2) });
+        assert_eq!(
+            error,
+            RestoreError::StaleCombatantCounter {
+                counter: 2,
+                used: CombatantId(2)
+            }
+        );
     }
 
     #[test]
@@ -721,10 +849,27 @@ mod tests {
                 join_battle: JoinBattleResult::Successes(0),
             },
             BattleEvent::StartBattle,
-            BattleEvent::AddMarker { id: MarkerId(3), label: label("Window"), source: CombatantId(0), at_tick: 0, ticks: 1 },
+            BattleEvent::AddMarker {
+                id: MarkerId(3),
+                label: label("Window"),
+                source: CombatantId(0),
+                at_tick: 0,
+                ticks: 1,
+            },
         ];
-        let restored = RestoredLog { events, cursor: 3, next_combatant_id: 1, next_marker_id: 3 };
+        let restored = RestoredLog {
+            events,
+            cursor: 3,
+            next_combatant_id: 1,
+            next_marker_id: 3,
+        };
         let error = BattleLog::try_from(restored).unwrap_err();
-        assert_eq!(error, RestoreError::StaleMarkerCounter { counter: 3, used: MarkerId(3) });
+        assert_eq!(
+            error,
+            RestoreError::StaleMarkerCounter {
+                counter: 3,
+                used: MarkerId(3)
+            }
+        );
     }
 }

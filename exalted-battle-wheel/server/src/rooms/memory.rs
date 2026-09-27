@@ -3,7 +3,7 @@
 //! same as a real read), so websocket-handler tests can exercise real behavior with no Docker or
 //! DynamoDB.
 
-use super::{NewRoom, Room, RoomId, RoomMember, RoomPage, RoomQuery, RoomStore, RoomStoreError, MAX_ITEM_BYTES, ROOM_TTL};
+use super::{MAX_ITEM_BYTES, NewRoom, ROOM_TTL, Room, RoomId, RoomMember, RoomPage, RoomQuery, RoomStore, RoomStoreError};
 use shared::rooms::RoomSummary;
 use shared::timestamp::Timestamp;
 use std::collections::HashMap;
@@ -27,7 +27,10 @@ fn approximate_size(room: &Room) -> usize {
 impl RoomStore for MemoryRoomStore {
     async fn get(&self, room_key: &str) -> Result<Option<Room>, RoomStoreError> {
         let rooms = self.rooms.lock().unwrap();
-        Ok(rooms.get(room_key).filter(|room| room.expires_at > OffsetDateTime::now_utc()).cloned())
+        Ok(rooms
+            .get(room_key)
+            .filter(|room| room.expires_at > OffsetDateTime::now_utc())
+            .cloned())
     }
 
     async fn list(&self, query: &RoomQuery) -> Result<RoomPage, RoomStoreError> {
@@ -60,7 +63,11 @@ impl RoomStore for MemoryRoomStore {
         let summaries = page
             .iter()
             .map(|room| RoomSummary {
-                display_name: room.display_name.clone().try_into().expect("valid by construction: see ws/handler.rs"),
+                display_name: room
+                    .display_name
+                    .clone()
+                    .try_into()
+                    .expect("valid by construction: see ws/handler.rs"),
                 member_count: u32::try_from(room.members.len()).unwrap_or(u32::MAX),
                 updated_at: Timestamp(room.updated_at),
             })
@@ -78,12 +85,19 @@ impl RoomStore for MemoryRoomStore {
             version: 1,
             log: new_room.log,
             everyone_writes: new_room.everyone_writes,
-            members: vec![RoomMember { connection_id: new_room.host, name: new_room.host_name, can_write: true, is_host: true }],
+            members: vec![RoomMember {
+                connection_id: new_room.host,
+                name: new_room.host_name,
+                can_write: true,
+                is_host: true,
+            }],
             updated_at: now,
             expires_at: now + ROOM_TTL,
         };
         if approximate_size(&room) > MAX_ITEM_BYTES {
-            return Err(RoomStoreError::TooLarge { size: approximate_size(&room) });
+            return Err(RoomStoreError::TooLarge {
+                size: approximate_size(&room),
+            });
         }
 
         let mut rooms = self.rooms.lock().unwrap();
@@ -96,7 +110,9 @@ impl RoomStore for MemoryRoomStore {
 
     async fn save(&self, mut room: Room) -> Result<Room, RoomStoreError> {
         if approximate_size(&room) > MAX_ITEM_BYTES {
-            return Err(RoomStoreError::TooLarge { size: approximate_size(&room) });
+            return Err(RoomStoreError::TooLarge {
+                size: approximate_size(&room),
+            });
         }
 
         let mut rooms = self.rooms.lock().unwrap();

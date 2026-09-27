@@ -9,12 +9,12 @@
 
 use crate::ui::glossary::Topic;
 use crate::ui::tip::{
-    on_focus_in, on_focus_in_text, on_focus_out, on_focus_out_text, on_pointer_enter, on_pointer_enter_text,
-    on_pointer_leave, on_pointer_leave_text,
+    on_focus_in, on_focus_in_text, on_focus_out, on_focus_out_text, on_pointer_enter, on_pointer_enter_text, on_pointer_leave,
+    on_pointer_leave_text,
 };
-use crate::ui::{ticks, Hovered, Tip};
-use shared::battle::{Battle, Combatant, CombatantId, Marker, MarkerId, Tick};
+use crate::ui::{Hovered, Tip, ticks};
 use leptos::prelude::*;
+use shared::battle::{Battle, Combatant, CombatantId, Marker, MarkerId, Tick};
 use std::collections::BTreeMap;
 
 const SECTOR_COUNT: i64 = 7;
@@ -71,7 +71,11 @@ fn ring_mid_radius(ring: usize) -> f64 {
 }
 
 fn ring_label(ring: usize) -> String {
-    if ring + 1 == RING_COUNT { "-5+".to_string() } else { format!("-{ring}") }
+    if ring + 1 == RING_COUNT {
+        "-5+".to_string()
+    } else {
+        format!("-{ring}")
+    }
 }
 
 fn point_on_circle(radius: f64, angle_deg: f64) -> (f64, f64) {
@@ -93,7 +97,11 @@ fn side_color_var(side: &str) -> &'static str {
 /// it never renders upside down.
 fn spoke_label_rotation(angle: f64) -> f64 {
     let normalized = angle.rem_euclid(360.0);
-    if (90.0..270.0).contains(&normalized) { angle - 180.0 } else { angle }
+    if (90.0..270.0).contains(&normalized) {
+        angle - 180.0
+    } else {
+        angle
+    }
 }
 
 /// A wheel position: `sector` ticks from now, `ring` rings in from the rim by DV penalty.
@@ -165,7 +173,13 @@ fn wheel_layout(battle: &Battle) -> WheelLayout {
     let mut beyond: Vec<&Combatant> = Vec::new();
     for combatant in &battle.combatants {
         match sector_of(combatant.next_action_tick, now) {
-            Some(sector) => cells.entry(Cell { sector, ring: ring_of(combatant.dv.penalty) }).or_default().push(combatant),
+            Some(sector) => cells
+                .entry(Cell {
+                    sector,
+                    ring: ring_of(combatant.dv.penalty),
+                })
+                .or_default()
+                .push(combatant),
             None => beyond.push(combatant),
         }
     }
@@ -201,7 +215,13 @@ fn wheel_layout(battle: &Battle) -> WheelLayout {
             let count = total - visible_count;
             let hidden_names: Vec<String> = occupants.iter().skip(visible_count).map(|c| c.name.clone()).collect();
             let (x, y) = slot_position(visible_count);
-            overflow.push(OverflowSlot { cell, x, y, count, tip: format!("+{count} more here: {}", hidden_names.join(", ")) });
+            overflow.push(OverflowSlot {
+                cell,
+                x,
+                y,
+                count,
+                tip: format!("+{count} more here: {}", hidden_names.join(", ")),
+            });
         }
     }
     // Ordered by id, not by cell: a keyed `<For>` that reorders its items re-inserts the DOM node
@@ -210,8 +230,11 @@ fn wheel_layout(battle: &Battle) -> WheelLayout {
     tokens.sort_by_key(|slot| slot.id.0);
 
     let horizon_end = now + (SECTOR_COUNT as u32 - 1);
-    let mut visible_markers: Vec<&Marker> =
-        battle.markers.iter().filter(|marker| marker.last_tick() >= now && marker.at_tick <= horizon_end).collect();
+    let mut visible_markers: Vec<&Marker> = battle
+        .markers
+        .iter()
+        .filter(|marker| marker.last_tick() >= now && marker.at_tick <= horizon_end)
+        .collect();
     visible_markers.sort_by_key(|marker| marker.id.0);
     let markers = visible_markers
         .into_iter()
@@ -231,18 +254,29 @@ fn wheel_layout(battle: &Battle) -> WheelLayout {
                 let (sx, sy) = point_on_circle(radius, start_angle);
                 let (ex, ey) = point_on_circle(radius, end_angle);
                 let large_arc = if (end_angle - start_angle).abs() > 180.0 { 1 } else { 0 };
-                MarkerShape::Arc { d: format!("M {sx} {sy} A {radius} {radius} 0 {large_arc} 1 {ex} {ey}") }
+                MarkerShape::Arc {
+                    d: format!("M {sx} {sy} A {radius} {radius} 0 {large_arc} 1 {ex} {ey}"),
+                }
             };
             let span = if marker.ticks <= 1 {
                 format!("tick {}", marker.at_tick)
             } else {
                 format!("ticks {}\u{2013}{}", marker.at_tick, marker.last_tick())
             };
-            MarkerSlot { id: marker.id, shape, tip: format!("{} ({span})", marker.label) }
+            MarkerSlot {
+                id: marker.id,
+                shape,
+                tip: format!("{} ({span})", marker.label),
+            }
         })
         .collect();
 
-    WheelLayout { tokens, overflow, markers, beyond }
+    WheelLayout {
+        tokens,
+        overflow,
+        markers,
+        beyond,
+    }
 }
 
 #[component]
@@ -372,7 +406,10 @@ fn OverHorizonEntry(id: CombatantId, battle: Memo<Battle>) -> impl IntoView {
     let name = move || battle.read().find(id).map(|c| c.name.clone()).unwrap_or_default();
     let tick = move || {
         let battle = battle.read();
-        battle.find(id).map(|c| ticks::at(battle.mode, c.next_action_tick)).unwrap_or_default()
+        battle
+            .find(id)
+            .map(|c| ticks::at(battle.mode, c.next_action_tick))
+            .unwrap_or_default()
     };
 
     view! {
@@ -568,17 +605,31 @@ mod tests {
             join_battle: JoinBattleResult::Successes(0),
             next_action_tick: tick,
             state: CombatantState::Normal,
-            dv: DvState { penalty, refreshes_at: None },
+            dv: DvState {
+                penalty,
+                refreshes_at: None,
+            },
             commitment: None,
+            last_declared: None,
         }
     }
 
     fn battle_at(tick: Tick, combatants: Vec<Combatant>) -> Battle {
-        Battle { current_tick: tick, combatants, ..Battle::genesis() }
+        Battle {
+            current_tick: tick,
+            combatants,
+            ..Battle::genesis()
+        }
     }
 
     fn marker(id: u32, source: u32, at_tick: Tick, ticks: u32) -> Marker {
-        Marker { id: MarkerId(id), label: format!("Marker {id}"), source: CombatantId(source), at_tick, ticks }
+        Marker {
+            id: MarkerId(id),
+            label: format!("Marker {id}"),
+            source: CombatantId(source),
+            at_tick,
+            ticks,
+        }
     }
 
     #[test]
@@ -633,8 +684,15 @@ mod tests {
 
     #[test]
     fn a_fourth_occupant_becomes_an_overflow_chip() {
-        let battle =
-            battle_at(0, vec![combatant(1, "A", 0, 0), combatant(2, "B", 0, 0), combatant(3, "C", 0, 0), combatant(4, "D", 0, 0)]);
+        let battle = battle_at(
+            0,
+            vec![
+                combatant(1, "A", 0, 0),
+                combatant(2, "B", 0, 0),
+                combatant(3, "C", 0, 0),
+                combatant(4, "D", 0, 0),
+            ],
+        );
         let layout = wheel_layout(&battle);
         assert_eq!(layout.tokens.len(), 3);
         let chip = layout.overflow(Cell { sector: 0, ring: 0 }).unwrap();
@@ -644,8 +702,15 @@ mod tests {
 
     #[test]
     fn overflow_keeps_the_lowest_ids_visible() {
-        let battle =
-            battle_at(0, vec![combatant(4, "D", 0, 0), combatant(1, "A", 0, 0), combatant(3, "C", 0, 0), combatant(2, "B", 0, 0)]);
+        let battle = battle_at(
+            0,
+            vec![
+                combatant(4, "D", 0, 0),
+                combatant(1, "A", 0, 0),
+                combatant(3, "C", 0, 0),
+                combatant(2, "B", 0, 0),
+            ],
+        );
         let layout = wheel_layout(&battle);
         let visible: Vec<u32> = layout.tokens.iter().map(|t| t.id.0).collect();
         assert_eq!(visible, vec![1, 2, 3]);
@@ -690,7 +755,11 @@ mod tests {
     fn a_marker_is_clipped_to_the_horizon() {
         // Spans tick 2 through 21; at now=5 with a 7-sector horizon (ticks 5-11), the arc must be
         // clipped to start at "now" and end at the last visible sector rather than run off both ends.
-        let battle = Battle { current_tick: 5, markers: vec![marker(1, 1, 2, 20)], ..Battle::genesis() };
+        let battle = Battle {
+            current_tick: 5,
+            markers: vec![marker(1, 1, 2, 20)],
+            ..Battle::genesis()
+        };
         let layout = wheel_layout(&battle);
         let slot = layout.marker(MarkerId(1)).unwrap();
         let (sx, sy) = point_on_circle(MARKER_GUTTER[0], 0.0);
@@ -701,22 +770,33 @@ mod tests {
 
     #[test]
     fn a_one_tick_marker_is_a_dot() {
-        let battle = Battle { current_tick: 0, markers: vec![marker(1, 1, 0, 1)], ..Battle::genesis() };
+        let battle = Battle {
+            current_tick: 0,
+            markers: vec![marker(1, 1, 0, 1)],
+            ..Battle::genesis()
+        };
         let layout = wheel_layout(&battle);
         assert!(matches!(layout.marker(MarkerId(1)).unwrap().shape, MarkerShape::Dot { .. }));
     }
 
     #[test]
     fn an_expired_marker_is_not_drawn() {
-        let battle = Battle { current_tick: 10, markers: vec![marker(1, 1, 0, 5)], ..Battle::genesis() };
+        let battle = Battle {
+            current_tick: 10,
+            markers: vec![marker(1, 1, 0, 5)],
+            ..Battle::genesis()
+        };
         let layout = wheel_layout(&battle);
         assert!(layout.marker(MarkerId(1)).is_none());
     }
 
     #[test]
     fn marker_tip_reads_its_span() {
-        let battle =
-            Battle { current_tick: 3, markers: vec![marker(1, 1, 8, 3), marker(2, 1, 5, 1)], ..Battle::genesis() };
+        let battle = Battle {
+            current_tick: 3,
+            markers: vec![marker(1, 1, 8, 3), marker(2, 1, 5, 1)],
+            ..Battle::genesis()
+        };
         let layout = wheel_layout(&battle);
         assert_eq!(layout.marker(MarkerId(1)).unwrap().tip, "Marker 1 (ticks 8\u{2013}10)");
         assert_eq!(layout.marker(MarkerId(2)).unwrap().tip, "Marker 2 (tick 5)");

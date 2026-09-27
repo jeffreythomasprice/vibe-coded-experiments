@@ -66,7 +66,7 @@ pub fn random_room_name() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shared::protocol::{sanitize_name, MAX_NAME_LEN};
+    use shared::protocol::{MAX_NAME_LEN, sanitize_name};
 
     #[test]
     fn pick_maps_zero_to_the_first_word() {

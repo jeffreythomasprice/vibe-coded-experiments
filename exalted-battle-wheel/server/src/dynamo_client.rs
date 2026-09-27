@@ -7,8 +7,8 @@ use aws_config::BehaviorVersion;
 use aws_sdk_dynamodb::Client;
 use aws_smithy_http_client::tls;
 use aws_smithy_http_client::tls::rustls_provider::CryptoMode;
-use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
+use time::format_description::well_known::Rfc3339;
 
 /// Builds the DynamoDB client from the environment. Infallible: credentials are resolved lazily on
 /// the first request, so a missing region or bad key surfaces as a 500 on that request rather than
@@ -18,10 +18,14 @@ pub async fn client(config: &Config) -> Client {
     // The SDK's default HTTPS client is rustls over aws-lc-rs, which means compiling several
     // hundred C files inside an emulated-arm64 container on every dependency-layer rebuild. Ring
     // builds from pre-generated asm instead.
-    let http_client =
-        aws_smithy_http_client::Builder::new().tls_provider(tls::Provider::Rustls(CryptoMode::Ring)).build_https();
+    let http_client = aws_smithy_http_client::Builder::new()
+        .tls_provider(tls::Provider::Rustls(CryptoMode::Ring))
+        .build_https();
 
-    let sdk_config = aws_config::defaults(BehaviorVersion::latest()).http_client(http_client).load().await;
+    let sdk_config = aws_config::defaults(BehaviorVersion::latest())
+        .http_client(http_client)
+        .load()
+        .await;
 
     let mut builder = aws_sdk_dynamodb::config::Builder::from(&sdk_config);
     if let Some(endpoint) = &config.dynamodb_endpoint {
@@ -47,11 +51,23 @@ pub enum ItemError {
     #[error("item attribute {name:?} is not of type {expected}")]
     WrongType { name: &'static str, expected: &'static str },
     #[error("item attribute {name:?} is not an rfc3339 timestamp {value:?}: {source}")]
-    Timestamp { name: &'static str, value: String, source: time::error::Parse },
+    Timestamp {
+        name: &'static str,
+        value: String,
+        source: time::error::Parse,
+    },
     #[error("item attribute {name:?} is not a valid unix timestamp {value}: {source}")]
-    Epoch { name: &'static str, value: i64, source: time::error::ComponentRange },
+    Epoch {
+        name: &'static str,
+        value: i64,
+        source: time::error::ComponentRange,
+    },
     #[error("item attribute {name:?} is not a valid number {value:?}: {source}")]
-    Number { name: &'static str, value: String, source: std::num::ParseIntError },
+    Number {
+        name: &'static str,
+        value: String,
+        source: std::num::ParseIntError,
+    },
     #[error("item attribute {name:?} is not valid json: {source}")]
     Json { name: &'static str, source: serde_json::Error },
     #[error("item attribute {name:?} does not satisfy its wire constraints ({value:?}): {reason}")]

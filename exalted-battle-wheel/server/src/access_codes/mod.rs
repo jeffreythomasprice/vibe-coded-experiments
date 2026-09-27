@@ -45,11 +45,7 @@ pub trait AccessCodeStore: Clone + Send + Sync + 'static {
     fn list(&self) -> impl Future<Output = Result<Vec<AccessCode>, StoreError>> + Send;
     /// `access_key`, if given, becomes the code verbatim; otherwise one is generated. A collision
     /// with an existing key -- whether given or generated -- is `StoreError::AlreadyExists`.
-    fn create(
-        &self,
-        access_key: Option<&str>,
-        is_admin: bool,
-    ) -> impl Future<Output = Result<AccessCode, StoreError>> + Send;
+    fn create(&self, access_key: Option<&str>, is_admin: bool) -> impl Future<Output = Result<AccessCode, StoreError>> + Send;
     fn update(&self, access_key: &str, is_admin: bool) -> impl Future<Output = Result<AccessCode, StoreError>> + Send;
     fn delete(&self, access_key: &str) -> impl Future<Output = Result<(), StoreError>> + Send;
 }

@@ -1,11 +1,11 @@
 use crate::battle_net::Battles;
 use crate::ui::glossary::Topic;
-use crate::ui::{ticks, DetailTip, MarkerForm, Modal, Tip};
-use shared::battle::{
-    combatant_name, queue, Battle, BattleEvent, BattleMode, Combatant, CombatantId, CombatantState, DvState, Marker,
-    MarkerId, QueueItem, Tick, MAX_COMBATANT_NAME_LEN,
-};
+use crate::ui::{Combobox, DetailTip, MarkerForm, Modal, Tip, ticks};
 use leptos::prelude::*;
+use shared::battle::{
+    Battle, BattleEvent, BattleMode, Combatant, CombatantId, CombatantState, DvState, MAX_COMBATANT_NAME_LEN, Marker, MarkerId, QueueItem,
+    Side, Tick, combatant_name, queue,
+};
 
 pub fn span_label(mode: BattleMode, marker: &Marker) -> String {
     ticks::span(mode, marker.at_tick, marker.ticks)
@@ -15,7 +15,11 @@ pub fn span_label(mode: BattleMode, marker: &Marker) -> String {
 /// started yet. `span_label` alone can't say this — it only knows the span, not `now`.
 fn marker_queue_span(mode: BattleMode, marker: &Marker, now: Tick) -> String {
     if marker.at_tick > now {
-        format!("starts {}, for {}", ticks::at(mode, marker.at_tick), ticks::count(mode, marker.ticks))
+        format!(
+            "starts {}, for {}",
+            ticks::at(mode, marker.at_tick),
+            ticks::count(mode, marker.ticks)
+        )
     } else {
         span_label(mode, marker)
     }
@@ -31,11 +35,19 @@ fn combatant_row_text(mode: BattleMode, combatant: &Combatant, now: Tick) -> Str
     let until = ticks::count(mode, combatant.next_action_tick - now);
     let next = ticks::at(mode, combatant.next_action_tick);
     if let CombatantState::InSequence(sequence) = &combatant.state {
-        return format!("{} will do {} on {next} (in {until})", combatant.name, sequence.current_step().label);
+        return format!(
+            "{} will do {} on {next} (in {until})",
+            combatant.name,
+            sequence.current_step().label
+        );
     }
     match &combatant.commitment {
         Some(commitment) => {
-            format!("{} \u{2014} {} resolving, ready {next} (in {until})", combatant.name, commitment.label.to_string())
+            format!(
+                "{} \u{2014} {} resolving, ready {next} (in {until})",
+                combatant.name,
+                commitment.label.to_string()
+            )
         }
         None => format!("{} \u{2014} ready to act on {next} (in {until})", combatant.name),
     }
@@ -106,7 +118,10 @@ pub fn QueuePanel() -> impl IntoView {
 fn CombatantQueueRow(id: CombatantId, battle: Memo<Battle>, editing: RwSignal<Option<Editing>>) -> impl IntoView {
     let text = move || {
         let battle = battle.read();
-        battle.find(id).map(|c| combatant_row_text(battle.mode, c, battle.current_tick)).unwrap_or_default()
+        battle
+            .find(id)
+            .map(|c| combatant_row_text(battle.mode, c, battle.current_tick))
+            .unwrap_or_default()
     };
     let ready = move || {
         let battle = battle.read();
@@ -134,14 +149,30 @@ fn CombatantQueueRow(id: CombatantId, battle: Memo<Battle>, editing: RwSignal<Op
 fn MarkerQueueRow(id: MarkerId, battle: Memo<Battle>, editing: RwSignal<Option<Editing>>) -> impl IntoView {
     let text = move || {
         let battle = battle.read();
-        battle.markers.iter().find(|m| m.id == id).map(|marker| {
-            let source = battle.find(marker.source).map(|c| c.name.clone()).unwrap_or_else(|| format!("#{}", marker.source.0));
-            format!("{} \u{2014} {}, from {source}", marker.label, marker_queue_span(battle.mode, marker, battle.current_tick))
-        }).unwrap_or_default()
+        battle
+            .markers
+            .iter()
+            .find(|m| m.id == id)
+            .map(|marker| {
+                let source = battle
+                    .find(marker.source)
+                    .map(|c| c.name.clone())
+                    .unwrap_or_else(|| format!("#{}", marker.source.0));
+                format!(
+                    "{} \u{2014} {}, from {source}",
+                    marker.label,
+                    marker_queue_span(battle.mode, marker, battle.current_tick)
+                )
+            })
+            .unwrap_or_default()
     };
     let pending = move || {
         let battle = battle.read();
-        battle.markers.iter().find(|m| m.id == id).is_some_and(|m| m.at_tick > battle.current_tick)
+        battle
+            .markers
+            .iter()
+            .find(|m| m.id == id)
+            .is_some_and(|m| m.at_tick > battle.current_tick)
     };
     let topic = Signal::derive(move || if pending() { Topic::PendingMarker } else { Topic::Markers });
     let detail = Signal::derive(String::new);
@@ -180,6 +211,37 @@ fn state_kind_of(state: &CombatantState) -> StateKind {
     }
 }
 
+/// A blank name or side field keeps the current value rather than clearing it, matching the add
+/// form's refusal to add a nameless combatant (roster.rs). A typed side that matches an existing
+/// faction apart from casing (ignoring the actor's own current side, so the sole member of a
+/// faction can still be re-cased) joins that faction instead of splitting it into a second one.
+fn resolved_name_and_side(
+    typed_name: &str,
+    initial_name: &str,
+    typed_side: &str,
+    initial_side: &Side,
+    battle: &Battle,
+    actor_id: CombatantId,
+) -> (shared::battle::CombatantName, Side) {
+    let trimmed_name = typed_name.trim();
+    let name = if trimmed_name.is_empty() {
+        initial_name.to_string()
+    } else {
+        trimmed_name.to_string()
+    };
+
+    let trimmed_side = typed_side.trim();
+    let side = if trimmed_side.is_empty() {
+        initial_side.clone()
+    } else {
+        battle
+            .canonical_side_excluding(actor_id, trimmed_side)
+            .unwrap_or_else(|| Side(trimmed_side.to_string()))
+    };
+
+    (combatant_name(name), side)
+}
+
 #[component]
 fn CombatantEditor(
     actor_id: CombatantId,
@@ -201,6 +263,11 @@ fn CombatantEditor(
     let initial_name = initial.name.clone();
     let name = RwSignal::new(initial_name.clone());
 
+    let initial_side = initial.side.clone();
+    let side = RwSignal::new(initial_side.0.clone());
+    let battle = expect_context::<Memo<Battle>>();
+    let sides = Signal::derive(move || battle.read().sides());
+
     let next_tick = RwSignal::new(initial.next_action_tick.to_string());
     let dv_penalty = RwSignal::new(initial.dv.penalty.to_string());
     let no_refresh = RwSignal::new(initial.dv.refreshes_at.is_none());
@@ -214,17 +281,25 @@ fn CombatantEditor(
     let clear_commitment = RwSignal::new(false);
     let note = RwSignal::new(String::new());
 
-    // A blank field keeps the current name rather than clearing it, matching the add form's
-    // refusal to add a nameless combatant (roster.rs).
     let cancel_initial_name = initial_name.clone();
+    let cancel_initial_side = initial_side.clone();
     let cancel_action = move |_| {
         let dv = DvState {
             penalty: dv_penalty.get().trim().parse().unwrap_or(0),
-            refreshes_at: if no_refresh.get() { None } else { dv_refreshes.get().trim().parse().ok() },
+            refreshes_at: if no_refresh.get() {
+                None
+            } else {
+                dv_refreshes.get().trim().parse().ok()
+            },
         };
-        let typed_name = name.get();
-        let trimmed_name = typed_name.trim();
-        let revised_name = if trimmed_name.is_empty() { cancel_initial_name.clone() } else { trimmed_name.to_string() };
+        let (revised_name, revised_side) = resolved_name_and_side(
+            &name.get(),
+            &cancel_initial_name,
+            &side.get(),
+            &cancel_initial_side,
+            &battle.read_untracked(),
+            actor_id,
+        );
         battles.push(BattleEvent::ReviseCombatant {
             actor: actor_id,
             next_action_tick: current_tick,
@@ -232,13 +307,16 @@ fn CombatantEditor(
             dv,
             commitment: None,
             note: shared::battle::note(note.get()),
-            name: Some(combatant_name(revised_name)),
+            name: Some(revised_name),
+            side: Some(revised_side),
         });
         on_close();
     };
 
     let apply = move |_| {
-        let Ok(parsed_tick) = next_tick.get().trim().parse::<Tick>() else { return };
+        let Ok(parsed_tick) = next_tick.get().trim().parse::<Tick>() else {
+            return;
+        };
         let state = match state_kind.get() {
             StateKind::Normal => CombatantState::Normal,
             StateKind::Guarding => CombatantState::Guarding,
@@ -255,12 +333,21 @@ fn CombatantEditor(
         };
         let dv = DvState {
             penalty: dv_penalty.get().trim().parse().unwrap_or(0),
-            refreshes_at: if no_refresh.get() { None } else { dv_refreshes.get().trim().parse().ok() },
+            refreshes_at: if no_refresh.get() {
+                None
+            } else {
+                dv_refreshes.get().trim().parse().ok()
+            },
         };
         let commitment = if clear_commitment.get() { None } else { initial_commitment.clone() };
-        let typed_name = name.get();
-        let trimmed_name = typed_name.trim();
-        let revised_name = if trimmed_name.is_empty() { initial_name.clone() } else { trimmed_name.to_string() };
+        let (revised_name, revised_side) = resolved_name_and_side(
+            &name.get(),
+            &initial_name,
+            &side.get(),
+            &initial_side,
+            &battle.read_untracked(),
+            actor_id,
+        );
         battles.push(BattleEvent::ReviseCombatant {
             actor: actor_id,
             next_action_tick: parsed_tick,
@@ -268,7 +355,8 @@ fn CombatantEditor(
             dv,
             commitment,
             note: shared::battle::note(note.get()),
-            name: Some(combatant_name(revised_name)),
+            name: Some(revised_name),
+            side: Some(revised_side),
         });
         on_close();
     };
@@ -286,6 +374,12 @@ fn CombatantEditor(
                         prop:value=move || name.get()
                         on:input=move |ev| name.set(event_target_value(&ev))
                     />
+                </label>
+            </Tip>
+            <Tip topic=Topic::Side>
+                <label class="queue-field">
+                    "Side"
+                    <Combobox value=side options=sides list_id="revise-side-options" placeholder="Side" />
                 </label>
             </Tip>
             <label class="queue-field">
@@ -404,8 +498,12 @@ fn MarkerEditor(marker_id: MarkerId, initial: Marker, battles: Battles, on_close
     let ticks = RwSignal::new(initial.ticks.to_string());
 
     let apply = move |_| {
-        let Ok(parsed_tick) = at_tick.get().trim().parse::<Tick>() else { return };
-        let Ok(parsed_ticks) = ticks.get().trim().parse::<u32>() else { return };
+        let Ok(parsed_tick) = at_tick.get().trim().parse::<Tick>() else {
+            return;
+        };
+        let Ok(parsed_ticks) = ticks.get().trim().parse::<u32>() else {
+            return;
+        };
         battles.push(BattleEvent::ReviseMarker {
             id: marker_id,
             label: shared::battle::label(label.get()),
@@ -457,6 +555,7 @@ mod tests {
             state,
             dv: DvState::default(),
             commitment,
+            last_declared: None,
         }
     }
 
@@ -478,38 +577,69 @@ mod tests {
 
     #[test]
     fn combatant_row_reports_a_resolving_commitment() {
-        let commitment = Commitment { label: "Attack".try_into().unwrap(), speed: 5, declared_at: 7 };
+        let commitment = Commitment {
+            label: "Attack".try_into().unwrap(),
+            speed: 5,
+            declared_at: 7,
+        };
         let c = combatant(CombatantState::Normal, Some(commitment));
-        assert_eq!(combatant_row_text(BattleMode::Personal, &c, 7), "Rin \u{2014} Attack resolving, ready tick 12 (in 5 ticks)");
+        assert_eq!(
+            combatant_row_text(BattleMode::Personal, &c, 7),
+            "Rin \u{2014} Attack resolving, ready tick 12 (in 5 ticks)"
+        );
     }
 
     #[test]
     fn combatant_row_falls_back_to_a_plain_ready_message() {
         let c = combatant(CombatantState::Normal, None);
-        assert_eq!(combatant_row_text(BattleMode::Personal, &c, 7), "Rin \u{2014} ready to act on tick 12 (in 5 ticks)");
+        assert_eq!(
+            combatant_row_text(BattleMode::Personal, &c, 7),
+            "Rin \u{2014} ready to act on tick 12 (in 5 ticks)"
+        );
     }
 
     #[test]
     fn combatant_row_uses_long_tick_vocabulary_in_mass_combat() {
         let c = combatant(CombatantState::Normal, None);
-        assert_eq!(combatant_row_text(BattleMode::Mass, &c, 7), "Rin \u{2014} ready to act on long tick 12 (in 5 long ticks)");
+        assert_eq!(
+            combatant_row_text(BattleMode::Mass, &c, 7),
+            "Rin \u{2014} ready to act on long tick 12 (in 5 long ticks)"
+        );
     }
 
     #[test]
     fn marker_span_reports_pending_before_it_starts() {
-        let marker = Marker { id: MarkerId(0), label: "Ambush".to_string(), source: CombatantId(0), at_tick: 14, ticks: 3 };
+        let marker = Marker {
+            id: MarkerId(0),
+            label: "Ambush".to_string(),
+            source: CombatantId(0),
+            at_tick: 14,
+            ticks: 3,
+        };
         assert_eq!(marker_queue_span(BattleMode::Personal, &marker, 10), "starts tick 14, for 3 ticks");
     }
 
     #[test]
     fn marker_span_reports_the_active_span_once_started() {
-        let marker = Marker { id: MarkerId(0), label: "Ambush".to_string(), source: CombatantId(0), at_tick: 8, ticks: 3 };
+        let marker = Marker {
+            id: MarkerId(0),
+            label: "Ambush".to_string(),
+            source: CombatantId(0),
+            at_tick: 8,
+            ticks: 3,
+        };
         assert_eq!(marker_queue_span(BattleMode::Personal, &marker, 9), "ticks 8\u{2013}10");
     }
 
     #[test]
     fn span_label_covers_a_single_tick() {
-        let marker = Marker { id: MarkerId(0), label: "Window".to_string(), source: CombatantId(0), at_tick: 5, ticks: 1 };
+        let marker = Marker {
+            id: MarkerId(0),
+            label: "Window".to_string(),
+            source: CombatantId(0),
+            at_tick: 5,
+            ticks: 1,
+        };
         assert_eq!(span_label(BattleMode::Personal, &marker), "tick 5");
     }
 }

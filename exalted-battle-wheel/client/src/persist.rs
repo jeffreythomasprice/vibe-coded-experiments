@@ -5,8 +5,8 @@
 use crate::storage::{self, StorageError};
 use leptos::prelude::*;
 use leptos::web_sys;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::ops::Deref;
 
 const KEY_PREFIX: &str = "ebw.";
@@ -14,9 +14,17 @@ const KEY_PREFIX: &str = "ebw.";
 #[derive(Debug, thiserror::Error)]
 pub enum PersistError {
     #[error("could not encode {key:?}: {source}")]
-    Encode { key: &'static str, #[source] source: serde_json::Error },
+    Encode {
+        key: &'static str,
+        #[source]
+        source: serde_json::Error,
+    },
     #[error("could not decode {key:?}: {source}")]
-    Decode { key: &'static str, #[source] source: serde_json::Error },
+    Decode {
+        key: &'static str,
+        #[source]
+        source: serde_json::Error,
+    },
     #[error(transparent)]
     Storage(#[from] StorageError),
 }

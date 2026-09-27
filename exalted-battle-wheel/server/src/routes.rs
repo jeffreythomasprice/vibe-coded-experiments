@@ -1,17 +1,17 @@
 use crate::access_codes::{AccessCode, AccessCodeStore};
-use crate::auth::{require_access_code, require_admin, Caller};
+use crate::auth::{Caller, require_access_code, require_admin};
 use crate::connections::ConnectionStore;
 use crate::error::ApiError;
-use crate::rooms::{RoomQuery, RoomStore, DEFAULT_ROOM_PAGE, MAX_ROOM_PAGE};
+use crate::rooms::{DEFAULT_ROOM_PAGE, MAX_ROOM_PAGE, RoomQuery, RoomStore};
 use crate::sessions::Sessions;
 use crate::wire_json::WireJson;
 use crate::ws::{self, Hub};
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{delete, get};
-use axum::{middleware, Json, Router};
+use axum::{Json, Router, middleware};
 use shared::access::{AccessCodeList, CreateAccessCode, UpdateAccessCode};
-use shared::protocol::{room_key, LeaveReason, ServerMessage};
+use shared::protocol::{LeaveReason, ServerMessage, room_key};
 use shared::rooms::RoomList;
 
 #[derive(Clone)]
@@ -29,10 +29,15 @@ pub fn router<A: AccessCodeStore, R: RoomStore, C: ConnectionStore>(state: AppSt
     // itself readable by every code would make "admin-only" purely cosmetic for anyone willing to
     // brute-force room names against it.
     let admin = Router::new()
-        .route("/access-codes", get(list_access_codes::<A, R, C>).post(create_access_code::<A, R, C>))
+        .route(
+            "/access-codes",
+            get(list_access_codes::<A, R, C>).post(create_access_code::<A, R, C>),
+        )
         .route(
             "/access-codes/{access_key}",
-            get(read_access_code::<A, R, C>).put(update_access_code::<A, R, C>).delete(delete_access_code::<A, R, C>),
+            get(read_access_code::<A, R, C>)
+                .put(update_access_code::<A, R, C>)
+                .delete(delete_access_code::<A, R, C>),
         )
         .route("/rooms", get(list_rooms::<A, R, C>))
         .route("/rooms/{room_name}", delete(delete_room::<A, R, C>))
@@ -88,7 +93,11 @@ struct ListRoomsParams {
 /// `RoomStore::list`'s own callers) has to trust a client-supplied page size.
 fn room_query(params: ListRoomsParams) -> RoomQuery {
     let limit = params.limit.unwrap_or(DEFAULT_ROOM_PAGE).clamp(1, MAX_ROOM_PAGE);
-    RoomQuery { search: params.q.unwrap_or_default(), limit, after: params.cursor }
+    RoomQuery {
+        search: params.q.unwrap_or_default(),
+        limit,
+        after: params.cursor,
+    }
 }
 
 async fn list_rooms<A: AccessCodeStore, R: RoomStore, C: ConnectionStore>(
@@ -96,7 +105,10 @@ async fn list_rooms<A: AccessCodeStore, R: RoomStore, C: ConnectionStore>(
     Query(params): Query<ListRoomsParams>,
 ) -> Result<Json<RoomList>, ApiError> {
     let page = state.rooms.list(&room_query(params)).await?;
-    Ok(Json(RoomList { rooms: page.rooms, next_cursor: page.next }))
+    Ok(Json(RoomList {
+        rooms: page.rooms,
+        next_cursor: page.next,
+    }))
 }
 
 /// Deletes a room outright and disconnects everyone in it, regardless of who's currently
@@ -113,12 +125,20 @@ async fn delete_room<A: AccessCodeStore, R: RoomStore, C: ConnectionStore>(
     let key = room_key(&room_name).map_err(|_| ApiError::NotFound)?;
 
     let guard = state.hub.lock_rooms().await;
-    let Some(room) = state.rooms.get(&key).await? else { return Err(ApiError::NotFound) };
+    let Some(room) = state.rooms.get(&key).await? else {
+        return Err(ApiError::NotFound);
+    };
     state.rooms.delete(&key).await?;
     drop(guard);
 
     let targets = room.members.iter().map(|member| member.connection_id.clone());
-    ws::notify(&state.hub, targets, ServerMessage::Left { reason: LeaveReason::RoomClosed });
+    ws::notify(
+        &state.hub,
+        targets,
+        ServerMessage::Left {
+            reason: LeaveReason::RoomClosed,
+        },
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -178,8 +198,8 @@ mod tests {
     use super::*;
     use crate::access_codes::MemoryAccessCodeStore;
     use crate::connections::MemoryConnectionStore;
-    use crate::rooms::{MemoryRoomStore, Room, RoomId, RoomMember, ROOM_TTL};
-    use axum::body::{to_bytes, Body};
+    use crate::rooms::{MemoryRoomStore, ROOM_TTL, Room, RoomId, RoomMember};
+    use axum::body::{Body, to_bytes};
     use axum::http::Request;
     use shared::battle::BattleLog;
     use shared::protocol::ConnectionId;
@@ -247,9 +267,17 @@ mod tests {
         if let Some(cursor) = cursor {
             params.push(format!("cursor={cursor}"));
         }
-        let uri = if params.is_empty() { "/rooms".to_string() } else { format!("/rooms?{}", params.join("&")) };
-        let request =
-            Request::builder().method("GET").uri(uri).header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap();
+        let uri = if params.is_empty() {
+            "/rooms".to_string()
+        } else {
+            format!("/rooms?{}", params.join("&"))
+        };
+        let request = Request::builder()
+            .method("GET")
+            .uri(uri)
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap();
         let response = app.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -356,10 +384,19 @@ mod tests {
         access_codes.seed("root", true);
         rooms.seed(sample_room("goblin-camp"));
 
-        assert_eq!(request(&app, "DELETE", "/rooms/goblin-camp", Some("member")).await, StatusCode::FORBIDDEN);
-        assert_eq!(request(&app, "DELETE", "/rooms/goblin-camp", Some("root")).await, StatusCode::NO_CONTENT);
+        assert_eq!(
+            request(&app, "DELETE", "/rooms/goblin-camp", Some("member")).await,
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            request(&app, "DELETE", "/rooms/goblin-camp", Some("root")).await,
+            StatusCode::NO_CONTENT
+        );
         // Gone: a second delete finds nothing to remove.
-        assert_eq!(request(&app, "DELETE", "/rooms/goblin-camp", Some("root")).await, StatusCode::NOT_FOUND);
+        assert_eq!(
+            request(&app, "DELETE", "/rooms/goblin-camp", Some("root")).await,
+            StatusCode::NOT_FOUND
+        );
     }
 
     #[tokio::test]
@@ -379,16 +416,31 @@ mod tests {
         hub.register(member_id.clone(), tx);
 
         let mut room = sample_room("goblin-camp");
-        room.members.push(RoomMember { connection_id: member_id, name: "Guest".to_string(), can_write: true, is_host: true });
+        room.members.push(RoomMember {
+            connection_id: member_id,
+            name: "Guest".to_string(),
+            can_write: true,
+            is_host: true,
+        });
         rooms.seed(room);
 
-        assert_eq!(request(&app, "DELETE", "/rooms/goblin-camp", Some("root")).await, StatusCode::NO_CONTENT);
+        assert_eq!(
+            request(&app, "DELETE", "/rooms/goblin-camp", Some("root")).await,
+            StatusCode::NO_CONTENT
+        );
 
         let sent = rx.try_recv().expect("the member should have been notified that its room closed");
-        let axum::extract::ws::Message::Text(text) = sent else { panic!("expected a text frame") };
+        let axum::extract::ws::Message::Text(text) = sent else {
+            panic!("expected a text frame")
+        };
         let envelope: shared::protocol::ServerEnvelope = serde_json::from_str(&text).unwrap();
         assert_eq!(envelope.reply_to, None);
-        assert_eq!(envelope.message, ServerMessage::Left { reason: LeaveReason::RoomClosed });
+        assert_eq!(
+            envelope.message,
+            ServerMessage::Left {
+                reason: LeaveReason::RoomClosed
+            }
+        );
     }
 
     #[tokio::test]
@@ -545,7 +597,10 @@ mod tests {
     async fn deleting_an_unknown_code_is_not_found() {
         let (app, store) = app();
         store.seed("root", true);
-        assert_eq!(request(&app, "DELETE", "/access-codes/unknown", Some("root")).await, StatusCode::NOT_FOUND);
+        assert_eq!(
+            request(&app, "DELETE", "/access-codes/unknown", Some("root")).await,
+            StatusCode::NOT_FOUND
+        );
     }
 
     #[tokio::test]
@@ -562,6 +617,9 @@ mod tests {
             .unwrap();
         assert_eq!(app.clone().oneshot(demote).await.unwrap().status(), StatusCode::FORBIDDEN);
 
-        assert_eq!(request(&app, "DELETE", "/access-codes/root", Some("root")).await, StatusCode::FORBIDDEN);
+        assert_eq!(
+            request(&app, "DELETE", "/access-codes/root", Some("root")).await,
+            StatusCode::FORBIDDEN
+        );
     }
 }

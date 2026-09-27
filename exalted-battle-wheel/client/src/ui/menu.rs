@@ -4,7 +4,7 @@
 
 use crate::battle_net::Battles;
 use crate::ui::glossary::Topic;
-use crate::ui::{room_label, ChangelogModal, ConfigModal, ConfigOpen, RoomModal, RoomOpen, Tip};
+use crate::ui::{ChangelogModal, ConfigModal, ConfigOpen, RoomModal, RoomOpen, Tip, room_label};
 use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
 use leptos::web_sys;

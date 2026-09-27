@@ -22,22 +22,35 @@ fn layer(path: &Path, values: &mut BTreeMap<String, String>) -> Result<(), EnvEr
     match dotenvy::from_path_iter(path) {
         Ok(iter) => {
             for item in iter {
-                let (key, value) = item.map_err(|source| EnvError::Read { path: path.to_path_buf(), source })?;
+                let (key, value) = item.map_err(|source| EnvError::Read {
+                    path: path.to_path_buf(),
+                    source,
+                })?;
                 values.insert(key, value);
             }
             Ok(())
         }
         Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(source) => Err(EnvError::Read { path: path.to_path_buf(), source }),
+        Err(source) => Err(EnvError::Read {
+            path: path.to_path_buf(),
+            source,
+        }),
     }
 }
 
 fn main() -> Result<(), EnvError> {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let profile = if std::env::var("PROFILE").as_deref() == Ok("release") { "production" } else { "development" };
+    let profile = if std::env::var("PROFILE").as_deref() == Ok("release") {
+        "production"
+    } else {
+        "development"
+    };
 
-    let layers =
-        [manifest_dir.join(".env"), manifest_dir.join(format!(".env.{profile}")), manifest_dir.join(".env.local")];
+    let layers = [
+        manifest_dir.join(".env"),
+        manifest_dir.join(format!(".env.{profile}")),
+        manifest_dir.join(".env.local"),
+    ];
 
     let mut values = BTreeMap::new();
     for path in &layers {

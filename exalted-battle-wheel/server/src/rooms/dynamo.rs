@@ -1,17 +1,17 @@
-use super::{ItemError, NewRoom, Room, RoomId, RoomMember, RoomPage, RoomQuery, RoomStore, RoomStoreError, MAX_ITEM_BYTES, ROOM_TTL};
+use super::{ItemError, MAX_ITEM_BYTES, NewRoom, ROOM_TTL, Room, RoomId, RoomMember, RoomPage, RoomQuery, RoomStore, RoomStoreError};
 use crate::config::Config;
 use crate::dynamo_client::{self, format_timestamp};
+use aws_sdk_dynamodb::Client;
 use aws_sdk_dynamodb::operation::put_item::PutItemError;
 use aws_sdk_dynamodb::types::AttributeValue;
-use aws_sdk_dynamodb::Client;
 use shared::battle::BattleLog;
 use shared::protocol::{ConnectionId, RoomName};
 use shared::rooms::RoomSummary;
 use shared::timestamp::Timestamp;
 use std::collections::HashMap;
 use std::sync::Arc;
-use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
+use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
 
 const ROOM_KEY: &str = "room_key";
@@ -36,7 +36,10 @@ pub struct DynamoRoomStore {
 }
 
 pub async fn connect(config: &Config) -> DynamoRoomStore {
-    DynamoRoomStore { client: dynamo_client::client(config).await, table: Arc::from(config.rooms_table.as_str()) }
+    DynamoRoomStore {
+        client: dynamo_client::client(config).await,
+        table: Arc::from(config.rooms_table.as_str()),
+    }
 }
 
 /// Rough but conservative: DynamoDB's per-item ceiling is on the whole item, but the log
@@ -91,7 +94,10 @@ fn room_to_item(room: &Room, log_json: &str) -> HashMap<String, AttributeValue> 
         (VERSION.to_string(), AttributeValue::N(room.version.to_string())),
         (LOG.to_string(), AttributeValue::S(log_json.to_string())),
         (EVERYONE_WRITES.to_string(), AttributeValue::Bool(room.everyone_writes)),
-        (MEMBERS.to_string(), AttributeValue::L(room.members.iter().map(member_to_item).collect())),
+        (
+            MEMBERS.to_string(),
+            AttributeValue::L(room.members.iter().map(member_to_item).collect()),
+        ),
         (UPDATED_AT.to_string(), AttributeValue::S(format_timestamp(room.updated_at))),
         (EXPIRES_AT.to_string(), AttributeValue::N(epoch_seconds(room.expires_at))),
     ])
@@ -105,10 +111,18 @@ fn item_to_room(item: &HashMap<String, AttributeValue>) -> Result<Room, ItemErro
             .iter()
             .map(|entry| match entry {
                 AttributeValue::M(map) => item_to_member(map),
-                _ => Err(ItemError::WrongType { name: MEMBERS, expected: "L of M" }),
+                _ => Err(ItemError::WrongType {
+                    name: MEMBERS,
+                    expected: "L of M",
+                }),
             })
             .collect::<Result<Vec<_>, _>>()?,
-        Some(_) => return Err(ItemError::WrongType { name: MEMBERS, expected: "L" }),
+        Some(_) => {
+            return Err(ItemError::WrongType {
+                name: MEMBERS,
+                expected: "L",
+            });
+        }
         None => return Err(ItemError::Missing(MEMBERS)),
     };
 
@@ -162,7 +176,11 @@ fn epoch_attr(item: &HashMap<String, AttributeValue>, name: &'static str) -> Res
         None => return Err(ItemError::Missing(name)),
     };
     let seconds: i64 = value.parse().map_err(|source| ItemError::Number { name, value, source })?;
-    OffsetDateTime::from_unix_timestamp(seconds).map_err(|source| ItemError::Epoch { name, value: seconds, source })
+    OffsetDateTime::from_unix_timestamp(seconds).map_err(|source| ItemError::Epoch {
+        name,
+        value: seconds,
+        source,
+    })
 }
 
 impl RoomStore for DynamoRoomStore {
@@ -207,8 +225,10 @@ impl RoomStore for DynamoRoomStore {
         let now = OffsetDateTime::now_utc();
         let mut rooms = Vec::new();
         let mut next = None;
-        let mut start_key =
-            query.after.as_ref().map(|after| HashMap::from([(ROOM_KEY.to_string(), AttributeValue::S(after.clone()))]));
+        let mut start_key = query
+            .after
+            .as_ref()
+            .map(|after| HashMap::from([(ROOM_KEY.to_string(), AttributeValue::S(after.clone()))]));
 
         'paging: loop {
             let output = self
@@ -236,7 +256,13 @@ impl RoomStore for DynamoRoomStore {
                 }
                 let member_count = match item.get(MEMBERS) {
                     Some(AttributeValue::L(entries)) => u32::try_from(entries.len()).unwrap_or(u32::MAX),
-                    Some(_) => return Err(ItemError::WrongType { name: MEMBERS, expected: "L" }.into()),
+                    Some(_) => {
+                        return Err(ItemError::WrongType {
+                            name: MEMBERS,
+                            expected: "L",
+                        }
+                        .into());
+                    }
                     None => return Err(ItemError::Missing(MEMBERS).into()),
                 };
                 let display_name = string_attr(item, DISPLAY_NAME)?;
@@ -284,7 +310,12 @@ impl RoomStore for DynamoRoomStore {
             version: 1,
             log: new_room.log,
             everyone_writes: new_room.everyone_writes,
-            members: vec![RoomMember { connection_id: new_room.host, name: new_room.host_name, can_write: true, is_host: true }],
+            members: vec![RoomMember {
+                connection_id: new_room.host,
+                name: new_room.host_name,
+                can_write: true,
+                is_host: true,
+            }],
             updated_at: now,
             expires_at: now + ROOM_TTL,
         };
@@ -305,7 +336,11 @@ impl RoomStore for DynamoRoomStore {
 
         match result {
             Ok(_) => Ok(room),
-            Err(error) if error.as_service_error().is_some_and(PutItemError::is_conditional_check_failed_exception) => {
+            Err(error)
+                if error
+                    .as_service_error()
+                    .is_some_and(PutItemError::is_conditional_check_failed_exception) =>
+            {
                 Err(RoomStoreError::AlreadyExists)
             }
             Err(error) => Err(RoomStoreError::PutItem(error)),
@@ -335,7 +370,11 @@ impl RoomStore for DynamoRoomStore {
 
         match result {
             Ok(_) => Ok(room),
-            Err(error) if error.as_service_error().is_some_and(PutItemError::is_conditional_check_failed_exception) => {
+            Err(error)
+                if error
+                    .as_service_error()
+                    .is_some_and(PutItemError::is_conditional_check_failed_exception) =>
+            {
                 Err(RoomStoreError::VersionConflict)
             }
             Err(error) => Err(RoomStoreError::PutItem(error)),
@@ -355,7 +394,12 @@ mod tests {
             version: 3,
             log: BattleLog::new(),
             everyone_writes: true,
-            members: vec![RoomMember { connection_id: ConnectionId("host-conn".to_string()), name: "Host".to_string(), can_write: true, is_host: true }],
+            members: vec![RoomMember {
+                connection_id: ConnectionId("host-conn".to_string()),
+                name: "Host".to_string(),
+                can_write: true,
+                is_host: true,
+            }],
             updated_at: OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap(),
             expires_at: OffsetDateTime::from_unix_timestamp(1_700_001_800).unwrap(),
         }
@@ -371,7 +415,12 @@ mod tests {
     #[test]
     fn item_round_trips_with_a_non_host_member() {
         let mut room = sample();
-        room.members.push(RoomMember { connection_id: ConnectionId("other-conn".to_string()), name: "Other".to_string(), can_write: false, is_host: false });
+        room.members.push(RoomMember {
+            connection_id: ConnectionId("other-conn".to_string()),
+            name: "Other".to_string(),
+            can_write: false,
+            is_host: false,
+        });
         let log_json = serde_json::to_string(&room.log).unwrap();
         assert_eq!(item_to_room(&room_to_item(&room, &log_json)).unwrap(), room);
     }

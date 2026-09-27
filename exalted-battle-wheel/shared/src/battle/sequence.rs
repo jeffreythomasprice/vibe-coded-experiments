@@ -4,7 +4,12 @@ pub use crate::generated::{Sequence, SequenceStep};
 
 impl Sequence {
     pub fn new(name: impl Into<String>, steps: Vec<SequenceStep>) -> Self {
-        Self { name: name.into(), steps, current: 0, effects: Vec::new() }
+        Self {
+            name: name.into(),
+            steps,
+            current: 0,
+            effects: Vec::new(),
+        }
     }
 
     /// RULES.md §5.1, pp. 251-253: Shape (N actions, each Speed 5) then Cast (Speed rolled
@@ -126,7 +131,14 @@ mod tests {
     #[test]
     fn sequence_catalog_covers_every_kind() {
         let kinds: Vec<SequenceKind> = SEQUENCE_CATALOG.iter().map(|t| t.kind).collect();
-        assert_eq!(kinds, [SequenceKind::ShapeTerrestrial, SequenceKind::ShapeCelestial, SequenceKind::ShapeSolar]);
+        assert_eq!(
+            kinds,
+            [
+                SequenceKind::ShapeTerrestrial,
+                SequenceKind::ShapeCelestial,
+                SequenceKind::ShapeSolar
+            ]
+        );
     }
 
     #[test]

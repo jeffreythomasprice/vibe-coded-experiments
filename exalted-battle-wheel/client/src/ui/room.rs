@@ -178,7 +178,12 @@ fn NoAccessCode(close: impl Fn() + Copy + Send + 'static) -> impl IntoView {
 fn SoloMenu(form: SoloForm) -> impl IntoView {
     let battles = expect_context::<Battles>();
     let prefs = expect_context::<Prefs>();
-    let SoloForm { menu, host_room, join_room, everyone_writes } = form;
+    let SoloForm {
+        menu,
+        host_room,
+        join_room,
+        everyone_writes,
+    } = form;
 
     let host = move |_| {
         let name = prefs.player_name.get();
@@ -354,9 +359,7 @@ fn InviteLink() -> impl IntoView {
     // This component only ever has one room to show a link for, so its label just compares
     // `working`/`copied` (which name *some* row's copy last touched -- see `copy_invite_link`'s
     // own doc comment) against that one room's own name.
-    let is_this_room = move |named: &RwSignal<Option<String>>| {
-        named.get().as_deref() == battles.room().get().as_deref()
-    };
+    let is_this_room = move |named: &RwSignal<Option<String>>| named.get().as_deref() == battles.room().get().as_deref();
 
     view! {
         {move || battles.is_host().get().then(|| view! {
@@ -445,7 +448,13 @@ pub(crate) fn copy_to_clipboard(text: &str, copied: RwSignal<Option<String>>, ro
             Ok(_) => {
                 copied.set(Some(room.clone()));
                 set_timeout(
-                    move || copied.update(|copied| if copied.as_deref() == Some(room.as_str()) { *copied = None }),
+                    move || {
+                        copied.update(|copied| {
+                            if copied.as_deref() == Some(room.as_str()) {
+                                *copied = None
+                            }
+                        })
+                    },
                     std::time::Duration::from_millis(1500),
                 );
             }

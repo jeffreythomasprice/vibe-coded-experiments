@@ -2,7 +2,7 @@
 //! on updating/deleting a missing key, `AlreadyExists` on a colliding create), so router tests can
 //! exercise real 401/403/200 behavior without Docker or DynamoDB.
 
-use super::{generate_key, AccessCode, AccessCodeStore, StoreError};
+use super::{AccessCode, AccessCodeStore, StoreError, generate_key};
 use shared::access::AccessKey;
 use shared::timestamp::Timestamp;
 use std::collections::HashMap;
@@ -31,7 +31,11 @@ impl AccessCodeStore for MemoryAccessCodeStore {
         let access_key: AccessKey = access_key
             .try_into()
             .expect("non-empty by construction: routes.rs filters blanks, generate_key() always returns a UUID");
-        let code = AccessCode { access_key, is_admin, created_at: Timestamp(OffsetDateTime::now_utc()) };
+        let code = AccessCode {
+            access_key,
+            is_admin,
+            created_at: Timestamp(OffsetDateTime::now_utc()),
+        };
         let mut codes = self.codes.lock().unwrap();
         if codes.contains_key(&code.access_key.to_string()) {
             return Err(StoreError::AlreadyExists);

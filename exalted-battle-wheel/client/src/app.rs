@@ -1,26 +1,29 @@
-use crate::battle_net::{set_root_owner, BattleView, Battles};
+use crate::battle_net::{BattleView, Battles, set_root_owner};
 use crate::persist::Persisted;
 use crate::prefs::{Prefs, Theme};
 use crate::ui::glossary::Topic;
 use crate::ui::ticks;
 use crate::ui::{
-    ActionPanel, ActiveTip, ConfigOpen, DetailTip, EventLogButton, HamburgerMenu, HoverCard, Hovered, Modal,
-    QueuePanel, RailSelection, ReferenceRail, RoomOpen, RoomStatusButton, Roster, Tip, TipLayer, ToastLayer, Toasts,
-    Wheel,
+    ActionPanel, ActiveTip, ConfigOpen, DetailTip, EventLogButton, HamburgerMenu, HoverCard, Hovered, Modal, QueuePanel, RailSelection,
+    ReferenceRail, RoomOpen, RoomStatusButton, Roster, Tip, TipLayer, ToastLayer, Toasts, Wheel,
 };
-use shared::battle::{BattleEvent, BattleLog, CombatantId, Phase};
 use leptos::prelude::*;
+use shared::battle::{BattleEvent, BattleLog, CombatantId, Phase};
 
 /// "tick" -> "Tick", "long tick" -> "Long Tick" — for button labels built from `BattleMode`'s
 /// lowercase nouns.
 fn capitalize(words: &str) -> String {
-    words.split(' ').map(|word| {
-        let mut chars = word.chars();
-        match chars.next() {
-            Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-            None => String::new(),
-        }
-    }).collect::<Vec<_>>().join(" ")
+    words
+        .split(' ')
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Why the Advance Tick button is currently disabled, or "" if it isn't. Shared by the button's

@@ -7,7 +7,7 @@ use axum::extract::ws::Message;
 use shared::protocol::ConnectionId;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tokio::sync::{mpsc, MutexGuard};
+use tokio::sync::{MutexGuard, mpsc};
 
 pub type Outbox = mpsc::UnboundedSender<Message>;
 

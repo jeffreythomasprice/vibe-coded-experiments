@@ -39,19 +39,22 @@ fn local_storage() -> Result<web_sys::Storage, StorageError> {
 }
 
 pub fn get(key: &str) -> Result<Option<String>, StorageError> {
-    local_storage()?
-        .get_item(key)
-        .map_err(|error| StorageError::Read { key: key.to_owned(), message: js_message(&error) })
+    local_storage()?.get_item(key).map_err(|error| StorageError::Read {
+        key: key.to_owned(),
+        message: js_message(&error),
+    })
 }
 
 pub fn set(key: &str, value: &str) -> Result<(), StorageError> {
-    local_storage()?
-        .set_item(key, value)
-        .map_err(|error| StorageError::Write { key: key.to_owned(), message: js_message(&error) })
+    local_storage()?.set_item(key, value).map_err(|error| StorageError::Write {
+        key: key.to_owned(),
+        message: js_message(&error),
+    })
 }
 
 pub fn remove(key: &str) -> Result<(), StorageError> {
-    local_storage()?
-        .remove_item(key)
-        .map_err(|error| StorageError::Remove { key: key.to_owned(), message: js_message(&error) })
+    local_storage()?.remove_item(key).map_err(|error| StorageError::Remove {
+        key: key.to_owned(),
+        message: js_message(&error),
+    })
 }

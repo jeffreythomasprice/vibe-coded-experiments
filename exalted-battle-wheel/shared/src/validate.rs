@@ -46,8 +46,7 @@ pub enum WireError {
 /// Compiled once per [`WireType`] this module actually validates, not once per def in the merged
 /// schema -- most defs exist only to be referenced from one of these, never decoded on their own.
 static VALIDATORS: LazyLock<HashMap<&'static str, Validator>> = LazyLock::new(|| {
-    let defs: serde_json::Value =
-        serde_json::from_str(WIRE_SCHEMA).expect("shared/build.rs always emits a valid JSON document");
+    let defs: serde_json::Value = serde_json::from_str(WIRE_SCHEMA).expect("shared/build.rs always emits a valid JSON document");
 
     [
         crate::protocol::ClientEnvelope::DEF,
@@ -75,9 +74,14 @@ static VALIDATORS: LazyLock<HashMap<&'static str, Validator>> = LazyLock::new(||
 pub fn decode<T: DeserializeOwned + WireType>(json: &str) -> Result<T, WireError> {
     let instance: serde_json::Value = serde_json::from_str(json).map_err(|error| WireError::Syntax(error.to_string()))?;
 
-    let validator = VALIDATORS.get(T::DEF).unwrap_or_else(|| panic!("no compiled validator for {} -- add it to shared::validate::VALIDATORS", T::DEF));
+    let validator = VALIDATORS
+        .get(T::DEF)
+        .unwrap_or_else(|| panic!("no compiled validator for {} -- add it to shared::validate::VALIDATORS", T::DEF));
     if let Err(error) = validator.validate(&instance) {
-        return Err(WireError::Invalid { pointer: error.instance_path().to_string(), message: error.to_string() });
+        return Err(WireError::Invalid {
+            pointer: error.instance_path().to_string(),
+            message: error.to_string(),
+        });
     }
 
     serde_json::from_value(instance).map_err(|error| WireError::Syntax(error.to_string()))

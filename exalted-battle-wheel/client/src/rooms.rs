@@ -117,7 +117,9 @@ impl RoomAdmin {
     }
 
     fn fetch(&self, append: bool) {
-        let Some(token) = expect_context::<Access>().token().get_untracked() else { return };
+        let Some(token) = expect_context::<Access>().token().get_untracked() else {
+            return;
+        };
         let this = *self;
         let my_generation = this.generation.get_untracked();
         let search = this.search.get_untracked();
@@ -131,7 +133,8 @@ impl RoomAdmin {
             this.in_flight.set(false);
             match result {
                 Ok(list) => {
-                    this.rooms.update(|rooms| *rooms = merge_page(std::mem::take(rooms), list.rooms, append));
+                    this.rooms
+                        .update(|rooms| *rooms = merge_page(std::mem::take(rooms), list.rooms, append));
                     this.next_cursor.set(list.next_cursor);
                 }
                 Err(error) => {
@@ -146,7 +149,9 @@ impl RoomAdmin {
     /// simpler than trying to patch the deleted room out of whatever page happened to be showing,
     /// and correct even if the delete changed which rooms belong on that page at all.
     pub fn delete(&self, room_name: String, then: impl FnOnce() + 'static) {
-        let Some(token) = expect_context::<Access>().token().get_untracked() else { return };
+        let Some(token) = expect_context::<Access>().token().get_untracked() else {
+            return;
+        };
         let this = *self;
         this.in_flight.set(true);
         leptos::task::spawn_local_scoped(async move {
@@ -181,7 +186,11 @@ mod tests {
     }
 
     fn room(name: &str) -> RoomSummary {
-        RoomSummary { display_name: name.try_into().unwrap(), member_count: 0, updated_at: shared::timestamp::Timestamp(time::OffsetDateTime::now_utc()) }
+        RoomSummary {
+            display_name: name.try_into().unwrap(),
+            member_count: 0,
+            updated_at: shared::timestamp::Timestamp(time::OffsetDateTime::now_utc()),
+        }
     }
 
     #[test]
@@ -197,6 +206,9 @@ mod tests {
         let existing = vec![room("first")];
         let fetched = vec![room("second")];
         let merged = merge_page(existing, fetched, true);
-        assert_eq!(merged.iter().map(|room| room.display_name.to_string()).collect::<Vec<_>>(), ["first", "second"]);
+        assert_eq!(
+            merged.iter().map(|room| room.display_name.to_string()).collect::<Vec<_>>(),
+            ["first", "second"]
+        );
     }
 }
