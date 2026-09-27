@@ -1199,11 +1199,13 @@ duration = "One day"
 prerequisites = []
 source = "Exalted 2E"
 pages = "201-202"
-effect = "Reject one shaping effect outright"
+effect = "Reject all Shaping effects for the rest of the day, even retroactively"
 description = """
 The Sun's Chosen define their own reality. This Charm protects the character from any Shaping effect that directly alters her mind, body, spirit or traits. This includes instantaneous Shaping effects and any new alterations caused by long-term Shaping effects. This Charm also protects the character from any undodgeable, unblockable Shaping attacks. Wyld energy cannot create a serpent inside the character's stomach or turn her armor to lava, whether it's manipulated by an enemy or its own random whims, because these effects inflict immediate damage and the character's DV is not applicable.
 
 This Charm does not protect against the miscellaneous dangers of the Wyld. If a Wyld effect creates a hundred-headed snake monster with burning chalcedony eyes that then eats the character, this is not directly altering the character's body through shaping.
+
+Duration: One day. Once activated, the character is immune to every qualifying Shaping effect for the remainder of that day, not just the one that triggered the Charm — and this immunity applies retroactively, nullifying any such effect already in force from earlier that same day.
 """
 
 [[charm]]
