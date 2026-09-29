@@ -3,6 +3,14 @@ in-flight:
 
 todo:
 
+when trying to use a link to join an existing room via query string parameters, and that room doesn't exist, we should show a modal that explains that no such room exists, and ask if they want to create it
+basically the same as the new room widgets, but name is fixed and all they can change is whether new joiners are allowed to edit or not by default
+
+
+cartoon-style "Pow" "Bang" popup art when attacks or other events occur
+other kinds of silly animations?
+
+
 show other people's cursors
 but how to do this when the windows can be different sizes?
 
