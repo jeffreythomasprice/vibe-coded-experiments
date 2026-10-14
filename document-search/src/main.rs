@@ -11,6 +11,7 @@ mod llm;
 mod logging;
 mod ollama;
 mod pdf;
+mod progress_format;
 mod protocol;
 mod server;
 mod summarize;

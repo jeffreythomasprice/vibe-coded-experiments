@@ -11,9 +11,9 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
 use crate::config::Config;
+use crate::progress_format::format_envelope;
 use crate::protocol::{
-    Event, OutputMode, OverallProgress, ProgressEnvelope, ProgressEvent, Request, RequestEnvelope,
-    StatusSnapshot,
+    Event, OutputMode, ProgressEvent, Request, RequestEnvelope, StatusSnapshot,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -350,8 +350,7 @@ fn print_status(s: &StatusSnapshot) {
                 c.running_secs,
             );
             if let Some(env) = &c.progress {
-                let age = c.progress_age_secs.unwrap_or(0);
-                println!("         {} ({}s ago)", format_envelope(env), age);
+                println!("         {}", format_envelope(env));
             }
         }
         None => println!("current: idle"),
@@ -369,95 +368,6 @@ fn print_status(s: &StatusSnapshot) {
                 q.queued_secs,
             );
         }
-    }
-}
-
-fn format_envelope(env: &ProgressEnvelope) -> String {
-    let mut s = format_event(&env.event);
-    if let Some(overall) = &env.overall
-        && let Some(suffix) = format_overall(overall)
-    {
-        s.push_str(" — ");
-        s.push_str(&suffix);
-    }
-    s
-}
-
-fn format_event(p: &ProgressEvent) -> String {
-    match p {
-        ProgressEvent::Stage { name } => match name.as_str() {
-            "extracting" => "Starting text extraction…".to_string(),
-            "ocr" => "Starting OCR fallback…".to_string(),
-            "chunking" => "Starting chunking…".to_string(),
-            "inserting" => "Committing chunks to DB…".to_string(),
-            "summarizing" => "Starting summary tree…".to_string(),
-            other => other.to_string(),
-        },
-        ProgressEvent::Extracting { current, total } => {
-            format!("Extracting page {current}/{total}")
-        }
-        ProgressEvent::Ocr { current, total } => {
-            format!("OCR-ing failed page {current}/{total}")
-        }
-        ProgressEvent::Chunking { current, total } => {
-            format!("Chunking text: {current}/{total} (≈ est.)")
-        }
-        ProgressEvent::Embedding { current, total } => {
-            format!("Embedding chunk {current}/{total}")
-        }
-        ProgressEvent::Summarizing {
-            level,
-            total_levels,
-            current,
-            total,
-        } => {
-            format!(
-                "Extracting group summary (level {}/{}, group {}/{})",
-                level + 1,
-                total_levels,
-                current,
-                total,
-            )
-        }
-    }
-}
-
-fn format_overall(o: &OverallProgress) -> Option<String> {
-    // Pre-count phase: surface just elapsed time so a stalled stage is
-    // visible without inventing fake step numbers.
-    if o.total_steps == 0 {
-        if o.elapsed_secs == 0 {
-            return None;
-        }
-        return Some(format!("elapsed {}", fmt_duration(o.elapsed_secs)));
-    }
-    let mut s = format!("step {}/{}", o.step, o.total_steps);
-    if let Some(eta) = o.eta_secs {
-        s.push_str(&format!(" (~{} remaining)", fmt_duration(eta)));
-    }
-    Some(s)
-}
-
-/// Compact human duration for the spinner / status line. Drops zero leading
-/// units, e.g. 75s → "1m15s", 3725s → "1h2m".
-fn fmt_duration(secs: u64) -> String {
-    let h = secs / 3600;
-    let m = (secs % 3600) / 60;
-    let s = secs % 60;
-    if h > 0 {
-        if m > 0 {
-            format!("{h}h{m}m")
-        } else {
-            format!("{h}h")
-        }
-    } else if m > 0 {
-        if s > 0 {
-            format!("{m}m{s}s")
-        } else {
-            format!("{m}m")
-        }
-    } else {
-        format!("{s}s")
     }
 }
 

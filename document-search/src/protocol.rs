@@ -326,6 +326,11 @@ pub struct OverallProgress {
     /// accumulated enough samples to extrapolate.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub eta_secs: Option<u64>,
+    /// Seconds since the job last emitted a real progress event. Envelopes
+    /// are re-rendered on a heartbeat and at `status` time, so this is how a
+    /// long single step (e.g. one slow LLM call) shows up as a gap.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -471,6 +476,7 @@ mod tests {
                         total_steps: 700,
                         elapsed_secs: 12,
                         eta_secs: Some(180),
+                        idle_secs: None,
                     }),
                 }),
                 progress_age_secs: Some(3),
@@ -511,6 +517,7 @@ mod tests {
                 total_steps: 0,
                 elapsed_secs: 0,
                 eta_secs: None,
+                idle_secs: None,
             }),
         };
         let s = serde_json::to_string(&env).unwrap();

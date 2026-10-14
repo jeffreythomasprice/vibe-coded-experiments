@@ -16,10 +16,14 @@ use uuid::Uuid;
 
 use crate::config::Config;
 use crate::db::{self, Db};
-use crate::protocol::{CurrentJob, Event, OutputMode, QueuedJob, Request, StatusSnapshot};
+use crate::progress_format::format_envelope;
+use crate::protocol::{
+    CurrentJob, Event, OutputMode, ProgressEnvelope, ProgressEvent, QueuedJob, Request,
+    StatusSnapshot,
+};
 use crate::{commands, config as cfg_mod, ingest};
 
-pub(crate) use tracker::JobTracker;
+pub(crate) use tracker::{JobTracker, SummaryPlan};
 
 #[derive(thiserror::Error, Debug)]
 pub enum ServerError {
@@ -318,7 +322,22 @@ async fn worker_loop(
         // cancelled-by-user failure from a real error after the handler returns.
         let cancel_observer = cancel_rx.clone();
         let job_started_at = Instant::now();
-        let tracker: Arc<Mutex<JobTracker>> = Arc::new(Mutex::new(JobTracker::new(job_started_at)));
+        // Ingests that will summarize get the tree's projected cost counted
+        // from the start, so the overall %/ETA aren't wildly optimistic
+        // until summarize begins.
+        let summary_plan = match &job.req {
+            Request::Ingest {
+                no_summary: false,
+                max_depth,
+                ..
+            } => Some(SummaryPlan {
+                group_size: cfg.summarize.group_size,
+                max_depth: max_depth.unwrap_or(cfg.summarize.max_depth),
+            }),
+            _ => None,
+        };
+        let tracker: Arc<Mutex<JobTracker>> =
+            Arc::new(Mutex::new(JobTracker::new(job_started_at, summary_plan)));
         {
             let mut g = state.lock().unwrap();
             g.current = Some(RunningJob {
@@ -363,8 +382,13 @@ async fn worker_loop(
                 let (relay_tx, relay_rx) = mpsc::unbounded_channel::<Event>();
                 let out_tx = job.event_tx.clone();
                 let tracker_for_relay = Arc::clone(&tracker);
-                tokio::spawn(run_progress_relay(relay_rx, out_tx, tracker_for_relay));
-                ingest::ingest(
+                let relay = tokio::spawn(run_progress_relay(
+                    relay_rx,
+                    out_tx,
+                    tracker_for_relay,
+                    label.clone(),
+                ));
+                let result = ingest::ingest(
                     &db,
                     &cfg,
                     &http,
@@ -376,8 +400,12 @@ async fn worker_loop(
                     Some(&relay_tx),
                     Some(cancel_rx),
                 )
-                .await
-                .map(|id| match mode {
+                .await;
+                // Let the relay drain and exit before we send `Final`, so a
+                // heartbeat can't land on the wire after it.
+                drop(relay_tx);
+                let _ = relay.await;
+                result.map(|id| match mode {
                     OutputMode::Text => {
                         format!("ingested document id {id} from {}\n", path.display())
                     }
@@ -611,8 +639,21 @@ impl Drop for SocketGuard {
     }
 }
 
+/// How often the relay re-sends the latest envelope with refreshed
+/// elapsed / ETA / idle numbers while no new progress event has arrived.
+const PROGRESS_HEARTBEAT: Duration = Duration::from_secs(1);
+/// Maximum gap between progress log lines while a job is running.
+const PROGRESS_LOG_INTERVAL: Duration = Duration::from_secs(30);
+/// Summary groups are slow (one LLM call each) so we log each one, but cap
+/// the rate so a hash-reuse burst on re-ingest doesn't flood the log.
+const SUMMARY_LOG_MIN_INTERVAL: Duration = Duration::from_secs(1);
+
 /// Drain `relay_rx`, feed every `ProgressEvent` into the tracker, then
-/// forward the enriched envelope to `out_tx`.
+/// forward the enriched envelope to `out_tx`. Between events, re-send the
+/// latest envelope every `PROGRESS_HEARTBEAT` so the foreground spinner's
+/// elapsed / ETA / "last update" numbers stay live, matching `status`.
+/// Also writes the same rendered line to the log (stage changes, each
+/// summary group, and at least every `PROGRESS_LOG_INTERVAL`).
 ///
 /// Keeps draining + observing even after `out_tx` is closed (i.e. the client
 /// disconnected). Otherwise a detached ingest — or any case where the
@@ -627,26 +668,78 @@ async fn run_progress_relay(
     mut relay_rx: mpsc::UnboundedReceiver<Event>,
     out_tx: mpsc::UnboundedSender<Event>,
     tracker: Arc<Mutex<JobTracker>>,
+    label: String,
 ) {
     let mut forward_alive = true;
-    while let Some(ev) = relay_rx.recv().await {
-        let out_ev = match ev {
-            Event::Progress(env_in) => {
-                let envelope = {
-                    let mut t = tracker.lock().unwrap();
-                    t.observe(&env_in.event);
-                    let env_out = t.build_envelope(env_in.event);
-                    t.set_latest(env_out.clone());
-                    env_out
-                };
+    let mut heartbeat = tokio::time::interval(PROGRESS_HEARTBEAT);
+    heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut last_log: Option<(Instant, String)> = None;
+    loop {
+        let out_ev = tokio::select! {
+            ev = relay_rx.recv() => match ev {
+                None => break,
+                Some(Event::Progress(env_in)) => {
+                    let envelope = tracker.lock().unwrap().record(env_in.event);
+                    let phase = envelope.overall.as_ref().map(|o| o.phase.as_str()).unwrap_or("");
+                    let should_log = match &last_log {
+                        None => true,
+                        Some((at, last_phase)) => {
+                            matches!(envelope.event, ProgressEvent::Stage { .. })
+                                || last_phase != phase
+                                || at.elapsed() >= PROGRESS_LOG_INTERVAL
+                                || (matches!(envelope.event, ProgressEvent::Summarizing { .. })
+                                    && at.elapsed() >= SUMMARY_LOG_MIN_INTERVAL)
+                        }
+                    };
+                    if should_log {
+                        log_progress(&label, &envelope);
+                        last_log = Some((Instant::now(), phase.to_string()));
+                    }
+                    heartbeat.reset();
+                    Event::Progress(envelope)
+                }
+                Some(other) => other,
+            },
+            _ = heartbeat.tick() => {
+                let (envelope, _) = tracker.lock().unwrap().latest();
+                let Some(envelope) = envelope else { continue };
+                if let Some((at, phase)) = &mut last_log
+                    && at.elapsed() >= PROGRESS_LOG_INTERVAL
+                {
+                    log_progress(&label, &envelope);
+                    *at = Instant::now();
+                    if let Some(o) = &envelope.overall {
+                        phase.clone_from(&o.phase);
+                    }
+                }
                 Event::Progress(envelope)
             }
-            other => other,
         };
         if forward_alive && out_tx.send(out_ev).is_err() {
             forward_alive = false;
         }
     }
+}
+
+fn log_progress(label: &str, env: &ProgressEnvelope) {
+    let Some(o) = &env.overall else { return };
+    let percent = if o.total_steps > 0 {
+        Some((o.step * 100 / o.total_steps).min(100))
+    } else {
+        None
+    };
+    tracing::info!(
+        job = %label,
+        phase = %o.phase,
+        step = o.step,
+        total_steps = o.total_steps,
+        percent = ?percent,
+        elapsed_secs = o.elapsed_secs,
+        eta_secs = ?o.eta_secs,
+        idle_secs = ?o.idle_secs,
+        "progress: {}",
+        format_envelope(env),
+    );
 }
 
 #[cfg(test)]
@@ -658,12 +751,13 @@ mod relay_tests {
     async fn relay_keeps_updating_tracker_after_client_disconnects() {
         let (relay_tx, relay_rx) = mpsc::unbounded_channel::<Event>();
         let (out_tx, out_rx) = mpsc::unbounded_channel::<Event>();
-        let tracker = Arc::new(Mutex::new(JobTracker::new(Instant::now())));
+        let tracker = Arc::new(Mutex::new(JobTracker::new(Instant::now(), None)));
 
         let handle = tokio::spawn(run_progress_relay(
             relay_rx,
             out_tx,
             Arc::clone(&tracker),
+            "test".to_string(),
         ));
 
         // Simulate the very first event a real ingest emits — the "extracting"

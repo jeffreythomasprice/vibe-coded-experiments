@@ -14,7 +14,9 @@ cargo test split_sql_handles_basic           # one test by name
 RUST_LOG=document_search=debug cargo run     # default is `warn,document_search=trace`
 ```
 
-Reset state (kill server, drop socket, wipe DB):
+Runtime prerequisites (unit tests don't need them; real ingests do): Ollama running locally with the embedding model from `[ollama]` and the chat model used for summaries pulled; `pdftotext` + `pdftoppm` (poppler-utils) for PDFs; `tesseract` for the per-page OCR fallback.
+
+Reset state (kill server, drop socket, wipe DB — the `rm` paths assume the default `db_path`):
 ```sh
 killall -9 document-search 2>/dev/null
 rm -f /tmp/document-search.sock
@@ -31,7 +33,7 @@ The wire protocol (`src/protocol.rs`) is NDJSON: client sends one `Request` line
 ### Single-worker queue with inline bypasses
 `src/server/mod.rs::worker_loop` pulls one `Job` at a time off an mpsc channel and runs ingests, info lookups, text reads, etc. serially. **`Status`, `List`, `QueueList`, `QueueDelete`, `QueueClear`, `QueueCleanup`, `TagList`, and `TaskLog` bypass the queue** — they're handled inline by the per-connection task in `src/server/connection.rs` so they stay responsive while a long ingest is running. The worker's `unreachable!()` branches enforce that. Mutating tag operations (`TagAdd`, `TagRemove`) and `Delete` go through the worker because they write through the shared connection.
 
-`ServerState` (queue + current job + shared `Arc<Db>`) is behind a `std::sync::Mutex`; **only lock for short sync sections, never across `.await`** — the codebase relies on this to keep status snapshots cheap. The worker also spawns a per-job relay task that taps the event stream and records the latest `Progress` event on `RunningJob.latest_progress`, so the inline `status` handler can show live progress without going through the worker.
+`ServerState` (queue + current job + shared `Arc<Db>`) is behind a `std::sync::Mutex`; **only lock for short sync sections, never across `.await`** — the codebase relies on this to keep status snapshots cheap. The worker also spawns a per-job relay task (`run_progress_relay`) that feeds every `Progress` event into `RunningJob.tracker` (`src/server/tracker.rs`), which enriches it with an overall weighted step count + ETA (including the projected summary-tree cost for ingests). The relay re-sends the latest envelope on a 1s heartbeat and logs it at info level; `status` rebuilds it at snapshot time. All three render via `src/progress_format.rs`, so the foreground spinner, `status`, and log lines use identical wording — change wording there, not in the client.
 
 Cooperative cancel: each running job gets a `watch::Sender<bool>`. Currently only `Ingest` polls it (between chunks during embedding, and again inside its post-chunk summarize phase via `llm::complete`'s cancel-watch `select!`); other handlers ignore it. Hence the `is_cancellable` flag on `RunningJob` and the targeting logic in the `QueueDelete` / `QueueClear` handlers. `QueueDelete` of a queued (not-yet-running) job is implemented by adding its id to `ServerState.cancelled_ids`; the worker checks that set when it dequeues and short-circuits with a `Final{ok:false}`.
 
@@ -72,8 +74,10 @@ Cancellation/error rolls back every row inserted *during this run* via `summariz
 ### Wire envelope and per-command output mode
 Every request is wrapped in `protocol::RequestEnvelope { output_mode, request }`. `OutputMode::{Text, Json}` propagates from `--output-mode` on the CLI through the socket to the worker, so command implementations come in pairs (`commands::tag_add` / `commands::tag_add_json`, `commands::search_text` / `commands::search_json`, …). **When adding a subcommand, plumb both formatters** and dispatch on `OutputMode` in the relevant worker / inline-handler arm. The envelope's `output_mode` defaults to `Text`, so an old client that serialized the bare `Request` shape still parses (covered by `missing_output_mode_defaults_to_text` in `protocol.rs`).
 
+`example-claude-skill/SKILL.md` is a Claude skill that drives this CLI through `--output-mode json` (`list`, `tag list`, `search`). If you change a JSON output's shape, update that skill too.
+
 ### Canonical PDF text and offset invariant
-`src/pdf.rs` joins extracted pages with a U+000C form-feed separator into one canonical `full_text`. **All byte/char offsets in the DB (`document_chunk`, `document_page`, totals) are computed against this exact string** — so chunkers, byte-range readers, and page lookups all share one coordinate system. If you change the separator or the page-join logic, every downstream offset breaks.
+Ingest accepts only `.txt` and `.pdf` (dispatched by extension in `src/ingest.rs`). For PDFs, `pdftotext` output is scored per page with `decodability_score`; pages below the `[ocr]` threshold are re-extracted via `pdftoppm` + `tesseract`, and offsets are computed only *after* OCR substitution. `src/pdf.rs` then joins the final pages with a U+000C form-feed separator into one canonical `full_text`. **All byte/char offsets in the DB (`document_chunk`, `document_page`, totals) are computed against this exact string** — so chunkers, byte-range readers, and page lookups all share one coordinate system. If you change the separator or the page-join logic, every downstream offset breaks.
 
 `page_for_byte_or_preceding` exists because chunks can start in the separator gap between pages; we report the *preceding* page so a chunk that visually spans pages 2-3 reports `page_first = 2`.
 
