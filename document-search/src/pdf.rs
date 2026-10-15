@@ -79,7 +79,9 @@ const OSD_MAX_ATTEMPTS: usize = 5;
 /// Extract canonical PDF text. First runs pdftotext over the whole document,
 /// then picks pages to re-extract via `pdftoppm` + `tesseract` (one page at a
 /// time; see `select_ocr_pages`). After OCR, pages still below
-/// `ocr.min_decodable_ratio` are fatal, as is a document with no text at
+/// `ocr.min_decodable_ratio` are fatal once they exceed
+/// `ocr.max_undecodable_page_ratio` of the document (below that they're kept
+/// with a warning), as is a document with no text at
 /// all: we return `IngestError::PdfExtract` so the caller can refuse the
 /// ingest rather than indexing garbage or nothing.
 pub async fn extract<F>(
@@ -210,7 +212,17 @@ where
             .copied()
             .filter(|&i| needs_ocr(&pages[i], ocr, scripts))
             .collect();
-        if !still_bad.is_empty() {
+        if within_undecodable_tolerance(still_bad.len(), pages.len(), ocr) {
+            for &i in &still_bad {
+                tracing::warn!(
+                    page = i + 1,
+                    score = decodability_score(&pages[i], scripts),
+                    threshold = ocr.min_decodable_ratio,
+                    language = %lang,
+                    "pdf: keeping best-effort OCR text for undecodable page",
+                );
+            }
+        } else {
             return Err(IngestError::PdfExtract {
                 source: format_threshold_failure(
                     "OCR could not produce decodable text",
@@ -835,6 +847,15 @@ fn collapse_cjk_spaces(s: &str) -> String {
     out
 }
 
+/// Whether `still_bad` undecodable-after-OCR pages out of `total_pages` are
+/// few enough (per `ocr.max_undecodable_page_ratio`) to keep their
+/// best-effort OCR text instead of failing the ingest.
+fn within_undecodable_tolerance(still_bad: usize, total_pages: usize, ocr: &OcrConfig) -> bool {
+    still_bad == 0
+        || (total_pages > 0
+            && still_bad as f32 / total_pages as f32 <= ocr.max_undecodable_page_ratio)
+}
+
 /// Format a "X of N pages failed the threshold" error string. Lists up to
 /// three worst offenders (by score) with their page numbers and scores so
 /// the user can spot-check.
@@ -955,6 +976,7 @@ mod tests {
             psm: 3,
             sparse_page_ratio: 0.5,
             sparse_min_pages: 3,
+            max_undecodable_page_ratio: 0.05,
         };
         // Five non-whitespace chars — way under the threshold — but page is
         // too short to trust the score, so we don't flag it.
@@ -972,6 +994,7 @@ mod tests {
             psm: 3,
             sparse_page_ratio: 0.5,
             sparse_min_pages: 3,
+            max_undecodable_page_ratio: 0.05,
         };
         let text = "ÊivviVÌÛiÊÜ iÌ ÀÜ7 i>ÊÌ ÀÜÜi>«ÃÊÕÃi`Ê >Ì > VL>Ì]Ê \
                     Ì iÊ V >À>VÌiÀÊ ÕÃÌÊ ÕÃiÊ iÀÊ iiiÊ LÌÞ°Ê \
@@ -990,11 +1013,40 @@ mod tests {
             psm: 3,
             sparse_page_ratio: 0.5,
             sparse_min_pages: 3,
+            max_undecodable_page_ratio: 0.05,
         };
         let text = "The quick brown fox jumps over the lazy dog. \
                     Pack my box with five dozen liquor jugs. \
                     She sells seashells by the seashore.";
         assert!(!needs_ocr(text, &cfg, ScriptSet::default()));
+    }
+
+    #[test]
+    fn undecodable_tolerance_allows_a_stray_page() {
+        let cfg = test_cfg();
+        assert!(within_undecodable_tolerance(0, 264, &cfg));
+        // One bad back-cover page out of 264 is well under 5%.
+        assert!(within_undecodable_tolerance(1, 264, &cfg));
+        assert!(within_undecodable_tolerance(5, 100, &cfg));
+    }
+
+    #[test]
+    fn undecodable_tolerance_rejects_wrong_language_runs() {
+        let cfg = test_cfg();
+        assert!(!within_undecodable_tolerance(6, 100, &cfg));
+        assert!(!within_undecodable_tolerance(231, 248, &cfg));
+        // Small docs: one bad page out of three is a real failure.
+        assert!(!within_undecodable_tolerance(1, 3, &cfg));
+    }
+
+    #[test]
+    fn undecodable_tolerance_zero_is_strict() {
+        let cfg = OcrConfig {
+            max_undecodable_page_ratio: 0.0,
+            ..test_cfg()
+        };
+        assert!(within_undecodable_tolerance(0, 264, &cfg));
+        assert!(!within_undecodable_tolerance(1, 264, &cfg));
     }
 
     fn test_cfg() -> OcrConfig {
@@ -1007,6 +1059,7 @@ mod tests {
             psm: 3,
             sparse_page_ratio: 0.5,
             sparse_min_pages: 3,
+            max_undecodable_page_ratio: 0.05,
         }
     }
 

@@ -17,6 +17,13 @@ embedding_model = "qwen3-embedding:8b"
 # Pull it once with: ollama pull <model>.
 chat_model = "qwen2.5:14b"
 
+# Let thinking-capable chat models (qwen3, qwen3.5, deepseek-r1, …) reason
+# before answering. Reasoning tokens count against [llm].max_output_tokens,
+# so a low cap can leave no room for the summary itself. Models that don't
+# support thinking are retried automatically without it. Set false for
+# faster (but usually shallower) summaries.
+think = true
+
 [anthropic]
 # Endpoint for Anthropic Messages API. Override only if proxying.
 base_url = "https://api.anthropic.com"
@@ -34,8 +41,10 @@ model = "claude-haiku-4-5-20251001"
 # set. Embeddings always come from Ollama regardless of this setting.
 provider = "ollama"
 
-# Max tokens to ask the model to emit per summarization call.
-max_output_tokens = 800
+# Max tokens to ask the model to emit per summarization call. With
+# [ollama].think = true this budget covers the model's reasoning as well as
+# the summary, so keep it generous.
+max_output_tokens = 8192
 
 [summarize]
 # Settings for the hierarchical summary tree built as the final phase of
@@ -124,6 +133,13 @@ min_chars_for_check = 40
 # `ingest --force-ocr` OCRs every page regardless.
 sparse_page_ratio = 0.5
 sparse_min_pages = 3
+
+# Tolerance for pages that are still below min_decodable_ratio after OCR
+# (covers, art plates, colophons). When at most this fraction of the
+# document's pages stay undecodable, the ingest keeps their best-effort OCR
+# text and logs a warning per page; above it, the ingest fails. 0.0 makes
+# any undecodable page fatal.
+max_undecodable_page_ratio = 0.05
 
 # Rasterization DPI for pdftoppm. 300 is standard for OCR; higher is
 # slower with diminishing returns.

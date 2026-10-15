@@ -306,6 +306,7 @@ async fn worker_loop(
             g.cancelled_ids.remove(&job.id)
         };
         if was_cancelled {
+            tracing::info!(job = %job.id, label = %job.req.label(), "job: removed from queue before starting");
             let _ = job.event_tx.send(Event::Final {
                 ok: false,
                 error: Some("removed from queue".to_string()),
@@ -556,6 +557,22 @@ async fn worker_loop(
             .await
         {
             tracing::warn!(error = %e, job = %job_id_str, "task_log_finish failed");
+        }
+
+        // Record the outcome in the log file too: with `--detach` (or a
+        // dropped client) nobody is listening for `Event::Final`, so this is
+        // the only place a failure shows up outside `task_log`.
+        let elapsed_secs = job_started_at.elapsed().as_secs();
+        match (&result, log_error.as_deref()) {
+            (Ok(_), _) => {
+                tracing::info!(job = %job_id_str, %label, elapsed_secs, "job: succeeded")
+            }
+            (Err(_), Some("cancelled")) => {
+                tracing::info!(job = %job_id_str, %label, elapsed_secs, "job: cancelled")
+            }
+            (Err(msg), _) => {
+                tracing::warn!(job = %job_id_str, %label, elapsed_secs, error = %msg, "job: failed")
+            }
         }
 
         match result {

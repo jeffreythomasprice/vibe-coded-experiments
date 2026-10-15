@@ -40,6 +40,7 @@ pub struct OllamaConfig {
     pub url: String,
     pub embedding_model: String,
     pub chat_model: String,
+    pub think: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -109,6 +110,7 @@ pub struct OcrConfig {
     pub psm: u32,
     pub sparse_page_ratio: f32,
     pub sparse_min_pages: usize,
+    pub max_undecodable_page_ratio: f32,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -143,6 +145,8 @@ struct PartialOllamaConfig {
     embedding_model: Option<String>,
     #[serde(default)]
     chat_model: Option<String>,
+    #[serde(default)]
+    think: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -223,6 +227,8 @@ struct PartialOcrConfig {
     sparse_page_ratio: Option<f32>,
     #[serde(default)]
     sparse_min_pages: Option<usize>,
+    #[serde(default)]
+    max_undecodable_page_ratio: Option<f32>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -347,6 +353,7 @@ fn merge_ollama(base: OllamaConfig, overlay: Option<PartialOllamaConfig>) -> Oll
         url: overlay.url.unwrap_or(base.url),
         embedding_model: overlay.embedding_model.unwrap_or(base.embedding_model),
         chat_model: overlay.chat_model.unwrap_or(base.chat_model),
+        think: overlay.think.unwrap_or(base.think),
     }
 }
 
@@ -447,6 +454,9 @@ fn merge_ocr(base: OcrConfig, overlay: Option<PartialOcrConfig>) -> OcrConfig {
         psm: overlay.psm.unwrap_or(base.psm),
         sparse_page_ratio: overlay.sparse_page_ratio.unwrap_or(base.sparse_page_ratio),
         sparse_min_pages: overlay.sparse_min_pages.unwrap_or(base.sparse_min_pages),
+        max_undecodable_page_ratio: overlay
+            .max_undecodable_page_ratio
+            .unwrap_or(base.max_undecodable_page_ratio),
     }
 }
 
@@ -483,11 +493,12 @@ mod tests {
         assert_eq!(cfg.ollama.url, "http://localhost:11434");
         assert_eq!(cfg.ollama.embedding_model, "qwen3-embedding:8b");
         assert_eq!(cfg.ollama.chat_model, "qwen2.5:14b");
+        assert!(cfg.ollama.think);
         assert_eq!(cfg.anthropic.base_url, "https://api.anthropic.com");
         assert_eq!(cfg.anthropic.api_key_env, "ANTHROPIC_API_KEY");
         assert_eq!(cfg.anthropic.model, "claude-haiku-4-5-20251001");
         assert_eq!(cfg.llm.provider, LlmProvider::Ollama);
-        assert_eq!(cfg.llm.max_output_tokens, 800);
+        assert_eq!(cfg.llm.max_output_tokens, 8192);
         assert_eq!(cfg.summarize.group_size, 6);
         assert_eq!(cfg.summarize.max_depth, 4);
         assert_eq!(cfg.chunking.chunk_size_bytes, 5000);
@@ -508,6 +519,7 @@ mod tests {
         assert_eq!(cfg.ocr.psm, 3);
         assert_eq!(cfg.ocr.sparse_page_ratio, 0.5);
         assert_eq!(cfg.ocr.sparse_min_pages, 3);
+        assert_eq!(cfg.ocr.max_undecodable_page_ratio, 0.05);
         assert_eq!(cfg.summarize.languages, vec!["en".to_string()]);
         assert_eq!(cfg.search.summary_language, None);
     }

@@ -44,6 +44,16 @@ pub enum LlmError {
         model: String,
     },
 
+    #[error(
+        "{provider} model {model:?} spent its whole {max_tokens}-token budget thinking and \
+         produced no answer; raise [llm].max_output_tokens or set [ollama].think = false"
+    )]
+    ThinkingExhausted {
+        provider: &'static str,
+        model: String,
+        max_tokens: u32,
+    },
+
     #[error("llm request cancelled")]
     Cancelled,
 }
@@ -97,6 +107,10 @@ struct OllamaChatRequest<'a> {
     model: &'a str,
     messages: Vec<OllamaChatMessage<'a>>,
     stream: bool,
+    /// Omitted (rather than `false`) on the retry for models that reject the
+    /// field entirely; see `ollama_chat`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    think: Option<bool>,
     options: OllamaChatOptions,
 }
 
@@ -114,11 +128,15 @@ struct OllamaChatOptions {
 #[derive(Deserialize)]
 struct OllamaChatResponse {
     message: OllamaChatResponseMessage,
+    #[serde(default)]
+    done_reason: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct OllamaChatResponseMessage {
     content: String,
+    #[serde(default)]
+    thinking: Option<String>,
 }
 
 async fn ollama_chat(
@@ -129,7 +147,7 @@ async fn ollama_chat(
     max_tokens: u32,
 ) -> Result<String, LlmError> {
     let endpoint = format!("{}/api/chat", cfg.url.trim_end_matches('/'));
-    let body = OllamaChatRequest {
+    let mut body = OllamaChatRequest {
         model: &cfg.chat_model,
         messages: vec![
             OllamaChatMessage {
@@ -142,31 +160,46 @@ async fn ollama_chat(
             },
         ],
         stream: false,
+        think: Some(cfg.think),
         options: OllamaChatOptions {
             num_predict: max_tokens,
         },
     };
 
-    let resp = http
-        .post(&endpoint)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|source| LlmError::Http {
-            url: endpoint.clone(),
-            source,
-        })?;
+    let resp = loop {
+        let resp = http
+            .post(&endpoint)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|source| LlmError::Http {
+                url: endpoint.clone(),
+                source,
+            })?;
 
-    let status = resp.status();
-    if !status.is_success() {
-        let body = resp.text().await.unwrap_or_default();
+        let status = resp.status();
+        if status.is_success() {
+            break resp;
+        }
+        let text = resp.text().await.unwrap_or_default();
+        // Ollama rejects `think` (even `false`) for models without thinking
+        // support. Retry once without the field so `think = true` stays a
+        // safe default regardless of which chat model is configured.
+        if body.think.is_some() && text.contains("does not support thinking") {
+            tracing::warn!(
+                model = %cfg.chat_model,
+                "chat model does not support thinking; retrying without it"
+            );
+            body.think = None;
+            continue;
+        }
         return Err(LlmError::Status {
             provider: "ollama",
             url: endpoint,
             status: status.as_u16(),
-            body,
+            body: text,
         });
-    }
+    };
 
     let parsed: OllamaChatResponse = resp.json().await.map_err(|source| LlmError::Decode {
         url: endpoint,
@@ -174,6 +207,18 @@ async fn ollama_chat(
     })?;
     let content = parsed.message.content.trim().to_string();
     if content.is_empty() {
+        let thought = parsed
+            .message
+            .thinking
+            .as_deref()
+            .is_some_and(|t| !t.trim().is_empty());
+        if thought && parsed.done_reason.as_deref() == Some("length") {
+            return Err(LlmError::ThinkingExhausted {
+                provider: "ollama",
+                model: cfg.chat_model.clone(),
+                max_tokens,
+            });
+        }
         return Err(LlmError::EmptyResponse {
             provider: "ollama",
             model: cfg.chat_model.clone(),
