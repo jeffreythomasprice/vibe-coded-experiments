@@ -498,7 +498,7 @@ mod tests {
         assert_eq!(cfg.anthropic.api_key_env, "ANTHROPIC_API_KEY");
         assert_eq!(cfg.anthropic.model, "claude-haiku-4-5-20251001");
         assert_eq!(cfg.llm.provider, LlmProvider::Ollama);
-        assert_eq!(cfg.llm.max_output_tokens, 8192);
+        assert_eq!(cfg.llm.max_output_tokens, 20000);
         assert_eq!(cfg.summarize.group_size, 6);
         assert_eq!(cfg.summarize.max_depth, 4);
         assert_eq!(cfg.chunking.chunk_size_bytes, 5000);

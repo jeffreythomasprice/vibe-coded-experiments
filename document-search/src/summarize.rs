@@ -49,6 +49,93 @@ the concrete topics, entities, events, and claims found in the text. \
 Prefer specific nouns over generalities. Do not editorialize or add framing \
 like 'this section discusses'.";
 
+/// Used when a thinking model spirals on a group under `SYSTEM_PROMPT` (see
+/// `ladder_step`). Noisy OCR input is the usual trigger, so this prompt gives
+/// the model explicit permission to skip what it can't read.
+const FALLBACK_SYSTEM_PROMPT: &str = "\
+You are summarizing a section of a longer document for a search index. The \
+input may be noisy OCR output or fragmentary text. Ignore unreadable or \
+garbled parts and summarize only what is legible, in a single dense paragraph \
+(no headings, no bullet points) naming the concrete topics, entities, and \
+events. Do not deliberate at length; answer directly. If almost nothing is \
+legible, say so in one sentence.";
+
+/// The system prompts for one language's tree: the normal one, and the one
+/// the thinking-spiral ladder escalates to.
+struct Prompts {
+    primary: String,
+    fallback: String,
+}
+
+/// Total attempts per group when the model keeps exhausting its budget on
+/// thinking. Each step past the first is described by `ladder_step`.
+const LADDER_ATTEMPTS: u8 = 3;
+
+/// The prompt and request overrides for `attempt` (0-based) of a group's LLM
+/// call. Attempt 0 is the normal request. After a `ThinkingExhausted`,
+/// attempt 1 switches to the fallback prompt with a quarter of the budget
+/// (still thinking), and attempt 2 turns thinking off with the full budget.
+fn ladder_step(attempt: u8, max_tokens: u32) -> (bool, llm::Overrides) {
+    match attempt {
+        0 => (false, llm::Overrides::default()),
+        1 => (
+            true,
+            llm::Overrides {
+                think: None,
+                max_tokens: Some((max_tokens / 4).max(1)),
+            },
+        ),
+        _ => (
+            true,
+            llm::Overrides {
+                think: Some(false),
+                max_tokens: None,
+            },
+        ),
+    }
+}
+
+/// Run one group's completion, escalating through `ladder_step` whenever the
+/// model spends its whole budget thinking. Any other error returns as-is.
+#[allow(clippy::too_many_arguments)]
+async fn complete_with_fallback(
+    http: &reqwest::Client,
+    cfg: &Config,
+    prompts: &Prompts,
+    user: &str,
+    cancel: Option<&watch::Receiver<bool>>,
+    level: usize,
+    group: usize,
+    lang: &str,
+) -> Result<String, llm::LlmError> {
+    let mut attempt = 0;
+    loop {
+        let (fallback, overrides) = ladder_step(attempt, cfg.llm.max_output_tokens);
+        let system = if fallback {
+            &prompts.fallback
+        } else {
+            &prompts.primary
+        };
+        match llm::complete(http, cfg, system, user, overrides, cancel).await {
+            Err(e @ llm::LlmError::ThinkingExhausted { .. }) if attempt + 1 < LADDER_ATTEMPTS => {
+                attempt += 1;
+                let (_, next) = ladder_step(attempt, cfg.llm.max_output_tokens);
+                tracing::warn!(
+                    level = level + 1,
+                    group,
+                    language = lang,
+                    attempt = attempt + 1,
+                    think = ?next.think,
+                    max_tokens = ?next.max_tokens,
+                    error = %e,
+                    "summarize: thinking spiral; escalating to fallback prompt",
+                );
+            }
+            res => return res,
+        }
+    }
+}
+
 /// Appended to `SYSTEM_PROMPT` to pin the output language. Without it, local
 /// models answer in whichever language the input or system prompt leans
 /// toward, which is unpredictable for non-English sources.
@@ -231,10 +318,11 @@ async fn summarize_inner(
     );
 
     for (tree, lang) in languages.iter().enumerate() {
-        let system_prompt = format!(
-            "{SYSTEM_PROMPT}{}",
-            language_instruction(lang, doc_language.as_deref())
-        );
+        let instruction = language_instruction(lang, doc_language.as_deref());
+        let prompts = Prompts {
+            primary: format!("{SYSTEM_PROMPT}{instruction}"),
+            fallback: format!("{FALLBACK_SYSTEM_PROMPT}{instruction}"),
+        };
         let tree_progress = TreeProgress {
             tree,
             trees: languages.len(),
@@ -248,7 +336,7 @@ async fn summarize_inner(
             &path,
             document_id,
             &chunks,
-            &system_prompt,
+            &prompts,
             &tree_progress,
             group_size,
             max_depth,
@@ -283,7 +371,7 @@ async fn build_tree(
     path: &Path,
     document_id: i64,
     chunks: &[Node],
-    system_prompt: &str,
+    prompts: &Prompts,
     tp: &TreeProgress<'_>,
     group_size: usize,
     max_depth: usize,
@@ -351,12 +439,15 @@ async fn build_tree(
                     stats.reused_summaries += 1;
                     (id, true)
                 } else {
-                    let text = llm::complete(
+                    let text = complete_with_fallback(
                         http,
                         cfg,
-                        system_prompt,
+                        prompts,
                         &concat,
                         cancel,
+                        level,
+                        group_index + 1,
+                        lang,
                     )
                     .await?;
                     let embedding = ollama::embed(
@@ -864,6 +955,28 @@ mod tests {
             page_last: None,
             text: text.to_string(),
         }
+    }
+
+    #[test]
+    fn ladder_starts_with_unmodified_request() {
+        assert_eq!(ladder_step(0, 20000), (false, llm::Overrides::default()));
+    }
+
+    #[test]
+    fn ladder_second_attempt_uses_fallback_with_quarter_budget() {
+        let (fallback, o) = ladder_step(1, 20000);
+        assert!(fallback);
+        assert_eq!(o.think, None);
+        assert_eq!(o.max_tokens, Some(5000));
+        assert_eq!(ladder_step(1, 3).1.max_tokens, Some(1));
+    }
+
+    #[test]
+    fn ladder_last_attempt_disables_thinking_with_full_budget() {
+        let (fallback, o) = ladder_step(LADDER_ATTEMPTS - 1, 20000);
+        assert!(fallback);
+        assert_eq!(o.think, Some(false));
+        assert_eq!(o.max_tokens, None);
     }
 
     #[test]

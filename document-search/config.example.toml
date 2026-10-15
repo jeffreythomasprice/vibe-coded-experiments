@@ -20,8 +20,10 @@ chat_model = "qwen2.5:14b"
 # Let thinking-capable chat models (qwen3, qwen3.5, deepseek-r1, …) reason
 # before answering. Reasoning tokens count against [llm].max_output_tokens,
 # so a low cap can leave no room for the summary itself. Models that don't
-# support thinking are retried automatically without it. Set false for
-# faster (but usually shallower) summaries.
+# support thinking are retried automatically without it. If a summary call
+# spends its whole budget thinking (common on noisy OCR text), that group is
+# retried with a terser fallback prompt at a quarter of the budget, then with
+# thinking off. Set false for faster (but usually shallower) summaries.
 think = true
 
 [anthropic]

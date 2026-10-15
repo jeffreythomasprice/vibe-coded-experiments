@@ -58,6 +58,16 @@ pub enum LlmError {
     Cancelled,
 }
 
+/// Per-call overrides of the configured request settings. `Default` means
+/// "use the config as-is".
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Overrides {
+    /// Replaces `[ollama].think`. Ignored by the Anthropic provider.
+    pub think: Option<bool>,
+    /// Replaces `[llm].max_output_tokens`.
+    pub max_tokens: Option<u32>,
+}
+
 /// Issue a single chat completion against the provider configured in `cfg.llm`.
 ///
 /// `system` is the system prompt; `user` is the single user-turn message. If
@@ -68,12 +78,16 @@ pub async fn complete(
     cfg: &Config,
     system: &str,
     user: &str,
+    overrides: Overrides,
     cancel: Option<&watch::Receiver<bool>>,
 ) -> Result<String, LlmError> {
-    let max_tokens = cfg.llm.max_output_tokens;
-    let fut = async {
+    let max_tokens = overrides.max_tokens.unwrap_or(cfg.llm.max_output_tokens);
+    let think = overrides.think.unwrap_or(cfg.ollama.think);
+    let call = || async move {
         match cfg.llm.provider {
-            LlmProvider::Ollama => ollama_chat(http, &cfg.ollama, system, user, max_tokens).await,
+            LlmProvider::Ollama => {
+                ollama_chat(http, &cfg.ollama, system, user, think, max_tokens).await
+            }
             LlmProvider::Anthropic => {
                 anthropic_chat(http, &cfg.anthropic, system, user, max_tokens).await
             }
@@ -83,22 +97,19 @@ pub async fn complete(
         Some(rx) => {
             let mut rx = rx.clone();
             tokio::select! {
-                res = fut => res,
+                res = call() => res,
                 changed = rx.changed() => {
                     if changed.is_ok() && *rx.borrow() {
                         Err(LlmError::Cancelled)
                     } else {
                         // Watch channel closed without a cancel signal — fall
                         // through to a fresh await with no cancel.
-                        match cfg.llm.provider {
-                            LlmProvider::Ollama => ollama_chat(http, &cfg.ollama, system, user, max_tokens).await,
-                            LlmProvider::Anthropic => anthropic_chat(http, &cfg.anthropic, system, user, max_tokens).await,
-                        }
+                        call().await
                     }
                 }
             }
         }
-        None => fut.await,
+        None => call().await,
     }
 }
 
@@ -144,6 +155,7 @@ async fn ollama_chat(
     cfg: &OllamaConfig,
     system: &str,
     user: &str,
+    think: bool,
     max_tokens: u32,
 ) -> Result<String, LlmError> {
     let endpoint = format!("{}/api/chat", cfg.url.trim_end_matches('/'));
@@ -160,7 +172,7 @@ async fn ollama_chat(
             },
         ],
         stream: false,
-        think: Some(cfg.think),
+        think: Some(think),
         options: OllamaChatOptions {
             num_predict: max_tokens,
         },
