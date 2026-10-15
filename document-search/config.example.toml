@@ -50,6 +50,15 @@ group_size = 6
 # (root) summary.
 max_depth = 4
 
+# Languages to write summaries in. One summary tree is built per entry, so
+# each extra language roughly doubles summarization cost. Entries are ISO
+# 639-1 codes ("en", "ja", "zh", "ko", "fr", …) or "source", which resolves
+# to the document's detected language (falling back to "en" when detection
+# was inconclusive). Duplicates after resolution are collapsed, so
+# ["en", "source"] on an English document builds a single tree.
+# Override per-ingest with `--summary-lang <code>` (repeatable).
+languages = ["en"]
+
 [chunking]
 # Target chunk size in bytes. The chunker steps back to the nearest UTF-8
 # char boundary, so actual chunks may be a few bytes smaller.
@@ -81,6 +90,11 @@ default_results_per_document = 5
 # Range [0.0, 1.0]. Override per-call with `search --cutoff F`.
 relevancy_cutoff = 0.3
 
+# Preferred language for the region summary shown next to each hit by
+# `search --include-summaries`. Falls back to any available language for
+# that region. Unset means the first resolved entry of [summarize].languages.
+# summary_language = "en"
+
 [ocr]
 # Re-extract pages that pdftotext garbled (typically PDFs with CID fonts
 # and no ToUnicode CMap) by rasterizing them and running OCR via tesseract.
@@ -89,20 +103,37 @@ enabled = true
 
 # Per-page decodability threshold. Pages from pdftotext scoring below this
 # get OCR'd; pages still below this after OCR fail the ingest. Range
-# [0.0, 1.0]. The score allowlist is ASCII-leaning, so heavily-accented
-# non-English PDFs may score lower than expected.
+# [0.0, 1.0]. The score allowlist is ASCII plus whichever scripts
+# `language` names (jpn/chi_*/kor add CJK/Hangul ranges; "auto" adds all
+# of them), so heavily-accented European PDFs may score lower than expected.
+# Rare CID fonts can emit garbage that happens to land in CJK ranges and
+# passes this check; `ingest --force-ocr` is the escape hatch.
 min_decodable_ratio = 0.7
 
 # Skip the decodability check on pages with fewer non-whitespace chars
-# than this. Avoids false positives on title pages, dividers, etc.
+# than this. Avoids false positives on title pages, dividers, etc. Pages
+# under this count are also what the sparse-page trigger below calls
+# "sparse".
 min_chars_for_check = 40
+
+# Scanned-PDF trigger: when a document has at least `sparse_min_pages`
+# pages and at least this fraction of them are sparse (see
+# min_chars_for_check), OCR every sparse page. Catches image-only scans,
+# whose pages come back from pdftotext empty rather than garbled. Pages
+# that are still near-empty after OCR are kept as legitimately blank.
+# `ingest --force-ocr` OCRs every page regardless.
+sparse_page_ratio = 0.5
+sparse_min_pages = 3
 
 # Rasterization DPI for pdftoppm. 300 is standard for OCR; higher is
 # slower with diminishing returns.
 dpi = 300
 
-# Tesseract language (must be installed: tesseract-ocr-<lang>). Combine
-# multiple as e.g. "eng+fra".
+# Tesseract language (must be installed: tesseract-data-<lang> on Arch,
+# tesseract-ocr-<lang> on Debian). Combine multiple as e.g. "eng+fra" or
+# "jpn+jpn_vert+eng". "auto" runs tesseract's script detection (needs
+# osd.traineddata) on the first page that needs OCR and picks matching
+# packs. Override per-ingest with `--ocr-language <codes>`.
 language = "eng"
 
 # Tesseract page segmentation mode. 3 = auto (no OSD); 1 = auto with OSD

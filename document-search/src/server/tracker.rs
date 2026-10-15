@@ -30,6 +30,10 @@ const ETA_MIN_SAMPLES: u64 = 3;
 pub(crate) struct SummaryPlan {
     pub group_size: usize,
     pub max_depth: usize,
+    /// Expected number of per-language trees (see
+    /// `language::estimate_summary_language_count`). Superseded by the
+    /// `trees` field of the first `Summarizing` event.
+    pub languages: usize,
 }
 
 /// Pipeline order. Seeing an event from a later phase implies every earlier
@@ -62,13 +66,17 @@ pub(crate) struct JobTracker {
     pages_total: Option<u32>,
     ocr_total: Option<u32>,
     chunks_total: Option<usize>,
-    groups_per_level: Vec<usize>,
+    /// Indexed `[tree][level]`; one tree per summary language.
+    groups_per_level: Vec<Vec<usize>>,
+    /// Tree count reported by summarize itself, once it has started.
+    trees_observed: Option<usize>,
 
     pages_done: u32,
     ocr_done: u32,
     chunking_done: usize,
     embedding_done: usize,
-    summaries_done: Vec<usize>,
+    /// Indexed `[tree][level]`, parallel to `groups_per_level`.
+    summaries_done: Vec<Vec<usize>>,
 
     sample_count: u64,
     phase_clock: Option<PhaseClock>,
@@ -84,6 +92,7 @@ impl JobTracker {
             ocr_total: None,
             chunks_total: None,
             groups_per_level: Vec::new(),
+            trees_observed: None,
             pages_done: 0,
             ocr_done: 0,
             chunking_done: 0,
@@ -149,15 +158,29 @@ impl JobTracker {
                 total_levels: _,
                 current,
                 total,
+                tree,
+                trees,
+                language: _,
             } => {
-                ensure_index(&mut self.groups_per_level, *level);
-                ensure_index(&mut self.summaries_done, *level);
-                self.groups_per_level[*level] = (*total).max(self.groups_per_level[*level]);
-                self.summaries_done[*level] =
-                    current.saturating_sub(1).max(self.summaries_done[*level]);
-                // Moving to level k means every lower level finished.
-                for l in 0..*level {
-                    self.summaries_done[l] = self.groups_per_level[l];
+                let (tree, level) = (*tree, *level);
+                self.trees_observed = Some(*trees);
+                while self.groups_per_level.len() <= tree {
+                    self.groups_per_level.push(Vec::new());
+                    self.summaries_done.push(Vec::new());
+                }
+                let groups = &mut self.groups_per_level[tree];
+                let done = &mut self.summaries_done[tree];
+                ensure_index(groups, level);
+                ensure_index(done, level);
+                groups[level] = (*total).max(groups[level]);
+                done[level] = current.saturating_sub(1).max(done[level]);
+                // Moving to level k means every lower level of this tree
+                // finished.
+                done[..level].copy_from_slice(&groups[..level]);
+                // Moving to tree t means every earlier tree finished.
+                for t in 0..tree {
+                    let finished = self.groups_per_level[t].clone();
+                    self.summaries_done[t] = finished;
                 }
                 Phase::Summarizing
             }
@@ -249,7 +272,7 @@ impl JobTracker {
             + f64::from(self.ocr_done) * W_OCR
             + self.chunking_done as f64 * W_CHUNKING
             + self.embedding_done as f64 * W_EMBED;
-        for &done in &self.summaries_done {
+        for &done in self.summaries_done.iter().flatten() {
             sum += done as f64 * W_SUMMARY;
         }
         sum
@@ -262,33 +285,45 @@ impl JobTracker {
             // Each chunk drives one chunking iteration and one embed call.
             sum += c as f64 * (W_CHUNKING + W_EMBED);
         }
-        for n in self.summary_groups_per_level() {
-            sum += n as f64 * W_SUMMARY;
+        for tree in self.summary_groups_per_tree() {
+            for n in tree {
+                sum += n as f64 * W_SUMMARY;
+            }
         }
         sum
     }
 
-    /// Group counts per summary level: observed where summarize has reached
-    /// that level, otherwise projected from the level below (mirrors the
-    /// `group_consecutive` / `inputs.len() <= 1` logic in `summarize`).
-    fn summary_groups_per_level(&self) -> Vec<usize> {
+    /// Group counts per tree per summary level: observed where summarize
+    /// has reached that level, otherwise projected from the level below
+    /// (mirrors the `group_consecutive` / `inputs.len() <= 1` logic in
+    /// `summarize`). Every tree is built over the same chunks, so a tree
+    /// that hasn't started borrows tree 0's observed shape.
+    fn summary_groups_per_tree(&self) -> Vec<Vec<usize>> {
         let mut out = self.groups_per_level.clone();
         let (Some(plan), Some(chunks)) = (self.summary_plan, self.chunks_total) else {
             return out;
         };
+        let trees = self.trees_observed.unwrap_or(plan.languages).max(1);
+        while out.len() < trees {
+            out.push(Vec::new());
+        }
+        let template = self.groups_per_level.first().cloned().unwrap_or_default();
         let g = plan.group_size.max(2);
-        let mut n = chunks;
-        for level in 0..plan.max_depth {
-            if n <= 1 {
-                break;
+        for tree in out.iter_mut().take(trees) {
+            let mut n = chunks;
+            for level in 0..plan.max_depth {
+                if n <= 1 {
+                    break;
+                }
+                let count = match (tree.get(level), template.get(level)) {
+                    (Some(&observed), _) if observed > 0 => observed,
+                    (_, Some(&shared)) if shared > 0 => shared,
+                    _ => n.div_ceil(g),
+                };
+                ensure_index(tree, level);
+                tree[level] = count;
+                n = count;
             }
-            let count = match out.get(level) {
-                Some(&observed) if observed > 0 => observed,
-                _ => n.div_ceil(g),
-            };
-            ensure_index(&mut out, level);
-            out[level] = count;
-            n = count;
         }
         out
     }
@@ -317,11 +352,24 @@ mod tests {
     use std::time::Duration;
 
     fn summarizing(level: usize, current: usize, total: usize) -> ProgressEvent {
+        summarizing_tree(0, 1, level, current, total)
+    }
+
+    fn summarizing_tree(
+        tree: usize,
+        trees: usize,
+        level: usize,
+        current: usize,
+        total: usize,
+    ) -> ProgressEvent {
         ProgressEvent::Summarizing {
             level,
             total_levels: 3,
             current,
             total,
+            tree,
+            trees,
+            language: None,
         }
     }
 
@@ -357,7 +405,7 @@ mod tests {
 
     #[test]
     fn summary_plan_projects_tree_cost_before_summarize_starts() {
-        let plan = SummaryPlan { group_size: 6, max_depth: 4 };
+        let plan = SummaryPlan { group_size: 6, max_depth: 4, languages: 1 };
         let mut t = JobTracker::new(Instant::now(), Some(plan));
         let o = t
             .record(ProgressEvent::Embedding { current: 1, total: 77 })
@@ -369,7 +417,7 @@ mod tests {
 
     #[test]
     fn summarizing_marks_embedding_and_lower_levels_complete() {
-        let plan = SummaryPlan { group_size: 6, max_depth: 4 };
+        let plan = SummaryPlan { group_size: 6, max_depth: 4, languages: 1 };
         let mut t = JobTracker::new(Instant::now(), Some(plan));
         t.record(ProgressEvent::Embedding { current: 77, total: 77 });
         t.record(summarizing(0, 13, 13));
@@ -382,7 +430,7 @@ mod tests {
 
     #[test]
     fn observed_level_count_overrides_projection() {
-        let plan = SummaryPlan { group_size: 6, max_depth: 4 };
+        let plan = SummaryPlan { group_size: 6, max_depth: 4, languages: 1 };
         let mut t = JobTracker::new(Instant::now(), Some(plan));
         t.record(ProgressEvent::Embedding { current: 1, total: 77 });
         // Pretend summarize found 20 groups at level 0 (e.g. config changed).
@@ -470,5 +518,42 @@ mod tests {
         // 60 chunks × 2.1 = 126 total. Chunking complete 6 + 50 × 2.0 = 106.
         assert_eq!(o.total_steps, 126);
         assert_eq!(o.step, 106);
+    }
+
+    #[test]
+    fn two_language_plan_doubles_projected_tree_cost() {
+        let plan = SummaryPlan { group_size: 6, max_depth: 4, languages: 2 };
+        let mut t = JobTracker::new(Instant::now(), Some(plan));
+        let o = t
+            .record(ProgressEvent::Embedding { current: 1, total: 77 })
+            .overall
+            .unwrap();
+        // 161.7 + 2 trees × 17 summaries × 10 = 501.7.
+        assert_eq!(o.total_steps, 502);
+    }
+
+    #[test]
+    fn second_tree_marks_first_tree_complete() {
+        let plan = SummaryPlan { group_size: 6, max_depth: 4, languages: 2 };
+        let mut t = JobTracker::new(Instant::now(), Some(plan));
+        t.record(ProgressEvent::Embedding { current: 77, total: 77 });
+        t.record(summarizing_tree(0, 2, 0, 13, 13));
+        t.record(summarizing_tree(0, 2, 1, 3, 3));
+        t.record(summarizing_tree(0, 2, 2, 1, 1));
+        let o = t.record(summarizing_tree(1, 2, 0, 1, 13)).overall.unwrap();
+        // Done: 161.7 + tree 0 all 17 × 10 = 331.7.
+        assert_eq!(o.step, 332);
+        assert_eq!(o.total_steps, 502);
+    }
+
+    #[test]
+    fn observed_tree_count_overrides_plan() {
+        // Plan guessed 2 trees ("en" + "source"), but the source turned out
+        // to be English so summarize only builds one.
+        let plan = SummaryPlan { group_size: 6, max_depth: 4, languages: 2 };
+        let mut t = JobTracker::new(Instant::now(), Some(plan));
+        t.record(ProgressEvent::Embedding { current: 77, total: 77 });
+        let o = t.record(summarizing_tree(0, 1, 0, 1, 13)).overall.unwrap();
+        assert_eq!(o.total_steps, 332);
     }
 }

@@ -12,6 +12,14 @@
 //! pdftotext output. The byte/char offset invariant still holds because
 //! offsets are computed from the final per-page strings *after* any OCR
 //! substitutions.
+//!
+//! Pages are picked for OCR by `select_ocr_pages`: garbled pages (above),
+//! sparse pages when enough of the document is sparse (the signature of an
+//! image-only scan, which pdftotext returns as *empty* rather than garbled),
+//! every page when the whole text layer is empty, or every page with
+//! `--force-ocr`. The decodability allowlist and the OCR language follow the
+//! configured tesseract language spec; `"auto"` resolves it from tesseract's
+//! script detection (OSD) on the first page that needs OCR.
 
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
@@ -51,15 +59,33 @@ pub enum ExtractProgress {
     Ocr { current: u32, total: u32 },
 }
 
+/// Per-ingest overrides for extraction (CLI `--force-ocr`, `--ocr-language`).
+#[derive(Debug, Clone, Default)]
+pub struct ExtractOptions {
+    /// OCR every page, ignoring the pdftotext text layer. Applies even when
+    /// `[ocr].enabled = false`.
+    pub force_ocr: bool,
+    /// Replaces `[ocr].language` (including `"auto"`).
+    pub language_override: Option<String>,
+}
+
+/// `[ocr].language` value that asks for script detection via tesseract OSD.
+const AUTO_LANGUAGE: &str = "auto";
+
+/// How many candidate pages to try OSD on before giving up. Blank or
+/// image-only-but-textless pages make OSD fail, so try a few.
+const OSD_MAX_ATTEMPTS: usize = 5;
+
 /// Extract canonical PDF text. First runs pdftotext over the whole document,
-/// then per-page scores the output with `decodability_score`. Pages below
-/// `ocr.min_decodable_ratio` get re-extracted via `pdftoppm` + `tesseract`
-/// (one page at a time). After OCR, pages still below the threshold are
-/// fatal: we return `IngestError::PdfExtract` so the caller can refuse the
-/// ingest rather than indexing garbage.
+/// then picks pages to re-extract via `pdftoppm` + `tesseract` (one page at a
+/// time; see `select_ocr_pages`). After OCR, pages still below
+/// `ocr.min_decodable_ratio` are fatal, as is a document with no text at
+/// all: we return `IngestError::PdfExtract` so the caller can refuse the
+/// ingest rather than indexing garbage or nothing.
 pub async fn extract<F>(
     path: &Path,
     ocr: &OcrConfig,
+    opts: &ExtractOptions,
     cancel: Option<&watch::Receiver<bool>>,
     mut on_progress: F,
 ) -> Result<PdfText, IngestError>
@@ -106,39 +132,60 @@ where
         });
     }
 
-    let bad: Vec<usize> = pages
-        .iter()
-        .enumerate()
-        .filter_map(|(i, p)| {
-            if needs_ocr(p, ocr) {
-                Some(i)
-            } else {
-                None
-            }
-        })
-        .collect();
+    let lang_spec = opts
+        .language_override
+        .clone()
+        .unwrap_or_else(|| ocr.language.clone());
+    let initial_scripts = ScriptSet::from_tesseract_langs(&lang_spec);
+    let selection = select_ocr_pages(&pages, ocr, initial_scripts, opts.force_ocr);
+    let bad = &selection.pages;
 
     if !bad.is_empty() {
-        if !ocr.enabled {
+        if !ocr.enabled && !opts.force_ocr {
+            let (prefix, hint) = if selection.garbled > 0 {
+                (
+                    "pdftotext produced unreadable output",
+                    "Likely a CID font without ToUnicode CMap. Set [ocr].enabled = true in config.toml to fall back to OCR, or pass --force-ocr.",
+                )
+            } else {
+                (
+                    "pdftotext found no text layer",
+                    "Likely a scanned PDF. Set [ocr].enabled = true in config.toml to fall back to OCR, or pass --force-ocr.",
+                )
+            };
             return Err(IngestError::PdfExtract {
                 source: format_threshold_failure(
-                    "pdftotext produced unreadable output",
-                    &bad,
+                    prefix,
+                    bad,
                     &pages,
                     pages.len(),
                     ocr.min_decodable_ratio,
-                    Some("Likely a CID font without ToUnicode CMap. Set [ocr].enabled = true in config.toml to fall back to OCR."),
+                    initial_scripts,
+                    Some(hint),
                 )
                 .into(),
             });
         }
 
         tracing::info!(
-            bad_pages = bad.len(),
+            ocr_pages = bad.len(),
+            garbled = selection.garbled,
+            sparse = selection.sparse,
+            forced = opts.force_ocr,
             total_pages,
-            "pdf: pdftotext output unreadable for {} pages, running OCR",
+            language = %lang_spec,
+            "pdf: running OCR on {} pages",
             bad.len(),
         );
+
+        let installed = installed_tesseract_langs(cancel).await;
+        let lang = if lang_spec == AUTO_LANGUAGE {
+            detect_ocr_language(path, bad, ocr, installed.as_deref(), cancel).await?
+        } else {
+            check_langs_installed(&lang_spec, installed.as_deref())?;
+            lang_spec.clone()
+        };
+        let scripts = ScriptSet::from_tesseract_langs(&lang);
 
         let bad_total = bad.len() as u32;
         for (k, &idx) in bad.iter().enumerate() {
@@ -147,11 +194,11 @@ where
                 current: k as u32 + 1,
                 total: bad_total,
             });
-            let ocr_text = ocr_page(path, page_num, ocr, cancel).await?;
+            let ocr_text = ocr_page(path, page_num, ocr, &lang, scripts, cancel).await?;
             tracing::debug!(
                 page = page_num,
-                pre_score = decodability_score(&pages[idx]),
-                post_score = decodability_score(&ocr_text),
+                pre_score = decodability_score(&pages[idx], scripts),
+                post_score = decodability_score(&ocr_text, scripts),
                 ocr_chars = ocr_text.chars().count(),
                 "pdf: ocr replaced page",
             );
@@ -161,7 +208,7 @@ where
         let still_bad: Vec<usize> = bad
             .iter()
             .copied()
-            .filter(|&i| needs_ocr(&pages[i], ocr))
+            .filter(|&i| needs_ocr(&pages[i], ocr, scripts))
             .collect();
         if !still_bad.is_empty() {
             return Err(IngestError::PdfExtract {
@@ -171,14 +218,30 @@ where
                     &pages,
                     pages.len(),
                     ocr.min_decodable_ratio,
+                    scripts,
                     Some(&format!(
-                        "Try increasing [ocr].dpi (currently {}) or installing additional tesseract language packs (currently \"{}\").",
-                        ocr.dpi, ocr.language,
+                        "Try increasing [ocr].dpi (currently {}) or a different tesseract language (currently \"{}\"; e.g. --ocr-language jpn_vert+jpn for vertical Japanese).",
+                        ocr.dpi, lang,
                     )),
                 )
                 .into(),
             });
         }
+    }
+
+    if pages.iter().all(|p| p.chars().all(char::is_whitespace)) {
+        return Err(IngestError::PdfExtract {
+            source: format!(
+                "no text extracted from {} pages{}",
+                pages.len(),
+                if bad.is_empty() {
+                    "; try --force-ocr if this is a scanned PDF"
+                } else {
+                    " even after OCR; check the PDF renders, or try a different --ocr-language"
+                },
+            )
+            .into(),
+        });
     }
 
     let mut full_text = String::new();
@@ -211,7 +274,7 @@ where
     tracing::info!(
         total_pages,
         total_bytes = full_text.len(),
-        ocr_pages = bad.len(),
+        ocr_pages = selection.pages.len(),
         total_secs = started.elapsed().as_secs_f64(),
         "pdf: extraction complete",
     );
@@ -222,21 +285,20 @@ where
     })
 }
 
-/// OCR a single page: rasterize via pdftoppm into a temp dir, then run
-/// tesseract on the resulting PNG. The temp dir is dropped (and cleaned up)
-/// at the end of this function, so only one PNG is ever on disk per call.
-async fn ocr_page(
+/// Rasterize one page to a PNG via pdftoppm. The returned `TempDir` owns the
+/// PNG; drop it to clean up, so only one page image is on disk at a time.
+async fn rasterize_page(
     pdf_path: &Path,
     page_number: u32,
-    ocr: &OcrConfig,
+    dpi: u32,
     cancel: Option<&watch::Receiver<bool>>,
-) -> Result<String, IngestError> {
+) -> Result<(tempfile::TempDir, PathBuf), IngestError> {
     let tmp = tempfile::tempdir().map_err(|e| IngestError::PdfExtract {
         source: format!("creating temp dir for OCR: {e}").into(),
     })?;
     let stem = tmp.path().join("page");
     let page_arg = page_number.to_string();
-    let dpi_arg = ocr.dpi.to_string();
+    let dpi_arg = dpi.to_string();
 
     run_cmd(
         "pdftoppm",
@@ -263,6 +325,22 @@ async fn ocr_page(
     let png_path = find_single_png(tmp.path()).map_err(|e| IngestError::PdfExtract {
         source: format!("locating pdftoppm output for page {page_number}: {e}").into(),
     })?;
+    Ok((tmp, png_path))
+}
+
+const TESSERACT_HINT: &str = "tesseract; on Arch: pacman -S tesseract, on Debian/Ubuntu: apt install tesseract-ocr";
+
+/// OCR a single page with tesseract using the resolved language spec `lang`.
+/// For CJK scripts, strips the spaces tesseract inserts between characters.
+async fn ocr_page(
+    pdf_path: &Path,
+    page_number: u32,
+    ocr: &OcrConfig,
+    lang: &str,
+    scripts: ScriptSet,
+    cancel: Option<&watch::Receiver<bool>>,
+) -> Result<String, IngestError> {
+    let (_tmp, png_path) = rasterize_page(pdf_path, page_number, ocr.dpi, cancel).await?;
 
     let psm_arg = ocr.psm.to_string();
     let stdout = run_cmd(
@@ -271,16 +349,180 @@ async fn ocr_page(
             png_path.as_os_str(),
             OsStr::new("-"),
             OsStr::new("-l"),
-            OsStr::new(&ocr.language),
+            OsStr::new(lang),
             OsStr::new("--psm"),
             OsStr::new(&psm_arg),
         ],
-        "tesseract-ocr; on Debian/Ubuntu: apt install tesseract-ocr",
+        TESSERACT_HINT,
         cancel,
     )
     .await?;
 
-    Ok(String::from_utf8_lossy(&stdout).into_owned())
+    let text = String::from_utf8_lossy(&stdout).into_owned();
+    Ok(if scripts.any_cjk() {
+        collapse_cjk_spaces(&text)
+    } else {
+        text
+    })
+}
+
+/// Installed tesseract language packs, or `None` if `--list-langs` couldn't
+/// be run/parsed (in which case callers skip the pre-check and let tesseract
+/// itself report a missing pack).
+async fn installed_tesseract_langs(cancel: Option<&watch::Receiver<bool>>) -> Option<Vec<String>> {
+    let out = run_cmd_output("tesseract", &[OsStr::new("--list-langs")], TESSERACT_HINT, cancel)
+        .await
+        .ok()?;
+    // Older tesseract versions print the list on stderr.
+    let text = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let langs = parse_list_langs(&text);
+    (!langs.is_empty()).then_some(langs)
+}
+
+fn parse_list_langs(text: &str) -> Vec<String> {
+    text.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with("List of available languages"))
+        .filter(|l| l.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+        .map(str::to_string)
+        .collect()
+}
+
+/// Error out with an install hint if any `+`-joined code in `spec` isn't an
+/// installed pack. No-op when the installed list is unknown.
+fn check_langs_installed(spec: &str, installed: Option<&[String]>) -> Result<(), IngestError> {
+    let Some(installed) = installed else {
+        return Ok(());
+    };
+    let missing: Vec<&str> = spec
+        .split('+')
+        .map(str::trim)
+        .filter(|c| !c.is_empty() && !installed.iter().any(|i| i == c))
+        .collect();
+    if missing.is_empty() {
+        return Ok(());
+    }
+    let pkgs: Vec<String> = missing.iter().map(|c| format!("tesseract-data-{c}")).collect();
+    Err(IngestError::PdfExtract {
+        source: format!(
+            "tesseract language pack(s) not installed: {} (on Arch: pacman -S {}; on Debian/Ubuntu the packages are tesseract-ocr-<code>)",
+            missing.join(", "),
+            pkgs.join(" "),
+        )
+        .into(),
+    })
+}
+
+/// Resolve `"auto"` to a concrete tesseract spec by running OSD
+/// (`--psm 0`) on the first few candidate pages until one reports a script.
+async fn detect_ocr_language(
+    pdf_path: &Path,
+    candidates: &[usize],
+    ocr: &OcrConfig,
+    installed: Option<&[String]>,
+    cancel: Option<&watch::Receiver<bool>>,
+) -> Result<String, IngestError> {
+    if let Some(langs) = installed
+        && !langs.iter().any(|l| l == "osd")
+    {
+        return Err(IngestError::PdfExtract {
+            source: "[ocr].language = \"auto\" needs tesseract's osd.traineddata \
+                     (on Arch: pacman -S tesseract-data-osd), or pass --ocr-language <codes>"
+                .into(),
+        });
+    }
+
+    let mut last_err: Option<String> = None;
+    for &idx in candidates.iter().take(OSD_MAX_ATTEMPTS) {
+        let page_number = (idx + 1) as u32;
+        let (_tmp, png) = rasterize_page(pdf_path, page_number, ocr.dpi, cancel).await?;
+        let out = match run_cmd_output(
+            "tesseract",
+            &[png.as_os_str(), OsStr::new("-"), OsStr::new("--psm"), OsStr::new("0")],
+            TESSERACT_HINT,
+            cancel,
+        )
+        .await
+        {
+            Ok(out) => out,
+            Err(IngestError::Cancelled) => return Err(IngestError::Cancelled),
+            Err(e) => {
+                tracing::debug!(page = page_number, error = %e, "pdf: OSD failed on page");
+                last_err = Some(e.to_string());
+                continue;
+            }
+        };
+        let text = format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let Some(script) = parse_osd_script(&text) else {
+            last_err = Some(format!("no script reported for page {page_number}"));
+            continue;
+        };
+        let spec = tesseract_spec_for_script(&script, installed).ok_or_else(|| {
+            IngestError::PdfExtract {
+                source: format!(
+                    "OCR auto-detection found script \"{script}\", which has no built-in \
+                     language mapping; pass --ocr-language <codes>"
+                )
+                .into(),
+            }
+        })?;
+        check_langs_installed(&spec, installed)?;
+        tracing::info!(page = page_number, script = %script, language = %spec, "pdf: OSD picked OCR language");
+        return Ok(spec);
+    }
+    Err(IngestError::PdfExtract {
+        source: format!(
+            "OCR language auto-detection failed on the first {} candidate pages ({}); pass --ocr-language <codes>",
+            candidates.len().min(OSD_MAX_ATTEMPTS),
+            last_err.unwrap_or_else(|| "no candidates".to_string()),
+        )
+        .into(),
+    })
+}
+
+/// Pull the `Script: <name>` value out of tesseract OSD output.
+fn parse_osd_script(text: &str) -> Option<String> {
+    text.lines().find_map(|l| {
+        let rest = l.trim().strip_prefix("Script:")?.trim();
+        (!rest.is_empty()).then(|| rest.to_string())
+    })
+}
+
+/// Map an OSD script name to a tesseract language spec. Adds vertical
+/// variants when installed (vertical layout is common in Japanese/Chinese
+/// print) and `eng` for the Latin text that shows up in most documents.
+fn tesseract_spec_for_script(script: &str, installed: Option<&[String]>) -> Option<String> {
+    let has = |code: &str| installed.is_none_or(|l| l.iter().any(|i| i == code));
+    let primary: &[&str] = match script {
+        "Japanese" | "Katakana" | "Hiragana" => &["jpn", "jpn_vert"],
+        "Han" | "HanS" => &["chi_sim", "chi_sim_vert"],
+        "HanT" => &["chi_tra", "chi_tra_vert"],
+        "Hangul" | "Korean" => &["kor", "kor_vert"],
+        "Cyrillic" => &["rus"],
+        "Greek" => &["ell"],
+        "Arabic" => &["ara"],
+        "Hebrew" => &["heb"],
+        "Devanagari" => &["hin"],
+        "Thai" => &["tha"],
+        "Latin" => &["eng"],
+        _ => return None,
+    };
+    // The base pack is required (checked by the caller); optional variants
+    // only when present.
+    let mut codes: Vec<&str> = vec![primary[0]];
+    codes.extend(primary[1..].iter().copied().filter(|c| installed.is_some() && has(c)));
+    if !codes.contains(&"eng") && has("eng") {
+        codes.push("eng");
+    }
+    Some(codes.join("+"))
 }
 
 fn find_single_png(dir: &Path) -> std::io::Result<PathBuf> {
@@ -312,6 +554,16 @@ async fn run_cmd(
     install_hint: &str,
     cancel: Option<&watch::Receiver<bool>>,
 ) -> Result<Vec<u8>, IngestError> {
+    Ok(run_cmd_output(name, args, install_hint, cancel).await?.stdout)
+}
+
+/// `run_cmd`, but returns the full output (stdout + stderr) on success.
+async fn run_cmd_output(
+    name: &'static str,
+    args: &[&OsStr],
+    install_hint: &str,
+    cancel: Option<&watch::Receiver<bool>>,
+) -> Result<std::process::Output, IngestError> {
     if let Some(rx) = cancel {
         if *rx.borrow() {
             return Err(IngestError::Cancelled);
@@ -359,7 +611,7 @@ async fn run_cmd(
             source: format!("{name}: {detail}").into(),
         });
     }
-    Ok(output.stdout)
+    Ok(output)
 }
 
 fn spawn_err(name: &'static str, install_hint: &str, e: std::io::Error) -> IngestError {
@@ -376,8 +628,10 @@ fn spawn_err(name: &'static str, install_hint: &str, e: std::io::Error) -> Inges
 ///
 /// Garbled CID-Identity-H output sits in the U+00C0–U+00FF Latin-1 supplement
 /// range (Ê Ì Ã Õ Ü À), which is *not* in our text-like allowlist — those
-/// pages score near 0.0. Clean English scores 0.95+.
-pub fn decodability_score(text: &str) -> f32 {
+/// pages score near 0.0. Clean English scores 0.95+. `scripts` widens the
+/// allowlist to the CJK/Hangul ranges the configured OCR language implies;
+/// it deliberately never admits Latin-1, so the garble signal survives.
+pub fn decodability_score(text: &str, scripts: ScriptSet) -> f32 {
     let mut text_like: u32 = 0;
     let mut total: u32 = 0;
     for c in text.chars() {
@@ -385,7 +639,7 @@ pub fn decodability_score(text: &str) -> f32 {
             continue;
         }
         total += 1;
-        if is_text_like(c) {
+        if is_text_like(c) || scripts.allows(c) {
             text_like += 1;
         }
     }
@@ -410,12 +664,175 @@ fn is_text_like(c: char) -> bool {
     )
 }
 
-fn needs_ocr(text: &str, ocr: &OcrConfig) -> bool {
-    let non_ws = text.chars().filter(|c| !c.is_whitespace()).count();
-    if non_ws < ocr.min_chars_for_check {
+fn needs_ocr(text: &str, ocr: &OcrConfig, scripts: ScriptSet) -> bool {
+    if is_sparse(text, ocr) {
         return false;
     }
-    decodability_score(text) < ocr.min_decodable_ratio
+    decodability_score(text, scripts) < ocr.min_decodable_ratio
+}
+
+/// Too few non-whitespace chars to score reliably. Also the sparse-page
+/// trigger's definition of a near-empty page.
+fn is_sparse(text: &str, ocr: &OcrConfig) -> bool {
+    text.chars().filter(|c| !c.is_whitespace()).count() < ocr.min_chars_for_check
+}
+
+/// Which pages to OCR, plus why (for logging and error wording).
+#[derive(Debug, Default, PartialEq, Eq)]
+struct OcrSelection {
+    /// 0-indexed, ascending.
+    pages: Vec<usize>,
+    garbled: usize,
+    sparse: usize,
+}
+
+/// Pick pages to OCR:
+/// - `force`: every page.
+/// - garbled pages (`needs_ocr`).
+/// - sparse pages, when the document has at least `ocr.sparse_min_pages`
+///   pages and at least `ocr.sparse_page_ratio` of them are sparse, or when
+///   every page is entirely empty (a short scan with no text layer at all).
+fn select_ocr_pages(
+    pages: &[String],
+    ocr: &OcrConfig,
+    scripts: ScriptSet,
+    force: bool,
+) -> OcrSelection {
+    if force {
+        return OcrSelection {
+            pages: (0..pages.len()).collect(),
+            ..Default::default()
+        };
+    }
+    let garbled: Vec<usize> = (0..pages.len())
+        .filter(|&i| needs_ocr(&pages[i], ocr, scripts))
+        .collect();
+    let sparse: Vec<usize> = (0..pages.len())
+        .filter(|&i| is_sparse(&pages[i], ocr))
+        .collect();
+    let all_empty = !pages.is_empty()
+        && pages.iter().all(|p| p.chars().all(char::is_whitespace));
+    let mostly_sparse = pages.len() >= ocr.sparse_min_pages.max(1)
+        && sparse.len() as f32 / pages.len() as f32 >= ocr.sparse_page_ratio;
+    let take_sparse = all_empty || mostly_sparse;
+
+    let mut out = garbled.clone();
+    if take_sparse {
+        out.extend(sparse.iter().copied());
+        out.sort_unstable();
+        out.dedup();
+    }
+    OcrSelection {
+        pages: out,
+        garbled: garbled.len(),
+        sparse: if take_sparse { sparse.len() } else { 0 },
+    }
+}
+
+/// Non-ASCII scripts that count as legitimate text for the decodability
+/// score, derived from a tesseract language spec.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ScriptSet {
+    japanese: bool,
+    chinese: bool,
+    korean: bool,
+}
+
+impl ScriptSet {
+    /// Parse a `+`-joined tesseract spec (`"jpn+eng"`, `"chi_sim_vert"`).
+    /// `"auto"` admits every script we know, since the real language isn't
+    /// resolved until OCR runs.
+    pub fn from_tesseract_langs(spec: &str) -> Self {
+        let mut set = ScriptSet::default();
+        for code in spec.split('+').map(str::trim) {
+            if code == AUTO_LANGUAGE {
+                return ScriptSet {
+                    japanese: true,
+                    chinese: true,
+                    korean: true,
+                };
+            }
+            if code.starts_with("jpn") {
+                set.japanese = true;
+            } else if code.starts_with("chi_") {
+                set.chinese = true;
+            } else if code.starts_with("kor") {
+                set.korean = true;
+            }
+        }
+        set
+    }
+
+    fn any_cjk(self) -> bool {
+        self.japanese || self.chinese || self.korean
+    }
+
+    fn allows(self, c: char) -> bool {
+        (self.japanese && is_kana(c))
+            || ((self.japanese || self.chinese) && is_han(c))
+            || (self.korean && is_hangul(c))
+            || (self.any_cjk() && is_cjk_punct_or_fullwidth(c))
+    }
+}
+
+fn is_kana(c: char) -> bool {
+    matches!(c, '\u{3040}'..='\u{30FF}' | '\u{31F0}'..='\u{31FF}')
+}
+
+fn is_han(c: char) -> bool {
+    matches!(
+        c,
+        '\u{4E00}'..='\u{9FFF}'
+            | '\u{3400}'..='\u{4DBF}'
+            | '\u{F900}'..='\u{FAFF}'
+            | '\u{20000}'..='\u{2A6DF}'
+    )
+}
+
+fn is_hangul(c: char) -> bool {
+    matches!(
+        c,
+        '\u{AC00}'..='\u{D7AF}' | '\u{1100}'..='\u{11FF}' | '\u{3130}'..='\u{318F}'
+    )
+}
+
+/// CJK symbols/punctuation (、。「」々〜…) and full/half-width forms
+/// (！？（）, full-width Latin, half-width katakana).
+fn is_cjk_punct_or_fullwidth(c: char) -> bool {
+    matches!(c, '\u{3000}'..='\u{303F}' | '\u{FF00}'..='\u{FFEF}')
+}
+
+fn is_cjk(c: char) -> bool {
+    is_kana(c) || is_han(c) || is_hangul(c) || is_cjk_punct_or_fullwidth(c)
+}
+
+/// Tesseract's CJK models emit a space between most characters ("日 本 語").
+/// Remove runs of spaces/tabs whose neighbours on both sides are CJK; keep
+/// newlines (they carry paragraph structure the chunker uses) and spaces
+/// next to Latin text.
+fn collapse_cjk_spaces(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if c == ' ' || c == '\t' {
+            let mut j = i;
+            while j < chars.len() && (chars[j] == ' ' || chars[j] == '\t') {
+                j += 1;
+            }
+            let prev_cjk = i > 0 && is_cjk(chars[i - 1]);
+            let next_cjk = j < chars.len() && is_cjk(chars[j]);
+            if !(prev_cjk && next_cjk) {
+                out.extend(&chars[i..j]);
+            }
+            i = j;
+            continue;
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
 }
 
 /// Format a "X of N pages failed the threshold" error string. Lists up to
@@ -427,11 +844,12 @@ fn format_threshold_failure(
     pages: &[String],
     total_pages: usize,
     threshold: f32,
+    scripts: ScriptSet,
     suffix: Option<&str>,
 ) -> String {
     let mut scored: Vec<(usize, f32)> = bad_indices
         .iter()
-        .map(|&i| (i, decodability_score(&pages[i])))
+        .map(|&i| (i, decodability_score(&pages[i], scripts)))
         .collect();
     scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
     let worst: Vec<String> = scored
@@ -495,7 +913,7 @@ mod tests {
         let text = "The quick brown fox jumps over the lazy dog. \
                     Pack my box with five dozen liquor jugs. \
                     She sells seashells by the seashore.";
-        let score = decodability_score(text);
+        let score = decodability_score(text, ScriptSet::default());
         assert!(score > 0.95, "clean English scored {score}");
     }
 
@@ -507,7 +925,7 @@ mod tests {
         // threshold still flags them while clean English (0.95+) sails past.
         let text = "ÊivviVÌÛiÊÜ iÌ ÀÜ7 i>ÊÌ ÀÜÜi>«ÃÊÕÃi`Ê >Ì > VL>Ì]Ê \
                     Ì iÊ V >À>VÌiÀÊ ÕÃÊ Ê ÕÃiÊ iÀÊ iiiÊ LÌÞ°Ê";
-        let score = decodability_score(text);
+        let score = decodability_score(text, ScriptSet::default());
         assert!(
             score < 0.7,
             "garbled CID scored {score} (must be below 0.7 default threshold)"
@@ -516,13 +934,13 @@ mod tests {
 
     #[test]
     fn decodability_empty_text() {
-        assert_eq!(decodability_score(""), 1.0);
+        assert_eq!(decodability_score("", ScriptSet::default()), 1.0);
     }
 
     #[test]
     fn decodability_table_of_numbers_high() {
         let text = "123 456\n789 012\n345 678\n";
-        let score = decodability_score(text);
+        let score = decodability_score(text, ScriptSet::default());
         assert!(score > 0.7, "numeric table scored {score}");
     }
 
@@ -535,10 +953,12 @@ mod tests {
             dpi: 300,
             language: "eng".into(),
             psm: 3,
+            sparse_page_ratio: 0.5,
+            sparse_min_pages: 3,
         };
         // Five non-whitespace chars — way under the threshold — but page is
         // too short to trust the score, so we don't flag it.
-        assert!(!needs_ocr("ÊÌÃÕÜ", &cfg));
+        assert!(!needs_ocr("ÊÌÃÕÜ", &cfg, ScriptSet::default()));
     }
 
     #[test]
@@ -550,11 +970,13 @@ mod tests {
             dpi: 300,
             language: "eng".into(),
             psm: 3,
+            sparse_page_ratio: 0.5,
+            sparse_min_pages: 3,
         };
         let text = "ÊivviVÌÛiÊÜ iÌ ÀÜ7 i>ÊÌ ÀÜÜi>«ÃÊÕÃi`Ê >Ì > VL>Ì]Ê \
                     Ì iÊ V >À>VÌiÀÊ ÕÃÌÊ ÕÃiÊ iÀÊ iiiÊ LÌÞ°Ê \
                     ÕÃ >Ê>ÀÌ>>ÀÌÃÊÜi>«Ã iÊ>ÞÊÃÕLÃÌÌÕÌiÊ iÀÊ>ÀÌ>ÊÀÌÃÊvÀ";
-        assert!(needs_ocr(text, &cfg));
+        assert!(needs_ocr(text, &cfg, ScriptSet::default()));
     }
 
     #[test]
@@ -566,10 +988,154 @@ mod tests {
             dpi: 300,
             language: "eng".into(),
             psm: 3,
+            sparse_page_ratio: 0.5,
+            sparse_min_pages: 3,
         };
         let text = "The quick brown fox jumps over the lazy dog. \
                     Pack my box with five dozen liquor jugs. \
                     She sells seashells by the seashore.";
-        assert!(!needs_ocr(text, &cfg));
+        assert!(!needs_ocr(text, &cfg, ScriptSet::default()));
+    }
+
+    fn test_cfg() -> OcrConfig {
+        OcrConfig {
+            enabled: true,
+            min_decodable_ratio: 0.7,
+            min_chars_for_check: 40,
+            dpi: 300,
+            language: "jpn".into(),
+            psm: 3,
+            sparse_page_ratio: 0.5,
+            sparse_min_pages: 3,
+        }
+    }
+
+    const JAPANESE: &str = "吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。\
+        何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。\
+        「吾輩はここで始めて人間というものを見た。」";
+
+    const ENGLISH: &str = "The quick brown fox jumps over the lazy dog. \
+        Pack my box with five dozen liquor jugs. She sells seashells by the seashore.";
+
+    const GARBLED: &str = "ÊivviVÌÛiÊÜ iÌ ÀÜ7 i>ÊÌ ÀÜÜi>«ÃÊÕÃi`Ê >Ì > VL>Ì]Ê \
+        Ì iÊ V >À>VÌiÀÊ ÕÃÌÊ ÕÃiÊ iÀÊ iiiÊ LÌÞ°Ê";
+
+    #[test]
+    fn script_set_parses_tesseract_specs() {
+        let jpn = ScriptSet::from_tesseract_langs("jpn_vert+jpn+eng");
+        assert!(jpn.japanese && !jpn.chinese && !jpn.korean);
+        let eng = ScriptSet::from_tesseract_langs("eng");
+        assert!(!eng.any_cjk());
+        let auto = ScriptSet::from_tesseract_langs("auto");
+        assert!(auto.japanese && auto.chinese && auto.korean);
+        assert!(ScriptSet::from_tesseract_langs("chi_tra").chinese);
+        assert!(ScriptSet::from_tesseract_langs("kor").korean);
+    }
+
+    #[test]
+    fn japanese_passes_with_jpn_and_fails_with_eng() {
+        let cfg = test_cfg();
+        let jpn = ScriptSet::from_tesseract_langs("jpn");
+        assert!(decodability_score(JAPANESE, jpn) > 0.95);
+        assert!(!needs_ocr(JAPANESE, &cfg, jpn));
+        assert!(needs_ocr(JAPANESE, &cfg, ScriptSet::default()));
+    }
+
+    #[test]
+    fn latin1_garbage_still_fails_with_cjk_scripts() {
+        let cfg = test_cfg();
+        let auto = ScriptSet::from_tesseract_langs("auto");
+        assert!(needs_ocr(GARBLED, &cfg, auto));
+    }
+
+    #[test]
+    fn hangul_only_allowed_for_korean() {
+        let text = "대한민국은 민주공화국이다. 대한민국의 주권은 국민에게 있고, 모든 권력은 국민으로부터 나온다.";
+        assert!(decodability_score(text, ScriptSet::from_tesseract_langs("kor")) > 0.95);
+        assert!(decodability_score(text, ScriptSet::from_tesseract_langs("jpn")) < 0.2);
+    }
+
+    fn pages(v: &[&str]) -> Vec<String> {
+        v.iter().map(|p| p.to_string()).collect()
+    }
+
+    #[test]
+    fn select_force_takes_every_page() {
+        let sel = select_ocr_pages(&pages(&[ENGLISH, ENGLISH]), &test_cfg(), ScriptSet::default(), true);
+        assert_eq!(sel.pages, vec![0, 1]);
+    }
+
+    #[test]
+    fn select_takes_sparse_pages_when_mostly_sparse() {
+        let p = pages(&[ENGLISH, "", "  \n", "12", ENGLISH]);
+        let sel = select_ocr_pages(&p, &test_cfg(), ScriptSet::default(), false);
+        assert_eq!(sel.pages, vec![1, 2, 3]);
+        assert_eq!(sel.sparse, 3);
+        assert_eq!(sel.garbled, 0);
+    }
+
+    #[test]
+    fn select_ignores_occasional_blank_pages() {
+        let p = pages(&[ENGLISH, "", ENGLISH, ENGLISH]);
+        let sel = select_ocr_pages(&p, &test_cfg(), ScriptSet::default(), false);
+        assert!(sel.pages.is_empty());
+    }
+
+    #[test]
+    fn select_short_fully_empty_doc_takes_all_pages() {
+        // Below sparse_min_pages, but there's no text layer at all.
+        let p = pages(&["", "\n"]);
+        let sel = select_ocr_pages(&p, &test_cfg(), ScriptSet::default(), false);
+        assert_eq!(sel.pages, vec![0, 1]);
+    }
+
+    #[test]
+    fn select_combines_garbled_and_sparse() {
+        let p = pages(&[GARBLED, "", "", ENGLISH]);
+        let sel = select_ocr_pages(&p, &test_cfg(), ScriptSet::default(), false);
+        assert_eq!(sel.pages, vec![0, 1, 2]);
+        assert_eq!(sel.garbled, 1);
+        assert_eq!(sel.sparse, 2);
+    }
+
+    #[test]
+    fn collapse_cjk_spaces_cases() {
+        assert_eq!(collapse_cjk_spaces("日 本 語"), "日本語");
+        assert_eq!(collapse_cjk_spaces("日本 ABC"), "日本 ABC");
+        assert_eq!(collapse_cjk_spaces("日 本\n語 で す 。"), "日本\n語です。");
+        assert_eq!(collapse_cjk_spaces("one two"), "one two");
+        assert_eq!(collapse_cjk_spaces("「 吾 輩 」\t は"), "「吾輩」は");
+    }
+
+    #[test]
+    fn parse_osd_script_reads_script_line() {
+        let out = "Page number: 0\nOrientation in degrees: 0\nRotate: 0\n\
+                   Orientation confidence: 2.11\nScript: Japanese\nScript confidence: 1.67\n";
+        assert_eq!(parse_osd_script(out).as_deref(), Some("Japanese"));
+        assert_eq!(parse_osd_script("nothing here"), None);
+    }
+
+    #[test]
+    fn spec_for_script_adds_installed_variants_and_eng() {
+        let installed: Vec<String> = ["eng", "jpn", "jpn_vert", "osd"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(
+            tesseract_spec_for_script("Japanese", Some(&installed)).as_deref(),
+            Some("jpn+jpn_vert+eng")
+        );
+        let minimal: Vec<String> = ["jpn"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(tesseract_spec_for_script("Japanese", Some(&minimal)).as_deref(), Some("jpn"));
+        assert_eq!(tesseract_spec_for_script("Latin", None).as_deref(), Some("eng"));
+        assert_eq!(tesseract_spec_for_script("Klingon", None), None);
+    }
+
+    #[test]
+    fn list_langs_parsing_and_install_check() {
+        let out = "List of available languages in \"/usr/share/tessdata/\" (3):\neng\njpn\nosd\n";
+        let langs = parse_list_langs(out);
+        assert_eq!(langs, vec!["eng", "jpn", "osd"]);
+        assert!(check_langs_installed("jpn+eng", Some(&langs)).is_ok());
+        let err = check_langs_installed("jpn_vert+jpn", Some(&langs)).unwrap_err().to_string();
+        assert!(err.contains("tesseract-data-jpn_vert"), "{err}");
+        assert!(check_langs_installed("kor", None).is_ok());
     }
 }

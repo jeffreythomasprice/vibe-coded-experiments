@@ -7,6 +7,7 @@ mod config;
 mod db;
 mod error;
 mod ingest;
+mod language;
 mod llm;
 mod logging;
 mod ollama;
@@ -98,6 +99,9 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             max_depth,
             chunk_size,
             overlap,
+            force_ocr,
+            ocr_language,
+            summary_languages,
             detach,
         } => Ok(Request::Ingest {
             path,
@@ -105,6 +109,9 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             max_depth,
             chunk_size,
             overlap,
+            force_ocr,
+            ocr_language,
+            summary_languages,
             detach,
         }),
         Command::Info { path } => Ok(Request::Info { path }),

@@ -9,12 +9,12 @@ cargo build --release
 cargo run -- <subcommand>                    # uses ./config.toml or ~/.config/document-search/config.toml
 cargo run -- --config ./other.toml <sub>     # explicit override (errors if missing)
 cargo test                                   # all unit tests
-cargo test --lib config::                    # one module
+cargo test config::                          # one module (binary-only crate: no --lib)
 cargo test split_sql_handles_basic           # one test by name
 RUST_LOG=document_search=debug cargo run     # default is `warn,document_search=trace`
 ```
 
-Runtime prerequisites (unit tests don't need them; real ingests do): Ollama running locally with the embedding model from `[ollama]` and the chat model used for summaries pulled; `pdftotext` + `pdftoppm` (poppler-utils) for PDFs; `tesseract` for the per-page OCR fallback.
+Runtime prerequisites (unit tests don't need them; real ingests do): Ollama running locally with the embedding model from `[ollama]` and the chat model used for summaries pulled; `pdftotext` + `pdftoppm` (poppler-utils) for PDFs; `tesseract` for the per-page OCR fallback, plus a language pack per OCR language (`tesseract-data-<code>` on Arch, `tesseract-ocr-<code>` on Debian) and `osd` when `[ocr].language = "auto"`.
 
 Reset state (kill server, drop socket, wipe DB — the `rm` paths assume the default `db_path`):
 ```sh
@@ -44,6 +44,8 @@ Cooperative cancel: each running job gets a `watch::Sender<bool>`. Currently onl
 
 Switching embedding models with a different vector length means a new pair of tables appears; the old ones are left in place. Code that reads embeddings should always go through `db.chunks_table` / `db.summary_vectors_table` — never hard-code a name. `src/db/vector.rs::{to_blob, from_blob}` is the only `f32 ↔ bytes` boundary; everything else operates on `&[f32]`.
 
+`document.language` is the ISO 639-1 code `language::detect` (whatlang) assigns at ingest, or NULL when detection was unreliable. `src/language.rs` is the single place that maps whatlang's 639-3 codes to the stored form and resolves summary-language lists.
+
 Tags live in `document_tag (document_id, tag)` with `ON DELETE CASCADE`, so removing a document drops its tags automatically. Tags are normalized to lowercase + trimmed at the command layer before they hit the DB; queries (e.g. `list --tag` with `--match-all`) assume the stored form is already canonical.
 
 `task_log` records every worker-handled job (`ingest`, `search`, `tag-add`, …) start→finish with status and error. Inline-handled requests (status, list, queue-*, tag-list, task-log) intentionally don't log — see `Request::task_metrics`. `Db::task_log_repair_abandoned()` runs once at server start to mark any `in-progress` rows left by a crashed/killed run as `failure`.
@@ -57,16 +59,18 @@ The server holds one `turso::Connection` (`db.conn`) and ingests open a transact
 The base schema (document, document_chunk, document_page, document_tag, document_summary, embedding_model_dimensions, task_log) lives entirely in `0001_initial.sql` — earlier intermediate migrations were squashed before any real users existed.
 
 ### Hierarchical summary tree
-`src/summarize.rs` builds a tree of `document_summary` rows per document. Level 0 groups `cfg.summarize.group_size` consecutive `document_chunk` rows, runs them through `llm::complete`, and embeds the resulting summary into `summary_vectors_<N>`. Level k > 0 does the same against level-(k-1) summaries until the level fits in a single node or `cfg.summarize.max_depth` is reached. Each summary's `content_hash` is the sha256 of its concatenated input texts and is the dedup key inside `(document_id, level)` — re-running `summarize` on an unchanged document is a no-op (zero LLM calls). `ingest` calls `summarize` as its final phase unless `--no-summary` is passed.
+`src/summarize.rs` builds a tree of `document_summary` rows per document. Level 0 groups `cfg.summarize.group_size` consecutive `document_chunk` rows, runs them through `llm::complete`, and embeds the resulting summary into `summary_vectors_<N>`. Level k > 0 does the same against level-(k-1) summaries until the level fits in a single node or `cfg.summarize.max_depth` is reached. Each summary's `content_hash` is the sha256 of its concatenated input texts and is the dedup key inside `(document_id, language, level)` — re-running `summarize` on an unchanged document is a no-op (zero LLM calls). `ingest` calls `summarize` as its final phase unless `--no-summary` is passed.
+
+**One independent tree per output language.** `[summarize].languages` (or repeated `ingest --summary-lang`) is resolved by `language::resolve_summary_languages` — `"source"` becomes `document.language` (fallback `en`), duplicates collapse — and `build_tree` runs once per language with a "write in X" line appended to the system prompt. Every `document_summary` row carries `language` (migration 0002 backfilled pre-existing rows to `'en'`); **any query that walks the tree (parent/child, levels, partial-level detection) must filter on `language`**, or two trees get mixed. The `Summarizing` progress event carries `tree`/`trees`/`language`, and `JobTracker` keeps per-tree counters.
 
 Cancellation/error rolls back every row inserted *during this run* via `summarize::rollback_inserted`, so a cancel leaves the DB exactly as it was. The next run's per-group hash skip then carries you forward.
 
-`search --include-summaries` vector-ranks summaries alongside chunks and groups results by document with a "region summary" line per hit.
+`search --include-summaries` vector-ranks summaries (all languages — embeddings are multilingual) alongside chunks and groups results by document with a "region summary" line per hit, preferring `[search].summary_language` (default: the first resolved `[summarize].languages` entry) and falling back to any language.
 
 ### turso 0.4 self-referential cascade gotcha
 `document_summary.parent_id` is a self-reference with `ON DELETE CASCADE`. Turso 0.4's cascade implementation **overflows the runtime stack on any delete against this table**, even for a single row with no children. Both `summarize::rollback_inserted` (cancel/error path) and `cleanup::repair_document` (startup repair of partial trees) work around this by opening a dedicated connection with `PRAGMA foreign_keys = OFF` and manually deleting dependents in order: `summary_vectors_<N>` row → null out children's `parent_id` → delete the row. Any new code that deletes from `document_summary` must do the same dance.
 
-`cleanup::scan_and_repair` runs once at server start. It detects documents whose summary tree has a "partial" level (mixed NULL/non-NULL `parent_id` at the same level — the signature of an interrupted pre-rollback summarize run) and drops everything from the partial level upward so the user can re-ingest. The CLI exposes the same routine as `queue cleanup`.
+`cleanup::scan_and_repair` runs once at server start. It detects per-`(document, language)` summary trees with a "partial" level (mixed NULL/non-NULL `parent_id` at the same level — the signature of an interrupted pre-rollback summarize run) and drops everything from the partial level upward so the user can re-ingest. The CLI exposes the same routine as `queue cleanup`.
 
 ### LLM provider abstraction
 `src/llm.rs::complete` issues a single chat completion against `cfg.llm.provider` (`ollama` → `/api/chat`, or `anthropic` → `/v1/messages`). It takes an optional `watch::Receiver<bool>` and runs the HTTP call inside a `tokio::select!`; on cancel it drops the in-flight request and returns `LlmError::Cancelled`. Anthropic mode reads the API key from the env var named in `cfg.anthropic.api_key_env` (not the value — the name). Currently only `summarize::summarize_inner` calls it.
@@ -77,7 +81,7 @@ Every request is wrapped in `protocol::RequestEnvelope { output_mode, request }`
 `example-claude-skill/SKILL.md` is a Claude skill that drives this CLI through `--output-mode json` (`list`, `tag list`, `search`). If you change a JSON output's shape, update that skill too.
 
 ### Canonical PDF text and offset invariant
-Ingest accepts only `.txt` and `.pdf` (dispatched by extension in `src/ingest.rs`). For PDFs, `pdftotext` output is scored per page with `decodability_score`; pages below the `[ocr]` threshold are re-extracted via `pdftoppm` + `tesseract`, and offsets are computed only *after* OCR substitution. `src/pdf.rs` then joins the final pages with a U+000C form-feed separator into one canonical `full_text`. **All byte/char offsets in the DB (`document_chunk`, `document_page`, totals) are computed against this exact string** — so chunkers, byte-range readers, and page lookups all share one coordinate system. If you change the separator or the page-join logic, every downstream offset breaks.
+Ingest accepts only `.txt` and `.pdf` (dispatched by extension in `src/ingest.rs`). For PDFs, `pdf::select_ocr_pages` picks pages to re-extract via `pdftoppm` + `tesseract`: pages below the `[ocr]` `decodability_score` threshold (garbled), sparse pages when at least `sparse_page_ratio` of a ≥`sparse_min_pages`-page document is sparse (image-only scans come back *empty*, not garbled), every page when the text layer is entirely empty, or every page with `ingest --force-ocr`. The score's allowlist is ASCII plus the CJK/Hangul ranges implied by the tesseract language spec (`ScriptSet`); it never admits Latin-1, which is the CID-garbage signal. `[ocr].language = "auto"` (or `--ocr-language auto`) resolves the spec from tesseract OSD on the first candidate page. CJK OCR output goes through `collapse_cjk_spaces` to drop tesseract's inter-character spaces. Offsets are computed only *after* OCR substitution, and an extraction with no text at all is an error. `src/pdf.rs` then joins the final pages with a U+000C form-feed separator into one canonical `full_text`. **All byte/char offsets in the DB (`document_chunk`, `document_page`, totals) are computed against this exact string** — so chunkers, byte-range readers, and page lookups all share one coordinate system. If you change the separator or the page-join logic, every downstream offset breaks.
 
 `page_for_byte_or_preceding` exists because chunks can start in the separator gap between pages; we report the *preceding* page so a chunk that visually spans pages 2-3 reports `page_first = 2`.
 

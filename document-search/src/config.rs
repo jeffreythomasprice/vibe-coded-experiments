@@ -66,6 +66,10 @@ pub struct LlmConfig {
 pub struct SummarizeConfig {
     pub group_size: usize,
     pub max_depth: usize,
+    /// Output languages for the summary tree, one tree per entry. ISO 639-1
+    /// codes (`"en"`, `"ja"`, …) or `"source"` for the document's detected
+    /// language. See `language::resolve_summary_languages`.
+    pub languages: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -89,6 +93,10 @@ pub struct LoggingConfig {
 pub struct SearchConfig {
     pub default_results_per_document: usize,
     pub relevancy_cutoff: f32,
+    /// Preferred language for region summaries shown with search hits.
+    /// `None` means the first resolved entry of `summarize.languages`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary_language: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -99,6 +107,8 @@ pub struct OcrConfig {
     pub dpi: u32,
     pub language: String,
     pub psm: u32,
+    pub sparse_page_ratio: f32,
+    pub sparse_min_pages: usize,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -159,6 +169,8 @@ struct PartialSummarizeConfig {
     group_size: Option<usize>,
     #[serde(default)]
     max_depth: Option<usize>,
+    #[serde(default)]
+    languages: Option<Vec<String>>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -189,6 +201,8 @@ struct PartialSearchConfig {
     default_results_per_document: Option<usize>,
     #[serde(default)]
     relevancy_cutoff: Option<f32>,
+    #[serde(default)]
+    summary_language: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -205,6 +219,10 @@ struct PartialOcrConfig {
     language: Option<String>,
     #[serde(default)]
     psm: Option<u32>,
+    #[serde(default)]
+    sparse_page_ratio: Option<f32>,
+    #[serde(default)]
+    sparse_min_pages: Option<usize>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -366,6 +384,7 @@ fn merge_summarize(
     SummarizeConfig {
         group_size: overlay.group_size.unwrap_or(base.group_size),
         max_depth: overlay.max_depth.unwrap_or(base.max_depth),
+        languages: overlay.languages.unwrap_or(base.languages),
     }
 }
 
@@ -407,6 +426,7 @@ fn merge_search(base: SearchConfig, overlay: Option<PartialSearchConfig>) -> Sea
             .default_results_per_document
             .unwrap_or(base.default_results_per_document),
         relevancy_cutoff: overlay.relevancy_cutoff.unwrap_or(base.relevancy_cutoff),
+        summary_language: overlay.summary_language.or(base.summary_language),
     }
 }
 
@@ -425,6 +445,8 @@ fn merge_ocr(base: OcrConfig, overlay: Option<PartialOcrConfig>) -> OcrConfig {
         dpi: overlay.dpi.unwrap_or(base.dpi),
         language: overlay.language.unwrap_or(base.language),
         psm: overlay.psm.unwrap_or(base.psm),
+        sparse_page_ratio: overlay.sparse_page_ratio.unwrap_or(base.sparse_page_ratio),
+        sparse_min_pages: overlay.sparse_min_pages.unwrap_or(base.sparse_min_pages),
     }
 }
 
@@ -484,6 +506,10 @@ mod tests {
         assert_eq!(cfg.ocr.dpi, 300);
         assert_eq!(cfg.ocr.language, "eng");
         assert_eq!(cfg.ocr.psm, 3);
+        assert_eq!(cfg.ocr.sparse_page_ratio, 0.5);
+        assert_eq!(cfg.ocr.sparse_min_pages, 3);
+        assert_eq!(cfg.summarize.languages, vec!["en".to_string()]);
+        assert_eq!(cfg.search.summary_language, None);
     }
 
     #[test]

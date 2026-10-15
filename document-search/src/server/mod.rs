@@ -329,10 +329,18 @@ async fn worker_loop(
             Request::Ingest {
                 no_summary: false,
                 max_depth,
+                summary_languages,
                 ..
             } => Some(SummaryPlan {
                 group_size: cfg.summarize.group_size,
                 max_depth: max_depth.unwrap_or(cfg.summarize.max_depth),
+                languages: crate::language::estimate_summary_language_count(
+                    if summary_languages.is_empty() {
+                        &cfg.summarize.languages
+                    } else {
+                        summary_languages
+                    },
+                ),
             }),
             _ => None,
         };
@@ -369,8 +377,22 @@ async fn worker_loop(
                 max_depth,
                 chunk_size,
                 overlap,
+                force_ocr,
+                ocr_language,
+                summary_languages,
                 detach: _,
             } => {
+                let opts = ingest::IngestOptions {
+                    no_summary,
+                    summary_max_depth: max_depth,
+                    summary_languages,
+                    chunk_size,
+                    overlap,
+                    extract: crate::pdf::ExtractOptions {
+                        force_ocr,
+                        language_override: ocr_language,
+                    },
+                };
                 // Insert a relay between ingest and the connection. The
                 // tracker accumulates known totals + per-phase counters,
                 // then enriches each `ProgressEvent` with an `OverallProgress`
@@ -393,10 +415,7 @@ async fn worker_loop(
                     &cfg,
                     &http,
                     &path,
-                    no_summary,
-                    max_depth,
-                    chunk_size,
-                    overlap,
+                    &opts,
                     Some(&relay_tx),
                     Some(cancel_rx),
                 )

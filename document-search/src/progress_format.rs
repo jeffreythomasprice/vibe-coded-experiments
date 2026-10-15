@@ -46,9 +46,17 @@ pub(crate) fn format_event(p: &ProgressEvent) -> String {
             total_levels,
             current,
             total,
+            tree,
+            trees,
+            language,
         } => {
+            let lang = match (language, *trees) {
+                (Some(l), n) if n > 1 => format!("{l} {}/{n}, ", tree + 1),
+                (Some(l), _) => format!("{l}, "),
+                (None, _) => String::new(),
+            };
             format!(
-                "Extracting group summary (level {}/{}, group {}/{})",
+                "Extracting group summary ({lang}level {}/{}, group {}/{})",
                 level + 1,
                 total_levels,
                 current,
@@ -133,6 +141,9 @@ mod tests {
                 total_levels: 3,
                 current: 55,
                 total: 77,
+                tree: 0,
+                trees: 1,
+                language: None,
             },
             overall: Some(overall(250, 1000, Some(3725), Some(2))),
         };
@@ -140,6 +151,30 @@ mod tests {
             format_envelope(&env),
             "Extracting group summary (level 1/3, group 55/77) — \
              25% overall (step 250/1000), elapsed 44m35s, ~1h2m remaining",
+        );
+    }
+
+    #[test]
+    fn summarizing_line_names_language_and_tree() {
+        let ev = |trees| ProgressEnvelope {
+            event: ProgressEvent::Summarizing {
+                level: 1,
+                total_levels: 3,
+                current: 2,
+                total: 4,
+                tree: 1,
+                trees,
+                language: Some("ja".into()),
+            },
+            overall: None,
+        };
+        assert_eq!(
+            format_envelope(&ev(2)),
+            "Extracting group summary (ja 2/2, level 2/3, group 2/4)",
+        );
+        assert_eq!(
+            format_envelope(&ev(1)),
+            "Extracting group summary (ja, level 2/3, group 2/4)",
         );
     }
 

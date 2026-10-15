@@ -5,9 +5,14 @@
 //! summaries the same way. Each summary is also embedded so summary-aware
 //! search can vector-rank summaries alongside chunks.
 //!
-//! Idempotent: a summary is identified within `(document_id, level)` by the
-//! sha256 of its input texts. Re-running `summarize` on an unchanged document
-//! skips every LLM call.
+//! Multi-language: one independent tree is built per resolved output
+//! language (`[summarize].languages`, see `language::resolve_summary_languages`).
+//! Every `document_summary` row carries its `language`, and level k of a
+//! tree is built only from level-(k-1) rows of the same language.
+//!
+//! Idempotent: a summary is identified within `(document_id, language, level)`
+//! by the sha256 of its input texts. Re-running `summarize` on an unchanged
+//! document skips every LLM call.
 //!
 //! Cancellable: each LLM call is wrapped in a cancel-watch select; on cancel,
 //! returns `SummarizeError::Cancelled`. Any `document_summary` rows inserted
@@ -23,6 +28,7 @@ use turso::{Value, params::Params};
 
 use crate::config::Config;
 use crate::db::{Db, vector};
+use crate::language;
 use crate::llm;
 use crate::ollama;
 use crate::protocol::{Event, ProgressEnvelope, ProgressEvent};
@@ -42,6 +48,25 @@ Write a single dense paragraph (no headings, no bullet points) that captures \
 the concrete topics, entities, events, and claims found in the text. \
 Prefer specific nouns over generalities. Do not editorialize or add framing \
 like 'this section discusses'.";
+
+/// Appended to `SYSTEM_PROMPT` to pin the output language. Without it, local
+/// models answer in whichever language the input or system prompt leans
+/// toward, which is unpredictable for non-English sources.
+fn language_instruction(code: &str, doc_language: Option<&str>) -> String {
+    let name = language::display_name(code);
+    let mut out = format!(
+        " Write the summary in {name}, regardless of the language of the input text."
+    );
+    if doc_language.is_some_and(|d| d != code) {
+        // Cross-language summary: keep source-script names so queries in
+        // either language can still match the summary.
+        out.push_str(
+            " After key proper nouns and technical terms, include the \
+             original-language spelling in parentheses.",
+        );
+    }
+    out
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum SummarizeError {
@@ -120,12 +145,21 @@ pub async fn summarize(
     http: &reqwest::Client,
     raw_path: &Path,
     max_depth_override: Option<usize>,
+    languages_override: &[String],
     progress: Option<&mpsc::UnboundedSender<Event>>,
     cancel: Option<watch::Receiver<bool>>,
 ) -> Result<SummarizeStats, SummarizeError> {
     let mut inserted: Vec<i64> = Vec::new();
     let result = summarize_inner(
-        db, cfg, http, raw_path, max_depth_override, progress, cancel, &mut inserted,
+        db,
+        cfg,
+        http,
+        raw_path,
+        max_depth_override,
+        languages_override,
+        progress,
+        cancel,
+        &mut inserted,
     )
     .await;
     if result.is_err() && !inserted.is_empty() {
@@ -149,6 +183,7 @@ async fn summarize_inner(
     http: &reqwest::Client,
     raw_path: &Path,
     max_depth_override: Option<usize>,
+    languages_override: &[String],
     progress: Option<&mpsc::UnboundedSender<Event>>,
     cancel: Option<watch::Receiver<bool>>,
     inserted: &mut Vec<i64>,
@@ -160,7 +195,13 @@ async fn summarize_inner(
     let max_depth = max_depth_override.unwrap_or(cfg.summarize.max_depth);
 
     let path = canonicalize(raw_path)?;
-    let document_id = lookup_document_id(db, &path).await?;
+    let (document_id, doc_language) = lookup_document(db, &path).await?;
+    let requested = if languages_override.is_empty() {
+        &cfg.summarize.languages[..]
+    } else {
+        languages_override
+    };
+    let languages = language::resolve_summary_languages(requested, doc_language.as_deref());
 
     emit_stage(progress, "summarizing");
 
@@ -172,28 +213,97 @@ async fn summarize_inner(
 
     // We have to load level 0 inputs to count chunks before we can estimate
     // total_levels; cheaper to just load them here and reuse them below.
-    let level0_inputs = load_chunks_as_nodes(db, document_id).await?;
-    if level0_inputs.is_empty() {
+    let chunks = load_chunks_as_nodes(db, document_id).await?;
+    if chunks.is_empty() {
         return Err(SummarizeError::NoChunks { path: path.clone() });
     }
-    let total_levels = estimate_total_levels(level0_inputs.len(), group_size, max_depth);
+    let total_levels = estimate_total_levels(chunks.len(), group_size, max_depth);
     let started_at = std::time::Instant::now();
     tracing::info!(
         path = %path.display(),
-        chunk_count = level0_inputs.len(),
+        chunk_count = chunks.len(),
         group_size,
         max_depth,
         total_levels,
+        languages = ?languages,
+        doc_language = ?doc_language,
         "summarize: starting tree build",
     );
 
+    for (tree, lang) in languages.iter().enumerate() {
+        let system_prompt = format!(
+            "{SYSTEM_PROMPT}{}",
+            language_instruction(lang, doc_language.as_deref())
+        );
+        let tree_progress = TreeProgress {
+            tree,
+            trees: languages.len(),
+            language: lang,
+            total_levels,
+        };
+        let levels = build_tree(
+            db,
+            cfg,
+            http,
+            &path,
+            document_id,
+            &chunks,
+            &system_prompt,
+            &tree_progress,
+            group_size,
+            max_depth,
+            started_at,
+            &mut stats,
+            progress,
+            cancel.as_ref(),
+            inserted,
+        )
+        .await?;
+        stats.levels = stats.levels.max(levels);
+    }
+
+    Ok(stats)
+}
+
+/// Where one language's tree sits within the whole run, for progress events.
+struct TreeProgress<'a> {
+    tree: usize,
+    trees: usize,
+    language: &'a str,
+    total_levels: usize,
+}
+
+/// Build (or top up) the summary tree for one language. Returns the number
+/// of levels the tree has after this run.
+#[allow(clippy::too_many_arguments)]
+async fn build_tree(
+    db: &Db,
+    cfg: &Config,
+    http: &reqwest::Client,
+    path: &Path,
+    document_id: i64,
+    chunks: &[Node],
+    system_prompt: &str,
+    tp: &TreeProgress<'_>,
+    group_size: usize,
+    max_depth: usize,
+    started_at: std::time::Instant,
+    stats: &mut SummarizeStats,
+    progress: Option<&mpsc::UnboundedSender<Event>>,
+    cancel: Option<&watch::Receiver<bool>>,
+    inserted: &mut Vec<i64>,
+) -> Result<usize, SummarizeError> {
+    let lang = tp.language;
+    let total_levels = tp.total_levels;
+    let mut levels_built = 0;
     let mut level: usize = 0;
-    let mut level0_inputs = Some(level0_inputs);
     loop {
-        let inputs = if level == 0 {
-            level0_inputs.take().expect("level 0 inputs loaded above")
+        let loaded;
+        let inputs: &[Node] = if level == 0 {
+            chunks
         } else {
-            load_summaries_as_nodes(db, document_id, level - 1).await?
+            loaded = load_summaries_as_nodes(db, document_id, lang, level - 1).await?;
+            &loaded
         };
 
         // Single-node level means the tree already has a root at level-1.
@@ -205,7 +315,7 @@ async fn summarize_inner(
             break;
         }
 
-        let groups = group_consecutive(&inputs, group_size);
+        let groups = group_consecutive(inputs, group_size);
 
         // Track the new (parent) ids in order, parallel to `groups`. After
         // creating all level-k summaries we issue a single UPDATE for each
@@ -217,12 +327,13 @@ async fn summarize_inner(
             path = %path.display(),
             level = level + 1,
             total_levels,
+            language = lang,
             groups = total,
             "summarize: starting level",
         );
         for (group_index, group) in groups.iter().enumerate() {
-            check_cancel(cancel.as_ref())?;
-            emit_progress(progress, level, total_levels, group_index + 1, total);
+            check_cancel(cancel)?;
+            emit_progress(progress, tp, level, group_index + 1, total);
 
             let concat = concat_texts(group);
             if concat.len() > INPUT_BUDGET_BYTES {
@@ -236,16 +347,16 @@ async fn summarize_inner(
             let hash = content_hash(&concat);
 
             let (summary_id, reused) =
-                if let Some(id) = find_existing_summary(db, document_id, level, &hash).await? {
+                if let Some(id) = find_existing_summary(db, document_id, lang, level, &hash).await? {
                     stats.reused_summaries += 1;
                     (id, true)
                 } else {
                     let text = llm::complete(
                         http,
                         cfg,
-                        SYSTEM_PROMPT,
+                        system_prompt,
                         &concat,
-                        cancel.as_ref(),
+                        cancel,
                     )
                     .await?;
                     let embedding = ollama::embed(
@@ -253,7 +364,7 @@ async fn summarize_inner(
                         &cfg.ollama.url,
                         &cfg.ollama.embedding_model,
                         &text,
-                        cancel.as_ref(),
+                        cancel,
                     )
                     .await?;
 
@@ -261,6 +372,7 @@ async fn summarize_inner(
                     let id = insert_summary(
                         db,
                         document_id,
+                        lang,
                         level as i64,
                         byte_start,
                         byte_end,
@@ -280,6 +392,7 @@ async fn summarize_inner(
             tracing::info!(
                 level = level + 1,
                 total_levels,
+                language = lang,
                 group = group_index + 1,
                 total_groups = total,
                 reused,
@@ -299,11 +412,11 @@ async fn summarize_inner(
             }
         }
 
-        stats.levels = level + 1;
+        levels_built = level + 1;
         level += 1;
     }
 
-    Ok(stats)
+    Ok(levels_built)
 }
 
 /// Estimate how many summary levels the tree will end up with for a document
@@ -334,11 +447,15 @@ fn canonicalize(p: &Path) -> Result<PathBuf, SummarizeError> {
     })
 }
 
-async fn lookup_document_id(db: &Db, path: &Path) -> Result<i64, SummarizeError> {
+/// `(id, detected language)` for the document at `path`.
+async fn lookup_document(
+    db: &Db,
+    path: &Path,
+) -> Result<(i64, Option<String>), SummarizeError> {
     let path_str = path.to_string_lossy().to_string();
     let mut rows = db
         .conn
-        .query("SELECT id FROM document WHERE path = ?", (path_str,))
+        .query("SELECT id, language FROM document WHERE path = ?", (path_str,))
         .await
         .map_err(|source| SummarizeError::Db {
             op: "lookup_document_id",
@@ -354,10 +471,21 @@ async fn lookup_document_id(db: &Db, path: &Path) -> Result<i64, SummarizeError>
         .ok_or_else(|| SummarizeError::DocumentNotFound {
             path: path.to_path_buf(),
         })?;
-    row.get::<i64>(0).map_err(|source| SummarizeError::Db {
+    let id = row.get::<i64>(0).map_err(|source| SummarizeError::Db {
         op: "lookup_document_id.get",
         source,
-    })
+    })?;
+    let language = match row.get_value(1) {
+        Ok(Value::Text(s)) => Some(s),
+        Ok(_) => None,
+        Err(source) => {
+            return Err(SummarizeError::Db {
+                op: "lookup_document_id.get.language",
+                source,
+            });
+        }
+    };
+    Ok((id, language))
 }
 
 async fn load_chunks_as_nodes(db: &Db, document_id: i64) -> Result<Vec<Node>, SummarizeError> {
@@ -386,6 +514,7 @@ async fn load_chunks_as_nodes(db: &Db, document_id: i64) -> Result<Vec<Node>, Su
 async fn load_summaries_as_nodes(
     db: &Db,
     document_id: i64,
+    language: &str,
     level: usize,
 ) -> Result<Vec<Node>, SummarizeError> {
     let mut rows = db
@@ -393,9 +522,11 @@ async fn load_summaries_as_nodes(
         .query(
             "SELECT id, byte_start, byte_end, page_first, page_last, text \
              FROM document_summary \
-             WHERE document_id = ? AND level = ? ORDER BY byte_start ASC",
+             WHERE document_id = ? AND language = ? AND level = ? \
+             ORDER BY byte_start ASC",
             Params::Positional(vec![
                 Value::Integer(document_id),
+                Value::Text(language.to_string()),
                 Value::Integer(level as i64),
             ]),
         )
@@ -503,6 +634,7 @@ fn span_of(group: &[Node]) -> (i64, i64, Option<i64>, Option<i64>) {
 async fn find_existing_summary(
     db: &Db,
     document_id: i64,
+    language: &str,
     level: usize,
     hash: &str,
 ) -> Result<Option<i64>, SummarizeError> {
@@ -510,9 +642,10 @@ async fn find_existing_summary(
         .conn
         .query(
             "SELECT id FROM document_summary \
-             WHERE document_id = ? AND level = ? AND content_hash = ?",
+             WHERE document_id = ? AND language = ? AND level = ? AND content_hash = ?",
             Params::Positional(vec![
                 Value::Integer(document_id),
+                Value::Text(language.to_string()),
                 Value::Integer(level as i64),
                 Value::Text(hash.to_string()),
             ]),
@@ -541,6 +674,7 @@ async fn find_existing_summary(
 async fn insert_summary(
     db: &Db,
     document_id: i64,
+    language: &str,
     level: i64,
     byte_start: i64,
     byte_end: i64,
@@ -554,11 +688,12 @@ async fn insert_summary(
     db.conn
         .execute(
             "INSERT INTO document_summary \
-                (document_id, parent_id, level, byte_start, byte_end, \
+                (document_id, language, parent_id, level, byte_start, byte_end, \
                  page_first, page_last, text, content_hash) \
-             VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)",
+             VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)",
             Params::Positional(vec![
                 Value::Integer(document_id),
+                Value::Text(language.to_string()),
                 Value::Integer(level),
                 Value::Integer(byte_start),
                 Value::Integer(byte_end),
@@ -695,8 +830,8 @@ fn emit_stage(progress: Option<&mpsc::UnboundedSender<Event>>, name: &str) {
 
 fn emit_progress(
     progress: Option<&mpsc::UnboundedSender<Event>>,
+    tp: &TreeProgress<'_>,
     level: usize,
-    total_levels: usize,
     current: usize,
     total: usize,
 ) {
@@ -704,9 +839,12 @@ fn emit_progress(
         let _ = tx.send(Event::Progress(ProgressEnvelope {
             event: ProgressEvent::Summarizing {
                 level,
-                total_levels,
+                total_levels: tp.total_levels,
                 current,
                 total,
+                tree: tp.tree,
+                trees: tp.trees,
+                language: Some(tp.language.to_string()),
             },
             overall: None,
         }));

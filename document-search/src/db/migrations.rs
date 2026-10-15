@@ -10,8 +10,10 @@ use turso::Connection;
 use super::DbError;
 
 /// `(version, name, sql)` — `version` must be monotonically increasing.
-const MIGRATIONS: &[(u32, &str, &str)] =
-    &[(1, "initial", include_str!("migrations/0001_initial.sql"))];
+const MIGRATIONS: &[(u32, &str, &str)] = &[
+    (1, "initial", include_str!("migrations/0001_initial.sql")),
+    (2, "language", include_str!("migrations/0002_language.sql")),
+];
 
 pub async fn run(conn: &Connection) -> Result<(), DbError> {
     ensure_bookkeeping(conn).await?;
@@ -264,5 +266,42 @@ mod tests {
         let row = rows.next().await.unwrap().unwrap();
         let count: i64 = row.get(0).unwrap();
         assert_eq!(count, MIGRATIONS.len() as i64);
+    }
+
+    #[tokio::test]
+    async fn language_migration_backfills_existing_summaries() {
+        let conn = mem_conn().await;
+        ensure_bookkeeping(&conn).await.unwrap();
+        let (v, name, sql) = MIGRATIONS[0];
+        apply_one(&conn, v, name, sql).await.unwrap();
+
+        conn.execute(
+            "INSERT INTO document (path, doc_type, total_size_bytes, total_size_chars) \
+             VALUES ('x', 'pdf', 10, 10)",
+            (),
+        )
+        .await
+        .unwrap();
+        conn.execute(
+            "INSERT INTO document_summary \
+                 (document_id, level, byte_start, byte_end, text, content_hash) \
+             VALUES (1, 0, 0, 10, 'old summary', 'h')",
+            (),
+        )
+        .await
+        .unwrap();
+
+        run(&conn).await.expect("0002 should apply on top of 0001");
+
+        let mut rows = conn
+            .query("SELECT s.language, d.language FROM document_summary s \
+                    JOIN document d ON d.id = s.document_id", ())
+            .await
+            .unwrap();
+        let row = rows.next().await.unwrap().unwrap();
+        let summary_lang: String = row.get(0).unwrap();
+        let doc_lang: Option<String> = row.get(1).unwrap();
+        assert_eq!(summary_lang, "en");
+        assert_eq!(doc_lang, None);
     }
 }

@@ -38,7 +38,13 @@ The first time the binary runs it probes the embedding model for its vector
 length and caches the result in the DB; subsequent runs skip the probe.
 
 For PDFs, `pdftotext` and `pdftoppm` (poppler-utils) are required; OCR fallback
-on garbled pages additionally needs `tesseract`.
+on garbled or scanned pages additionally needs `tesseract` plus a language pack
+for each language you OCR. For non-English scans, e.g. Japanese on Arch:
+
+```sh
+sudo pacman -S tesseract tesseract-data-eng tesseract-data-jpn tesseract-data-jpn_vert \
+  tesseract-data-osd                # osd is only needed for --ocr-language auto
+```
 
 ## Commands
 
@@ -66,6 +72,64 @@ document-search ingest --no-summary path/to/doc.pdf
 
 # Override chunking and summary depth for a single ingest.
 document-search ingest --chunk-size 8000 --overlap 1500 --max-depth 3 path/to/doc.pdf
+```
+
+#### Non-English documents and cross-language summaries
+
+The document's language is detected at ingest and stored (see `info`). OCR is
+script-aware: set `[ocr].language` (or pass `--ocr-language`) to tesseract
+codes like `jpn+eng`, or `auto` to let tesseract detect the script. Scanned
+PDFs with no text layer are OCR'd automatically; `--force-ocr` OCRs every page
+regardless.
+
+Summaries can be built in several languages — one independent tree per
+language. `source` means "the document's detected language", so
+`["en", "source"]` gives an English tree plus a native one (and collapses to a
+single tree for English documents). Set it in config:
+
+```toml
+[summarize]
+languages = ["en", "source"]
+```
+
+or per ingest:
+
+```sh
+# Scanned Japanese PDF: detect the OCR script, then summarize in English and Japanese.
+document-search ingest --ocr-language auto \
+  --summary-lang en --summary-lang source path/to/scan.pdf
+
+# Vertical Japanese text (common in books) — name the packs explicitly.
+document-search ingest --ocr-language jpn_vert+jpn path/to/tategaki.pdf
+
+# Already-clean text: no OCR involved, just the two summary trees.
+document-search ingest --summary-lang en --summary-lang source path/to/neko.txt
+```
+
+```
+$ document-search info path/to/neko.txt
+path:             /.../neko.txt
+type:             txt
+total_size_bytes: 2889
+total_size_chars: 969
+total_size_pages: null
+language:         ja
+summaries:        en (6), ja (6)
+tags:             (none)
+```
+
+Embeddings are multilingual, so an English query finds Japanese chunks. With
+`--include-summaries`, the region summary is shown in `[search].summary_language`
+(default: the first entry of `[summarize].languages`) when one exists:
+
+```
+$ document-search search 'cat abandoned near a pond, hungry' --path path/to/neko.txt --include-summaries
+=== /.../neko.txt ===
+  region summary (level 1, en): The text describes a cat named "I" that was abruptly left on a
+  straw mat and then thrown into a bamboo grove. The cat slowly navigates through the bamboo
+  grove and encounters a large pond.
+  - bytes 2157-2741  similarity 0.6634  [both]
+      吾輩は藁の上から急に笹原の中へ棄てられたのである。 ようやくの思いで笹原を這い出すと向うに大きな池がある。…
 ```
 
 ### `search` — vector search

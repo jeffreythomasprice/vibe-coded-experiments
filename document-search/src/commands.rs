@@ -97,6 +97,7 @@ struct DocumentRow {
     total_size_bytes: i64,
     total_size_chars: i64,
     total_size_pages: Option<i64>,
+    language: Option<String>,
 }
 
 pub async fn info(db: &Db, raw_path: &Path) -> Result<String, CommandError> {
@@ -116,6 +117,18 @@ pub async fn info(db: &Db, raw_path: &Path) -> Result<String, CommandError> {
             let _ = writeln!(out, "total_size_pages: null");
         }
     }
+    let _ = writeln!(
+        out,
+        "language:         {}",
+        row.language.as_deref().unwrap_or("(undetected)")
+    );
+    let summaries = fetch_summary_counts(db, row.id).await?;
+    if summaries.is_empty() {
+        let _ = writeln!(out, "summaries:        (none)");
+    } else {
+        let parts: Vec<String> = summaries.iter().map(|(l, n)| format!("{l} ({n})")).collect();
+        let _ = writeln!(out, "summaries:        {}", parts.join(", "));
+    }
 
     let tags = fetch_document_tags(db, row.id).await?;
     if tags.is_empty() {
@@ -130,6 +143,11 @@ pub async fn info_json(db: &Db, raw_path: &Path) -> Result<String, CommandError>
     let path = canonicalize(raw_path)?;
     let row = lookup_document(db, &path).await?;
     let tags = fetch_document_tags(db, row.id).await?;
+    let summaries: serde_json::Map<String, serde_json::Value> = fetch_summary_counts(db, row.id)
+        .await?
+        .into_iter()
+        .map(|(l, n)| (l, serde_json::Value::from(n)))
+        .collect();
     let env = serde_json::json!({
         "ok": true,
         "path": path.display().to_string(),
@@ -137,9 +155,46 @@ pub async fn info_json(db: &Db, raw_path: &Path) -> Result<String, CommandError>
         "total_size_bytes": row.total_size_bytes,
         "total_size_chars": row.total_size_chars,
         "total_size_pages": row.total_size_pages,
+        "language": row.language,
+        "summaries": summaries,
         "tags": tags,
     });
     Ok(env.to_string())
+}
+
+/// `(language, row count)` for each summary tree of a document.
+async fn fetch_summary_counts(
+    db: &Db,
+    document_id: i64,
+) -> Result<Vec<(String, i64)>, CommandError> {
+    let mut rows = db
+        .conn
+        .query(
+            "SELECT language, count(*) FROM document_summary \
+             WHERE document_id = ? GROUP BY language ORDER BY language",
+            (document_id,),
+        )
+        .await
+        .map_err(|source| CommandError::Db {
+            op: "summary_counts",
+            source,
+        })?;
+    let mut out = Vec::new();
+    while let Some(row) = rows.next().await.map_err(|source| CommandError::Db {
+        op: "summary_counts.next",
+        source,
+    })? {
+        let language: String = row.get(0).map_err(|source| CommandError::Db {
+            op: "summary_counts.get.language",
+            source,
+        })?;
+        let n: i64 = row.get(1).map_err(|source| CommandError::Db {
+            op: "summary_counts.get.count",
+            source,
+        })?;
+        out.push((language, n));
+    }
+    Ok(out)
 }
 
 async fn fetch_document_tags(db: &Db, document_id: i64) -> Result<Vec<String>, CommandError> {
@@ -1090,7 +1145,8 @@ async fn lookup_document(db: &Db, path: &Path) -> Result<DocumentRow, CommandErr
     let mut rows = db
         .conn
         .query(
-            "SELECT id, doc_type, total_size_bytes, total_size_chars, total_size_pages \
+            "SELECT id, doc_type, total_size_bytes, total_size_chars, total_size_pages, \
+                    language \
              FROM document WHERE path = ?",
             (path_str,),
         )
@@ -1138,12 +1194,24 @@ async fn lookup_document(db: &Db, path: &Path) -> Result<DocumentRow, CommandErr
         }
     };
 
+    let language = match row.get_value(5) {
+        Ok(Value::Text(s)) => Some(s),
+        Ok(_) => None,
+        Err(source) => {
+            return Err(CommandError::Db {
+                op: "lookup_document.get.language",
+                source,
+            });
+        }
+    };
+
     Ok(DocumentRow {
         id,
         doc_type,
         total_size_bytes,
         total_size_chars,
         total_size_pages,
+        language,
     })
 }
 
@@ -1391,6 +1459,7 @@ struct DocGroup {
     path: String,
     region_summary: Option<String>,
     region_summary_level: Option<i64>,
+    region_summary_language: Option<String>,
     hits: Vec<SearchHit>,
 }
 
@@ -1422,7 +1491,7 @@ pub async fn search_text(
     )
     .await?;
     if include_summaries {
-        let groups = group_hits_by_document(db, &hits, &cutoff).await?;
+        let groups = group_hits_by_document(db, cfg, &hits, &cutoff).await?;
         Ok(render_search_grouped(term, limit, cutoff, &groups, no_truncate))
     } else {
         Ok(render_search(term, limit, cutoff, &hits, no_truncate))
@@ -1458,7 +1527,7 @@ pub async fn search_json(
     .await?;
     let max_chars = if no_truncate { None } else { Some(SNIPPET_MAX_CHARS) };
     if include_summaries {
-        let groups = group_hits_by_document(db, &hits, &cutoff).await?;
+        let groups = group_hits_by_document(db, cfg, &hits, &cutoff).await?;
         let documents: Vec<serde_json::Value> = groups
             .iter()
             .map(|g| {
@@ -1483,6 +1552,7 @@ pub async fn search_json(
                     "path": g.path,
                     "region_summary": g.region_summary,
                     "region_summary_level": g.region_summary_level,
+                    "region_summary_language": g.region_summary_language,
                     "hits": hits_json,
                 })
             })
@@ -1964,6 +2034,28 @@ async fn gather_summary_hits(
     Ok(out)
 }
 
+/// Detected language of a document (`document.language`), if any.
+async fn document_language(
+    conn: &turso::Connection,
+    document_id: i64,
+) -> Result<Option<String>, CommandError> {
+    let mut rows = conn
+        .query("SELECT language FROM document WHERE id = ?", (document_id,))
+        .await
+        .map_err(|source| CommandError::Db {
+            op: "search.document_language",
+            source,
+        })?;
+    let row = rows.next().await.map_err(|source| CommandError::Db {
+        op: "search.document_language.next",
+        source,
+    })?;
+    Ok(match row.map(|r| r.get_value(0)) {
+        Some(Ok(turso::Value::Text(s))) => Some(s),
+        _ => None,
+    })
+}
+
 /// Merge summary-expanded hits into the chunk-search hits, deduping by
 /// `(document_id, chunk_id)`. When the same chunk appears in both sets we
 /// keep the higher similarity and flag the source as `Both`.
@@ -1993,9 +2085,13 @@ fn merge_summary_hits(hits: &mut Vec<SearchHit>, summary_hits: Vec<SearchHit>) {
 
 /// Group merged hits by document and pull each document's smallest covering
 /// level≥1 summary in one query per doc. The region summary is the smallest
-/// (innermost) covering one — narrower context is more relevant.
+/// (innermost) covering one — narrower context is more relevant — in the
+/// preferred language (`[search].summary_language`, else the first resolved
+/// `[summarize].languages` entry for that document), falling back to the
+/// innermost covering summary in any language.
 async fn group_hits_by_document(
     db: &Db,
+    cfg: &Config,
     hits: &[SearchHit],
     _cutoff: &f32,
 ) -> Result<Vec<DocGroup>, CommandError> {
@@ -2026,9 +2122,20 @@ async fn group_hits_by_document(
         let (path, idxs) = buckets.remove(&doc_id).expect("bucket exists");
         // Pull all level>=1 summaries for this doc once; pick covering ones
         // per hit in memory below.
+        let preferred_language = match &cfg.search.summary_language {
+            Some(l) => crate::language::normalize(l),
+            None => {
+                let doc_language = document_language(&conn, doc_id).await?;
+                crate::language::resolve_summary_languages(
+                    &cfg.summarize.languages,
+                    doc_language.as_deref(),
+                )
+                .swap_remove(0)
+            }
+        };
         let mut rows = conn
             .query(
-                "SELECT level, byte_start, byte_end, text \
+                "SELECT level, byte_start, byte_end, text, language \
                  FROM document_summary \
                  WHERE document_id = ? AND level >= 1 \
                  ORDER BY level ASC, byte_start ASC",
@@ -2044,6 +2151,7 @@ async fn group_hits_by_document(
             byte_start: i64,
             byte_end: i64,
             text: String,
+            language: String,
         }
         let mut summaries: Vec<LevelSummary> = Vec::new();
         while let Some(row) = rows.next().await.map_err(|source| CommandError::Db {
@@ -2066,11 +2174,16 @@ async fn group_hits_by_document(
                 op: "search.region_summary.get.text",
                 source,
             })?;
+            let language: String = row.get(4).map_err(|source| CommandError::Db {
+                op: "search.region_summary.get.language",
+                source,
+            })?;
             summaries.push(LevelSummary {
                 level,
                 byte_start,
                 byte_end,
                 text,
+                language,
             });
         }
 
@@ -2081,15 +2194,20 @@ async fn group_hits_by_document(
             .first()
             .and_then(|&i| {
                 let hit = &hits[i];
-                summaries
+                let mut covering = summaries
                     .iter()
-                    .filter(|s| s.byte_start <= hit.byte_start && s.byte_end >= hit.byte_end)
-                    // Already sorted by level ASC, so first match is the innermost.
-                    .next()
+                    .filter(|s| s.byte_start <= hit.byte_start && s.byte_end >= hit.byte_end);
+                // Already sorted by level ASC, so the first match is the
+                // innermost; prefer the innermost in the preferred language.
+                covering
+                    .clone()
+                    .find(|s| s.language == preferred_language)
+                    .or_else(|| covering.next())
             });
 
         let region_summary = region.map(|s| s.text.clone());
         let region_summary_level = region.map(|s| s.level);
+        let region_summary_language = region.map(|s| s.language.clone());
 
         // Materialize hits, preserving the similarity-desc order from the
         // caller. We move them out by index; the caller is fine with that
@@ -2117,6 +2235,7 @@ async fn group_hits_by_document(
             path,
             region_summary,
             region_summary_level,
+            region_summary_language,
             hits: hits_owned,
         });
     }
@@ -2203,7 +2322,12 @@ fn render_search_grouped(
         match (&g.region_summary, g.region_summary_level) {
             (Some(text), Some(level)) => {
                 let (snip, _) = snippet_with_flag(text, summary_max_chars);
-                let _ = writeln!(out, "  region summary (level {level}): {snip}");
+                let lang = g
+                    .region_summary_language
+                    .as_deref()
+                    .map(|l| format!(", {l}"))
+                    .unwrap_or_default();
+                let _ = writeln!(out, "  region summary (level {level}{lang}): {snip}");
             }
             _ => {
                 let _ = writeln!(out, "  region summary: (none built — run `summarize`)");

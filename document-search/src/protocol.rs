@@ -43,6 +43,13 @@ pub enum Request {
         chunk_size: Option<usize>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         overlap: Option<usize>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        force_ocr: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ocr_language: Option<String>,
+        /// Empty means "use [summarize].languages".
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        summary_languages: Vec<String>,
         /// Server hint: after sending the initial `QueuedAhead`, immediately
         /// close the connection with `Final{ok=true}`. The worker still runs
         /// the job; the client just doesn't wait.
@@ -110,6 +117,10 @@ pub enum Request {
     },
 }
 
+fn default_trees() -> usize {
+    1
+}
+
 fn default_status_interval_ms() -> u64 {
     500
 }
@@ -132,6 +143,9 @@ impl Request {
                 max_depth,
                 chunk_size,
                 overlap,
+                force_ocr,
+                ocr_language,
+                summary_languages,
                 detach: _,
             } => {
                 let mut s = format!("ingest {}", path.display());
@@ -146,6 +160,15 @@ impl Request {
                 }
                 if let Some(n) = overlap {
                     s.push_str(&format!(" --overlap {n}"));
+                }
+                if *force_ocr {
+                    s.push_str(" --force-ocr");
+                }
+                if let Some(l) = ocr_language {
+                    s.push_str(&format!(" --ocr-language {l}"));
+                }
+                for l in summary_languages {
+                    s.push_str(&format!(" --summary-lang {l}"));
                 }
                 s
             }
@@ -287,12 +310,20 @@ pub enum ProgressEvent {
     /// depth being built (0 = chunks → first summaries). `current` is
     /// 1-indexed. `total_levels` is an upper-bound estimate of how many
     /// summary levels the tree will end up with, derived from chunk count,
-    /// group_size, and max_depth.
+    /// group_size, and max_depth. `tree` (0-indexed) / `trees` locate this
+    /// tree among the per-language trees of the run; `language` is the
+    /// tree's output language. All three default so older peers still parse.
     Summarizing {
         level: usize,
         total_levels: usize,
         current: usize,
         total: usize,
+        #[serde(default)]
+        tree: usize,
+        #[serde(default = "default_trees")]
+        trees: usize,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        language: Option<String>,
     },
 }
 
@@ -439,6 +470,57 @@ mod tests {
     }
 
     #[test]
+    fn old_ingest_request_parses_with_new_fields_defaulted() {
+        let s = r#"{"cmd":"ingest","path":"/x.pdf","no_summary":true}"#;
+        let env: RequestEnvelope = serde_json::from_str(s).unwrap();
+        match env.request {
+            Request::Ingest {
+                no_summary,
+                force_ocr,
+                ocr_language,
+                summary_languages,
+                ..
+            } => {
+                assert!(no_summary);
+                assert!(!force_ocr);
+                assert_eq!(ocr_language, None);
+                assert!(summary_languages.is_empty());
+            }
+            _ => panic!("expected Ingest variant"),
+        }
+    }
+
+    #[test]
+    fn old_summarizing_event_parses_as_single_tree() {
+        let s = r#"{"stage":"summarizing","level":1,"total_levels":3,"current":2,"total":4}"#;
+        match serde_json::from_str::<ProgressEvent>(s) {
+            Ok(ProgressEvent::Summarizing { tree, trees, language, .. }) => {
+                assert_eq!((tree, trees, language), (0, 1, None));
+            }
+            other => panic!("expected Summarizing, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ingest_label_lists_new_flags() {
+        let req = Request::Ingest {
+            path: "/x.pdf".into(),
+            no_summary: false,
+            max_depth: None,
+            chunk_size: None,
+            overlap: None,
+            force_ocr: true,
+            ocr_language: Some("jpn+eng".into()),
+            summary_languages: vec!["en".into(), "source".into()],
+            detach: false,
+        };
+        assert_eq!(
+            req.label(),
+            "ingest /x.pdf --force-ocr --ocr-language jpn+eng --summary-lang en --summary-lang source"
+        );
+    }
+
+    #[test]
     fn current_job_without_progress_round_trips() {
         let snap = StatusSnapshot {
             uptime_secs: 10,
@@ -534,6 +616,9 @@ mod tests {
                 total_levels: 3,
                 current: 55,
                 total: 77,
+                tree: 0,
+                trees: 1,
+                language: None,
             },
             overall: None,
         };
@@ -542,7 +627,7 @@ mod tests {
         assert!(s.contains("\"level\":0"));
         let back: ProgressEnvelope = serde_json::from_str(&s).unwrap();
         match back.event {
-            ProgressEvent::Summarizing { level, total_levels, current, total } => {
+            ProgressEvent::Summarizing { level, total_levels, current, total, .. } => {
                 assert_eq!(level, 0);
                 assert_eq!(total_levels, 3);
                 assert_eq!(current, 55);

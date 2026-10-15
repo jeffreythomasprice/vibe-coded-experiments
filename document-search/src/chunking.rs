@@ -7,7 +7,9 @@
 //!   2. Markdown heading — start of a line whose first non-space char is `#`.
 //!   3. Paragraph — position just after a `\n\n` pair.
 //!   4. Sentence end — position just after `[.!?]` followed by space or
-//!      newline, with a small abbreviation guard for `Mr.`, `e.g.`, etc.
+//!      newline, with a small abbreviation guard for `Mr.`, `e.g.`, etc.;
+//!      or just after a CJK terminator `。！？` (no trailing space needed),
+//!      absorbing any closing quotes/brackets that follow (`」』）】`).
 //!
 //! Each chunk targets `target_bytes` bytes but may grow up to ~1.5× looking
 //! for a boundary. If no boundary is found in the search window, the chunk
@@ -177,6 +179,45 @@ fn snap_forward_to_boundary(text: &str, mut idx: usize) -> usize {
     idx
 }
 
+/// Full-width sentence terminators: 。！？
+const CJK_TERMINATORS: [[u8; 3]; 3] = [
+    [0xE3, 0x80, 0x82],
+    [0xEF, 0xBC, 0x81],
+    [0xEF, 0xBC, 0x9F],
+];
+
+/// Closers that belong to the sentence they follow: 」』）】
+const CJK_CLOSERS: [[u8; 3]; 4] = [
+    [0xE3, 0x80, 0x8D],
+    [0xE3, 0x80, 0x8F],
+    [0xEF, 0xBC, 0x89],
+    [0xE3, 0x80, 0x91],
+];
+
+/// How far before `lo` the candidate scan starts so CJK sentence ends that
+/// land at or just after `lo` are still seen. Terminator + a few closers.
+const CJK_LOOKBEHIND: usize = 12;
+
+/// If a CJK terminator starts at `i`, return the byte position just past it
+/// and any immediately following terminators/closers (so `？！」` stays
+/// together). Always a char boundary, since every matched unit is a whole
+/// 3-byte UTF-8 sequence.
+fn cjk_sentence_end(bytes: &[u8], i: usize) -> Option<usize> {
+    let at = |j: usize, set: &[[u8; 3]]| {
+        bytes
+            .get(j..j + 3)
+            .is_some_and(|w| set.iter().any(|t| t == w))
+    };
+    if !at(i, &CJK_TERMINATORS) {
+        return None;
+    }
+    let mut j = i + 3;
+    while at(j, &CJK_TERMINATORS) || at(j, &CJK_CLOSERS) {
+        j += 3;
+    }
+    Some(j)
+}
+
 /// Candidates for each tier, all guaranteed in `[lo, hi]`.
 struct Candidates {
     page: Vec<usize>,
@@ -213,9 +254,12 @@ fn collect_candidates(
 
     // Sentence / paragraph / heading-after-newline candidates produced by
     // delimiter at index `i` typically land at `i + 1` (heading) or `i + 2`
-    // (paragraph, sentence). To catch candidates landing at `lo`, start the
-    // scan two bytes earlier.
-    let scan_start = lo.saturating_sub(2);
+    // (paragraph, ASCII sentence). CJK sentence ends land further out: a
+    // 3-byte terminator plus any run of 3-byte closers. To catch candidates
+    // landing at `lo`, start the scan a little earlier; every tier filters
+    // on `>= lo`, and the CJK matcher only fires on lead bytes, so starting
+    // mid-character is harmless.
+    let scan_start = lo.saturating_sub(CJK_LOOKBEHIND);
     let mut i = scan_start;
     while i < hi && i < total {
         let b = bytes[i];
@@ -235,6 +279,13 @@ fn collect_candidates(
                     paragraph.push(p_pos);
                 }
             }
+        }
+
+        if let Some(s_pos) = cjk_sentence_end(bytes, i)
+            && s_pos >= lo
+            && s_pos <= hi
+        {
+            sentence.push(s_pos);
         }
 
         if (b == b'.' || b == b'!' || b == b'?')
@@ -574,4 +625,58 @@ mod tests {
         }
         assert_eq!(cs.last().unwrap().byte_end, t.len());
     }
+
+    /// Japanese prose with no ASCII punctuation, no blank lines, and
+    /// sentence ends that are sometimes followed by a closing quote.
+    fn japanese_prose(sentences: usize) -> String {
+        let mut t = String::new();
+        for i in 0..sentences {
+            if i % 4 == 3 {
+                t.push_str("「吾輩はここで始めて人間というものを見た。」");
+            } else {
+                t.push_str("名前はまだ無いがどこで生れたかとんと見当がつかぬ。");
+            }
+        }
+        t
+    }
+
+    #[test]
+    fn cjk_sentence_end_absorbs_closers() {
+        let t = "見た。」次";
+        assert_eq!(cjk_sentence_end(t.as_bytes(), "見た".len()), Some("見た。」".len()));
+        let t = "本当？！」";
+        assert_eq!(cjk_sentence_end(t.as_bytes(), "本当".len()), Some(t.len()));
+        assert_eq!(cjk_sentence_end("abc".as_bytes(), 0), None);
+    }
+
+    #[test]
+    fn japanese_chunks_break_at_sentence_ends() {
+        let t = japanese_prose(200);
+        let cs = chunk_no_progress(&t, 1000, 200);
+        assert!(cs.len() > 3);
+        for c in &cs {
+            assert!(t.is_char_boundary(c.byte_start));
+            assert!(t.is_char_boundary(c.byte_end));
+            assert_eq!(t[c.byte_start..c.byte_end].chars().count(), c.char_end - c.char_start);
+        }
+        // Every chunk but the last ends right after a sentence end (。 or
+        // 。」), never mid-sentence — and never between 。 and 」.
+        for c in &cs[..cs.len() - 1] {
+            let chunk = &t[c.byte_start..c.byte_end];
+            assert!(
+                chunk.ends_with('。') || chunk.ends_with("。」"),
+                "chunk ends mid-sentence: …{}",
+                chunk.chars().rev().take(8).collect::<String>().chars().rev().collect::<String>()
+            );
+            let next = &t[c.byte_end..];
+            assert!(!next.starts_with('」'), "split before closing quote");
+        }
+        // Chunks tile the text.
+        assert_eq!(cs.first().unwrap().byte_start, 0);
+        assert_eq!(cs.last().unwrap().byte_end, t.len());
+        for w in cs.windows(2) {
+            assert!(w[1].byte_start <= w[0].byte_end, "gap between chunks");
+        }
+    }
 }
+

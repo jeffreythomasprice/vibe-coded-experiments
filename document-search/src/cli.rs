@@ -56,6 +56,26 @@ pub enum Command {
         #[arg(long, value_name = "N")]
         overlap: Option<usize>,
 
+        /// OCR every PDF page, ignoring the pdftotext text layer. Use for
+        /// scans with a bad embedded text layer, or when garbled output
+        /// slips past the decodability check. Works even when
+        /// [ocr].enabled = false.
+        #[arg(long)]
+        force_ocr: bool,
+
+        /// Override [ocr].language for this ingest: tesseract codes joined
+        /// with `+` (e.g. "jpn+eng", "jpn_vert+jpn"), or "auto" to detect
+        /// the script with tesseract OSD.
+        #[arg(long, value_name = "CODES")]
+        ocr_language: Option<String>,
+
+        /// Override [summarize].languages for this ingest. Repeat for
+        /// multiple trees, e.g. `--summary-lang en --summary-lang source`.
+        /// Accepts ISO 639-1 codes or "source" (the detected document
+        /// language).
+        #[arg(long = "summary-lang", value_name = "CODE")]
+        summary_languages: Vec<String>,
+
         /// Queue the ingest and return immediately without waiting for it
         /// to finish. Use `status` or `queue list` to monitor progress.
         #[arg(short = 'd', long)]

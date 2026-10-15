@@ -9,6 +9,10 @@
 //! already exist but their children aren't all pointing at them. Cleanest
 //! fix is to drop the entire topmost level for the affected document; the
 //! user re-ingests to rebuild it.
+//!
+//! Each summary language is an independent tree, so detection and repair
+//! run per `(document_id, language)`: a partial Japanese tree never costs
+//! the document its intact English one.
 
 use turso::{Value, params::Params};
 
@@ -51,32 +55,36 @@ impl CleanupReport {
 pub async fn scan_and_repair(db: &Db) -> Result<CleanupReport, CleanupError> {
     let affected = find_partial_documents(db).await?;
     let mut report = CleanupReport::default();
-    for (document_id, min_partial_level) in affected {
-        let removed = repair_document(db, document_id, min_partial_level).await?;
+    let mut repaired_docs: Vec<i64> = Vec::new();
+    for (document_id, language, min_partial_level) in affected {
+        let removed = repair_document(db, document_id, &language, min_partial_level).await?;
         if removed > 0 {
-            report.documents_repaired += 1;
+            if !repaired_docs.contains(&document_id) {
+                repaired_docs.push(document_id);
+                report.documents_repaired += 1;
+            }
             report.summary_rows_removed += removed;
         }
     }
     Ok(report)
 }
 
-/// Returns `(document_id, min_level_with_partial_linkage)` for each affected
-/// document. The "min" is the lowest level whose children are inconsistently
+/// Returns `(document_id, language, min_level_with_partial_linkage)` for each
+/// affected per-language tree. The "min" is the lowest level whose children are inconsistently
 /// linked to a parent — that's the level that was being built when the run
 /// was interrupted. Repair drops level + 1 (the parents that were being
 /// wired up) and everything above; level itself is kept intact.
-async fn find_partial_documents(db: &Db) -> Result<Vec<(i64, i64)>, CleanupError> {
+async fn find_partial_documents(db: &Db) -> Result<Vec<(i64, String, i64)>, CleanupError> {
     let mut rows = db
         .conn
         .query(
-            "SELECT document_id, level, \
+            "SELECT document_id, language, level, \
                     SUM(parent_id IS NULL) AS nulls, \
                     SUM(parent_id IS NOT NULL) AS set_count \
              FROM document_summary \
-             GROUP BY document_id, level \
+             GROUP BY document_id, language, level \
              HAVING nulls > 0 AND set_count > 0 \
-             ORDER BY document_id, level",
+             ORDER BY document_id, language, level",
             (),
         )
         .await
@@ -85,7 +93,7 @@ async fn find_partial_documents(db: &Db) -> Result<Vec<(i64, i64)>, CleanupError
             source,
         })?;
 
-    let mut out: Vec<(i64, i64)> = Vec::new();
+    let mut out: Vec<(i64, String, i64)> = Vec::new();
     while let Some(row) = rows.next().await.map_err(|source| CleanupError::Db {
         op: "find_partial.next",
         source,
@@ -94,21 +102,26 @@ async fn find_partial_documents(db: &Db) -> Result<Vec<(i64, i64)>, CleanupError
             op: "find_partial.get.doc_id",
             source,
         })?;
-        let level: i64 = row.get(1).map_err(|source| CleanupError::Db {
+        let language: String = row.get(1).map_err(|source| CleanupError::Db {
+            op: "find_partial.get.language",
+            source,
+        })?;
+        let level: i64 = row.get(2).map_err(|source| CleanupError::Db {
             op: "find_partial.get.level",
             source,
         })?;
-        // Keep only the smallest partial level per document; the result is
-        // ordered by (document_id, level) so the first row wins.
-        if out.last().map(|(d, _)| *d) != Some(doc_id) {
-            out.push((doc_id, level));
+        // Keep only the smallest partial level per (document, language); the
+        // result is ordered by (document_id, language, level) so the first
+        // row wins.
+        if out.last().map(|(d, l, _)| (*d, l.as_str())) != Some((doc_id, language.as_str())) {
+            out.push((doc_id, language, level));
         }
     }
     Ok(out)
 }
 
 /// Delete summary rows at level `min_partial_level + 1` and above for this
-/// document.
+/// document's `language` tree.
 ///
 /// Turso 0.4's self-referential `ON DELETE CASCADE` on
 /// `document_summary.parent_id` overflows the runtime stack, so we do the
@@ -117,6 +130,7 @@ async fn find_partial_documents(db: &Db) -> Result<Vec<(i64, i64)>, CleanupError
 async fn repair_document(
     db: &Db,
     document_id: i64,
+    language: &str,
     min_partial_level: i64,
 ) -> Result<usize, CleanupError> {
     let drop_from = min_partial_level + 1;
@@ -128,10 +142,11 @@ async fn repair_document(
         .conn
         .query(
             "SELECT id FROM document_summary \
-             WHERE document_id = ? AND level >= ? \
+             WHERE document_id = ? AND language = ? AND level >= ? \
              ORDER BY level DESC",
             Params::Positional(vec![
                 Value::Integer(document_id),
+                Value::Text(language.to_string()),
                 Value::Integer(drop_from),
             ]),
         )
@@ -215,4 +230,93 @@ pub fn render_json(report: &CleanupReport) -> String {
         "summary_rows_removed": report.summary_rows_removed,
     })
     .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn test_db() -> Db {
+        let database = turso::Builder::new_local(":memory:").build().await.unwrap();
+        let conn = database.connect().unwrap();
+        crate::db::migrations::run(&conn).await.unwrap();
+        conn.execute(
+            "CREATE TABLE summary_vectors_2 (
+                summary_id INTEGER PRIMARY KEY REFERENCES document_summary(id) ON DELETE CASCADE,
+                embedding  F32_BLOB(2) NOT NULL
+            )",
+            (),
+        )
+        .await
+        .unwrap();
+        Db {
+            database,
+            conn,
+            embedding_model: "test".into(),
+            embedding_dimensions: 2,
+            chunks_table: "chunks_2".into(),
+            summary_vectors_table: "summary_vectors_2".into(),
+        }
+    }
+
+    async fn insert(db: &Db, id: i64, language: &str, level: i64, parent: Option<i64>) {
+        db.conn
+            .execute(
+                "INSERT INTO document_summary \
+                    (id, document_id, language, parent_id, level, byte_start, byte_end, \
+                     text, content_hash) \
+                 VALUES (?, 1, ?, ?, ?, 0, 10, 't', 'h')",
+                Params::Positional(vec![
+                    Value::Integer(id),
+                    Value::Text(language.into()),
+                    parent.map(Value::Integer).unwrap_or(Value::Null),
+                    Value::Integer(level),
+                ]),
+            )
+            .await
+            .unwrap();
+    }
+
+    async fn count(db: &Db, language: &str) -> i64 {
+        let mut rows = db
+            .conn
+            .query(
+                "SELECT count(*) FROM document_summary WHERE language = ?",
+                (language.to_string(),),
+            )
+            .await
+            .unwrap();
+        rows.next().await.unwrap().unwrap().get(0).unwrap()
+    }
+
+    #[tokio::test]
+    async fn repairs_partial_tree_without_touching_other_language() {
+        let db = test_db().await;
+        db.conn
+            .execute(
+                "INSERT INTO document (id, path, doc_type, total_size_bytes, total_size_chars) \
+                 VALUES (1, '/x.pdf', 'pdf', 10, 10)",
+                (),
+            )
+            .await
+            .unwrap();
+        // Intact English tree: two leaves under one root.
+        insert(&db, 3, "en", 1, None).await;
+        insert(&db, 1, "en", 0, Some(3)).await;
+        insert(&db, 2, "en", 0, Some(3)).await;
+        // Japanese tree interrupted mid-linking: one leaf linked, one not.
+        insert(&db, 6, "ja", 1, None).await;
+        insert(&db, 4, "ja", 0, Some(6)).await;
+        insert(&db, 5, "ja", 0, None).await;
+
+        let report = scan_and_repair(&db).await.unwrap();
+        assert_eq!(report.documents_repaired, 1);
+        assert_eq!(report.summary_rows_removed, 1);
+        assert_eq!(count(&db, "en").await, 3);
+        // Japanese level 1 dropped; level 0 kept for the hash skip.
+        assert_eq!(count(&db, "ja").await, 2);
+
+        let again = scan_and_repair(&db).await.unwrap();
+        assert!(again.is_empty());
+    }
 }

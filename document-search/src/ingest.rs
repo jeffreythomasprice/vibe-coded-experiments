@@ -10,6 +10,7 @@ use turso::{Value, params::Params};
 use crate::chunking::{self, ChunkParams, ChunkSpan};
 use crate::config::Config;
 use crate::db::{Db, vector};
+use crate::language;
 use crate::ollama;
 use crate::pdf::{self, PageOffset, PdfText};
 use crate::protocol::{Event, ProgressEnvelope, ProgressEvent};
@@ -99,21 +100,30 @@ pub enum IngestError {
     Summarize(#[from] crate::summarize::SummarizeError),
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Per-ingest overrides from the CLI. `Default` means "everything from
+/// config".
+#[derive(Debug, Clone, Default)]
+pub struct IngestOptions {
+    pub no_summary: bool,
+    pub summary_max_depth: Option<usize>,
+    /// Empty means `[summarize].languages`.
+    pub summary_languages: Vec<String>,
+    pub chunk_size: Option<usize>,
+    pub overlap: Option<usize>,
+    pub extract: pdf::ExtractOptions,
+}
+
 pub async fn ingest(
     db: &Db,
     cfg: &Config,
     http: &reqwest::Client,
     raw_path: &Path,
-    no_summary: bool,
-    summary_max_depth: Option<usize>,
-    chunk_size_override: Option<usize>,
-    overlap_override: Option<usize>,
+    opts: &IngestOptions,
     progress: Option<&mpsc::UnboundedSender<Event>>,
     cancel: Option<watch::Receiver<bool>>,
 ) -> Result<i64, IngestError> {
-    let chunk_target = chunk_size_override.unwrap_or(cfg.chunking.chunk_size_bytes);
-    let chunk_overlap = overlap_override.unwrap_or(cfg.chunking.overlap_bytes);
+    let chunk_target = opts.chunk_size.unwrap_or(cfg.chunking.chunk_size_bytes);
+    let chunk_overlap = opts.overlap.unwrap_or(cfg.chunking.overlap_bytes);
     if chunk_overlap >= chunk_target {
         return Err(IngestError::InvalidChunkOverride {
             size: chunk_target,
@@ -154,7 +164,7 @@ pub async fn ingest(
             let PdfText {
                 full_text,
                 page_offsets,
-            } = pdf::extract(&path, &cfg.ocr, cancel.as_ref(), |p| match p {
+            } = pdf::extract(&path, &cfg.ocr, &opts.extract, cancel.as_ref(), |p| match p {
                 pdf::ExtractProgress::Pdftotext { current, total } => {
                     emit_extracting(progress, current, total);
                 }
@@ -181,6 +191,13 @@ pub async fn ingest(
             (full_text, page_offsets)
         }
     };
+
+    let doc_language = language::detect(&text);
+    tracing::info!(
+        path = %path.display(),
+        language = ?doc_language,
+        "ingest: detected document language",
+    );
 
     let total_size_bytes = text.len();
     let total_size_chars = text.chars().count();
@@ -238,18 +255,20 @@ pub async fn ingest(
         total_size_bytes,
         total_size_chars,
         total_size_pages,
+        doc_language.as_deref(),
         progress,
         cancel.as_ref(),
     )
     .await?;
 
-    if !no_summary {
+    if !opts.no_summary {
         crate::summarize::summarize(
             db,
             cfg,
             http,
             &path,
-            summary_max_depth,
+            opts.summary_max_depth,
+            &opts.summary_languages,
             progress,
             cancel,
         )
@@ -328,6 +347,7 @@ async fn insert_all(
     total_size_bytes: usize,
     total_size_chars: usize,
     total_size_pages: Option<usize>,
+    language: Option<&str>,
     progress: Option<&mpsc::UnboundedSender<Event>>,
     cancel: Option<&watch::Receiver<bool>>,
 ) -> Result<i64, IngestError> {
@@ -349,6 +369,7 @@ async fn insert_all(
         total_size_bytes,
         total_size_chars,
         total_size_pages,
+        language,
         progress,
         cancel,
     )
@@ -385,6 +406,7 @@ async fn insert_all_inner(
     total_size_bytes: usize,
     total_size_chars: usize,
     total_size_pages: Option<usize>,
+    language: Option<&str>,
     progress: Option<&mpsc::UnboundedSender<Event>>,
     cancel: Option<&watch::Receiver<bool>>,
 ) -> Result<i64, IngestError> {
@@ -398,6 +420,7 @@ async fn insert_all_inner(
         total_size_bytes,
         total_size_chars,
         total_size_pages,
+        language,
     )
     .await?;
 
@@ -527,6 +550,7 @@ async fn insert_document(
     total_size_bytes: usize,
     total_size_chars: usize,
     total_size_pages: Option<usize>,
+    language: Option<&str>,
 ) -> Result<i64, IngestError> {
     let pages_value = match total_size_pages {
         Some(n) => Value::Integer(n as i64),
@@ -536,14 +560,18 @@ async fn insert_document(
     let res = conn
         .execute(
             "INSERT INTO document \
-                (path, doc_type, total_size_bytes, total_size_chars, total_size_pages) \
-             VALUES (?, ?, ?, ?, ?)",
+                (path, doc_type, total_size_bytes, total_size_chars, total_size_pages, \
+                 language) \
+             VALUES (?, ?, ?, ?, ?, ?)",
             Params::Positional(vec![
                 Value::Text(path.to_string()),
                 Value::Text(doc_type.as_str().to_string()),
                 Value::Integer(total_size_bytes as i64),
                 Value::Integer(total_size_chars as i64),
                 pages_value,
+                language
+                    .map(|l| Value::Text(l.to_string()))
+                    .unwrap_or(Value::Null),
             ]),
         )
         .await;

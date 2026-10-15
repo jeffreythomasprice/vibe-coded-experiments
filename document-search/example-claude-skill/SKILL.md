@@ -50,6 +50,10 @@ Useful flags:
 
 JSON shape: `{ ok, term, cutoff, limit, results: [{ path, similarity, page_first, page_last, byte_start, byte_end, snippet, truncated }] }`.
 
+With `--include-summaries` the results are grouped by document instead: `{ ok, term, cutoff, limit, include_summaries: true, documents: [{ path, region_summary, region_summary_level, region_summary_language, hits: [{ byte_start, byte_end, page_first, page_last, similarity, snippet, truncated, source }] }] }`. `region_summary_language` is an ISO 639-1 code (`en`, `ja`, …); documents may have summaries in several languages and the preferred one is picked when available.
+
+Embeddings are multilingual, so an English query can match chunks of a non-English document (and vice versa). Snippets come back in the document's own language — translate when answering if needed, and consider re-searching in the document's language when cross-language hits are weak.
+
 Heuristics:
 - `similarity` ≥ 0.6 — strong, likely directly relevant.
 - 0.4–0.6 — plausibly relevant; read carefully before citing.
