@@ -44,7 +44,7 @@ provider = "ollama"
 # Max tokens to ask the model to emit per summarization call. With
 # [ollama].think = true this budget covers the model's reasoning as well as
 # the summary, so keep it generous.
-max_output_tokens = 8192
+max_output_tokens = 20000
 
 [summarize]
 # Settings for the hierarchical summary tree built as the final phase of
