@@ -245,9 +245,42 @@ NDLOCR-Lite: installed d001dad2013ceabb5736ff8d637474e443eb73c2 (Python 3.12, �
 YomiToku:    installed 0.15.0 (Python 3.12, CUDA available, …)
 ```
 
+Which path a page takes depends on the resolved OCR language, meaning
+`--ocr-language` if given, else `[ocr].language`, with `auto` detected by
+tesseract first:
+
+| Resolved language | `japanese_engine` | Pages are read by |
+|---|---|---|
+| no `jpn` / `jpn_vert` | any | tesseract |
+| includes `jpn` or `jpn_vert` | `"tesseract"` | tesseract |
+| includes `jpn` or `jpn_vert` | `"ndlocr"` / `"yomitoku"` | that engine alone |
+| includes `jpn` or `jpn_vert` | `"ensemble"` (default) | both, merged as above |
+
+`--force-ocr` works the same on every path. `auto` still needs tesseract and
+`tesseract-data-osd` to detect the script; an explicit spec such as
+`--ocr-language jpn_vert+jpn` doesn't need tesseract at all when a Japanese
+engine handles it.
+
+Settings, all optional:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `[ocr].japanese_engine` | `"ensemble"` | `ensemble`, `ndlocr`, `yomitoku`, or `tesseract` |
+| `[ocr].arbiter_model` | `"qwen3.5:9b"` | Vision model for the ensemble (Ollama only; Anthropic uses `[anthropic].model`) |
+| `[ocr_tools].dir` | `~/.local/share/document-search/ocr-tools` | Install location |
+| `[ocr_tools].auto_install` | `true` | Install missing engines when an ingest needs them |
+| `[ocr_tools].python` | `"3.12"` | Python for the engines' virtualenvs (uv downloads it if needed) |
+| `[ocr_tools].ndlocr_repo` | NDL's GitHub repo | Where NDLOCR-Lite is cloned from |
+| `[ocr_tools].ndlocr_rev` | the benchmarked commit | NDLOCR-Lite commit to check out |
+| `[ocr_tools].yomitoku_version` | `"0.15.0"` | YomiToku release from PyPI |
+| `[ocr_tools].yomitoku_device` | `"auto"` | `auto` (CUDA if the install found a GPU), `cuda`, or `cpu` |
+| `[ocr_tools].batch_pages` | `32` | Pages rendered and passed to the engines per run |
+
 Changing `ndlocr_rev`, `yomitoku_version`, or `python` reinstalls that engine
-on next use. With `auto_install = false`, an ingest that needs a missing
-engine fails and asks you to run `ocr-tools install`.
+on next use; changing only `ndlocr_repo` doesn't, so follow it with
+`ocr-tools install --reinstall`. With `auto_install = false`, an
+ingest that needs a missing engine fails and asks you to run
+`ocr-tools install`.
 
 ### `search` — vector search
 
@@ -340,6 +373,7 @@ document-search tag list
 document-search delete '/.../Exalted 2E.pdf'               # drops chunks + embeddings + tags
 document-search task-log --limit 20                        # recent server task history
 document-search ocr-tools status                           # Japanese OCR engine installs
+document-search ocr-tools install [--reinstall]            # install them ahead of time
 document-search server                                     # run server in foreground
 document-search print-config                               # merged defaults + overrides
 ```
