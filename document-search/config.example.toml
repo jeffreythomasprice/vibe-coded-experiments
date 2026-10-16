@@ -26,6 +26,14 @@ chat_model = "qwen2.5:14b"
 # thinking off. Set false for faster (but usually shallower) summaries.
 think = true
 
+# Context window (in tokens) requested for every chat call. Ollama's own
+# default is only a few thousand tokens and it silently drops the *start* of
+# any longer prompt, system prompt included. This must hold the summary input
+# (about one token per CJK character, or per ~4 bytes of Latin text) plus the
+# output budget; [llm].max_output_tokens is shrunk per call to fit, and a
+# prompt that doesn't fit at all fails the call. Larger values cost VRAM.
+num_ctx = 32768
+
 [anthropic]
 # Endpoint for Anthropic Messages API. Override only if proxying.
 base_url = "https://api.anthropic.com"
@@ -158,3 +166,47 @@ language = "eng"
 # (requires osd.traineddata, not always installed); 6 = single uniform
 # block. See `tesseract --help-psm`.
 psm = 3
+
+# Engine for pages whose OCR language (above, or the --ocr-language override,
+# or the script "auto" detects) includes Japanese (jpn / jpn_vert):
+#   "ensemble"  - NDLOCR-Lite and YomiToku both read the page; where they
+#                 disagree, arbiter_model looks at the page image and picks
+#                 one reading per disagreement. Most faithful.
+#   "ndlocr"    - NDLOCR-Lite alone.
+#   "yomitoku"  - YomiToku alone.
+#   "tesseract" - tesseract with `language`, as for other languages.
+# The Python engines are installed on first use; see [ocr_tools].
+japanese_engine = "ensemble"
+
+# Vision-capable Ollama model for the ensemble's arbitration pass. With
+# [llm].provider = "anthropic", [anthropic].model is used instead.
+arbiter_model = "qwen3.5:9b"
+
+[ocr_tools]
+# Where the Python OCR engines are checked out and installed. Unset means
+# ~/.local/share/document-search/ocr-tools. Needs `uv` and `git` on PATH and
+# about 6 GB (YomiToku pulls in torch). `document-search ocr-tools install`
+# installs ahead of time; `ocr-tools status` shows what's there.
+# dir = "~/.local/share/document-search/ocr-tools"
+
+# Install missing engines the first time an ingest needs them. When false,
+# such an ingest fails and asks you to run `ocr-tools install`.
+auto_install = true
+
+# Python version for the engines' virtualenvs (uv downloads it if needed).
+python = "3.12"
+
+# NDLOCR-Lite source, pinned to a commit. Changing either reinstalls it.
+ndlocr_repo = "https://github.com/ndl-lab/ndlocr-lite"
+ndlocr_rev = "d001dad2013ceabb5736ff8d637474e443eb73c2"
+
+# YomiToku release from PyPI. Changing it reinstalls it. YomiToku is licensed
+# CC BY-NC-SA 4.0 (non-commercial use).
+yomitoku_version = "0.15.0"
+
+# "auto" uses CUDA when the install found a usable GPU, else CPU (slow).
+yomitoku_device = "auto"
+
+# Pages rendered and passed to each engine per run. Larger amortizes model
+# load time; smaller uses less temp disk and updates progress more often.
+batch_pages = 32

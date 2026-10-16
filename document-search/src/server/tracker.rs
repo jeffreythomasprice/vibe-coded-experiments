@@ -300,15 +300,23 @@ impl JobTracker {
     /// that hasn't started borrows tree 0's observed shape.
     fn summary_groups_per_tree(&self) -> Vec<Vec<usize>> {
         let mut out = self.groups_per_level.clone();
-        let (Some(plan), Some(chunks)) = (self.summary_plan, self.chunks_total) else {
+        let Some(plan) = self.summary_plan else {
+            return out;
+        };
+        let template = self.groups_per_level.first().cloned().unwrap_or_default();
+        let g = plan.group_size.max(2);
+        // A standalone `summarize` job never sees chunking/embedding events,
+        // so fall back to the first observed level's group count: `g0 * g`
+        // chunks reproduces exactly `g0` level-0 groups.
+        let Some(chunks) = self.chunks_total.or_else(|| {
+            template.first().copied().filter(|&g0| g0 > 0).map(|g0| g0 * g)
+        }) else {
             return out;
         };
         let trees = self.trees_observed.unwrap_or(plan.languages).max(1);
         while out.len() < trees {
             out.push(Vec::new());
         }
-        let template = self.groups_per_level.first().cloned().unwrap_or_default();
-        let g = plan.group_size.max(2);
         for tree in out.iter_mut().take(trees) {
             let mut n = chunks;
             for level in 0..plan.max_depth {
@@ -426,6 +434,18 @@ mod tests {
         assert_eq!(o.step, 292);
         // Total unchanged from projection: 161.7 + 170 = 332.
         assert_eq!(o.total_steps, 332);
+    }
+
+    #[test]
+    fn standalone_summarize_projects_from_first_level() {
+        // `summarize` command: no extracting/chunking/embedding events, so
+        // the tree is projected from level 0's observed group count.
+        let plan = SummaryPlan { group_size: 6, max_depth: 4, languages: 1 };
+        let mut t = JobTracker::new(Instant::now(), Some(plan));
+        let o = t.record(summarizing(0, 1, 13)).overall.unwrap();
+        // Tree: 13 + 3 + 1 = 17 summaries × 10 = 170.
+        assert_eq!(o.total_steps, 170);
+        assert_eq!(o.step, 0);
     }
 
     #[test]

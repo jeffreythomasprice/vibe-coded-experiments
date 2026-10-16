@@ -10,8 +10,12 @@ mod ingest;
 mod language;
 mod llm;
 mod logging;
+mod ocr_ja;
+mod ocr_merge;
+mod ocr_tools;
 mod ollama;
 mod pdf;
+mod proc;
 mod progress_format;
 mod protocol;
 mod server;
@@ -19,7 +23,7 @@ mod summarize;
 
 use clap::Parser;
 
-use crate::cli::{Cli, Command, QueueCommand, TagCommand, TextRange};
+use crate::cli::{Cli, Command, OcrToolsCommand, QueueCommand, TagCommand, TextRange};
 use crate::error::Error;
 use crate::protocol::{OutputMode, Request, RequestEnvelope, TextRangeReq};
 
@@ -114,6 +118,19 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             summary_languages,
             detach,
         }),
+        Command::Summarize {
+            path,
+            rebuild,
+            max_depth,
+            summary_languages,
+            detach,
+        } => Ok(Request::Summarize {
+            path,
+            rebuild,
+            max_depth,
+            summary_languages,
+            detach,
+        }),
         Command::Info { path } => Ok(Request::Info { path }),
         Command::Text { path, range } => Ok(Request::Text {
             path,
@@ -161,6 +178,10 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             no_truncate,
             include_summaries,
         }),
+        Command::OcrTools { action } => match action {
+            OcrToolsCommand::Status => Ok(Request::OcrToolsStatus),
+            OcrToolsCommand::Install { reinstall } => Ok(Request::OcrToolsInstall { reinstall }),
+        },
         Command::TaskLog { limit } => Ok(Request::TaskLog { limit: Some(limit) }),
         Command::Server => unreachable!("Server is dispatched directly"),
     }

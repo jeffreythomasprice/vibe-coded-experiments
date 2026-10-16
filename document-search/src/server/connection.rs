@@ -190,6 +190,19 @@ pub(crate) async fn handle(
         return Ok(());
     }
 
+    if matches!(req, Request::OcrToolsStatus) {
+        let tools_cfg = state.lock().unwrap().ocr_tools.clone();
+        let status = crate::ocr_tools::status(&tools_cfg).await;
+        let text = match output_mode {
+            OutputMode::Text => crate::ocr_tools::render_status_text(&status),
+            OutputMode::Json => crate::ocr_tools::render_status_json(&status),
+        };
+        write_event(&mut write_half, &Event::Output { text }).await?;
+        write_event(&mut write_half, &Event::Final { ok: true, error: None }).await?;
+        let _ = write_half.shutdown().await;
+        return Ok(());
+    }
+
     if matches!(req, Request::TagList) {
         let db = {
             let g = state.lock().unwrap();
@@ -228,7 +241,7 @@ pub(crate) async fn handle(
 
     let label = req.label();
     let job_id = Uuid::new_v4();
-    let is_detach = matches!(&req, Request::Ingest { detach: true, .. });
+    let is_detach = req.detached_target().is_some();
     let (event_tx, mut event_rx) = mpsc::unbounded_channel::<Event>();
 
     // Reserve a queue slot under the lock and capture the index this job
@@ -273,7 +286,7 @@ pub(crate) async fn handle(
     }
     drop(event_tx);
 
-    // Detached ingest: client is done as soon as the job is enqueued. The
+    // Detached ingest/summarize: client is done as soon as the job is enqueued. The
     // worker still owns its event_tx clone and will run the job to completion;
     // its event sends just go into the void after we close here.
     if is_detach {

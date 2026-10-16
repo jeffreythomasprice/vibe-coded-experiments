@@ -93,11 +93,25 @@ pub enum IngestError {
         source: turso::Error,
     },
 
+    #[error("Japanese OCR: {0}")]
+    JapaneseOcr(#[from] crate::ocr_ja::JaOcrError),
+
     #[error("ingest cancelled")]
     Cancelled,
 
-    #[error("summarize: {0}")]
-    Summarize(#[from] crate::summarize::SummarizeError),
+    /// The document, chunks, and embeddings were committed, but the summary
+    /// phase failed (or was cancelled) afterwards. The document stays
+    /// ingested; `summarize <path>` retries just the summaries.
+    #[error(
+        "document {path} was ingested (id {document_id}), but summarization \
+         failed: {source}. Run `summarize` on it to retry without re-extracting"
+    )]
+    SummarizeAfterIngest {
+        path: PathBuf,
+        document_id: i64,
+        #[source]
+        source: crate::summarize::SummarizeError,
+    },
 }
 
 /// Per-ingest overrides from the CLI. `Default` means "everything from
@@ -111,6 +125,25 @@ pub struct IngestOptions {
     pub chunk_size: Option<usize>,
     pub overlap: Option<usize>,
     pub extract: pdf::ExtractOptions,
+}
+
+async fn is_ingested(db: &Db, path: &Path) -> Result<bool, IngestError> {
+    let mut rows = db
+        .conn
+        .query(
+            "SELECT 1 FROM document WHERE path = ?",
+            (path.to_string_lossy().to_string(),),
+        )
+        .await
+        .map_err(|source| IngestError::Db {
+            op: "check_already_ingested",
+            source,
+        })?;
+    let row = rows.next().await.map_err(|source| IngestError::Db {
+        op: "check_already_ingested.next",
+        source,
+    })?;
+    Ok(row.is_some())
 }
 
 pub async fn ingest(
@@ -138,6 +171,11 @@ pub async fn ingest(
         })?;
 
     let doc_type = detect_type(&path)?;
+    // Fail before extraction, which (with OCR) can take most of an hour. The
+    // UNIQUE(path) check at insert time stays as the backstop.
+    if is_ingested(db, &path).await? {
+        return Err(IngestError::AlreadyIngested { path });
+    }
     emit_stage(progress, "extracting");
 
     let (text, page_offsets) = match doc_type {
@@ -164,7 +202,7 @@ pub async fn ingest(
             let PdfText {
                 full_text,
                 page_offsets,
-            } = pdf::extract(&path, &cfg.ocr, &opts.extract, cancel.as_ref(), |p| match p {
+            } = pdf::extract(&path, cfg, http, &opts.extract, cancel.as_ref(), |p| match p {
                 pdf::ExtractProgress::Pdftotext { current, total } => {
                     emit_extracting(progress, current, total);
                 }
@@ -185,6 +223,10 @@ pub async fn ingest(
                         "ingest: OCR-ing page",
                     );
                     emit_ocr(progress, current, total);
+                }
+                pdf::ExtractProgress::Stage(name) => {
+                    tracing::info!(path = %path_for_log.display(), stage = name, "ingest: stage");
+                    emit_stage(progress, name);
                 }
             })
             .await?;
@@ -260,19 +302,37 @@ pub async fn ingest(
         cancel.as_ref(),
     )
     .await?;
+    tracing::info!(
+        path = %path.display(),
+        document_id = doc_id,
+        "ingest: document committed",
+    );
 
-    if !opts.no_summary {
-        crate::summarize::summarize(
+    if !opts.no_summary
+        && let Err(source) = crate::summarize::summarize(
             db,
             cfg,
             http,
             &path,
             opts.summary_max_depth,
             &opts.summary_languages,
+            false,
             progress,
             cancel,
         )
-        .await?;
+        .await
+    {
+        tracing::warn!(
+            path = %path.display(),
+            document_id = doc_id,
+            error = %source,
+            "ingest: document committed but summarize failed; run `summarize` to retry",
+        );
+        return Err(IngestError::SummarizeAfterIngest {
+            path,
+            document_id: doc_id,
+            source,
+        });
     }
 
     Ok(doc_id)

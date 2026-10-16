@@ -46,6 +46,16 @@ sudo pacman -S tesseract tesseract-data-eng tesseract-data-jpn tesseract-data-jp
   tesseract-data-osd                # osd is only needed for --ocr-language auto
 ```
 
+Japanese pages are OCR'd with NDLOCR-Lite and YomiToku instead of tesseract
+by default (see [Japanese OCR](#japanese-ocr)). The server installs those
+itself on first use, which needs `uv` and `git` on PATH, about 7 GB of disk,
+and ideally an NVIDIA GPU:
+
+```sh
+sudo pacman -S uv git
+ollama pull qwen3.5:9b              # vision model that settles the engines' disagreements
+```
+
 ## Commands
 
 The interesting ones, in roughly the order you'll use them.
@@ -67,12 +77,52 @@ document-search ingest --detach '/home/jeff/scratch/games/source_material/free_o
 document-search ingest --detach '/home/jeff/scratch/games/source_material/free_or_stolen/World of Darkness (Classic)/v20 Vampire The Masquerade - 20th Anniversary Edition.pdf'
 
 # Skip the summary phase (faster, but `search --include-summaries` won't work
-# on this document until you re-ingest).
+# on this document until you run `summarize` on it).
 document-search ingest --no-summary path/to/doc.pdf
 
 # Override chunking and summary depth for a single ingest.
 document-search ingest --chunk-size 8000 --overlap 1500 --max-depth 3 path/to/doc.pdf
 ```
+
+The document, chunks, and embeddings are committed before the summary phase
+starts. If summarization fails or is cancelled, the document stays ingested:
+the job is recorded in `task-log` as `partial` rather than `failure`, and you
+can finish the summaries with `summarize` instead of re-ingesting.
+
+### `summarize` — build or finish a summary tree
+
+Builds the summary tree for a document that's already ingested, without
+re-extracting, re-OCRing, or re-embedding it. Groups whose inputs haven't
+changed are skipped, so this resumes after a failed summary phase, and adding a
+`--summary-lang` adds a new tree without touching the existing ones.
+
+```sh
+# Retry after `ingest` reported "ingested ... but summarization failed".
+document-search summarize path/to/scan.pdf
+
+# Add a Japanese tree to a document that already has an English one.
+document-search summarize --summary-lang ja path/to/scan.pdf
+
+# Queue it and return immediately.
+document-search summarize --detach path/to/scan.pdf
+```
+
+`--rebuild` regenerates every summary instead of skipping unchanged groups,
+for example after switching to a better chat model or fixing bad summaries.
+The new tree is built next to the old one, which is only deleted once every
+tree has finished, so a failed or cancelled rebuild leaves the old summaries
+in place.
+
+```sh
+document-search summarize --rebuild path/to/scan.pdf
+```
+
+Each summary is checked against its tree's language. One that comes back in
+the wrong language is retried once with a stricter instruction, and if it is
+still wrong the run fails instead of storing it. The whole group plus the
+output budget has to fit in `[ollama].num_ctx`. The output budget is shrunk to
+fit, and a prompt that is too big on its own, or one Ollama reports it
+truncated, fails the run rather than being summarized from a fragment.
 
 #### Non-English documents and cross-language summaries
 
@@ -93,6 +143,9 @@ languages = ["en", "source"]
 ```
 
 or per ingest:
+
+Japanese is read by its own engines rather than tesseract; see the next
+section.
 
 ```sh
 # Scanned Japanese PDF: detect the OCR script, then summarize in English and Japanese.
@@ -131,6 +184,70 @@ $ document-search search 'cat abandoned near a pond, hungry' --path path/to/neko
   - bytes 2157-2741  similarity 0.6634  [both]
       吾輩は藁の上から急に笹原の中へ棄てられたのである。 ようやくの思いで笹原を這い出すと向うに大きな池がある。…
 ```
+
+#### Japanese OCR
+
+When the OCR language includes Japanese (`jpn` or `jpn_vert`, given
+explicitly or picked by `auto`), pages are read by two dedicated engines
+instead of tesseract:
+
+- [NDLOCR-Lite](https://github.com/ndl-lab/ndlocr-lite) (National Diet
+  Library, CC BY 4.0) runs on the CPU.
+- [YomiToku](https://github.com/kotaro-kinoshita/yomitoku) (CC BY-NC-SA 4.0,
+  non-commercial use only) runs on the GPU.
+
+On a benchmark of vertical-text novel pages, tesseract got 16% of characters
+wrong, NDLOCR-Lite 0.2–0.6%, and YomiToku 0.9%. They rarely make the same
+mistake: NDLOCR-Lite occasionally drops or repeats a line, while YomiToku
+misreads dashes and lets furigana (reading glosses) into the text. So by
+default both read every page, and their disagreements are settled in three
+ways:
+
+- The text they agree on is kept as is.
+- Known patterns are settled by fixed rules. A difference that is only
+  typographic (`--` versus `――`, character width) takes the full-width form.
+  NDLOCR-Lite's dash against YomiToku's ー, `!`, or nothing is a dash. Short
+  kana that only YomiToku has is furigana and is dropped.
+- For anything else, mostly single-character misreads, `[ocr].arbiter_model`
+  looks at the page image and picks one reading. It is asked twice, with the
+  readings in both orders, and its answer is used only when both agree.
+  Otherwise NDLOCR-Lite's reading is kept.
+
+The model never sees, and so can't change, the text both engines agreed on.
+On the benchmark this got 1 character wrong in about 4,000.
+
+`[ocr].japanese_engine` picks `"ensemble"` (the default), `"ndlocr"`,
+`"yomitoku"`, or `"tesseract"`. If an engine fails, the ingest fails rather
+than falling back to tesseract. The exception is an arbiter reply that is
+still unusable after a retry. That page then uses NDLOCR-Lite's readings,
+keeps any text only YomiToku has, and logs a warning.
+
+The engines are installed under `[ocr_tools].dir` (default
+`~/.local/share/document-search/ocr-tools`) the first time an ingest needs
+them. That is a git checkout of NDLOCR-Lite at a pinned commit, plus a `uv`
+virtualenv for each engine; YomiToku pulls in torch and downloads its model
+weights. Every step's output is appended to `install.log` in that dir, and a
+failure names the step that failed and what to check. To install ahead of
+time, or see what's there:
+
+```sh
+document-search ocr-tools install              # installs what's missing; a few minutes
+document-search ocr-tools install --reinstall  # rebuild from scratch
+document-search ocr-tools status
+```
+
+```
+$ document-search ocr-tools status
+dir:         /home/you/.local/share/document-search/ocr-tools
+uv:          uv 0.13.1
+git:         git version 2.56.0
+NDLOCR-Lite: installed d001dad2013ceabb5736ff8d637474e443eb73c2 (Python 3.12, …)
+YomiToku:    installed 0.15.0 (Python 3.12, CUDA available, …)
+```
+
+Changing `ndlocr_rev`, `yomitoku_version`, or `python` reinstalls that engine
+on next use. With `auto_install = false`, an ingest that needs a missing
+engine fails and asks you to run `ocr-tools install`.
 
 ### `search` — vector search
 
@@ -189,7 +306,7 @@ document-search queue list
 # 8-char prefix shown by `status` / `queue list`.
 document-search queue delete 3f9a1c2b
 
-# Cancel the current cancellable job (only ingests are cancellable) and drop
+# Cancel the current cancellable job (ingest and summarize are cancellable) and drop
 # every queued job.
 document-search queue clear
 
@@ -222,6 +339,7 @@ document-search tag add '/.../Exalted 2E.pdf' exalted 2e   # tags: lowercased + 
 document-search tag list
 document-search delete '/.../Exalted 2E.pdf'               # drops chunks + embeddings + tags
 document-search task-log --limit 20                        # recent server task history
+document-search ocr-tools status                           # Japanese OCR engine installs
 document-search server                                     # run server in foreground
 document-search print-config                               # merged defaults + overrides
 ```

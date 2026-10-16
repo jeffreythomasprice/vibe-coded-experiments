@@ -21,7 +21,7 @@ use crate::protocol::{
     CurrentJob, Event, OutputMode, ProgressEnvelope, ProgressEvent, QueuedJob, Request,
     StatusSnapshot,
 };
-use crate::{commands, config as cfg_mod, ingest};
+use crate::{commands, config as cfg_mod, ingest, summarize};
 
 pub(crate) use tracker::{JobTracker, SummaryPlan};
 
@@ -57,6 +57,8 @@ pub(crate) struct ServerState {
     /// Shared so inline handlers (status, list, cancel) can read without
     /// going through the worker's queue. Holds the same `Db` the worker uses.
     pub db: Arc<Db>,
+    /// For the inline `ocr-tools status` handler.
+    pub ocr_tools: crate::config::OcrToolsConfig,
 }
 
 pub(crate) struct QueueEntry {
@@ -167,6 +169,7 @@ pub async fn run(cfg: Config) -> Result<(), ServerError> {
         current: None,
         cancelled_ids: HashSet::new(),
         db: Arc::clone(&db),
+        ocr_tools: cfg.ocr_tools.clone(),
     }));
 
     let (job_tx, job_rx) = mpsc::channel::<Job>(32);
@@ -317,7 +320,10 @@ async fn worker_loop(
         }
 
         let label = job.req.label();
-        let is_cancellable = matches!(job.req, Request::Ingest { .. });
+        let is_cancellable = matches!(
+            job.req,
+            Request::Ingest { .. } | Request::Summarize { .. } | Request::OcrToolsInstall { .. }
+        );
         let (cancel_tx, cancel_rx) = watch::channel::<bool>(false);
         // Keep our own handle on the cancel state so we can distinguish a
         // cancelled-by-user failure from a real error after the handler returns.
@@ -329,6 +335,11 @@ async fn worker_loop(
         let summary_plan = match &job.req {
             Request::Ingest {
                 no_summary: false,
+                max_depth,
+                summary_languages,
+                ..
+            }
+            | Request::Summarize {
                 max_depth,
                 summary_languages,
                 ..
@@ -371,6 +382,10 @@ async fn worker_loop(
         }
 
         let mode = job.output_mode;
+        // Set when an ingest committed its document but the summary phase
+        // failed afterwards: the job still reports failure, but task_log
+        // records `partial` so it's clear the document is in the DB.
+        let mut partial = false;
         let result: Result<String, String> = match job.req {
             Request::Ingest {
                 path,
@@ -394,23 +409,7 @@ async fn worker_loop(
                         language_override: ocr_language,
                     },
                 };
-                // Insert a relay between ingest and the connection. The
-                // tracker accumulates known totals + per-phase counters,
-                // then enriches each `ProgressEvent` with an `OverallProgress`
-                // summary. The same enriched envelope is stored on the
-                // tracker (so the inline `status` handler renders identical
-                // wording) and forwarded to the connection. The relay keeps
-                // feeding the tracker even after the client connection drops;
-                // see `run_progress_relay` for the rationale.
-                let (relay_tx, relay_rx) = mpsc::unbounded_channel::<Event>();
-                let out_tx = job.event_tx.clone();
-                let tracker_for_relay = Arc::clone(&tracker);
-                let relay = tokio::spawn(run_progress_relay(
-                    relay_rx,
-                    out_tx,
-                    tracker_for_relay,
-                    label.clone(),
-                ));
+                let (relay_tx, relay) = spawn_relay(&job.event_tx, &tracker, &label);
                 let result = ingest::ingest(
                     &db,
                     &cfg,
@@ -436,7 +435,60 @@ async fn worker_loop(
                     })
                     .to_string(),
                 })
-                .map_err(|e| e.to_string())
+                .map_err(|e| {
+                    partial = matches!(e, ingest::IngestError::SummarizeAfterIngest { .. });
+                    e.to_string()
+                })
+            }
+            Request::Summarize {
+                path,
+                rebuild,
+                max_depth,
+                summary_languages,
+                detach: _,
+            } => {
+                let (relay_tx, relay) = spawn_relay(&job.event_tx, &tracker, &label);
+                let result = summarize::summarize(
+                    &db,
+                    &cfg,
+                    &http,
+                    &path,
+                    max_depth,
+                    &summary_languages,
+                    rebuild,
+                    Some(&relay_tx),
+                    Some(cancel_rx),
+                )
+                .await;
+                drop(relay_tx);
+                let _ = relay.await;
+                result
+                    .map(|stats| match mode {
+                        OutputMode::Text if stats.replaced_summaries > 0 => format!(
+                            "summarized {}: {} new summaries replaced {} old ({} level(s))\n",
+                            path.display(),
+                            stats.new_summaries,
+                            stats.replaced_summaries,
+                            stats.levels,
+                        ),
+                        OutputMode::Text => format!(
+                            "summarized {}: {} new, {} reused summaries ({} level(s))\n",
+                            path.display(),
+                            stats.new_summaries,
+                            stats.reused_summaries,
+                            stats.levels,
+                        ),
+                        OutputMode::Json => serde_json::json!({
+                            "ok": true,
+                            "path": path.display().to_string(),
+                            "new_summaries": stats.new_summaries,
+                            "reused_summaries": stats.reused_summaries,
+                            "replaced_summaries": stats.replaced_summaries,
+                            "levels": stats.levels,
+                        })
+                        .to_string(),
+                    })
+                    .map_err(|e| e.to_string())
             }
             Request::Info { path } => match mode {
                 OutputMode::Text => commands::info(&db, &path).await.map_err(|e| e.to_string()),
@@ -539,18 +591,52 @@ async fn worker_loop(
             Request::TaskLog { .. } => {
                 unreachable!("task-log is handled inline by the connection task")
             }
+            Request::OcrToolsStatus => {
+                unreachable!("ocr-tools status is handled inline by the connection task")
+            }
+            Request::OcrToolsInstall { reinstall } => {
+                let (relay_tx, relay) = spawn_relay(&job.event_tx, &tracker, &label);
+                let wanted = crate::ocr_tools::tools_for_install(cfg.ocr.japanese_engine);
+                let install_mode = if reinstall {
+                    crate::ocr_tools::Mode::Reinstall
+                } else {
+                    crate::ocr_tools::Mode::Install
+                };
+                let result =
+                    crate::ocr_tools::ensure(&cfg.ocr_tools, wanted, install_mode, Some(&cancel_rx), |stage| {
+                        let _ = relay_tx.send(Event::Progress(crate::protocol::ProgressEnvelope {
+                            event: crate::protocol::ProgressEvent::Stage {
+                                name: stage.to_string(),
+                            },
+                            overall: None,
+                        }));
+                    })
+                    .await;
+                drop(relay_tx);
+                let _ = relay.await;
+                result
+                    .map(|ensured| match mode {
+                        OutputMode::Text => {
+                            crate::ocr_tools::render_install_text(&cfg.ocr_tools, &ensured, wanted)
+                        }
+                        OutputMode::Json => {
+                            crate::ocr_tools::render_install_json(&cfg.ocr_tools, &ensured, wanted)
+                        }
+                    })
+                    .map_err(|e| e.to_string())
+            }
         };
 
+        let was_cancelled = *cancel_observer.borrow();
         let (log_status, log_error): (&str, Option<String>) = match &result {
             Ok(_) => ("success", None),
-            Err(msg) => {
-                let was_cancelled = *cancel_observer.borrow();
-                if was_cancelled {
-                    ("failure", Some("cancelled".to_string()))
-                } else {
-                    ("failure", Some(msg.clone()))
-                }
-            }
+            Err(_) if partial && was_cancelled => (
+                "partial",
+                Some("document ingested; summarize cancelled".to_string()),
+            ),
+            Err(msg) if partial => ("partial", Some(msg.clone())),
+            Err(_) if was_cancelled => ("failure", Some("cancelled".to_string())),
+            Err(msg) => ("failure", Some(msg.clone())),
         };
         if let Err(e) = db
             .task_log_finish(&job_id_str, log_status, log_error.as_deref())
@@ -567,6 +653,13 @@ async fn worker_loop(
             (Ok(_), _) => {
                 tracing::info!(job = %job_id_str, %label, elapsed_secs, "job: succeeded")
             }
+            (Err(msg), _) if partial => tracing::warn!(
+                job = %job_id_str,
+                %label,
+                elapsed_secs,
+                error = %msg,
+                "job: partially succeeded (document ingested, summarize failed)",
+            ),
             (Err(_), Some("cancelled")) => {
                 tracing::info!(job = %job_id_str, %label, elapsed_secs, "job: cancelled")
             }
@@ -600,6 +693,29 @@ async fn worker_loop(
         completed += 1;
         let _ = completed_tx.send(completed);
     }
+}
+
+/// Insert a relay between a job and its connection. The tracker accumulates
+/// known totals + per-phase counters, then enriches each `ProgressEvent` with
+/// an `OverallProgress` summary. The same enriched envelope is stored on the
+/// tracker (so the inline `status` handler renders identical wording) and
+/// forwarded to the connection. The relay keeps feeding the tracker even
+/// after the client connection drops; see `run_progress_relay` for the
+/// rationale. Drop the returned sender and await the handle before sending
+/// `Final`, so a heartbeat can't land on the wire after it.
+fn spawn_relay(
+    event_tx: &mpsc::UnboundedSender<Event>,
+    tracker: &Arc<Mutex<JobTracker>>,
+    label: &str,
+) -> (mpsc::UnboundedSender<Event>, tokio::task::JoinHandle<()>) {
+    let (relay_tx, relay_rx) = mpsc::unbounded_channel::<Event>();
+    let relay = tokio::spawn(run_progress_relay(
+        relay_rx,
+        event_tx.clone(),
+        Arc::clone(tracker),
+        label.to_string(),
+    ));
+    (relay_tx, relay)
 }
 
 async fn run_text(

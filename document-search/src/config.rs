@@ -33,6 +33,8 @@ pub struct Config {
     pub search: SearchConfig,
 
     pub ocr: OcrConfig,
+
+    pub ocr_tools: OcrToolsConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -41,6 +43,7 @@ pub struct OllamaConfig {
     pub embedding_model: String,
     pub chat_model: String,
     pub think: bool,
+    pub num_ctx: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -111,6 +114,64 @@ pub struct OcrConfig {
     pub sparse_page_ratio: f32,
     pub sparse_min_pages: usize,
     pub max_undecodable_page_ratio: f32,
+    /// Engine for pages whose resolved OCR language is Japanese.
+    pub japanese_engine: JapaneseEngine,
+    /// Vision-capable Ollama model that arbitrates between the two Japanese
+    /// engines. Unused with the Anthropic provider, which uses its own model.
+    pub arbiter_model: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum JapaneseEngine {
+    /// NDLOCR-Lite and YomiToku, with an LLM settling their disagreements.
+    Ensemble,
+    Ndlocr,
+    Yomitoku,
+    Tesseract,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum YomitokuDevice {
+    /// CUDA when the install-time probe found it, else CPU.
+    Auto,
+    Cuda,
+    Cpu,
+}
+
+/// Where and how the server installs the Python OCR engines (see
+/// `ocr_tools`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct OcrToolsConfig {
+    /// Install root. `None` means the XDG data dir
+    /// (`~/.local/share/document-search/ocr-tools`); see `OcrToolsConfig::dir`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir: Option<PathBuf>,
+    pub auto_install: bool,
+    pub python: String,
+    pub ndlocr_repo: String,
+    pub ndlocr_rev: String,
+    pub yomitoku_version: String,
+    pub yomitoku_device: YomitokuDevice,
+    pub batch_pages: usize,
+}
+
+impl OcrToolsConfig {
+    /// The resolved install root, with a leading `~/` expanded.
+    pub fn dir(&self) -> PathBuf {
+        match &self.dir {
+            Some(d) => match d.strip_prefix("~") {
+                Ok(rest) => std::env::var_os("HOME")
+                    .map(|h| PathBuf::from(h).join(rest))
+                    .unwrap_or_else(|| d.clone()),
+                Err(_) => d.clone(),
+            },
+            None => ProjectDirs::from("", "", "document-search")
+                .map(|p| p.data_dir().join("ocr-tools"))
+                .unwrap_or_else(|| PathBuf::from("ocr-tools")),
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -135,6 +196,8 @@ struct PartialConfig {
     search: Option<PartialSearchConfig>,
     #[serde(default)]
     ocr: Option<PartialOcrConfig>,
+    #[serde(default)]
+    ocr_tools: Option<PartialOcrToolsConfig>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -147,6 +210,8 @@ struct PartialOllamaConfig {
     chat_model: Option<String>,
     #[serde(default)]
     think: Option<bool>,
+    #[serde(default)]
+    num_ctx: Option<u32>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -229,6 +294,30 @@ struct PartialOcrConfig {
     sparse_min_pages: Option<usize>,
     #[serde(default)]
     max_undecodable_page_ratio: Option<f32>,
+    #[serde(default)]
+    japanese_engine: Option<JapaneseEngine>,
+    #[serde(default)]
+    arbiter_model: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct PartialOcrToolsConfig {
+    #[serde(default)]
+    dir: Option<PathBuf>,
+    #[serde(default)]
+    auto_install: Option<bool>,
+    #[serde(default)]
+    python: Option<String>,
+    #[serde(default)]
+    ndlocr_repo: Option<String>,
+    #[serde(default)]
+    ndlocr_rev: Option<String>,
+    #[serde(default)]
+    yomitoku_version: Option<String>,
+    #[serde(default)]
+    yomitoku_device: Option<YomitokuDevice>,
+    #[serde(default)]
+    batch_pages: Option<usize>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -342,6 +431,7 @@ fn merge(base: Config, overlay: PartialConfig) -> Config {
         logging: merge_logging(base.logging, overlay.logging),
         search: merge_search(base.search, overlay.search),
         ocr: merge_ocr(base.ocr, overlay.ocr),
+        ocr_tools: merge_ocr_tools(base.ocr_tools, overlay.ocr_tools),
     }
 }
 
@@ -354,6 +444,7 @@ fn merge_ollama(base: OllamaConfig, overlay: Option<PartialOllamaConfig>) -> Oll
         embedding_model: overlay.embedding_model.unwrap_or(base.embedding_model),
         chat_model: overlay.chat_model.unwrap_or(base.chat_model),
         think: overlay.think.unwrap_or(base.think),
+        num_ctx: overlay.num_ctx.unwrap_or(base.num_ctx),
     }
 }
 
@@ -457,6 +548,24 @@ fn merge_ocr(base: OcrConfig, overlay: Option<PartialOcrConfig>) -> OcrConfig {
         max_undecodable_page_ratio: overlay
             .max_undecodable_page_ratio
             .unwrap_or(base.max_undecodable_page_ratio),
+        japanese_engine: overlay.japanese_engine.unwrap_or(base.japanese_engine),
+        arbiter_model: overlay.arbiter_model.unwrap_or(base.arbiter_model),
+    }
+}
+
+fn merge_ocr_tools(base: OcrToolsConfig, overlay: Option<PartialOcrToolsConfig>) -> OcrToolsConfig {
+    let Some(overlay) = overlay else {
+        return base;
+    };
+    OcrToolsConfig {
+        dir: overlay.dir.or(base.dir),
+        auto_install: overlay.auto_install.unwrap_or(base.auto_install),
+        python: overlay.python.unwrap_or(base.python),
+        ndlocr_repo: overlay.ndlocr_repo.unwrap_or(base.ndlocr_repo),
+        ndlocr_rev: overlay.ndlocr_rev.unwrap_or(base.ndlocr_rev),
+        yomitoku_version: overlay.yomitoku_version.unwrap_or(base.yomitoku_version),
+        yomitoku_device: overlay.yomitoku_device.unwrap_or(base.yomitoku_device),
+        batch_pages: overlay.batch_pages.unwrap_or(base.batch_pages),
     }
 }
 

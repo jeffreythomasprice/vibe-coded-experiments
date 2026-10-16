@@ -56,6 +56,22 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         detach: bool,
     },
+    /// Build (or top up) the summary tree for an already-ingested document.
+    /// Idempotent: groups whose inputs are unchanged are skipped, unless
+    /// `rebuild` is set.
+    Summarize {
+        path: PathBuf,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        rebuild: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_depth: Option<usize>,
+        /// Empty means "use [summarize].languages".
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        summary_languages: Vec<String>,
+        /// Same as `Ingest::detach`.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        detach: bool,
+    },
     Info { path: PathBuf },
     Text { path: PathBuf, range: TextRangeReq },
     PrintConfig,
@@ -108,6 +124,15 @@ pub enum Request {
         no_truncate: bool,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         include_summaries: bool,
+    },
+    /// Install dir, uv/git presence, and installed engine versions.
+    /// Bypasses the queue.
+    OcrToolsStatus,
+    /// Install (or with `reinstall`, rebuild) the Japanese OCR engines.
+    /// Runs through the worker so it never races an ingest's own install.
+    OcrToolsInstall {
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        reinstall: bool,
     },
     /// Show the most recent rows from the persistent `task_log` table.
     /// Bypasses the queue.
@@ -172,6 +197,25 @@ impl Request {
                 }
                 s
             }
+            Request::Summarize {
+                path,
+                rebuild,
+                max_depth,
+                summary_languages,
+                detach: _,
+            } => {
+                let mut s = format!("summarize {}", path.display());
+                if *rebuild {
+                    s.push_str(" --rebuild");
+                }
+                if let Some(d) = max_depth {
+                    s.push_str(&format!(" --max-depth {d}"));
+                }
+                for l in summary_languages {
+                    s.push_str(&format!(" --summary-lang {l}"));
+                }
+                s
+            }
             Request::Info { path } => format!("info {}", path.display()),
             Request::Text { path, .. } => format!("text {}", path.display()),
             Request::PrintConfig => "print-config".to_string(),
@@ -216,7 +260,23 @@ impl Request {
                 };
                 format!("search {:?}{}", term, scope)
             }
+            Request::OcrToolsStatus => "ocr-tools status".to_string(),
+            Request::OcrToolsInstall { reinstall: false } => "ocr-tools install".to_string(),
+            Request::OcrToolsInstall { reinstall: true } => {
+                "ocr-tools install --reinstall".to_string()
+            }
             Request::TaskLog { .. } => "task-log".to_string(),
+        }
+    }
+
+    /// For fire-and-forget requests (`--detach`): the verb and path to echo
+    /// back once the job is queued. `None` means the client waits for the
+    /// job to finish as usual.
+    pub fn detached_target(&self) -> Option<(&'static str, &PathBuf)> {
+        match self {
+            Request::Ingest { path, detach: true, .. } => Some(("ingest", path)),
+            Request::Summarize { path, detach: true, .. } => Some(("summarize", path)),
+            _ => None,
         }
     }
 
@@ -229,6 +289,9 @@ impl Request {
         match self {
             Request::Ingest { path, .. } => {
                 Some(("ingest", Some(path.display().to_string()), None))
+            }
+            Request::Summarize { path, .. } => {
+                Some(("summarize", Some(path.display().to_string()), None))
             }
             Request::Info { path } => {
                 Some(("info", Some(path.display().to_string()), None))
@@ -255,7 +318,9 @@ impl Request {
                 path.as_ref().map(|p| p.display().to_string()),
                 if tags.is_empty() { None } else { Some(tags.join(",")) },
             )),
+            Request::OcrToolsInstall { .. } => Some(("ocr-tools-install", None, None)),
             Request::Status { .. }
+            | Request::OcrToolsStatus
             | Request::QueueList
             | Request::QueueDelete { .. }
             | Request::QueueClear

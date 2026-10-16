@@ -132,3 +132,50 @@ pub async fn probe_dimensions(
     let v = embed(client, url, model, " ", None).await?;
     Ok(v.len())
 }
+
+#[derive(Serialize)]
+struct ShowRequest<'a> {
+    model: &'a str,
+}
+
+#[derive(Deserialize)]
+struct ShowResponse {
+    #[serde(default)]
+    capabilities: Vec<String>,
+}
+
+/// The capabilities Ollama reports for `model` (`"completion"`, `"vision"`,
+/// …), or `None` when the model isn't pulled.
+pub async fn model_capabilities(
+    client: &reqwest::Client,
+    url: &str,
+    model: &str,
+) -> Result<Option<Vec<String>>, OllamaError> {
+    let endpoint = format!("{}/api/show", url.trim_end_matches('/'));
+    let resp = client
+        .post(&endpoint)
+        .json(&ShowRequest { model })
+        .send()
+        .await
+        .map_err(|source| OllamaError::Http {
+            url: endpoint.clone(),
+            source,
+        })?;
+    let status = resp.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(OllamaError::Status {
+            url: endpoint,
+            status: status.as_u16(),
+            body,
+        });
+    }
+    let parsed: ShowResponse = resp.json().await.map_err(|source| OllamaError::Decode {
+        url: endpoint,
+        source,
+    })?;
+    Ok(Some(parsed.capabilities))
+}

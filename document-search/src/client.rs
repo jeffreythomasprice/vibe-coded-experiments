@@ -56,17 +56,17 @@ pub async fn run(
         Request::Status { interval_ms, .. } => interval_ms,
         _ => 0,
     };
-    let detach_path = match &envelope.request {
-        Request::Ingest { path, detach: true, .. } => Some(path.clone()),
-        _ => None,
-    };
+    let detach_target = envelope
+        .request
+        .detached_target()
+        .map(|(verb, path)| (verb, path.clone()));
     let mut line = serde_json::to_string(&envelope).map_err(ClientError::Encode)?;
     line.push('\n');
     write_half.write_all(line.as_bytes()).await?;
     write_half.flush().await?;
 
-    if let Some(path) = detach_path {
-        return render_detach(&mut reader, output_mode, &path).await;
+    if let Some((verb, path)) = detach_target {
+        return render_detach(&mut reader, output_mode, verb, &path).await;
     }
     render_events(&mut reader, output_mode, watch_mode, watch_interval_ms).await
 }
@@ -74,6 +74,7 @@ pub async fn run(
 async fn render_detach<R>(
     reader: &mut BufReader<R>,
     output_mode: OutputMode,
+    verb: &str,
     path: &Path,
 ) -> Result<(), ClientError>
 where
@@ -101,7 +102,7 @@ where
                             1 => "1 task ahead".to_string(),
                             n => format!("{n} tasks ahead"),
                         };
-                        println!("queued ingest of {} ({suffix})", path.display());
+                        println!("queued {verb} of {} ({suffix})", path.display());
                     }
                     OutputMode::Json => {
                         println!(

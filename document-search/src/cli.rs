@@ -82,6 +82,37 @@ pub enum Command {
         detach: bool,
     },
 
+    /// Build (or finish) the hierarchical summary tree for an
+    /// already-ingested document, without re-extracting or re-embedding it.
+    /// Idempotent: groups whose inputs are unchanged are skipped, so this
+    /// resumes after an ingest whose summary phase failed, and adds new
+    /// trees when given new --summary-lang values. Pass --rebuild to
+    /// regenerate every summary instead.
+    Summarize {
+        /// Path of an already-ingested document.
+        path: PathBuf,
+
+        /// Regenerate every summary in the selected language trees, ignoring
+        /// the unchanged-input skip. The old tree is kept until the new one
+        /// is complete, so a failed or cancelled rebuild changes nothing.
+        #[arg(long)]
+        rebuild: bool,
+
+        /// Override [summarize].max_depth for this run.
+        #[arg(long, value_name = "N")]
+        max_depth: Option<usize>,
+
+        /// Override [summarize].languages for this run. Repeatable; accepts
+        /// ISO 639-1 codes or "source" (the detected document language).
+        #[arg(long = "summary-lang", value_name = "CODE")]
+        summary_languages: Vec<String>,
+
+        /// Queue the run and return immediately without waiting for it to
+        /// finish. Use `status` or `queue list` to monitor progress.
+        #[arg(short = 'd', long)]
+        detach: bool,
+    },
+
     /// Print metadata for a document by path.
     Info {
         /// Path of an already-ingested document.
@@ -203,6 +234,14 @@ pub enum Command {
         include_summaries: bool,
     },
 
+    /// Manage the Python OCR engines used for Japanese pages (NDLOCR-Lite,
+    /// YomiToku). Ingest installs them on first use; this shows what's
+    /// installed or installs ahead of time.
+    OcrTools {
+        #[command(subcommand)]
+        action: OcrToolsCommand,
+    },
+
     /// Show the most recent tasks the server has executed, oldest first.
     /// Bypasses the queue.
     TaskLog {
@@ -232,6 +271,22 @@ pub enum QueueCommand {
     /// Scan the DB for orphaned rows left behind by interrupted summarize
     /// runs from older versions and repair them in place.
     Cleanup,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum OcrToolsCommand {
+    /// Show the install dir, whether uv and git are on PATH, and each
+    /// engine's installed version. Bypasses the queue.
+    Status,
+
+    /// Install the engines [ocr].japanese_engine uses (both when it is
+    /// "tesseract"), skipping any already installed at the configured
+    /// version. Runs through the queue and can be cancelled.
+    Install {
+        /// Delete and reinstall even when already installed.
+        #[arg(long)]
+        reinstall: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]

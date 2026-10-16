@@ -21,16 +21,17 @@
 //! configured tesseract language spec; `"auto"` resolves it from tesseract's
 //! script detection (OSD) on the first page that needs OCR.
 
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::time::Instant;
 
 use tokio::process::Command;
 use tokio::sync::watch;
 
-use crate::config::OcrConfig;
+use crate::config::{Config, OcrConfig};
 use crate::ingest::IngestError;
+use crate::ocr_ja;
+use crate::proc::{self, ProcError};
 
 const PAGE_SEPARATOR: &str = "\u{000C}";
 
@@ -57,6 +58,8 @@ pub struct PdfText {
 pub enum ExtractProgress {
     Pdftotext { current: u32, total: u32 },
     Ocr { current: u32, total: u32 },
+    /// A named step with no page count, such as installing an OCR engine.
+    Stage(&'static str),
 }
 
 /// Per-ingest overrides for extraction (CLI `--force-ocr`, `--ocr-language`).
@@ -86,14 +89,16 @@ const OSD_MAX_ATTEMPTS: usize = 5;
 /// ingest rather than indexing garbage or nothing.
 pub async fn extract<F>(
     path: &Path,
-    ocr: &OcrConfig,
+    cfg: &Config,
+    http: &reqwest::Client,
     opts: &ExtractOptions,
     cancel: Option<&watch::Receiver<bool>>,
     mut on_progress: F,
 ) -> Result<PdfText, IngestError>
 where
-    F: FnMut(ExtractProgress),
+    F: FnMut(ExtractProgress) + Send,
 {
+    let ocr = &cfg.ocr;
     let started = Instant::now();
     tracing::info!(path = %path.display(), "pdf: extracting via pdftotext");
 
@@ -180,31 +185,56 @@ where
             bad.len(),
         );
 
-        let installed = installed_tesseract_langs(cancel).await;
+        let japanese_engine = ocr_ja::handles(&lang_spec, ocr.japanese_engine);
+        // An explicit Japanese spec handled by the Japanese engines needs no
+        // tesseract at all; "auto" still needs it for script detection.
+        let installed = if japanese_engine {
+            None
+        } else {
+            installed_tesseract_langs(cancel).await
+        };
         let lang = if lang_spec == AUTO_LANGUAGE {
             detect_ocr_language(path, bad, ocr, installed.as_deref(), cancel).await?
         } else {
-            check_langs_installed(&lang_spec, installed.as_deref())?;
             lang_spec.clone()
         };
+        let japanese_engine = ocr_ja::handles(&lang, ocr.japanese_engine);
+        if !japanese_engine {
+            check_langs_installed(&lang, installed.as_deref())?;
+        }
         let scripts = ScriptSet::from_tesseract_langs(&lang);
 
-        let bad_total = bad.len() as u32;
-        for (k, &idx) in bad.iter().enumerate() {
-            let page_num = (idx + 1) as u32;
-            on_progress(ExtractProgress::Ocr {
-                current: k as u32 + 1,
-                total: bad_total,
-            });
-            let ocr_text = ocr_page(path, page_num, ocr, &lang, scripts, cancel).await?;
-            tracing::debug!(
-                page = page_num,
-                pre_score = decodability_score(&pages[idx], scripts),
-                post_score = decodability_score(&ocr_text, scripts),
-                ocr_chars = ocr_text.chars().count(),
-                "pdf: ocr replaced page",
-            );
-            pages[idx] = ocr_text;
+        if japanese_engine {
+            tracing::info!(engine = ?ocr.japanese_engine, language = %lang, "pdf: using Japanese OCR engines");
+            let texts = ocr_ja::run(path, bad, cfg, http, cancel, &mut on_progress).await?;
+            for (&idx, ocr_text) in bad.iter().zip(texts) {
+                tracing::debug!(
+                    page = idx + 1,
+                    pre_score = decodability_score(&pages[idx], scripts),
+                    post_score = decodability_score(&ocr_text, scripts),
+                    ocr_chars = ocr_text.chars().count(),
+                    "pdf: ocr replaced page",
+                );
+                pages[idx] = ocr_text;
+            }
+        } else {
+            let bad_total = bad.len() as u32;
+            for (k, &idx) in bad.iter().enumerate() {
+                let page_num = (idx + 1) as u32;
+                on_progress(ExtractProgress::Ocr {
+                    current: k as u32 + 1,
+                    total: bad_total,
+                });
+                let ocr_text = ocr_page(path, page_num, ocr, &lang, scripts, cancel).await?;
+                tracing::debug!(
+                    page = page_num,
+                    pre_score = decodability_score(&pages[idx], scripts),
+                    post_score = decodability_score(&ocr_text, scripts),
+                    ocr_chars = ocr_text.chars().count(),
+                    "pdf: ocr replaced page",
+                );
+                pages[idx] = ocr_text;
+            }
         }
 
         let still_bad: Vec<usize> = bad
@@ -338,6 +368,39 @@ async fn rasterize_page(
         source: format!("locating pdftoppm output for page {page_number}: {e}").into(),
     })?;
     Ok((tmp, png_path))
+}
+
+/// Rasterize one page to `<stem>.png` via pdftoppm, for callers that collect
+/// several pages in one directory.
+pub(crate) async fn rasterize_page_to(
+    pdf_path: &Path,
+    page_number: u32,
+    dpi: u32,
+    stem: &Path,
+    cancel: Option<&watch::Receiver<bool>>,
+) -> Result<PathBuf, IngestError> {
+    let page_arg = page_number.to_string();
+    let dpi_arg = dpi.to_string();
+    run_cmd(
+        "pdftoppm",
+        &[
+            OsStr::new("-q"),
+            OsStr::new("-f"),
+            OsStr::new(&page_arg),
+            OsStr::new("-l"),
+            OsStr::new(&page_arg),
+            OsStr::new("-r"),
+            OsStr::new(&dpi_arg),
+            OsStr::new("-png"),
+            OsStr::new("-singlefile"),
+            pdf_path.as_os_str(),
+            stem.as_os_str(),
+        ],
+        "poppler-utils",
+        cancel,
+    )
+    .await?;
+    Ok(stem.with_extension("png"))
 }
 
 const TESSERACT_HINT: &str = "tesseract; on Arch: pacman -S tesseract, on Debian/Ubuntu: apt install tesseract-ocr";
@@ -486,7 +549,6 @@ async fn detect_ocr_language(
                 .into(),
             }
         })?;
-        check_langs_installed(&spec, installed)?;
         tracing::info!(page = page_number, script = %script, language = %spec, "pdf: OSD picked OCR language");
         return Ok(spec);
     }
@@ -554,12 +616,9 @@ fn find_single_png(dir: &Path) -> std::io::Result<PathBuf> {
     found.ok_or_else(|| std::io::Error::other("no PNG produced"))
 }
 
-/// Run a binary and return its stdout. Maps a missing binary to a friendly
-/// "install <hint>" message. On non-zero exit, includes stderr in the error.
-///
-/// If `cancel` fires before the child exits, the child is killed via
-/// `kill_on_drop` (we drop the `wait_with_output` future, which owns the
-/// `Child`) and `IngestError::Cancelled` is returned.
+/// Run `name` and return its stdout. Failures become `IngestError::PdfExtract`
+/// naming the program; a missing binary gets `install_hint`. Cancellation
+/// kills the child and returns `IngestError::Cancelled`.
 async fn run_cmd(
     name: &'static str,
     args: &[&OsStr],
@@ -576,63 +635,31 @@ async fn run_cmd_output(
     install_hint: &str,
     cancel: Option<&watch::Receiver<bool>>,
 ) -> Result<std::process::Output, IngestError> {
-    if let Some(rx) = cancel {
-        if *rx.borrow() {
-            return Err(IngestError::Cancelled);
-        }
-    }
-    let owned: Vec<OsString> = args.iter().map(|a| a.to_os_string()).collect();
-    let child = Command::new(name)
-        .args(&owned)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|e| spawn_err(name, install_hint, e))?;
-
-    let wait_fut = child.wait_with_output();
-    let output = match cancel {
-        Some(rx) => {
-            let mut rx = rx.clone();
-            tokio::select! {
-                res = wait_fut => res.map_err(|e| IngestError::PdfExtract {
-                    source: format!("waiting on {name}: {e}").into(),
-                })?,
-                _ = rx.changed() => {
-                    // Either cancel fired or the sender was dropped (server
-                    // shutdown); either way, kill the child (drop did so) and
-                    // bail.
-                    return Err(IngestError::Cancelled);
-                }
+    let mut cmd = Command::new(name);
+    cmd.args(args);
+    proc::run(cmd, cancel).await.map_err(|e| match e {
+        ProcError::Cancelled => IngestError::Cancelled,
+        ProcError::NotFound => IngestError::PdfExtract {
+            source: format!("{name} binary not found in PATH (install {install_hint})").into(),
+        },
+        ProcError::Spawn(e) => IngestError::PdfExtract {
+            source: format!("spawning {name}: {e}").into(),
+        },
+        ProcError::Wait(e) => IngestError::PdfExtract {
+            source: format!("waiting on {name}: {e}").into(),
+        },
+        ProcError::Failed(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            let detail = if stderr.is_empty() {
+                format!("exited with status {}", out.status)
+            } else {
+                stderr
+            };
+            IngestError::PdfExtract {
+                source: format!("{name}: {detail}").into(),
             }
         }
-        None => wait_fut.await.map_err(|e| IngestError::PdfExtract {
-            source: format!("waiting on {name}: {e}").into(),
-        })?,
-    };
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let detail = if stderr.is_empty() {
-            format!("exited with status {}", output.status)
-        } else {
-            stderr
-        };
-        return Err(IngestError::PdfExtract {
-            source: format!("{name}: {detail}").into(),
-        });
-    }
-    Ok(output)
-}
-
-fn spawn_err(name: &'static str, install_hint: &str, e: std::io::Error) -> IngestError {
-    let msg = if e.kind() == std::io::ErrorKind::NotFound {
-        format!("{name} binary not found in PATH (install {install_hint})")
-    } else {
-        format!("spawning {name}: {e}")
-    };
-    IngestError::PdfExtract { source: msg.into() }
+    })
 }
 
 /// Decodability score: ratio of "text-like" chars to non-whitespace chars.
@@ -968,15 +995,8 @@ mod tests {
     #[test]
     fn needs_ocr_skips_short_pages() {
         let cfg = OcrConfig {
-            enabled: true,
-            min_decodable_ratio: 0.7,
-            min_chars_for_check: 40,
-            dpi: 300,
             language: "eng".into(),
-            psm: 3,
-            sparse_page_ratio: 0.5,
-            sparse_min_pages: 3,
-            max_undecodable_page_ratio: 0.05,
+            ..test_cfg()
         };
         // Five non-whitespace chars — way under the threshold — but page is
         // too short to trust the score, so we don't flag it.
@@ -986,15 +1006,8 @@ mod tests {
     #[test]
     fn needs_ocr_flags_garbled_long_page() {
         let cfg = OcrConfig {
-            enabled: true,
-            min_decodable_ratio: 0.7,
-            min_chars_for_check: 40,
-            dpi: 300,
             language: "eng".into(),
-            psm: 3,
-            sparse_page_ratio: 0.5,
-            sparse_min_pages: 3,
-            max_undecodable_page_ratio: 0.05,
+            ..test_cfg()
         };
         let text = "ÊivviVÌÛiÊÜ iÌ ÀÜ7 i>ÊÌ ÀÜÜi>«ÃÊÕÃi`Ê >Ì > VL>Ì]Ê \
                     Ì iÊ V >À>VÌiÀÊ ÕÃÌÊ ÕÃiÊ iÀÊ iiiÊ LÌÞ°Ê \
@@ -1005,15 +1018,8 @@ mod tests {
     #[test]
     fn needs_ocr_passes_clean_english() {
         let cfg = OcrConfig {
-            enabled: true,
-            min_decodable_ratio: 0.7,
-            min_chars_for_check: 40,
-            dpi: 300,
             language: "eng".into(),
-            psm: 3,
-            sparse_page_ratio: 0.5,
-            sparse_min_pages: 3,
-            max_undecodable_page_ratio: 0.05,
+            ..test_cfg()
         };
         let text = "The quick brown fox jumps over the lazy dog. \
                     Pack my box with five dozen liquor jugs. \
@@ -1060,6 +1066,8 @@ mod tests {
             sparse_page_ratio: 0.5,
             sparse_min_pages: 3,
             max_undecodable_page_ratio: 0.05,
+            japanese_engine: crate::config::JapaneseEngine::Tesseract,
+            arbiter_model: "qwen3.5:9b".into(),
         }
     }
 

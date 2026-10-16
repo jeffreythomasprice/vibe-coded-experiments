@@ -24,6 +24,13 @@ pub(crate) fn format_event(p: &ProgressEvent) -> String {
         ProgressEvent::Stage { name } => match name.as_str() {
             "extracting" => "Starting text extraction…".to_string(),
             "ocr" => "Starting OCR fallback…".to_string(),
+            "ocr-install-ndlocr" => {
+                "Installing NDLOCR-Lite (first use; git clone + uv, a few minutes)…".to_string()
+            }
+            "ocr-install-yomitoku" => {
+                "Installing YomiToku (first use; uv + torch + model weights, several GB)…"
+                    .to_string()
+            }
             "chunking" => "Starting chunking…".to_string(),
             "inserting" => "Committing chunks to DB…".to_string(),
             "summarizing" => "Starting summary tree…".to_string(),
