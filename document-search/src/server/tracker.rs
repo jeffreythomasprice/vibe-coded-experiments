@@ -18,6 +18,8 @@ const W_OCR: f64 = 5.0;
 const W_CHUNKING: f64 = 0.1;
 const W_EMBED: f64 = 2.0;
 const W_SUMMARY: f64 = 10.0;
+const W_TRANSLATE: f64 = 10.0;
+const W_SEAM: f64 = 4.0;
 
 /// Minimum count-bearing samples observed before we extrapolate an ETA.
 /// Below this threshold the rate estimate is too noisy to be useful.
@@ -46,6 +48,8 @@ enum Phase {
     Chunking,
     Embedding,
     Summarizing,
+    Translating,
+    Seaming,
 }
 
 /// Rate measurement for the phase currently running. ETA prefers this over
@@ -66,6 +70,8 @@ pub(crate) struct JobTracker {
     pages_total: Option<u32>,
     ocr_total: Option<u32>,
     chunks_total: Option<usize>,
+    translate_total: Option<usize>,
+    seam_total: usize,
     /// Indexed `[tree][level]`; one tree per summary language.
     groups_per_level: Vec<Vec<usize>>,
     /// Tree count reported by summarize itself, once it has started.
@@ -75,6 +81,8 @@ pub(crate) struct JobTracker {
     ocr_done: u32,
     chunking_done: usize,
     embedding_done: usize,
+    translate_done: usize,
+    seam_done: usize,
     /// Indexed `[tree][level]`, parallel to `groups_per_level`.
     summaries_done: Vec<Vec<usize>>,
 
@@ -91,12 +99,16 @@ impl JobTracker {
             pages_total: None,
             ocr_total: None,
             chunks_total: None,
+            translate_total: None,
+            seam_total: 0,
             groups_per_level: Vec::new(),
             trees_observed: None,
             pages_done: 0,
             ocr_done: 0,
             chunking_done: 0,
             embedding_done: 0,
+            translate_done: 0,
+            seam_done: 0,
             summaries_done: Vec::new(),
             sample_count: 0,
             phase_clock: None,
@@ -184,6 +196,17 @@ impl JobTracker {
                 }
                 Phase::Summarizing
             }
+            ProgressEvent::Translating { current, total, seams } => {
+                self.translate_total = Some(*total);
+                self.seam_total = (*seams).max(self.seam_total);
+                self.translate_done = current.saturating_sub(1).max(self.translate_done);
+                Phase::Translating
+            }
+            ProgressEvent::Seaming { current, total } => {
+                self.seam_total = (*total).max(self.seam_total);
+                self.seam_done = current.saturating_sub(1).max(self.seam_done);
+                Phase::Seaming
+            }
         };
         self.complete_phases_before(phase);
         self.sample_count += 1;
@@ -221,6 +244,11 @@ impl JobTracker {
             && let Some(t) = self.chunks_total
         {
             self.embedding_done = t;
+        }
+        if phase > Phase::Translating
+            && let Some(t) = self.translate_total
+        {
+            self.translate_done = t;
         }
     }
 
@@ -271,7 +299,9 @@ impl JobTracker {
         let mut sum = f64::from(self.pages_done) * W_PAGE
             + f64::from(self.ocr_done) * W_OCR
             + self.chunking_done as f64 * W_CHUNKING
-            + self.embedding_done as f64 * W_EMBED;
+            + self.embedding_done as f64 * W_EMBED
+            + self.translate_done as f64 * W_TRANSLATE
+            + self.seam_done as f64 * W_SEAM;
         for &done in self.summaries_done.iter().flatten() {
             sum += done as f64 * W_SUMMARY;
         }
@@ -285,6 +315,8 @@ impl JobTracker {
             // Each chunk drives one chunking iteration and one embed call.
             sum += c as f64 * (W_CHUNKING + W_EMBED);
         }
+        sum += self.translate_total.unwrap_or(0) as f64 * W_TRANSLATE
+            + self.seam_total as f64 * W_SEAM;
         for tree in self.summary_groups_per_tree() {
             for n in tree {
                 sum += n as f64 * W_SUMMARY;
@@ -345,6 +377,8 @@ fn phase_label(event: &ProgressEvent) -> &str {
         ProgressEvent::Chunking { .. } => "chunking",
         ProgressEvent::Embedding { .. } => "embedding",
         ProgressEvent::Summarizing { .. } => "summarizing",
+        ProgressEvent::Translating { .. } => "translating",
+        ProgressEvent::Seaming { .. } => "seaming",
     }
 }
 
@@ -379,6 +413,25 @@ mod tests {
             trees,
             language: None,
         }
+    }
+
+    #[test]
+    fn translation_counts_windows_then_seams() {
+        let mut t = JobTracker::new(Instant::now(), None);
+        let o = t
+            .record(ProgressEvent::Translating { current: 2, total: 4, seams: 3 })
+            .overall
+            .unwrap();
+        // Total: 4 windows × 10 + 3 seams × 4. Done: one window finished.
+        assert_eq!(o.total_steps, 52);
+        assert_eq!(o.step, 10);
+        let o = t
+            .record(ProgressEvent::Seaming { current: 1, total: 3 })
+            .overall
+            .unwrap();
+        // Seaming implies every window is translated.
+        assert_eq!(o.phase, "seaming");
+        assert_eq!(o.step, 40);
     }
 
     #[test]

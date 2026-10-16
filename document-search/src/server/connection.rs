@@ -258,6 +258,27 @@ pub(crate) async fn handle(
         return Ok(());
     }
 
+    if let Request::Export {
+        to_language: None, ..
+    } = &req
+    {
+        let (db, export_cfg) = {
+            let g = state.lock().unwrap();
+            (Arc::clone(&g.db), g.export.clone())
+        };
+        let result = crate::export::handle(&db, &export_cfg, None, &req, output_mode, None, None).await;
+        let events = match result {
+            Ok(text) if text.is_empty() => vec![Event::Final { ok: true, error: None }],
+            Ok(text) => vec![Event::Output { text }, Event::Final { ok: true, error: None }],
+            Err(e) => vec![Event::Final { ok: false, error: Some(e.to_string()) }],
+        };
+        for ev in &events {
+            write_event(&mut write_half, ev).await?;
+        }
+        let _ = write_half.shutdown().await;
+        return Ok(());
+    }
+
     if matches!(req, Request::TagList) {
         let db = {
             let g = state.lock().unwrap();

@@ -24,6 +24,8 @@ pub struct Config {
 
     pub summarize: SummarizeConfig,
 
+    pub export: ExportConfig,
+
     pub chunking: ChunkingConfig,
 
     pub server: ServerConfig,
@@ -74,6 +76,19 @@ pub struct SummarizeConfig {
     /// codes (`"en"`, `"ja"`, …) or `"source"` for the document's detected
     /// language. See `language::resolve_summary_languages`.
     pub languages: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ExportConfig {
+    /// Chunks translated per LLM call by `export --to`.
+    pub window_chunks: usize,
+    /// Trailing chunks each window shares with the next; the seam pass
+    /// deduplicates them. 0 disables the seam pass.
+    pub overlap_chunks: usize,
+    /// Font file for PDF output. Empty probes common Noto/DejaVu paths.
+    pub pdf_font: String,
+    /// Face index inside a `.ttc` collection.
+    pub pdf_font_index: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -187,6 +202,8 @@ struct PartialConfig {
     #[serde(default)]
     summarize: Option<PartialSummarizeConfig>,
     #[serde(default)]
+    export: Option<PartialExportConfig>,
+    #[serde(default)]
     chunking: Option<PartialChunkingConfig>,
     #[serde(default)]
     server: Option<PartialServerConfig>,
@@ -240,6 +257,18 @@ struct PartialSummarizeConfig {
     max_depth: Option<usize>,
     #[serde(default)]
     languages: Option<Vec<String>>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct PartialExportConfig {
+    #[serde(default)]
+    window_chunks: Option<usize>,
+    #[serde(default)]
+    overlap_chunks: Option<usize>,
+    #[serde(default)]
+    pdf_font: Option<String>,
+    #[serde(default)]
+    pdf_font_index: Option<u32>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -344,6 +373,11 @@ pub enum ConfigError {
     )]
     InvalidChunking { size: usize, overlap: usize },
 
+    #[error(
+        "invalid export window: window_chunks ({window}) must be > 0 and overlap_chunks ({overlap}) must be less than it"
+    )]
+    InvalidExportWindows { window: usize, overlap: usize },
+
     #[error("invalid [chunking] config: chunk_size_bytes must be > 0")]
     ZeroChunkSize,
 
@@ -405,6 +439,7 @@ fn load_with_paths(
     };
 
     validate_chunking(&cfg.chunking)?;
+    validate_export_windows(cfg.export.window_chunks, cfg.export.overlap_chunks)?;
     Ok((path, cfg))
 }
 
@@ -426,6 +461,7 @@ fn merge(base: Config, overlay: PartialConfig) -> Config {
         anthropic: merge_anthropic(base.anthropic, overlay.anthropic),
         llm: merge_llm(base.llm, overlay.llm),
         summarize: merge_summarize(base.summarize, overlay.summarize),
+        export: merge_export(base.export, overlay.export),
         chunking: merge_chunking(base.chunking, overlay.chunking),
         server: merge_server(base.server, overlay.server),
         logging: merge_logging(base.logging, overlay.logging),
@@ -569,6 +605,27 @@ fn merge_ocr_tools(base: OcrToolsConfig, overlay: Option<PartialOcrToolsConfig>)
     }
 }
 
+fn merge_export(base: ExportConfig, overlay: Option<PartialExportConfig>) -> ExportConfig {
+    let Some(overlay) = overlay else {
+        return base;
+    };
+    ExportConfig {
+        window_chunks: overlay.window_chunks.unwrap_or(base.window_chunks),
+        overlap_chunks: overlay.overlap_chunks.unwrap_or(base.overlap_chunks),
+        pdf_font: overlay.pdf_font.unwrap_or(base.pdf_font),
+        pdf_font_index: overlay.pdf_font_index.unwrap_or(base.pdf_font_index),
+    }
+}
+
+/// Window sizes for `export --to`, shared by the config check and the CLI
+/// overrides.
+pub fn validate_export_windows(window: usize, overlap: usize) -> Result<(), ConfigError> {
+    if window == 0 || overlap >= window {
+        return Err(ConfigError::InvalidExportWindows { window, overlap });
+    }
+    Ok(())
+}
+
 fn validate_chunking(c: &ChunkingConfig) -> Result<(), ConfigError> {
     if c.chunk_size_bytes == 0 {
         return Err(ConfigError::ZeroChunkSize);
@@ -610,6 +667,9 @@ mod tests {
         assert_eq!(cfg.llm.max_output_tokens, 20000);
         assert_eq!(cfg.summarize.group_size, 6);
         assert_eq!(cfg.summarize.max_depth, 4);
+        assert_eq!(cfg.export.window_chunks, 4);
+        assert_eq!(cfg.export.overlap_chunks, 1);
+        assert!(cfg.export.pdf_font.is_empty());
         assert_eq!(cfg.chunking.chunk_size_bytes, 5000);
         assert_eq!(cfg.chunking.overlap_bytes, 1000);
         assert_eq!(

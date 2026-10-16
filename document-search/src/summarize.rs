@@ -105,7 +105,7 @@ impl Prompts {
 /// The user turn: the input fenced in `<document>` tags, then the task
 /// restated. Small local models weight the end of the prompt most, and a
 /// prompt truncated from the front still keeps the instruction.
-fn user_message(input: &str, reminder: &str) -> String {
+pub(crate) fn user_message(input: &str, reminder: &str) -> String {
     format!("<document>\n{input}\n</document>\n\n{reminder}")
 }
 
@@ -113,7 +113,7 @@ fn user_message(input: &str, reminder: &str) -> String {
 /// since cross-language summaries carry source-script names in parentheses
 /// that would otherwise skew detection. An unreliable detection passes: only
 /// a confident mismatch counts.
-fn output_language_ok(text: &str, code: &str) -> bool {
+pub(crate) fn output_language_ok(text: &str, code: &str) -> bool {
     match language::detect(&strip_parentheticals(text)) {
         Some(detected) => detected == code,
         None => true,
@@ -215,28 +215,50 @@ async fn complete_with_fallback(
     group: usize,
     lang: &str,
 ) -> Result<String, llm::LlmError> {
+    complete_ladder(
+        http,
+        cfg,
+        &prompts.primary,
+        &prompts.fallback,
+        user,
+        cancel,
+        |attempt, next, e| {
+            tracing::warn!(
+                level = level + 1,
+                group,
+                language = lang,
+                attempt = attempt + 1,
+                think = ?next.think,
+                max_tokens = ?next.max_tokens,
+                error = %e,
+                "summarize: thinking spiral; escalating to fallback prompt",
+            );
+        },
+    )
+    .await
+}
+
+/// The thinking-spiral ladder behind `complete_with_fallback`, independent of
+/// what is being generated (`export` uses it for translation). `on_escalate`
+/// is told about each step up so the caller can log it with its own context.
+pub(crate) async fn complete_ladder(
+    http: &reqwest::Client,
+    cfg: &Config,
+    primary: &str,
+    fallback: &str,
+    user: &str,
+    cancel: Option<&watch::Receiver<bool>>,
+    on_escalate: impl Fn(u8, &llm::Overrides, &llm::LlmError),
+) -> Result<String, llm::LlmError> {
     let mut attempt = 0;
     loop {
-        let (fallback, overrides) = ladder_step(attempt, cfg.llm.max_output_tokens);
-        let system = if fallback {
-            &prompts.fallback
-        } else {
-            &prompts.primary
-        };
+        let (use_fallback, overrides) = ladder_step(attempt, cfg.llm.max_output_tokens);
+        let system = if use_fallback { fallback } else { primary };
         match llm::complete(http, cfg, system, user, overrides, cancel).await {
             Err(e @ llm::LlmError::ThinkingExhausted { .. }) if attempt + 1 < LADDER_ATTEMPTS => {
                 attempt += 1;
                 let (_, next) = ladder_step(attempt, cfg.llm.max_output_tokens);
-                tracing::warn!(
-                    level = level + 1,
-                    group,
-                    language = lang,
-                    attempt = attempt + 1,
-                    think = ?next.think,
-                    max_tokens = ?next.max_tokens,
-                    error = %e,
-                    "summarize: thinking spiral; escalating to fallback prompt",
-                );
+                on_escalate(attempt, &next, &e);
             }
             res => return res,
         }

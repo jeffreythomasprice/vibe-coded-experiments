@@ -6,6 +6,7 @@ mod commands;
 mod config;
 mod db;
 mod error;
+mod export;
 mod ingest;
 mod language;
 mod llm;
@@ -28,7 +29,7 @@ use crate::cli::{
     Cli, Command, OcrToolsCommand, QueueCommand, SummarySelectArgs, TagCommand, TextRange,
 };
 use crate::error::Error;
-use crate::protocol::{OutputMode, Request, RequestEnvelope, SummarySelect, TextRangeReq};
+use crate::protocol::{ExportFormat, ExportOutput, OutputMode, Request, RequestEnvelope, SummarySelect, TextRangeReq};
 
 #[tokio::main]
 async fn main() {
@@ -153,6 +154,44 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             select: summary_select_to_proto(select)?,
             outline,
         }),
+        Command::Export {
+            path,
+            output_txt,
+            output_md,
+            output_pdf,
+            to,
+            window_chunks,
+            overlap_chunks,
+        } => {
+            let mut outputs = Vec::new();
+            for (format, target) in [
+                (ExportFormat::Txt, output_txt),
+                (ExportFormat::Md, output_md),
+                (ExportFormat::Pdf, output_pdf),
+            ] {
+                let Some(target) = target else { continue };
+                let path = (target != std::path::Path::new("-")).then_some(target);
+                if format == ExportFormat::Pdf && path.is_none() {
+                    return Err(Error::Cli(
+                        "PDF output needs a file: pass --output-pdf PATH".into(),
+                    ));
+                }
+                outputs.push(ExportOutput { format, path });
+            }
+            if outputs.is_empty() {
+                outputs.push(ExportOutput { format: ExportFormat::Txt, path: None });
+            }
+            if outputs.iter().filter(|o| o.path.is_none()).count() > 1 {
+                return Err(Error::Cli("only one output can go to stdout (\"-\")".into()));
+            }
+            Ok(Request::Export {
+                path,
+                outputs,
+                to_language: to,
+                window_chunks,
+                overlap_chunks,
+            })
+        }
         Command::PrintConfig => Ok(Request::PrintConfig),
         Command::Status { watch, interval_ms } => Ok(Request::Status { watch, interval_ms }),
         Command::Queue { action } => match action {
@@ -209,12 +248,20 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
 /// it can't resolve them itself. Lexical only: the file need not exist (e.g.
 /// `info` on a path a queued ingest will create).
 fn absolutize_paths(req: &mut Request) {
+    if let Request::Export { outputs, .. } = req {
+        for out in outputs.iter_mut().filter_map(|o| o.path.as_mut()) {
+            if let Ok(abs) = std::path::absolute(&*out) {
+                *out = abs;
+            }
+        }
+    }
     let path = match req {
         Request::Ingest { path, .. }
         | Request::Summarize { path, .. }
         | Request::Info { path }
         | Request::Text { path, .. }
         | Request::Summaries { path, .. }
+        | Request::Export { path, .. }
         | Request::Delete { path }
         | Request::TagAdd { path, .. }
         | Request::TagRemove { path, .. }

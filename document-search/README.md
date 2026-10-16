@@ -56,6 +56,10 @@ sudo pacman -S uv git
 ollama pull qwen3.5:9b              # vision model that settles the engines' disagreements
 ```
 
+PDF output from `export` uses Noto Sans and Noto Sans CJK JP, which are built
+into the binary (`assets/fonts/`). Point `[export].pdf_font` at a font file only
+for scripts those don't cover.
+
 ## Commands
 
 The interesting ones, in roughly the order you'll use them.
@@ -327,6 +331,57 @@ pass straight to `text --bytes`; JSON output (`--output-mode json`) uses the
 stored half-open `byte_start`/`byte_end`, like `search`. The command bypasses
 the queue, so it works while an ingest is running.
 
+### `export` — write a whole document as txt, markdown or PDF
+
+Writes an ingested document out in full, as plain text, markdown or PDF,
+either as written or translated into another language by the LLM. Layout is
+not preserved: tables and figures come out as broken text fragments, just as
+they are in the OCR data. Markdown headings and bullet items are guessed from
+the text itself (lines like `Chapter 3`, `2.1 Method`, `第一章`, or short
+ALL-CAPS lines become headings; `•`/`・`/`-` lines become list items), and the
+PDF is laid out from the same structure.
+
+```sh
+# Plain text to stdout (page breaks become blank lines).
+document-search export notes.pdf > notes.txt
+
+# Pick formats with --output-txt / --output-md / --output-pdf (any
+# combination). "-" means stdout for txt and md; PDF always needs a file.
+document-search export notes.pdf --output-md notes.md
+document-search export notes.pdf --output-md - | less
+document-search export notes.pdf --output-pdf notes.pdf
+
+# Translate with the configured LLM. Runs as a queued, cancellable job
+# (`status` shows progress, `queue delete <id>` cancels and writes nothing).
+document-search export manual-ja.pdf --to en --output-md manual-en.md
+
+# Translation is non-deterministic, so ask for every format in one run: they
+# are all rendered from the same translation.
+document-search export manual-ja.pdf --to en --output-txt manual-en.txt --output-md manual-en.md --output-pdf manual-en.pdf
+
+# Translate bigger or smaller windows, with more or less overlap.
+document-search export manual-ja.pdf --to en --window-chunks 6 --overlap-chunks 2 --output-md manual-en.md
+```
+
+`--to <code>` takes an ISO 639-1 code. If it is the document's own language
+nothing is translated. Without `--to` the export only reads, so it is
+answered immediately even while an ingest is running; with it the export
+queues like an ingest.
+
+Translation works through the document's chunks `[export].window_chunks` at
+a time, each window sharing `[export].overlap_chunks` chunks with the next. A
+second LLM pass then merges each seam so the shared text appears once. Raise
+the overlap if seams read badly; set `overlap_chunks = 0` to skip the second
+pass (the shared text then appears twice). Lower `--window-chunks` if the model
+runs out of context. If a seam can't be merged reliably the export keeps both
+passages (a duplicated paragraph rather than a lost one) and logs a warning.
+
+Every format is rendered before any file is written, and each file is written
+atomically, so a failed or cancelled export never leaves a partial file. With
+`--output-mode json` the result is
+`{ok, path, source_language, language, translated, translation_skipped, outputs: [{format, path, bytes}], text}`,
+where `text` is the document when an output was `-` (stdout).
+
 ### `search` — vector search
 
 Requires exactly one scope: either `--path <exact ingested path>` or one or
@@ -413,6 +468,7 @@ document-search list --tag wod --tag vampire --match-all   # filter by tag(s)
 document-search info '/.../Exalted 2E.pdf'                 # metadata for one doc
 document-search text --pages 142 145 '/.../Exalted 2E.pdf' # slice of original text
                                                            # (also --bytes / --chars)
+document-search export '/.../Exalted 2E.pdf' --output-md out.md  # whole doc as txt/md/pdf (see above)
 document-search tag add '/.../Exalted 2E.pdf' exalted 2e   # tags: lowercased + trimmed
 document-search tag list
 document-search delete '/.../Exalted 2E.pdf'               # drops chunks + embeddings + tags

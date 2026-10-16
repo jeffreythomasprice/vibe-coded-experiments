@@ -78,6 +78,22 @@ max_depth = 4
 # Override per-ingest with `--summary-lang <code>` (repeatable).
 languages = ["en"]
 
+[export]
+# Settings for `export --to <lang>` (LLM translation). The document's chunks
+# are translated `window_chunks` at a time; consecutive windows share
+# `overlap_chunks` chunks, and a second LLM pass merges each seam so the
+# shared text appears once. 0 skips the seam pass (windows are concatenated,
+# so the shared text appears twice).
+window_chunks = 4
+overlap_chunks = 1
+
+# Font file for PDF output. Empty uses the fonts built into the binary: Noto
+# Sans, or Noto Sans CJK JP when the text has CJK. Set a path for scripts
+# neither covers (Arabic, Hebrew, Thai, ...). `pdf_font_index` picks the face
+# inside a .ttc collection.
+pdf_font = ""
+pdf_font_index = 0
+
 [chunking]
 # Target chunk size in bytes. The chunker steps back to the nearest UTF-8
 # char boundary, so actual chunks may be a few bytes smaller.

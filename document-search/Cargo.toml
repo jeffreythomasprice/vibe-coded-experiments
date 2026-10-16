@@ -27,3 +27,5 @@ turso = "0.4"
 unicode-normalization = "0.1"
 uuid = { version = "1", features = ["v4", "serde"] }
 whatlang = "0.18"
+krilla = { version = "0.8.2", default-features = false, features = ["simple-text"] }
+ttf-parser = "0.25"

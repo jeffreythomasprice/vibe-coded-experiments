@@ -61,6 +61,8 @@ pub(crate) struct ServerState {
     pub ocr_tools: crate::config::OcrToolsConfig,
     /// For the inline `summaries` handler's default language.
     pub summary_prefs: crate::summaries::LanguagePrefs,
+    /// For the inline (untranslated) `export` handler's PDF font.
+    pub export: crate::config::ExportConfig,
 }
 
 pub(crate) struct QueueEntry {
@@ -181,6 +183,7 @@ pub async fn run(cfg: Config) -> Result<(), ServerError> {
             search_language: cfg.search.summary_language.clone(),
             summarize_languages: cfg.summarize.languages.clone(),
         },
+        export: cfg.export.clone(),
     }));
 
     let (job_tx, job_rx) = mpsc::channel::<Job>(32);
@@ -317,7 +320,10 @@ async fn worker_loop(
         let label = job.req.label();
         let is_cancellable = matches!(
             job.req,
-            Request::Ingest { .. } | Request::Summarize { .. } | Request::OcrToolsInstall { .. }
+            Request::Ingest { .. }
+                | Request::Summarize { .. }
+                | Request::Export { .. }
+                | Request::OcrToolsInstall { .. }
         );
         let (cancel_tx, cancel_rx) = watch::channel::<bool>(false);
         // Keep our own handle on the cancel state so we can distinguish a
@@ -516,6 +522,24 @@ async fn worker_loop(
             }
             Request::Summaries { .. } => {
                 unreachable!("summaries is handled inline by the connection task")
+            }
+            Request::Export { .. } => {
+                // Untranslated exports are served inline by the connection
+                // task; only `--to` reaches the worker.
+                let (relay_tx, relay) = spawn_relay(&job.event_tx, &tracker, &label);
+                let result = crate::export::handle(
+                    &db,
+                    &cfg.export,
+                    Some(crate::export::Llm { cfg: &cfg, http: &http }),
+                    &job.req,
+                    mode,
+                    Some(&relay_tx),
+                    Some(&cancel_rx),
+                )
+                .await;
+                drop(relay_tx);
+                let _ = relay.await;
+                result.map_err(|e| e.to_string())
             }
             Request::Text { path, range } => run_text(&db, &path, range, mode).await,
             Request::PrintConfig => match mode {

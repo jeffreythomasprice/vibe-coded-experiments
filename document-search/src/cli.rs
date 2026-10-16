@@ -129,6 +129,46 @@ pub enum Command {
         range: TextRange,
     },
 
+    /// Write a whole ingested document as plain text, markdown and/or PDF,
+    /// optionally translated into another language by the LLM. Pass any
+    /// combination of --output-txt / --output-md / --output-pdf: they are all
+    /// rendered from the same (single) translation. A txt or md path of "-"
+    /// means stdout; with no --output-* the text goes to stdout. Formatting
+    /// is not preserved: markdown headings and lists are guessed from the
+    /// text, and tables or figures come out as text fragments.
+    Export {
+        /// Path of an already-ingested document.
+        path: PathBuf,
+
+        /// Write plain text to this file ("-" for stdout).
+        #[arg(long, value_name = "PATH")]
+        output_txt: Option<PathBuf>,
+
+        /// Write markdown to this file ("-" for stdout).
+        #[arg(long, value_name = "PATH")]
+        output_md: Option<PathBuf>,
+
+        /// Write a PDF to this file.
+        #[arg(long, value_name = "PATH")]
+        output_pdf: Option<PathBuf>,
+
+        /// Translate into this language (ISO 639-1 code, e.g. "en", "ja")
+        /// with the configured LLM. Runs as a queued, cancellable job.
+        /// Without it the text is exported as written.
+        #[arg(long = "to", value_name = "CODE")]
+        to: Option<String>,
+
+        /// Override [export].window_chunks: chunks translated per LLM call.
+        /// Requires --to.
+        #[arg(long, value_name = "N", requires = "to")]
+        window_chunks: Option<usize>,
+
+        /// Override [export].overlap_chunks: chunks shared by neighbouring
+        /// windows (0 skips the seam-merge pass). Requires --to.
+        #[arg(long, value_name = "N", requires = "to")]
+        overlap_chunks: Option<usize>,
+    },
+
     /// Print a document's summary tree. With no filters, prints every
     /// summary, top level first. Level 0 holds the leaf summaries (each one
     /// covers a group of chunks); each higher level summarizes the one below.

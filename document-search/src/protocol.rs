@@ -90,6 +90,21 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         outline: bool,
     },
+    /// Write a whole ingested document as txt / markdown / PDF, optionally
+    /// translated. Without `to_language` it only reads, so it bypasses the
+    /// queue; with it, it is a cancellable worker job.
+    Export {
+        path: PathBuf,
+        /// Every format to produce from one (possibly translated) text.
+        outputs: Vec<ExportOutput>,
+        /// Target language (ISO 639-1). `None` keeps the document as written.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        to_language: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        window_chunks: Option<usize>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        overlap_chunks: Option<usize>,
+    },
     PrintConfig,
     Status {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -197,6 +212,36 @@ pub enum TextRangeReq {
 /// Which summaries of a tree `summaries` returns. All ranges are inclusive;
 /// `Index` is 0-based within one level, `Pages` 1-based, and `Pages` /
 /// `Bytes` keep every summary whose span overlaps the range.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum,
+)]
+#[serde(rename_all = "kebab-case")]
+#[clap(rename_all = "kebab-case")]
+pub enum ExportFormat {
+    Txt,
+    Md,
+    Pdf,
+}
+
+impl ExportFormat {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ExportFormat::Txt => "txt",
+            ExportFormat::Md => "md",
+            ExportFormat::Pdf => "pdf",
+        }
+    }
+}
+
+/// One requested export file. `path: None` returns the txt / markdown to
+/// the client as output text (PDF always needs a path).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExportOutput {
+    pub format: ExportFormat,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<PathBuf>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum SummarySelect {
@@ -268,6 +313,25 @@ impl Request {
             Request::Info { path } => format!("info {}", path.display()),
             Request::Text { path, .. } => format!("text {}", path.display()),
             Request::Summaries { path, .. } => format!("summaries {}", path.display()),
+            Request::Export {
+                path,
+                outputs,
+                to_language,
+                ..
+            } => {
+                let mut s = format!("export {}", path.display());
+                if let Some(l) = to_language {
+                    s.push_str(&format!(" --to {l}"));
+                }
+                for o in outputs {
+                    let target = o
+                        .path
+                        .as_ref()
+                        .map_or("-".to_string(), |p| p.display().to_string());
+                    s.push_str(&format!(" --output-{} {target}", o.format.as_str()));
+                }
+                s
+            }
             Request::PrintConfig => "print-config".to_string(),
             Request::Status { watch: false, .. } => "status".to_string(),
             Request::Status { watch: true, .. } => "status --watch".to_string(),
@@ -359,6 +423,11 @@ impl Request {
             Request::Text { path, .. } => {
                 Some(("text", Some(path.display().to_string()), None))
             }
+            Request::Export {
+                path,
+                to_language: Some(l),
+                ..
+            } => Some(("export", Some(path.display().to_string()), Some(l.clone()))),
             Request::PrintConfig => Some(("print-config", None, None)),
             Request::Delete { path } => {
                 Some(("delete", Some(path.display().to_string()), None))
@@ -382,6 +451,7 @@ impl Request {
             Request::Status { .. }
             | Request::Info { .. }
             | Request::Summaries { .. }
+            | Request::Export { .. }
             | Request::OcrToolsStatus
             | Request::QueueList
             | Request::QueueDelete { .. }
@@ -452,6 +522,18 @@ pub enum ProgressEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         language: Option<String>,
     },
+    /// `export --to`: translating window `current` (1-indexed, emitted
+    /// before the window starts) of `total`. `seams` is how many seam-merge
+    /// calls will follow, so the tracker can count them from the start.
+    Translating {
+        current: usize,
+        total: usize,
+        #[serde(default)]
+        seams: usize,
+    },
+    /// `export --to`: merging the seam between windows `current` and
+    /// `current + 1` (1-indexed, emitted before the merge starts).
+    Seaming { current: usize, total: usize },
 }
 
 /// Wraps a raw `ProgressEvent` with a server-derived view of how far the
@@ -709,12 +791,56 @@ mod tests {
         );
         assert_eq!(effect(Request::Info { path: p() }), None);
         assert_eq!(
+            effect(Request::Export {
+                path: p(),
+                outputs: vec![ExportOutput { format: ExportFormat::Md, path: None }],
+                to_language: Some("en".into()),
+                window_chunks: None,
+                overlap_chunks: None,
+            }),
+            None
+        );
+        assert_eq!(
             effect(Request::Text {
                 path: p(),
                 range: TextRangeReq::Bytes { start: 0, end: 1 },
             }),
             None
         );
+    }
+
+    #[test]
+    fn export_round_trips_and_only_translation_is_logged() {
+        let req = Request::Export {
+            path: PathBuf::from("/x.pdf"),
+            outputs: vec![ExportOutput {
+                format: ExportFormat::Pdf,
+                path: Some(PathBuf::from("/out.pdf")),
+            }],
+            to_language: Some("en".into()),
+            window_chunks: Some(3),
+            overlap_chunks: None,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"cmd\":\"export\""), "{json}");
+        assert!(json.contains("\"format\":\"pdf\""), "{json}");
+        let back: Request = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.task_metrics().map(|m| m.0), Some("export"));
+        let plain = Request::Export {
+            path: PathBuf::from("/x.pdf"),
+            outputs: vec![ExportOutput { format: ExportFormat::Txt, path: None }],
+            to_language: None,
+            window_chunks: None,
+            overlap_chunks: None,
+        };
+        assert!(plain.task_metrics().is_none());
+    }
+
+    #[test]
+    fn translating_without_seams_still_parses() {
+        let ev: ProgressEvent =
+            serde_json::from_str(r#"{"stage":"translating","current":1,"total":3}"#).unwrap();
+        assert!(matches!(ev, ProgressEvent::Translating { seams: 0, .. }));
     }
 
     #[test]

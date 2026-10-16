@@ -125,6 +125,15 @@ document-search text --bytes <byte_start> <byte_end> --output-mode json "<path>"
 
 → `{ ok, path, range: { type: "pages", first, last } | { type: "chars"|"bytes", start, end }, text }`. Pages inside a multi-page range are separated by a form feed (`\f`, U+000C), so you can split `text` on it to recover per-page text — page `first + i` is element `i`.
 
+To get a whole document rather than a range, `export` prints it (untranslated; no file output, so it only reads and answers immediately):
+
+```bash
+document-search export --output-mode json "<path>"                  # txt
+document-search export --output-md - --output-mode json "<path>"    # markdown, headings guessed
+```
+
+→ `{ ok, path, format, source_language, language, translated: false, translation_skipped: false, outputs: [{ format, path: null, bytes }], text }`. A large document floods the context just like a large `text` range, so prefer `summaries` or a page range unless the user wants the whole thing. Don't use `--to` (LLM translation, a long queued job) or `--output-*` file paths unless the user asks for a file.
+
 The text is what was extracted at ingest (pdftotext, or OCR for scanned/garbled pages), not the original layout: tables and figures come out as fragments, and OCR'd pages can contain misreads. Read a few pages at a time rather than a whole book — large ranges flood the context.
 
 ### Summary tree
