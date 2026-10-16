@@ -94,6 +94,17 @@ overlap_chunks = 1
 pdf_font = ""
 pdf_font_index = 0
 
+# Grammar-edit pass over the exported text (txt, md and pdf alike, translated
+# or not). The LLM fixes errors OCR and chunking introduced - lines broken
+# mid-sentence, stray spaces before punctuation, commas and periods outside
+# closing quotes, dialogue run together - without rewording anything. A piece
+# whose edit looks like a rewrite is kept as it was. Needs the LLM, so an
+# edited export is a queued, cancellable job. Override per run with
+# `export --edit` / `--no-edit`.
+edit = true
+# Target size in bytes of each piece sent to the LLM for editing.
+edit_segment_bytes = 4000
+
 [chunking]
 # Target chunk size in bytes. The chunker steps back to the nearest UTF-8
 # char boundary, so actual chunks may be a few bytes smaller.

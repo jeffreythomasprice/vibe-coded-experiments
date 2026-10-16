@@ -167,6 +167,16 @@ pub enum Command {
         /// windows (0 skips the seam-merge pass). Requires --to.
         #[arg(long, value_name = "N", requires = "to")]
         overlap_chunks: Option<usize>,
+
+        /// Run the LLM grammar-edit pass over the text (fixes OCR and
+        /// chunking errors such as broken lines and misplaced punctuation;
+        /// never rewords). The default comes from [export].edit.
+        #[arg(long, overrides_with = "no_edit")]
+        edit: bool,
+
+        /// Skip the grammar-edit pass.
+        #[arg(long, overrides_with = "edit")]
+        no_edit: bool,
     },
 
     /// Print a document's summary tree. With no filters, prints every

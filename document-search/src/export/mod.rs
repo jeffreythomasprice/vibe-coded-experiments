@@ -8,10 +8,15 @@
 //! worker job: chunks are translated in overlapping windows and each seam
 //! is merged by a second LLM pass (see `translate`).
 //!
+//! Unless disabled, the final text then goes through a grammar-edit pass
+//! (see `edit`) that repairs OCR and chunking errors without rewording. That
+//! needs the LLM too, so only `--no-edit` without `--to` runs inline.
+//!
 //! Structure (headings, list items) is guessed from the text alone by
 //! `blocks`; markdown and PDF render the same blocks, so they agree.
 
 mod blocks;
+mod edit;
 mod pdf;
 mod render;
 mod translate;
@@ -120,6 +125,9 @@ pub struct Params {
     pub to_language: Option<String>,
     pub window_chunks: usize,
     pub overlap_chunks: usize,
+    /// Run the grammar-edit pass.
+    pub edit: bool,
+    pub edit_segment_bytes: usize,
 }
 
 impl Params {
@@ -130,6 +138,7 @@ impl Params {
         to_language: Option<&str>,
         window_chunks: Option<usize>,
         overlap_chunks: Option<usize>,
+        edit: Option<bool>,
         cfg: &ExportConfig,
     ) -> Result<Self, ExportError> {
         if outputs.is_empty() {
@@ -165,6 +174,8 @@ impl Params {
             to_language,
             window_chunks,
             overlap_chunks,
+            edit: edit.unwrap_or(cfg.edit),
+            edit_segment_bytes: cfg.edit_segment_bytes,
         })
     }
 }
@@ -180,6 +191,11 @@ pub struct Outcome {
     pub translated: bool,
     /// `--to` named the document's own language, so nothing was translated.
     pub translation_skipped: bool,
+    /// The grammar-edit pass ran.
+    pub edited: bool,
+    /// Segments the edit pass left as they were because its answer failed
+    /// the checks.
+    pub edit_segments_kept: usize,
     pub outputs: Vec<WrittenOutput>,
     /// txt / markdown returned to the client instead of a file.
     pub text: Option<String>,
@@ -212,6 +228,15 @@ impl Outcome {
                 ", already in {}; not translated",
                 self.language.as_deref().unwrap_or("?"),
             ));
+        }
+        if self.edited {
+            suffix.push_str(", edited");
+            if self.edit_segments_kept > 0 {
+                suffix.push_str(&format!(
+                    " ({} segments left unedited)",
+                    self.edit_segments_kept
+                ));
+            }
         }
         self.outputs
             .iter()
@@ -246,6 +271,8 @@ impl Outcome {
             "language": self.language,
             "translated": self.translated,
             "translation_skipped": self.translation_skipped,
+            "edited": self.edited,
+            "edit_segments_kept": self.edit_segments_kept,
             "outputs": outputs,
             "text": self.text,
         })
@@ -337,6 +364,7 @@ pub async fn handle(
         to_language,
         window_chunks,
         overlap_chunks,
+        edit,
     } = req
     else {
         unreachable!("export::handle is only called for Request::Export");
@@ -347,6 +375,7 @@ pub async fn handle(
         to_language.as_deref(),
         *window_chunks,
         *overlap_chunks,
+        *edit,
         export_cfg,
     )?;
     let conn = db.fresh_conn().await?;
@@ -392,10 +421,10 @@ pub async fn run(
     let translated = target.is_some() && !skipped;
     let text = match target {
         Some(target) if translated => {
-            let llm = llm.ok_or(ExportError::NoLlm)?;
+            let llm = llm.as_ref().ok_or(ExportError::NoLlm)?;
             emit_stage(progress, "translating");
             translate::translate_document(
-                &llm,
+                llm,
                 &chunks,
                 target,
                 p.window_chunks,
@@ -408,6 +437,23 @@ pub async fn run(
         _ => full,
     };
     drop(chunks);
+    let (text, edit_segments_kept) = if p.edit {
+        let llm = llm.as_ref().ok_or(ExportError::NoLlm)?;
+        emit_stage(progress, "editing");
+        let lang = if translated { target } else { doc.language.as_deref() };
+        let edited = edit::edit_document(
+            llm,
+            &text,
+            lang,
+            p.edit_segment_bytes,
+            progress,
+            cancel,
+        )
+        .await?;
+        (edited.text, edited.kept)
+    } else {
+        (text, 0)
+    };
     if let Some(rx) = cancel
         && *rx.borrow()
     {
@@ -470,6 +516,8 @@ pub async fn run(
         },
         translated,
         translation_skipped: skipped,
+        edited: p.edit,
+        edit_segments_kept,
         outputs: written,
         text: text_out,
     })
@@ -550,13 +598,15 @@ mod tests {
             overlap_chunks: 1,
             pdf_font: String::new(),
             pdf_font_index: 0,
+            edit: true,
+            edit_segment_bytes: 4000,
         };
         let out = |fmt, p: Option<&str>| ExportOutput {
             format: fmt,
             path: p.map(PathBuf::from),
         };
         let new = |outs: Vec<ExportOutput>, to: Option<&str>, w, o| {
-            Params::new(PathBuf::from("/d.pdf"), outs, to, w, o, &cfg)
+            Params::new(PathBuf::from("/d.pdf"), outs, to, w, o, None, &cfg)
         };
         let txt = || vec![out(ExportFormat::Txt, None)];
         assert!(new(txt(), None, Some(1), Some(5)).is_ok());
@@ -568,18 +618,39 @@ mod tests {
     }
 
     #[test]
+    fn params_edit_follows_config_unless_overridden() {
+        let cfg = ExportConfig {
+            window_chunks: 4,
+            overlap_chunks: 1,
+            pdf_font: String::new(),
+            pdf_font_index: 0,
+            edit: true,
+            edit_segment_bytes: 4000,
+        };
+        let outs = || vec![ExportOutput { format: ExportFormat::Txt, path: None }];
+        let new = |edit| {
+            Params::new(PathBuf::from("/d.pdf"), outs(), None, None, None, edit, &cfg).unwrap()
+        };
+        assert!(new(None).edit);
+        assert!(new(Some(true)).edit);
+        assert!(!new(Some(false)).edit);
+    }
+
+    #[test]
     fn params_validate_outputs() {
         let cfg = ExportConfig {
             window_chunks: 4,
             overlap_chunks: 1,
             pdf_font: String::new(),
             pdf_font_index: 0,
+            edit: true,
+            edit_segment_bytes: 4000,
         };
         let out = |fmt, p: Option<&str>| ExportOutput {
             format: fmt,
             path: p.map(PathBuf::from),
         };
-        let new = |outs| Params::new(PathBuf::from("/d.pdf"), outs, None, None, None, &cfg);
+        let new = |outs| Params::new(PathBuf::from("/d.pdf"), outs, None, None, None, None, &cfg);
         assert!(matches!(new(vec![]), Err(ExportError::NoOutputs)));
         assert!(matches!(
             new(vec![out(ExportFormat::Pdf, None)]),

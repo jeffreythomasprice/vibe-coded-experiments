@@ -23,8 +23,4 @@ I want to export these to markdown and pdf files to a new tmp directory in this 
 We should translate to english.
 
 
-
-
 todo:
-
-editing pass that does things like check whether quotes start on new lines, try to fix grammar with commas and quotes etc.

@@ -20,6 +20,7 @@ const W_EMBED: f64 = 2.0;
 const W_SUMMARY: f64 = 10.0;
 const W_TRANSLATE: f64 = 10.0;
 const W_SEAM: f64 = 4.0;
+const W_EDIT: f64 = 8.0;
 
 /// Minimum count-bearing samples observed before we extrapolate an ETA.
 /// Below this threshold the rate estimate is too noisy to be useful.
@@ -50,6 +51,7 @@ enum Phase {
     Summarizing,
     Translating,
     Seaming,
+    Editing,
 }
 
 /// Rate measurement for the phase currently running. ETA prefers this over
@@ -72,6 +74,7 @@ pub(crate) struct JobTracker {
     chunks_total: Option<usize>,
     translate_total: Option<usize>,
     seam_total: usize,
+    edit_total: usize,
     /// Indexed `[tree][level]`; one tree per summary language.
     groups_per_level: Vec<Vec<usize>>,
     /// Tree count reported by summarize itself, once it has started.
@@ -83,6 +86,7 @@ pub(crate) struct JobTracker {
     embedding_done: usize,
     translate_done: usize,
     seam_done: usize,
+    edit_done: usize,
     /// Indexed `[tree][level]`, parallel to `groups_per_level`.
     summaries_done: Vec<Vec<usize>>,
 
@@ -101,6 +105,7 @@ impl JobTracker {
             chunks_total: None,
             translate_total: None,
             seam_total: 0,
+            edit_total: 0,
             groups_per_level: Vec::new(),
             trees_observed: None,
             pages_done: 0,
@@ -109,6 +114,7 @@ impl JobTracker {
             embedding_done: 0,
             translate_done: 0,
             seam_done: 0,
+            edit_done: 0,
             summaries_done: Vec::new(),
             sample_count: 0,
             phase_clock: None,
@@ -207,6 +213,11 @@ impl JobTracker {
                 self.seam_done = current.saturating_sub(1).max(self.seam_done);
                 Phase::Seaming
             }
+            ProgressEvent::Editing { current, total } => {
+                self.edit_total = (*total).max(self.edit_total);
+                self.edit_done = current.saturating_sub(1).max(self.edit_done);
+                Phase::Editing
+            }
         };
         self.complete_phases_before(phase);
         self.sample_count += 1;
@@ -249,6 +260,9 @@ impl JobTracker {
             && let Some(t) = self.translate_total
         {
             self.translate_done = t;
+        }
+        if phase > Phase::Seaming {
+            self.seam_done = self.seam_total;
         }
     }
 
@@ -301,7 +315,8 @@ impl JobTracker {
             + self.chunking_done as f64 * W_CHUNKING
             + self.embedding_done as f64 * W_EMBED
             + self.translate_done as f64 * W_TRANSLATE
-            + self.seam_done as f64 * W_SEAM;
+            + self.seam_done as f64 * W_SEAM
+            + self.edit_done as f64 * W_EDIT;
         for &done in self.summaries_done.iter().flatten() {
             sum += done as f64 * W_SUMMARY;
         }
@@ -316,7 +331,8 @@ impl JobTracker {
             sum += c as f64 * (W_CHUNKING + W_EMBED);
         }
         sum += self.translate_total.unwrap_or(0) as f64 * W_TRANSLATE
-            + self.seam_total as f64 * W_SEAM;
+            + self.seam_total as f64 * W_SEAM
+            + self.edit_total as f64 * W_EDIT;
         for tree in self.summary_groups_per_tree() {
             for n in tree {
                 sum += n as f64 * W_SUMMARY;
@@ -379,6 +395,7 @@ fn phase_label(event: &ProgressEvent) -> &str {
         ProgressEvent::Summarizing { .. } => "summarizing",
         ProgressEvent::Translating { .. } => "translating",
         ProgressEvent::Seaming { .. } => "seaming",
+        ProgressEvent::Editing { .. } => "editing",
     }
 }
 
@@ -432,6 +449,22 @@ mod tests {
         // Seaming implies every window is translated.
         assert_eq!(o.phase, "seaming");
         assert_eq!(o.step, 40);
+    }
+
+    #[test]
+    fn editing_closes_out_translation_and_seams() {
+        let mut t = JobTracker::new(Instant::now(), None);
+        t.record(ProgressEvent::Translating { current: 4, total: 4, seams: 3 });
+        t.record(ProgressEvent::Seaming { current: 3, total: 3 });
+        let o = t
+            .record(ProgressEvent::Editing { current: 2, total: 5 })
+            .overall
+            .unwrap();
+        assert_eq!(o.phase, "editing");
+        // Total: 40 + 12 + 5 segments × 8. Done: all windows and seams, plus
+        // one finished segment.
+        assert_eq!(o.total_steps, 92);
+        assert_eq!(o.step, 40 + 12 + 8);
     }
 
     #[test]

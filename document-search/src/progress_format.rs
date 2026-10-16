@@ -76,6 +76,9 @@ pub(crate) fn format_event(p: &ProgressEvent) -> String {
         ProgressEvent::Seaming { current, total } => {
             format!("Joining translated windows {current}/{total}")
         }
+        ProgressEvent::Editing { current, total } => {
+            format!("Editing segment {current}/{total}")
+        }
     }
 }
 

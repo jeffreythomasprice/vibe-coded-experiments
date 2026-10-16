@@ -104,6 +104,11 @@ pub enum Request {
         window_chunks: Option<usize>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         overlap_chunks: Option<usize>,
+        /// Run the grammar-edit pass. `None` means `[export].edit`; the
+        /// server resolves it before routing, since editing needs the LLM
+        /// and so the worker.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        edit: Option<bool>,
     },
     PrintConfig,
     Status {
@@ -317,11 +322,15 @@ impl Request {
                 path,
                 outputs,
                 to_language,
+                edit,
                 ..
             } => {
                 let mut s = format!("export {}", path.display());
                 if let Some(l) = to_language {
                     s.push_str(&format!(" --to {l}"));
+                }
+                if *edit == Some(false) {
+                    s.push_str(" --no-edit");
                 }
                 for o in outputs {
                     let target = o
@@ -425,9 +434,14 @@ impl Request {
             }
             Request::Export {
                 path,
-                to_language: Some(l),
+                to_language,
+                edit,
                 ..
-            } => Some(("export", Some(path.display().to_string()), Some(l.clone()))),
+            } if to_language.is_some() || *edit == Some(true) => Some((
+                "export",
+                Some(path.display().to_string()),
+                to_language.clone(),
+            )),
             Request::PrintConfig => Some(("print-config", None, None)),
             Request::Delete { path } => {
                 Some(("delete", Some(path.display().to_string()), None))
@@ -534,6 +548,9 @@ pub enum ProgressEvent {
     /// `export --to`: merging the seam between windows `current` and
     /// `current + 1` (1-indexed, emitted before the merge starts).
     Seaming { current: usize, total: usize },
+    /// `export` grammar-edit pass: editing segment `current` (1-indexed,
+    /// emitted before the segment starts) of `total`.
+    Editing { current: usize, total: usize },
 }
 
 /// Wraps a raw `ProgressEvent` with a server-derived view of how far the
@@ -797,6 +814,7 @@ mod tests {
                 to_language: Some("en".into()),
                 window_chunks: None,
                 overlap_chunks: None,
+                edit: None,
             }),
             None
         );
@@ -820,6 +838,7 @@ mod tests {
             to_language: Some("en".into()),
             window_chunks: Some(3),
             overlap_chunks: None,
+            edit: None,
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("\"cmd\":\"export\""), "{json}");
@@ -832,8 +851,36 @@ mod tests {
             to_language: None,
             window_chunks: None,
             overlap_chunks: None,
+            edit: Some(false),
         };
         assert!(plain.task_metrics().is_none());
+        let edited = Request::Export {
+            path: PathBuf::from("/x.pdf"),
+            outputs: vec![ExportOutput { format: ExportFormat::Txt, path: None }],
+            to_language: None,
+            window_chunks: None,
+            overlap_chunks: None,
+            edit: Some(true),
+        };
+        assert_eq!(edited.task_metrics().map(|m| m.0), Some("export"));
+        assert!(edited.label().find("--no-edit").is_none());
+        assert!(plain.label().contains("--no-edit"));
+    }
+
+    #[test]
+    fn export_without_edit_field_still_parses() {
+        let json = r#"{"cmd":"export","path":"/x.pdf","outputs":[{"format":"txt","path":null}]}"#;
+        let req: Request = serde_json::from_str(json).unwrap();
+        assert!(matches!(req, Request::Export { edit: None, .. }));
+    }
+
+    #[test]
+    fn editing_progress_round_trips() {
+        let ev = ProgressEvent::Editing { current: 2, total: 5 };
+        let json = serde_json::to_string(&ev).unwrap();
+        assert!(json.contains("\"stage\":\"editing\""), "{json}");
+        let back: ProgressEvent = serde_json::from_str(&json).unwrap();
+        assert!(matches!(back, ProgressEvent::Editing { current: 2, total: 5 }));
     }
 
     #[test]

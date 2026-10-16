@@ -101,7 +101,7 @@ impl Prompts {
     }
 }
 
-fn emit(progress: Option<&mpsc::UnboundedSender<Event>>, event: ProgressEvent) {
+pub(super) fn emit(progress: Option<&mpsc::UnboundedSender<Event>>, event: ProgressEvent) {
     if let Some(tx) = progress {
         let _ = tx.send(Event::Progress(ProgressEnvelope {
             event,
@@ -110,14 +110,14 @@ fn emit(progress: Option<&mpsc::UnboundedSender<Event>>, event: ProgressEvent) {
     }
 }
 
-fn check_cancel(cancel: Option<&watch::Receiver<bool>>) -> Result<(), ExportError> {
+pub(super) fn check_cancel(cancel: Option<&watch::Receiver<bool>>) -> Result<(), ExportError> {
     if cancel.is_some_and(|rx| *rx.borrow()) {
         return Err(ExportError::Cancelled);
     }
     Ok(())
 }
 
-fn llm_error(what: String, source: LlmError) -> ExportError {
+pub(super) fn llm_error(what: String, source: LlmError) -> ExportError {
     match source {
         LlmError::Cancelled => ExportError::Cancelled,
         source => ExportError::Llm { what, source },
@@ -125,7 +125,7 @@ fn llm_error(what: String, source: LlmError) -> ExportError {
 }
 
 /// Drop a `<document>…</document>` wrapper some models echo back.
-fn strip_wrapper(s: &str) -> &str {
+pub(super) fn strip_wrapper(s: &str) -> &str {
     let s = s.trim();
     let s = s.strip_prefix("<document>").unwrap_or(s);
     let s = s.strip_suffix("</document>").unwrap_or(s);
@@ -388,7 +388,7 @@ fn snap_forward(s: &str, target: usize) -> usize {
         .map_or(s.len(), |(i, c)| target + i + c.len_utf8())
 }
 
-fn floor_boundary(s: &str, mut i: usize) -> usize {
+pub(super) fn floor_boundary(s: &str, mut i: usize) -> usize {
     i = i.min(s.len());
     while !s.is_char_boundary(i) {
         i -= 1;
@@ -396,7 +396,7 @@ fn floor_boundary(s: &str, mut i: usize) -> usize {
     i
 }
 
-fn is_sentence_end(c: char) -> bool {
+pub(super) fn is_sentence_end(c: char) -> bool {
     matches!(c, '.' | '!' | '?' | '。' | '！' | '？')
 }
 

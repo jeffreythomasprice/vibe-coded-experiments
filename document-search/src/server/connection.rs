@@ -47,7 +47,16 @@ pub(crate) async fn handle(
     let envelope: RequestEnvelope =
         serde_json::from_str(line.trim_end()).map_err(ConnectionError::Decode)?;
     let output_mode = envelope.output_mode;
-    let req = envelope.request;
+    let mut req = envelope.request;
+
+    // Settle `export`'s edit default now: editing needs the LLM, so it
+    // decides whether the request is inline or a worker job, and the worker
+    // and task log see a concrete value.
+    if let Request::Export { edit, .. } = &mut req
+        && edit.is_none()
+    {
+        *edit = Some(state.lock().unwrap().export.edit);
+    }
 
     if let Request::Status { watch, interval_ms } = req {
         return handle_status(&mut write_half, &state, output_mode, watch, interval_ms).await;
@@ -258,8 +267,11 @@ pub(crate) async fn handle(
         return Ok(());
     }
 
+    // Only a read-only export (no translation, no edit) skips the queue.
     if let Request::Export {
-        to_language: None, ..
+        to_language: None,
+        edit: Some(false),
+        ..
     } = &req
     {
         let (db, export_cfg) = {

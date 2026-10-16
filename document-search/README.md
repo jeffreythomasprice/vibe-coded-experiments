@@ -359,14 +359,28 @@ document-search export manual-ja.pdf --to en --output-md manual-en.md
 # are all rendered from the same translation.
 document-search export manual-ja.pdf --to en --output-txt manual-en.txt --output-md manual-en.md --output-pdf manual-en.pdf
 
+# Skip the grammar-edit pass (see below): the text comes out exactly as
+# stored, and the export is answered immediately.
+document-search export notes.pdf --no-edit > notes.txt
+
 # Translate bigger or smaller windows, with more or less overlap.
 document-search export manual-ja.pdf --to en --window-chunks 6 --overlap-chunks 2 --output-md manual-en.md
 ```
 
 `--to <code>` takes an ISO 639-1 code. If it is the document's own language
-nothing is translated. Without `--to` the export only reads, so it is
-answered immediately even while an ingest is running; with it the export
-queues like an ingest.
+nothing is translated. An export that neither translates nor edits (`--no-edit`
+without `--to`) only reads, so it is answered immediately even while an ingest
+is running; any other export queues like an ingest.
+
+By default the final text, translated or not, goes through a grammar-edit pass
+(`[export].edit`; `--edit` / `--no-edit` override it per run). The LLM works
+through the text in segments of about `[export].edit_segment_bytes` and fixes
+only what OCR and chunking broke: lines split mid-sentence, hyphenated line
+breaks, stray spaces before punctuation, commas and periods outside closing
+quotes, dialogue run together in one paragraph. It is told not to reword
+anything, and an edit that changes too much (or comes back in the wrong
+language) is discarded and that segment is kept as it was, so a bad answer
+costs a missed fix rather than lost text. All formats share the edited text.
 
 Translation works through the document's chunks `[export].window_chunks` at
 a time, each window sharing `[export].overlap_chunks` chunks with the next. A
@@ -379,7 +393,7 @@ passages (a duplicated paragraph rather than a lost one) and logs a warning.
 Every format is rendered before any file is written, and each file is written
 atomically, so a failed or cancelled export never leaves a partial file. With
 `--output-mode json` the result is
-`{ok, path, source_language, language, translated, translation_skipped, outputs: [{format, path, bytes}], text}`,
+`{ok, path, source_language, language, translated, translation_skipped, edited, edit_segments_kept, outputs: [{format, path, bytes}], text}`,
 where `text` is the document when an output was `-` (stdout).
 
 ### `search` — vector search

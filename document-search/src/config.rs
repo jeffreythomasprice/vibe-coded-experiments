@@ -89,6 +89,10 @@ pub struct ExportConfig {
     pub pdf_font: String,
     /// Face index inside a `.ttc` collection.
     pub pdf_font_index: u32,
+    /// Run the LLM grammar-edit pass over exported text by default.
+    pub edit: bool,
+    /// Target size in bytes of each piece the edit pass sends to the LLM.
+    pub edit_segment_bytes: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -269,6 +273,10 @@ struct PartialExportConfig {
     pdf_font: Option<String>,
     #[serde(default)]
     pdf_font_index: Option<u32>,
+    #[serde(default)]
+    edit: Option<bool>,
+    #[serde(default)]
+    edit_segment_bytes: Option<usize>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -378,6 +386,9 @@ pub enum ConfigError {
     )]
     InvalidExportWindows { window: usize, overlap: usize },
 
+    #[error("invalid [export] config: edit_segment_bytes must be > 0")]
+    ZeroEditSegment,
+
     #[error("invalid [chunking] config: chunk_size_bytes must be > 0")]
     ZeroChunkSize,
 
@@ -440,6 +451,7 @@ fn load_with_paths(
 
     validate_chunking(&cfg.chunking)?;
     validate_export_windows(cfg.export.window_chunks, cfg.export.overlap_chunks)?;
+    validate_edit_segment(cfg.export.edit_segment_bytes)?;
     Ok((path, cfg))
 }
 
@@ -614,7 +626,17 @@ fn merge_export(base: ExportConfig, overlay: Option<PartialExportConfig>) -> Exp
         overlap_chunks: overlay.overlap_chunks.unwrap_or(base.overlap_chunks),
         pdf_font: overlay.pdf_font.unwrap_or(base.pdf_font),
         pdf_font_index: overlay.pdf_font_index.unwrap_or(base.pdf_font_index),
+        edit: overlay.edit.unwrap_or(base.edit),
+        edit_segment_bytes: overlay.edit_segment_bytes.unwrap_or(base.edit_segment_bytes),
     }
+}
+
+/// Segment size for the export edit pass.
+pub fn validate_edit_segment(bytes: usize) -> Result<(), ConfigError> {
+    if bytes == 0 {
+        return Err(ConfigError::ZeroEditSegment);
+    }
+    Ok(())
 }
 
 /// Window sizes for `export --to`, shared by the config check and the CLI
@@ -669,6 +691,8 @@ mod tests {
         assert_eq!(cfg.summarize.max_depth, 4);
         assert_eq!(cfg.export.window_chunks, 4);
         assert_eq!(cfg.export.overlap_chunks, 1);
+        assert!(cfg.export.edit);
+        assert_eq!(cfg.export.edit_segment_bytes, 4000);
         assert!(cfg.export.pdf_font.is_empty());
         assert_eq!(cfg.chunking.chunk_size_bytes, 5000);
         assert_eq!(cfg.chunking.overlap_bytes, 1000);

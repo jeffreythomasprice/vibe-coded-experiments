@@ -162,6 +162,8 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             to,
             window_chunks,
             overlap_chunks,
+            edit,
+            no_edit,
         } => {
             let mut outputs = Vec::new();
             for (format, target) in [
@@ -190,6 +192,13 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
                 to_language: to,
                 window_chunks,
                 overlap_chunks,
+                edit: if edit {
+                    Some(true)
+                } else if no_edit {
+                    Some(false)
+                } else {
+                    None
+                },
             })
         }
         Command::PrintConfig => Ok(Request::PrintConfig),
