@@ -19,13 +19,16 @@ mod proc;
 mod progress_format;
 mod protocol;
 mod server;
+mod summaries;
 mod summarize;
 
 use clap::Parser;
 
-use crate::cli::{Cli, Command, OcrToolsCommand, QueueCommand, TagCommand, TextRange};
+use crate::cli::{
+    Cli, Command, OcrToolsCommand, QueueCommand, SummarySelectArgs, TagCommand, TextRange,
+};
 use crate::error::Error;
-use crate::protocol::{OutputMode, Request, RequestEnvelope, TextRangeReq};
+use crate::protocol::{OutputMode, Request, RequestEnvelope, SummarySelect, TextRangeReq};
 
 #[tokio::main]
 async fn main() {
@@ -83,7 +86,8 @@ async fn run(args: Cli) -> Result<(), Error> {
         }
         other => {
             logging::init(logging::Role::Client, &cfg.logging)?;
-            let request = command_to_request(other)?;
+            let mut request = command_to_request(other)?;
+            absolutize_paths(&mut request);
             let envelope = RequestEnvelope {
                 output_mode,
                 request,
@@ -136,6 +140,19 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             path,
             range: text_range_to_proto(range)?,
         }),
+        Command::Summaries {
+            path,
+            language,
+            level,
+            select,
+            outline,
+        } => Ok(Request::Summaries {
+            path,
+            language,
+            level,
+            select: summary_select_to_proto(select)?,
+            outline,
+        }),
         Command::PrintConfig => Ok(Request::PrintConfig),
         Command::Status { watch, interval_ms } => Ok(Request::Status { watch, interval_ms }),
         Command::Queue { action } => match action {
@@ -187,6 +204,28 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
     }
 }
 
+/// Resolve relative document paths against the client's CWD. The server
+/// is a long-lived process with whatever CWD the first client gave it, so
+/// it can't resolve them itself. Lexical only: the file need not exist (e.g.
+/// `info` on a path a queued ingest will create).
+fn absolutize_paths(req: &mut Request) {
+    let path = match req {
+        Request::Ingest { path, .. }
+        | Request::Summarize { path, .. }
+        | Request::Info { path }
+        | Request::Text { path, .. }
+        | Request::Summaries { path, .. }
+        | Request::Delete { path }
+        | Request::TagAdd { path, .. }
+        | Request::TagRemove { path, .. }
+        | Request::Search { path: Some(path), .. } => path,
+        _ => return,
+    };
+    if let Ok(abs) = std::path::absolute(&*path) {
+        *path = abs;
+    }
+}
+
 fn text_range_to_proto(range: TextRange) -> Result<TextRangeReq, Error> {
     if let Some(v) = range.bytes {
         let (start, end) = pair_u64(&v).map_err(Error::Cli)?;
@@ -201,6 +240,21 @@ fn text_range_to_proto(range: TextRange) -> Result<TextRangeReq, Error> {
         Err(Error::Cli(
             "expected one of --bytes / --chars / --pages".to_string(),
         ))
+    }
+}
+
+fn summary_select_to_proto(select: SummarySelectArgs) -> Result<SummarySelect, Error> {
+    if let Some(v) = select.index {
+        let (first, last) = pair_u32(&v).map_err(Error::Cli)?;
+        Ok(SummarySelect::Index { first, last })
+    } else if let Some(v) = select.pages {
+        let (first, last) = pair_u32(&v).map_err(Error::Cli)?;
+        Ok(SummarySelect::Pages { first, last })
+    } else if let Some(v) = select.bytes {
+        let (start, end) = pair_u64(&v).map_err(Error::Cli)?;
+        Ok(SummarySelect::Bytes { start, end })
+    } else {
+        Ok(SummarySelect::All)
     }
 }
 

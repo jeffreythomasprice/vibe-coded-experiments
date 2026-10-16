@@ -111,6 +111,20 @@ pub fn resolve_summary_languages(requested: &[String], doc_language: Option<&str
     out
 }
 
+/// The summary language to show when the caller didn't pick one:
+/// `[search].summary_language` if set, else the first resolved
+/// `[summarize].languages` entry.
+pub fn preferred_summary_language(
+    search_language: Option<&str>,
+    summarize_languages: &[String],
+    doc_language: Option<&str>,
+) -> String {
+    match search_language {
+        Some(l) => normalize(l),
+        None => resolve_summary_languages(summarize_languages, doc_language).swap_remove(0),
+    }
+}
+
 /// Number of trees `requested` will produce, without knowing the document
 /// language yet. `"source"` is counted as a distinct tree unless it's the
 /// only entry; this may over-count by one when the source matches another
@@ -169,6 +183,16 @@ mod tests {
         assert_eq!(estimate_summary_language_count(&s(&["en", "source"])), 2);
         assert_eq!(estimate_summary_language_count(&s(&["en", "EN"])), 1);
         assert_eq!(estimate_summary_language_count(&[]), 1);
+    }
+
+    #[test]
+    fn preferred_uses_search_override_then_first_resolved() {
+        assert_eq!(preferred_summary_language(Some(" JA "), &s(&["en"]), None), "ja");
+        assert_eq!(
+            preferred_summary_language(None, &s(&["source", "en"]), Some("ja")),
+            "ja"
+        );
+        assert_eq!(preferred_summary_language(None, &[], None), "en");
     }
 
     #[test]

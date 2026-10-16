@@ -9,7 +9,7 @@ use turso::{Value, params::Params};
 use crate::config::Config;
 use crate::db::{Db, TaskLogRow, vector};
 use crate::ollama;
-use crate::protocol::{StatusSnapshot, TextRangeReq};
+use crate::protocol::{PendingEffect, StatusSnapshot, TextRangeReq};
 
 #[derive(thiserror::Error, Debug)]
 pub enum CommandError {
@@ -89,23 +89,105 @@ pub enum CommandError {
 
     #[error("invalid --cutoff {0}: must be in [0.0, 1.0]")]
     InvalidCutoff(f32),
+
+    #[error("{path} has no summaries; run `summarize` on it first")]
+    NoSummaries { path: PathBuf },
+
+    #[error("no {language:?} summary tree; available: {}", available.join(", "))]
+    SummaryLanguageMissing {
+        language: String,
+        available: Vec<String>,
+    },
+
+    #[error("no summary level {level}; available levels: 0..={}", count.saturating_sub(1))]
+    SummaryLevelMissing { level: u32, count: u32 },
+
+    #[error(
+        "summary index range {first}..={last} out of bounds for level {level} ({count} summaries, indexes 0..={})",
+        count.saturating_sub(1)
+    )]
+    SummaryIndexOutOfBounds {
+        level: u32,
+        first: u32,
+        last: u32,
+        count: u32,
+    },
 }
 
-struct DocumentRow {
-    id: i64,
-    doc_type: String,
-    total_size_bytes: i64,
-    total_size_chars: i64,
-    total_size_pages: Option<i64>,
-    language: Option<String>,
+pub(crate) struct DocumentRow {
+    pub(crate) id: i64,
+    pub(crate) doc_type: String,
+    pub(crate) total_size_bytes: i64,
+    pub(crate) total_size_chars: i64,
+    pub(crate) total_size_pages: Option<i64>,
+    pub(crate) language: Option<String>,
 }
 
-pub async fn info(db: &Db, raw_path: &Path) -> Result<String, CommandError> {
-    let path = canonicalize(raw_path)?;
-    let row = lookup_document(db, &path).await?;
+/// A queued or running job that will change the document `info` was asked
+/// about. `queue_position` is 1-based; `None` means the job is running now.
+#[derive(Debug, Clone)]
+pub struct PendingJob {
+    pub id: String,
+    pub queue_position: Option<usize>,
+    pub label: String,
+    pub effect: PendingEffect,
+}
 
+/// What `info` found in the DB for an ingested document.
+struct DocInfo {
+    row: DocumentRow,
+    summaries: Vec<(String, i64)>,
+    tags: Vec<String>,
+}
+
+pub async fn info(db: &Db, raw_path: &Path, pending: &[PendingJob]) -> Result<String, CommandError> {
+    let (path, doc) = info_lookup(db, raw_path, pending).await?;
+    Ok(render_info_text(&path, doc.as_ref(), pending))
+}
+
+pub async fn info_json(
+    db: &Db,
+    raw_path: &Path,
+    pending: &[PendingJob],
+) -> Result<String, CommandError> {
+    let (path, doc) = info_lookup(db, raw_path, pending).await?;
+    Ok(render_info_json(&path, doc.as_ref(), pending).to_string())
+}
+
+/// Runs inline while an ingest may hold an open transaction on `db.conn`,
+/// hence the fresh connection. A path that isn't ingested is only an error
+/// when no pending job will touch it either.
+async fn info_lookup(
+    db: &Db,
+    raw_path: &Path,
+    pending: &[PendingJob],
+) -> Result<(PathBuf, Option<DocInfo>), CommandError> {
+    let path = normalize_path(raw_path);
+    let conn = db
+        .fresh_conn()
+        .await
+        .map_err(|source| CommandError::FreshConn { source })?;
+    match lookup_document(&conn, &path).await {
+        Ok(row) => {
+            let summaries = fetch_summary_counts(&conn, row.id).await?;
+            let tags = fetch_document_tags(&conn, row.id).await?;
+            Ok((path, Some(DocInfo { row, summaries, tags })))
+        }
+        Err(CommandError::DocumentNotFound { .. }) if !pending.is_empty() => Ok((path, None)),
+        Err(e) => Err(e),
+    }
+}
+
+fn render_info_text(path: &Path, doc: Option<&DocInfo>, pending: &[PendingJob]) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "path:             {}", path.display());
+    let Some(doc) = doc else {
+        let _ = writeln!(out, "status:           not ingested");
+        write_pending_text(&mut out, pending);
+        return out;
+    };
+    let row = &doc.row;
+    let _ = writeln!(out, "status:           ingested");
     let _ = writeln!(out, "type:             {}", row.doc_type);
     let _ = writeln!(out, "total_size_bytes: {}", row.total_size_bytes);
     let _ = writeln!(out, "total_size_chars: {}", row.total_size_chars);
@@ -122,53 +204,86 @@ pub async fn info(db: &Db, raw_path: &Path) -> Result<String, CommandError> {
         "language:         {}",
         row.language.as_deref().unwrap_or("(undetected)")
     );
-    let summaries = fetch_summary_counts(db, row.id).await?;
-    if summaries.is_empty() {
+    if doc.summaries.is_empty() {
         let _ = writeln!(out, "summaries:        (none)");
     } else {
-        let parts: Vec<String> = summaries.iter().map(|(l, n)| format!("{l} ({n})")).collect();
+        let parts: Vec<String> = doc
+            .summaries
+            .iter()
+            .map(|(l, n)| format!("{l} ({n})"))
+            .collect();
         let _ = writeln!(out, "summaries:        {}", parts.join(", "));
     }
-
-    let tags = fetch_document_tags(db, row.id).await?;
-    if tags.is_empty() {
+    if doc.tags.is_empty() {
         let _ = writeln!(out, "tags:             (none)");
     } else {
-        let _ = writeln!(out, "tags:             {}", tags.join(", "));
+        let _ = writeln!(out, "tags:             {}", doc.tags.join(", "));
     }
-    Ok(out)
+    write_pending_text(&mut out, pending);
+    out
 }
 
-pub async fn info_json(db: &Db, raw_path: &Path) -> Result<String, CommandError> {
-    let path = canonicalize(raw_path)?;
-    let row = lookup_document(db, &path).await?;
-    let tags = fetch_document_tags(db, row.id).await?;
-    let summaries: serde_json::Map<String, serde_json::Value> = fetch_summary_counts(db, row.id)
-        .await?
-        .into_iter()
-        .map(|(l, n)| (l, serde_json::Value::from(n)))
+fn write_pending_text(out: &mut String, pending: &[PendingJob]) {
+    if pending.is_empty() {
+        return;
+    }
+    let _ = writeln!(out, "pending:");
+    for p in pending {
+        let state = match p.queue_position {
+            None => "running".to_string(),
+            Some(n) => format!("queued #{n}"),
+        };
+        let short_id: String = p.id.chars().take(8).collect();
+        let _ = writeln!(
+            out,
+            "  {state:<10} {short_id}  will {:<6}  {}",
+            p.effect.as_str(),
+            p.label
+        );
+    }
+}
+
+fn render_info_json(path: &Path, doc: Option<&DocInfo>, pending: &[PendingJob]) -> serde_json::Value {
+    let pending: Vec<serde_json::Value> = pending
+        .iter()
+        .map(|p| {
+            serde_json::json!({
+                "id": p.id,
+                "state": if p.queue_position.is_some() { "queued" } else { "running" },
+                "position": p.queue_position,
+                "effect": p.effect,
+                "label": p.label,
+            })
+        })
         .collect();
-    let env = serde_json::json!({
+    let row = doc.map(|d| &d.row);
+    let summaries: Option<serde_json::Map<String, serde_json::Value>> = doc.map(|d| {
+        d.summaries
+            .iter()
+            .map(|(l, n)| (l.clone(), serde_json::Value::from(*n)))
+            .collect()
+    });
+    serde_json::json!({
         "ok": true,
         "path": path.display().to_string(),
-        "type": row.doc_type,
-        "total_size_bytes": row.total_size_bytes,
-        "total_size_chars": row.total_size_chars,
-        "total_size_pages": row.total_size_pages,
-        "language": row.language,
+        "ingested": doc.is_some(),
+        "type": row.map(|r| &r.doc_type),
+        "total_size_bytes": row.map(|r| r.total_size_bytes),
+        "total_size_chars": row.map(|r| r.total_size_chars),
+        "total_size_pages": row.and_then(|r| r.total_size_pages),
+        "language": row.and_then(|r| r.language.as_deref()),
         "summaries": summaries,
-        "tags": tags,
-    });
-    Ok(env.to_string())
+        "tags": doc.map(|d| &d.tags),
+        "pending": pending,
+    })
 }
 
 /// `(language, row count)` for each summary tree of a document.
-async fn fetch_summary_counts(
-    db: &Db,
+pub(crate) async fn fetch_summary_counts(
+    conn: &turso::Connection,
     document_id: i64,
 ) -> Result<Vec<(String, i64)>, CommandError> {
-    let mut rows = db
-        .conn
+    let mut rows = conn
         .query(
             "SELECT language, count(*) FROM document_summary \
              WHERE document_id = ? GROUP BY language ORDER BY language",
@@ -197,9 +312,11 @@ async fn fetch_summary_counts(
     Ok(out)
 }
 
-async fn fetch_document_tags(db: &Db, document_id: i64) -> Result<Vec<String>, CommandError> {
-    let mut rows = db
-        .conn
+async fn fetch_document_tags(
+    conn: &turso::Connection,
+    document_id: i64,
+) -> Result<Vec<String>, CommandError> {
+    let mut rows = conn
         .query(
             "SELECT tag FROM document_tag WHERE document_id = ? ORDER BY tag",
             (document_id,),
@@ -244,7 +361,7 @@ pub async fn tag_add(
     raw_tags: &[String],
 ) -> Result<String, CommandError> {
     let path = canonicalize(raw_path)?;
-    let row = lookup_document(db, &path).await?;
+    let row = lookup_document(&db.conn, &path).await?;
     let tags = normalize_tags(raw_tags)?;
 
     // Determine added vs already-present counts up front. turso 0.4.4's
@@ -252,7 +369,7 @@ pub async fn tag_add(
     // indexes, so we compute mutation counts in Rust and treat the SQL writes
     // as fire-and-forget on success.
     let existing: std::collections::BTreeSet<String> =
-        fetch_document_tags(db, row.id).await?.into_iter().collect();
+        fetch_document_tags(&db.conn, row.id).await?.into_iter().collect();
     let to_insert: Vec<&String> = tags.iter().filter(|t| !existing.contains(*t)).collect();
     let already = (tags.len() - to_insert.len()) as u64;
     let added = to_insert.len() as u64;
@@ -302,11 +419,11 @@ pub async fn tag_add_json(
     raw_tags: &[String],
 ) -> Result<String, CommandError> {
     let path = canonicalize(raw_path)?;
-    let row = lookup_document(db, &path).await?;
+    let row = lookup_document(&db.conn, &path).await?;
     let tags = normalize_tags(raw_tags)?;
 
     let existing: std::collections::BTreeSet<String> =
-        fetch_document_tags(db, row.id).await?.into_iter().collect();
+        fetch_document_tags(&db.conn, row.id).await?.into_iter().collect();
     let to_insert: Vec<&String> = tags.iter().filter(|t| !existing.contains(*t)).collect();
     let already = (tags.len() - to_insert.len()) as u64;
     let added = to_insert.len() as u64;
@@ -359,11 +476,11 @@ pub async fn tag_remove(
     raw_tags: &[String],
 ) -> Result<String, CommandError> {
     let path = canonicalize(raw_path)?;
-    let row = lookup_document(db, &path).await?;
+    let row = lookup_document(&db.conn, &path).await?;
     let tags = normalize_tags(raw_tags)?;
 
     let existing: std::collections::BTreeSet<String> =
-        fetch_document_tags(db, row.id).await?.into_iter().collect();
+        fetch_document_tags(&db.conn, row.id).await?.into_iter().collect();
     let to_remove: Vec<&String> = tags.iter().filter(|t| existing.contains(*t)).collect();
     let removed = to_remove.len() as u64;
 
@@ -412,11 +529,11 @@ pub async fn tag_remove_json(
     raw_tags: &[String],
 ) -> Result<String, CommandError> {
     let path = canonicalize(raw_path)?;
-    let row = lookup_document(db, &path).await?;
+    let row = lookup_document(&db.conn, &path).await?;
     let tags = normalize_tags(raw_tags)?;
 
     let existing: std::collections::BTreeSet<String> =
-        fetch_document_tags(db, row.id).await?.into_iter().collect();
+        fetch_document_tags(&db.conn, row.id).await?.into_iter().collect();
     let to_remove: Vec<&String> = tags.iter().filter(|t| existing.contains(*t)).collect();
     let removed = to_remove.len() as u64;
 
@@ -559,7 +676,7 @@ pub async fn delete(db: &Db, raw_path: &Path) -> Result<(), CommandError> {
     let path = canonicalize(raw_path)?;
     // Surfaces DocumentNotFound when the path isn't ingested, instead of a
     // silent no-op DELETE.
-    let row = lookup_document(db, &path).await?;
+    let row = lookup_document(&db.conn, &path).await?;
 
     // Delete children explicitly bottom-up rather than relying on
     // `ON DELETE CASCADE`. turso 0.4 cascades recursively on the call stack
@@ -1072,7 +1189,7 @@ pub async fn text_bytes(
         return Err(CommandError::InvalidRange { start, end });
     }
     let path = canonicalize(raw_path)?;
-    let row = lookup_document(db, &path).await?;
+    let row = lookup_document(&db.conn, &path).await?;
     let total = row.total_size_bytes as u64;
     if end >= total {
         return Err(CommandError::ByteRangeOutOfBounds { start, end, total });
@@ -1091,7 +1208,7 @@ pub async fn text_chars(
         return Err(CommandError::InvalidRange { start, end });
     }
     let path = canonicalize(raw_path)?;
-    let row = lookup_document(db, &path).await?;
+    let row = lookup_document(&db.conn, &path).await?;
     let total = row.total_size_chars as u64;
     if end >= total {
         return Err(CommandError::CharRangeOutOfBounds { start, end, total });
@@ -1117,7 +1234,7 @@ pub async fn text_pages(
         });
     }
     let path = canonicalize(raw_path)?;
-    let row = lookup_document(db, &path).await?;
+    let row = lookup_document(&db.conn, &path).await?;
     let total_pages = row.total_size_pages.ok_or(CommandError::NotPdf {
         path: path.clone(),
     })? as u32;
@@ -1133,6 +1250,24 @@ pub async fn text_pages(
     stitch_bytes(db, row.id, byte_start, byte_end_exclusive).await
 }
 
+/// Best-effort absolute form of a path that may not exist (yet, or any
+/// more): the canonical path if it exists, else the canonical parent joined
+/// with the file name, else the lexically absolute path. Used to match
+/// `info` against queued jobs and stored documents without requiring the
+/// file to be on disk.
+pub fn normalize_path(p: &Path) -> PathBuf {
+    if let Ok(c) = p.canonicalize() {
+        return c;
+    }
+    let abs = std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
+    if let (Some(parent), Some(name)) = (abs.parent(), abs.file_name())
+        && let Ok(c) = parent.canonicalize()
+    {
+        return c.join(name);
+    }
+    abs
+}
+
 fn canonicalize(p: &Path) -> Result<PathBuf, CommandError> {
     p.canonicalize().map_err(|source| CommandError::Canonicalize {
         path: p.to_path_buf(),
@@ -1140,10 +1275,12 @@ fn canonicalize(p: &Path) -> Result<PathBuf, CommandError> {
     })
 }
 
-async fn lookup_document(db: &Db, path: &Path) -> Result<DocumentRow, CommandError> {
+pub(crate) async fn lookup_document(
+    conn: &turso::Connection,
+    path: &Path,
+) -> Result<DocumentRow, CommandError> {
     let path_str = path.to_string_lossy().to_string();
-    let mut rows = db
-        .conn
+    let mut rows = conn
         .query(
             "SELECT id, doc_type, total_size_bytes, total_size_chars, total_size_pages, \
                     language \
@@ -2122,17 +2259,15 @@ async fn group_hits_by_document(
         let (path, idxs) = buckets.remove(&doc_id).expect("bucket exists");
         // Pull all level>=1 summaries for this doc once; pick covering ones
         // per hit in memory below.
-        let preferred_language = match &cfg.search.summary_language {
-            Some(l) => crate::language::normalize(l),
-            None => {
-                let doc_language = document_language(&conn, doc_id).await?;
-                crate::language::resolve_summary_languages(
-                    &cfg.summarize.languages,
-                    doc_language.as_deref(),
-                )
-                .swap_remove(0)
-            }
+        let doc_language = match cfg.search.summary_language {
+            Some(_) => None,
+            None => document_language(&conn, doc_id).await?,
         };
+        let preferred_language = crate::language::preferred_summary_language(
+            cfg.search.summary_language.as_deref(),
+            &cfg.summarize.languages,
+            doc_language.as_deref(),
+        );
         let mut rows = conn
             .query(
                 "SELECT level, byte_start, byte_end, text, language \
@@ -2579,5 +2714,114 @@ mod search_tests {
         assert!(out_truncated.contains('\u{2026}'));
         let out_full = render_search("q", 5, 0.3, &hits, true);
         assert!(!out_full.contains('\u{2026}'));
+    }
+}
+
+#[cfg(test)]
+mod info_tests {
+    use super::*;
+
+    fn pending() -> Vec<PendingJob> {
+        vec![
+            PendingJob {
+                id: "1a2b3c4d-0000-0000-0000-000000000000".into(),
+                queue_position: None,
+                label: "summarize /x.pdf".into(),
+                effect: PendingEffect::Update,
+            },
+            PendingJob {
+                id: "9f8e7d6c-0000-0000-0000-000000000000".into(),
+                queue_position: Some(2),
+                label: "delete /x.pdf".into(),
+                effect: PendingEffect::Delete,
+            },
+        ]
+    }
+
+    fn doc() -> DocInfo {
+        DocInfo {
+            row: DocumentRow {
+                id: 1,
+                doc_type: "pdf".into(),
+                total_size_bytes: 10,
+                total_size_chars: 9,
+                total_size_pages: Some(2),
+                language: Some("en".into()),
+            },
+            summaries: vec![("en".into(), 3)],
+            tags: vec!["a".into()],
+        }
+    }
+
+    #[test]
+    fn text_lists_pending_jobs_after_metadata() {
+        let out = render_info_text(Path::new("/x.pdf"), Some(&doc()), &pending());
+        assert!(out.contains("status:           ingested\n"));
+        assert!(out.contains("tags:             a\npending:\n"));
+        assert!(out.contains("  running    1a2b3c4d  will update  summarize /x.pdf\n"));
+        assert!(out.contains("  queued #2  9f8e7d6c  will delete  delete /x.pdf\n"));
+    }
+
+    #[test]
+    fn text_without_pending_has_no_pending_section() {
+        let out = render_info_text(Path::new("/x.pdf"), Some(&doc()), &[]);
+        assert!(!out.contains("pending"));
+    }
+
+    #[test]
+    fn text_not_ingested_shows_status_and_pending() {
+        let p = vec![PendingJob {
+            id: "abcdef01-0000".into(),
+            queue_position: Some(1),
+            label: "ingest /new.txt".into(),
+            effect: PendingEffect::Create,
+        }];
+        let out = render_info_text(Path::new("/new.txt"), None, &p);
+        assert_eq!(
+            out,
+            "path:             /new.txt\n\
+             status:           not ingested\n\
+             pending:\n  queued #1  abcdef01  will create  ingest /new.txt\n"
+        );
+    }
+
+    #[test]
+    fn json_not_ingested_has_null_fields_and_pending() {
+        let v = render_info_json(Path::new("/x.pdf"), None, &pending());
+        assert_eq!(v["ingested"], false);
+        assert!(v["type"].is_null());
+        assert!(v["tags"].is_null());
+        assert_eq!(v["pending"][0]["state"], "running");
+        assert!(v["pending"][0]["position"].is_null());
+        assert_eq!(v["pending"][1]["state"], "queued");
+        assert_eq!(v["pending"][1]["position"], 2);
+        assert_eq!(v["pending"][1]["effect"], "delete");
+    }
+
+    #[test]
+    fn json_ingested_keeps_existing_fields() {
+        let v = render_info_json(Path::new("/x.pdf"), Some(&doc()), &[]);
+        assert_eq!(v["ingested"], true);
+        assert_eq!(v["type"], "pdf");
+        assert_eq!(v["total_size_pages"], 2);
+        assert_eq!(v["summaries"]["en"], 3);
+        assert_eq!(v["tags"][0], "a");
+        assert_eq!(v["pending"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn normalize_path_handles_missing_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let canon_dir = dir.path().canonicalize().unwrap();
+        let existing = dir.path().join("a.txt");
+        std::fs::write(&existing, "x").unwrap();
+        assert_eq!(normalize_path(&existing), canon_dir.join("a.txt"));
+        // Missing file under an existing dir: parent is canonicalized.
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+        let missing = dir.path().join("sub/../b.txt");
+        assert_eq!(normalize_path(&missing), canon_dir.join("b.txt"));
+        // Missing dir: falls back to the lexical absolute path.
+        let deep = dir.path().join("nope/c.txt");
+        assert_eq!(normalize_path(&deep), dir.path().join("nope/c.txt"));
     }
 }

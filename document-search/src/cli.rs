@@ -129,6 +129,34 @@ pub enum Command {
         range: TextRange,
     },
 
+    /// Print a document's summary tree. With no filters, prints every
+    /// summary, top level first. Level 0 holds the leaf summaries (each one
+    /// covers a group of chunks); each higher level summarizes the one below.
+    /// Use --outline to see the tree's shape (levels, counts, page/byte spans,
+    /// parent/child positions) without the text. Bypasses the queue.
+    Summaries {
+        /// Path of an already-ingested document.
+        path: PathBuf,
+
+        /// Which language tree to read (ISO 639-1). Default: the only tree,
+        /// else [search].summary_language, else the first resolved
+        /// [summarize].languages entry.
+        #[arg(long = "lang", value_name = "CODE")]
+        language: Option<String>,
+
+        /// Only this level (0 = leaf summaries). Default: every level.
+        #[arg(long, value_name = "N")]
+        level: Option<u32>,
+
+        #[command(flatten)]
+        select: SummarySelectArgs,
+
+        /// Print the tree's structure (one line per summary) instead of the
+        /// summary text. Combine with the filters to outline part of it.
+        #[arg(long)]
+        outline: bool,
+    },
+
     /// Print the assembled configuration (embedded defaults + user overrides) as TOML.
     PrintConfig,
 
@@ -311,6 +339,25 @@ pub enum TagCommand {
 
     /// List all known tags with usage counts.
     List,
+}
+
+#[derive(Args, Debug)]
+#[group(required = false, multiple = false)]
+pub struct SummarySelectArgs {
+    /// Inclusive range [FIRST LAST] of 0-based positions within --level
+    /// (required with this flag).
+    #[arg(long, value_names = ["FIRST", "LAST"], num_args = 2, requires = "level")]
+    pub index: Option<Vec<u32>>,
+
+    /// Inclusive page range [FIRST LAST] (1-based); every summary whose page
+    /// span overlaps it. PDFs only.
+    #[arg(long, value_names = ["FIRST", "LAST"], num_args = 2)]
+    pub pages: Option<Vec<u32>>,
+
+    /// Inclusive byte range [START END]; every summary whose byte span
+    /// overlaps it.
+    #[arg(long, value_names = ["START", "END"], num_args = 2)]
+    pub bytes: Option<Vec<u64>>,
 }
 
 #[derive(Args, Debug)]

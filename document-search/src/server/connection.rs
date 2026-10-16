@@ -1,6 +1,7 @@
 //! Per-connection task: read one [`Request`], either handle it inline
-//! (status) or enqueue a job and forward events back to the client.
+//! (status, info, list, …) or enqueue a job and forward events back to the client.
 
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -203,6 +204,60 @@ pub(crate) async fn handle(
         return Ok(());
     }
 
+    if let Request::Info { path } = &req {
+        let target = commands::normalize_path(path);
+        let (db, pending) = {
+            let g = state.lock().unwrap();
+            (Arc::clone(&g.db), pending_for(&g, &target))
+        };
+        let result = match output_mode {
+            OutputMode::Text => commands::info(&db, path, &pending).await,
+            OutputMode::Json => commands::info_json(&db, path, &pending).await,
+        };
+        let events = match result {
+            Ok(text) => vec![Event::Output { text }, Event::Final { ok: true, error: None }],
+            Err(e) => vec![Event::Final { ok: false, error: Some(e.to_string()) }],
+        };
+        for ev in &events {
+            write_event(&mut write_half, ev).await?;
+        }
+        let _ = write_half.shutdown().await;
+        return Ok(());
+    }
+
+    if let Request::Summaries {
+        path,
+        language,
+        level,
+        select,
+        outline,
+    } = &req
+    {
+        let (db, prefs) = {
+            let g = state.lock().unwrap();
+            (Arc::clone(&g.db), g.summary_prefs.clone())
+        };
+        let query = crate::summaries::Query {
+            language: language.clone(),
+            level: *level,
+            select: select.clone(),
+            outline: *outline,
+        };
+        let result = match output_mode {
+            OutputMode::Text => crate::summaries::summaries_text(&db, path, &query, &prefs).await,
+            OutputMode::Json => crate::summaries::summaries_json(&db, path, &query, &prefs).await,
+        };
+        let events = match result {
+            Ok(text) => vec![Event::Output { text }, Event::Final { ok: true, error: None }],
+            Err(e) => vec![Event::Final { ok: false, error: Some(e.to_string()) }],
+        };
+        for ev in &events {
+            write_event(&mut write_half, ev).await?;
+        }
+        let _ = write_half.shutdown().await;
+        return Ok(());
+    }
+
     if matches!(req, Request::TagList) {
         let db = {
             let g = state.lock().unwrap();
@@ -240,6 +295,9 @@ pub(crate) async fn handle(
     }
 
     let label = req.label();
+    let target = req
+        .pending_effect()
+        .map(|(effect, path)| (effect, commands::normalize_path(path)));
     let job_id = Uuid::new_v4();
     let is_detach = req.detached_target().is_some();
     let (event_tx, mut event_rx) = mpsc::unbounded_channel::<Event>();
@@ -256,6 +314,7 @@ pub(crate) async fn handle(
             label: label.clone(),
             enqueued_at: Instant::now(),
             event_tx: event_tx.clone(),
+            target,
         });
         idx
     };
@@ -378,6 +437,30 @@ async fn handle_status(
         }
     }
     Ok(())
+}
+
+/// The running job (first) and queued jobs, in queue order, that will
+/// change the document at `target` (already normalized).
+fn pending_for(state: &ServerState, target: &Path) -> Vec<commands::PendingJob> {
+    let running = state.current.iter().filter_map(|c| {
+        let (effect, path) = c.target.as_ref()?;
+        (path == target).then(|| commands::PendingJob {
+            id: c.id.to_string(),
+            queue_position: None,
+            label: c.label.clone(),
+            effect: *effect,
+        })
+    });
+    let queued = state.queued.iter().enumerate().filter_map(|(i, q)| {
+        let (effect, path) = q.target.as_ref()?;
+        (path == target).then(|| commands::PendingJob {
+            id: q.id.to_string(),
+            queue_position: Some(i + 1),
+            label: q.label.clone(),
+            effect: *effect,
+        })
+    });
+    running.chain(queued).collect()
 }
 
 /// Resolve a queue id from a full UUID string or an 8+ char hex prefix.

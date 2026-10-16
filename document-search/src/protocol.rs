@@ -2,7 +2,7 @@
 //! Unix socket: the client writes exactly one [`Request`] line, then reads
 //! [`Event`] lines until it sees [`Event::Final`].
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -74,6 +74,22 @@ pub enum Request {
     },
     Info { path: PathBuf },
     Text { path: PathBuf, range: TextRangeReq },
+    /// Read a document's summary tree: its shape, and the text of any
+    /// level / index range / page or byte range. Bypasses the queue.
+    Summaries {
+        path: PathBuf,
+        /// `None` picks the only tree, else the preferred summary language.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        language: Option<String>,
+        /// `None` means every level.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        level: Option<u32>,
+        #[serde(default)]
+        select: SummarySelect,
+        /// Structure only: omit summary text.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        outline: bool,
+    },
     PrintConfig,
     Status {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -150,12 +166,45 @@ fn default_status_interval_ms() -> u64 {
     500
 }
 
+/// How a queued or running job will change the document at its path. Used
+/// by `info` to report work that hasn't landed yet.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum PendingEffect {
+    Create,
+    Update,
+    Delete,
+}
+
+impl PendingEffect {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PendingEffect::Create => "create",
+            PendingEffect::Update => "update",
+            PendingEffect::Delete => "delete",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum TextRangeReq {
     Bytes { start: u64, end: u64 },
     Chars { start: u64, end: u64 },
     Pages { first: u32, last: u32 },
+}
+
+/// Which summaries of a tree `summaries` returns. All ranges are inclusive;
+/// `Index` is 0-based within one level, `Pages` 1-based, and `Pages` /
+/// `Bytes` keep every summary whose span overlaps the range.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum SummarySelect {
+    #[default]
+    All,
+    Index { first: u32, last: u32 },
+    Pages { first: u32, last: u32 },
+    Bytes { start: u64, end: u64 },
 }
 
 impl Request {
@@ -218,6 +267,7 @@ impl Request {
             }
             Request::Info { path } => format!("info {}", path.display()),
             Request::Text { path, .. } => format!("text {}", path.display()),
+            Request::Summaries { path, .. } => format!("summaries {}", path.display()),
             Request::PrintConfig => "print-config".to_string(),
             Request::Status { watch: false, .. } => "status".to_string(),
             Request::Status { watch: true, .. } => "status --watch".to_string(),
@@ -269,6 +319,19 @@ impl Request {
         }
     }
 
+    /// The document path this request will change, and how. `None` for
+    /// read-only requests (info, text, search, …) and non-document jobs.
+    pub fn pending_effect(&self) -> Option<(PendingEffect, &Path)> {
+        match self {
+            Request::Ingest { path, .. } => Some((PendingEffect::Create, path)),
+            Request::Summarize { path, .. }
+            | Request::TagAdd { path, .. }
+            | Request::TagRemove { path, .. } => Some((PendingEffect::Update, path)),
+            Request::Delete { path } => Some((PendingEffect::Delete, path)),
+            _ => None,
+        }
+    }
+
     /// For fire-and-forget requests (`--detach`): the verb and path to echo
     /// back once the job is queued. `None` means the client waits for the
     /// job to finish as usual.
@@ -282,7 +345,7 @@ impl Request {
 
     /// Returns `(task_name, path, tags)` for the persistent task_log row this
     /// request will produce when the worker runs it. Inline-handled variants
-    /// (status/list/queue-*/tag-list/task-log) never reach the worker, so
+    /// (status/info/list/queue-*/tag-list/task-log) never reach the worker, so
     /// they return `None` for the whole tuple — callers shouldn't be logging
     /// them.
     pub fn task_metrics(&self) -> Option<(&'static str, Option<String>, Option<String>)> {
@@ -292,9 +355,6 @@ impl Request {
             }
             Request::Summarize { path, .. } => {
                 Some(("summarize", Some(path.display().to_string()), None))
-            }
-            Request::Info { path } => {
-                Some(("info", Some(path.display().to_string()), None))
             }
             Request::Text { path, .. } => {
                 Some(("text", Some(path.display().to_string()), None))
@@ -320,6 +380,8 @@ impl Request {
             )),
             Request::OcrToolsInstall { .. } => Some(("ocr-tools-install", None, None)),
             Request::Status { .. }
+            | Request::Info { .. }
+            | Request::Summaries { .. }
             | Request::OcrToolsStatus
             | Request::QueueList
             | Request::QueueDelete { .. }
@@ -519,6 +581,44 @@ mod tests {
     }
 
     #[test]
+    fn summaries_round_trip_and_defaults() {
+        let env = RequestEnvelope {
+            output_mode: OutputMode::Json,
+            request: Request::Summaries {
+                path: PathBuf::from("/a.pdf"),
+                language: Some("en".into()),
+                level: Some(1),
+                select: SummarySelect::Pages { first: 3, last: 9 },
+                outline: true,
+            },
+        };
+        let s = serde_json::to_string(&env).unwrap();
+        let back: RequestEnvelope = serde_json::from_str(&s).unwrap();
+        match back.request {
+            Request::Summaries { path, language, level, select, outline } => {
+                assert_eq!(path, PathBuf::from("/a.pdf"));
+                assert_eq!(language.as_deref(), Some("en"));
+                assert_eq!(level, Some(1));
+                assert_eq!(select, SummarySelect::Pages { first: 3, last: 9 });
+                assert!(outline);
+            }
+            other => panic!("expected Summaries, got {other:?}"),
+        }
+
+        let bare: RequestEnvelope =
+            serde_json::from_str(r#"{"cmd":"summaries","path":"/a.pdf"}"#).unwrap();
+        match bare.request {
+            Request::Summaries { language, level, select, outline, .. } => {
+                assert_eq!(language, None);
+                assert_eq!(level, None);
+                assert_eq!(select, SummarySelect::All);
+                assert!(!outline);
+            }
+            other => panic!("expected Summaries, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn missing_output_mode_defaults_to_text() {
         // Backwards compatibility: an old client serializing only the `Request`
         // shape (no output_mode field) should deserialize as `text`.
@@ -582,6 +682,38 @@ mod tests {
         assert_eq!(
             req.label(),
             "ingest /x.pdf --force-ocr --ocr-language jpn+eng --summary-lang en --summary-lang source"
+        );
+    }
+
+    #[test]
+    fn pending_effect_covers_mutating_requests() {
+        let p = || PathBuf::from("/x.pdf");
+        let effect = |r: Request| r.pending_effect().map(|(e, _)| e);
+        assert_eq!(
+            effect(Request::Delete { path: p() }),
+            Some(PendingEffect::Delete)
+        );
+        assert_eq!(
+            effect(Request::TagAdd { path: p(), tags: vec![] }),
+            Some(PendingEffect::Update)
+        );
+        assert_eq!(
+            effect(Request::Summarize {
+                path: p(),
+                rebuild: false,
+                max_depth: None,
+                summary_languages: vec![],
+                detach: false,
+            }),
+            Some(PendingEffect::Update)
+        );
+        assert_eq!(effect(Request::Info { path: p() }), None);
+        assert_eq!(
+            effect(Request::Text {
+                path: p(),
+                range: TextRangeReq::Bytes { start: 0, end: 1 },
+            }),
+            None
         );
     }
 

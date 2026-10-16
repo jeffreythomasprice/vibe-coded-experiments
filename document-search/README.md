@@ -162,6 +162,7 @@ document-search ingest --summary-lang en --summary-lang source path/to/neko.txt
 ```
 $ document-search info path/to/neko.txt
 path:             /.../neko.txt
+status:           ingested
 type:             txt
 total_size_bytes: 2889
 total_size_chars: 969
@@ -169,6 +170,19 @@ total_size_pages: null
 language:         ja
 summaries:        en (6), ja (6)
 tags:             (none)
+```
+
+`info` answers immediately, even while an ingest is running, and lists any
+queued or running jobs that will create, update, or delete that document. A
+path that isn't ingested yet (or doesn't exist on disk yet) is reported as
+long as a queued `ingest` will create it:
+
+```
+$ document-search info path/to/next.pdf
+path:             /.../next.pdf
+status:           not ingested
+pending:
+  queued #2  9f8e7d6c  will create  ingest /.../next.pdf
 ```
 
 Embeddings are multilingual, so an English query finds Japanese chunks. With
@@ -281,6 +295,37 @@ on next use; changing only `ndlocr_repo` doesn't, so follow it with
 `ocr-tools install --reinstall`. With `auto_install = false`, an
 ingest that needs a missing engine fails and asks you to run
 `ocr-tools install`.
+
+### `summaries` — read a summary tree
+
+Prints the summaries `summarize` built for a document. Level 0 holds the leaf
+summaries (each covers a group of chunks), and each level above summarizes the
+one below, up to a single root. With no filters it prints the whole tree, top
+level first.
+
+```sh
+# Structure only: levels, counts, and each summary's pages, bytes, parent and
+# children (positions within the neighbouring levels).
+document-search summaries --outline path/to/book.pdf
+
+# The root summary (use the top level number from --outline).
+document-search summaries --level 2 path/to/book.pdf
+
+# Leaf summaries #3 to #5 (0-based, inclusive).
+document-search summaries --level 0 --index 3 5 path/to/book.pdf
+
+# Every summary, at any level, that overlaps pages 100-150 (or a byte range).
+document-search summaries --pages 100 150 path/to/book.pdf
+document-search summaries --level 0 --bytes 0 50000 path/to/notes.txt
+```
+
+`--index`, `--pages` and `--bytes` are mutually exclusive; `--index` needs
+`--level`. `--lang <code>` picks a language tree when a document has several
+(default: `[search].summary_language`, else the first resolved
+`[summarize].languages` entry). Text output shows inclusive byte ranges you can
+pass straight to `text --bytes`; JSON output (`--output-mode json`) uses the
+stored half-open `byte_start`/`byte_end`, like `search`. The command bypasses
+the queue, so it works while an ingest is running.
 
 ### `search` — vector search
 

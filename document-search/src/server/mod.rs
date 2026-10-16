@@ -18,8 +18,8 @@ use crate::config::Config;
 use crate::db::{self, Db};
 use crate::progress_format::format_envelope;
 use crate::protocol::{
-    CurrentJob, Event, OutputMode, ProgressEnvelope, ProgressEvent, QueuedJob, Request,
-    StatusSnapshot,
+    CurrentJob, Event, OutputMode, PendingEffect, ProgressEnvelope, ProgressEvent, QueuedJob,
+    Request, StatusSnapshot,
 };
 use crate::{commands, config as cfg_mod, ingest, summarize};
 
@@ -59,6 +59,8 @@ pub(crate) struct ServerState {
     pub db: Arc<Db>,
     /// For the inline `ocr-tools status` handler.
     pub ocr_tools: crate::config::OcrToolsConfig,
+    /// For the inline `summaries` handler's default language.
+    pub summary_prefs: crate::summaries::LanguagePrefs,
 }
 
 pub(crate) struct QueueEntry {
@@ -68,11 +70,16 @@ pub(crate) struct QueueEntry {
     /// Held so `queue delete` can synthesize an `Event::Final` on the
     /// connection that submitted this job, before the worker ever sees it.
     pub event_tx: mpsc::UnboundedSender<Event>,
+    /// Document this job will change (path via `commands::normalize_path`),
+    /// so the inline `info` handler can report pending work.
+    pub target: Option<(PendingEffect, PathBuf)>,
 }
 
 pub(crate) struct RunningJob {
     pub id: Uuid,
     pub label: String,
+    /// Same as `QueueEntry::target`.
+    pub target: Option<(PendingEffect, PathBuf)>,
     pub started_at: Instant,
     /// Cooperative cancel signal. Held only when the current job supports
     /// cancellation; otherwise the receiver side is dropped immediately.
@@ -170,6 +177,10 @@ pub async fn run(cfg: Config) -> Result<(), ServerError> {
         cancelled_ids: HashSet::new(),
         db: Arc::clone(&db),
         ocr_tools: cfg.ocr_tools.clone(),
+        summary_prefs: crate::summaries::LanguagePrefs {
+            search_language: cfg.search.summary_language.clone(),
+            summarize_languages: cfg.summarize.languages.clone(),
+        },
     }));
 
     let (job_tx, job_rx) = mpsc::channel::<Job>(32);
@@ -300,25 +311,9 @@ async fn worker_loop(
 ) {
     let mut completed: u64 = 0;
     while let Some(job) = job_rx.recv().await {
-        // Drop the queue entry for this id (which may be anywhere in the
-        // queue — `queue delete` can remove a middle entry) and check whether
-        // the job was cancelled while still queued.
-        let was_cancelled = {
-            let mut g = state.lock().unwrap();
-            g.queued.retain(|q| q.id != job.id);
-            g.cancelled_ids.remove(&job.id)
-        };
-        if was_cancelled {
-            tracing::info!(job = %job.id, label = %job.req.label(), "job: removed from queue before starting");
-            let _ = job.event_tx.send(Event::Final {
-                ok: false,
-                error: Some("removed from queue".to_string()),
-            });
-            completed += 1;
-            let _ = completed_tx.send(completed);
-            continue;
-        }
-
+        // Everything `RunningJob` needs is built before taking the lock, so
+        // dequeueing and publishing `current` happen in one critical section:
+        // the inline `info` handler must never see the job in neither place.
         let label = job.req.label();
         let is_cancellable = matches!(
             job.req,
@@ -358,17 +353,43 @@ async fn worker_loop(
         };
         let tracker: Arc<Mutex<JobTracker>> =
             Arc::new(Mutex::new(JobTracker::new(job_started_at, summary_plan)));
-        {
+
+        // Drop the queue entry for this id (which may be anywhere in the
+        // queue — `queue delete` can remove a middle entry) and check whether
+        // the job was cancelled while still queued.
+        let was_cancelled = {
             let mut g = state.lock().unwrap();
-            g.current = Some(RunningJob {
-                id: job.id,
-                label: label.clone(),
-                started_at: job_started_at,
-                cancel_tx,
-                is_cancellable,
-                tracker: Arc::clone(&tracker),
+            let target = g
+                .queued
+                .iter()
+                .find(|q| q.id == job.id)
+                .and_then(|q| q.target.clone());
+            g.queued.retain(|q| q.id != job.id);
+            let was_cancelled = g.cancelled_ids.remove(&job.id);
+            if !was_cancelled {
+                g.current = Some(RunningJob {
+                    id: job.id,
+                    label: label.clone(),
+                    target,
+                    started_at: job_started_at,
+                    cancel_tx,
+                    is_cancellable,
+                    tracker: Arc::clone(&tracker),
+                });
+            }
+            was_cancelled
+        };
+        if was_cancelled {
+            tracing::info!(job = %job.id, %label, "job: removed from queue before starting");
+            let _ = job.event_tx.send(Event::Final {
+                ok: false,
+                error: Some("removed from queue".to_string()),
             });
+            completed += 1;
+            let _ = completed_tx.send(completed);
+            continue;
         }
+
         let _ = job.event_tx.send(Event::Started);
 
         let job_id_str = job.id.to_string();
@@ -490,12 +511,12 @@ async fn worker_loop(
                     })
                     .map_err(|e| e.to_string())
             }
-            Request::Info { path } => match mode {
-                OutputMode::Text => commands::info(&db, &path).await.map_err(|e| e.to_string()),
-                OutputMode::Json => commands::info_json(&db, &path)
-                    .await
-                    .map_err(|e| e.to_string()),
-            },
+            Request::Info { .. } => {
+                unreachable!("info is handled inline by the connection task")
+            }
+            Request::Summaries { .. } => {
+                unreachable!("summaries is handled inline by the connection task")
+            }
             Request::Text { path, range } => run_text(&db, &path, range, mode).await,
             Request::PrintConfig => match mode {
                 OutputMode::Text => cfg_mod::render_toml(&cfg).map_err(|e| e.to_string()),
