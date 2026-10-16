@@ -16,6 +16,15 @@ document-search delete '/home/jeff/scratch/books/Final Fantasy IV (Volume 2).pdf
 
 
 
+I want to export these to markdown and pdf files to a new tmp directory in this directory:
+'/home/jeff/scratch/books/Final Fantasy IV (Volume 1).pdf'
+'/home/jeff/scratch/books/Final Fantasy IV (Volume 2).pdf'
+
+We should translate to english.
+
+
 
 
 todo:
+
+editing pass that does things like check whether quotes start on new lines, try to fix grammar with commas and quotes etc.

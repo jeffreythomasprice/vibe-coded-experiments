@@ -5,7 +5,9 @@ use std::borrow::Cow;
 use std::path::PathBuf;
 
 use krilla::Document;
+use krilla::destination::XyzDestination;
 use krilla::geom::Point;
+use krilla::outline::{Outline, OutlineNode};
 use krilla::page::PageSettings;
 use krilla::text::{Font, TextDirection};
 
@@ -72,6 +74,25 @@ struct Line {
 
 type Page = Vec<Line>;
 
+/// A heading's place in the laid-out body (page index counts body pages only).
+#[derive(Debug, PartialEq)]
+struct Heading {
+    level: u8,
+    text: String,
+    page: usize,
+    /// Top of the heading, from the top of the page.
+    y: f32,
+}
+
+struct Laid {
+    pages: Vec<Page>,
+    headings: Vec<Heading>,
+}
+
+/// Width reserved at the right of a table-of-contents line for the page number.
+const TOC_NUM_W: f32 = 36.0;
+const TOC_INDENT: f32 = 14.0;
+
 /// Render `blocks` to PDF bytes. Also returns how many distinct characters
 /// the font has no glyph for (they draw as blanks or notdef boxes).
 pub fn render(blocks: &[Block], font: &LoadedFont) -> Result<(Vec<u8>, usize), ExportError> {
@@ -94,7 +115,28 @@ pub fn render(blocks: &[Block], font: &LoadedFont) -> Result<(Vec<u8>, usize), E
             }
         }
     };
-    let pages = layout(blocks, &mut |c| advance(c, &mut missing));
+    let body = layout(blocks, &mut |c| advance(c, &mut missing));
+    // The table of contents sits in front of the body. Its length doesn't
+    // depend on the page numbers (titles wrap short of the number column), so
+    // measure it once to learn the offset, then lay it out for real.
+    let toc_title = if body.headings.iter().any(|h| h.text.chars().any(is_cjk)) {
+        "目次"
+    } else {
+        "Contents"
+    };
+    let toc_pages = if body.headings.is_empty() {
+        0
+    } else {
+        layout_toc(toc_title, &body.headings, 0, &mut |c| advance(c, &mut missing)).len()
+    };
+    let toc = if toc_pages == 0 {
+        Vec::new()
+    } else {
+        layout_toc(toc_title, &body.headings, toc_pages, &mut |c| {
+            advance(c, &mut missing)
+        })
+    };
+    let pages: Vec<&Page> = toc.iter().chain(body.pages.iter()).collect();
     if !missing.is_empty() {
         let sample: String = missing.iter().take(12).collect();
         tracing::warn!(
@@ -114,7 +156,7 @@ pub fn render(blocks: &[Block], font: &LoadedFont) -> Result<(Vec<u8>, usize), E
             message: "not a usable font file".into(),
         })?;
     let mut doc = Document::new();
-    for page_lines in &pages {
+    for page_lines in pages {
         let mut page = doc
             .start_page_with(PageSettings::from_wh(PAGE_W, PAGE_H).expect("page size is positive"));
         let mut surface = page.surface();
@@ -131,10 +173,92 @@ pub fn render(blocks: &[Block], font: &LoadedFont) -> Result<(Vec<u8>, usize), E
         surface.finish();
         page.finish();
     }
+    if !body.headings.is_empty() {
+        doc.set_outline(build_outline(&body.headings, toc_pages));
+    }
     let bytes = doc
         .finish()
         .map_err(|e| ExportError::Pdf(format!("{e:?}")))?;
     Ok((bytes, missing.len()))
+}
+
+/// PDF bookmarks, nested by heading level.
+fn build_outline(headings: &[Heading], offset: usize) -> Outline {
+    fn attach(stack: &mut Vec<(u8, OutlineNode)>, root: &mut Outline) {
+        let (_, node) = stack.pop().expect("caller checks the stack");
+        match stack.last_mut() {
+            Some((_, parent)) => parent.push_child(node),
+            None => root.push_child(node),
+        }
+    }
+    let mut root = Outline::new();
+    let mut stack: Vec<(u8, OutlineNode)> = Vec::new();
+    for h in headings {
+        let level = h.level.max(1);
+        while stack.last().is_some_and(|(l, _)| *l >= level) {
+            attach(&mut stack, &mut root);
+        }
+        let dest = XyzDestination::new(h.page + offset, Point::from_xy(MARGIN, h.y));
+        stack.push((level, OutlineNode::new(h.text.clone(), dest)));
+    }
+    while !stack.is_empty() {
+        attach(&mut stack, &mut root);
+    }
+    root
+}
+
+/// Lay out the table of contents. `toc_pages` is how many pages it occupies
+/// (0 while measuring); body page numbers are shifted past it.
+fn layout_toc(
+    title: &str,
+    headings: &[Heading],
+    toc_pages: usize,
+    advance: &mut dyn FnMut(char) -> f32,
+) -> Vec<Page> {
+    let bottom = PAGE_H - MARGIN;
+    let lead = BODY_SIZE * BODY_LEADING;
+    let title_size = heading_size(1);
+    let mut pages: Vec<Page> = vec![vec![Line {
+        x: MARGIN,
+        y: MARGIN + title_size,
+        size: title_size,
+        text: title.into(),
+    }]];
+    let mut y = MARGIN + title_size * HEADING_LEADING + BODY_SIZE;
+    for h in headings {
+        let indent = f32::from(h.level.saturating_sub(1).min(3)) * TOC_INDENT;
+        let lines = wrap(
+            &h.text,
+            BODY_SIZE,
+            PAGE_W - 2.0 * MARGIN - indent - TOC_NUM_W,
+            advance,
+        );
+        let number = (h.page + toc_pages + 1).to_string();
+        for (i, text) in lines.into_iter().enumerate() {
+            if y + lead > bottom {
+                pages.push(Vec::new());
+                y = MARGIN;
+            }
+            let page = pages.last_mut().unwrap();
+            if i == 0 {
+                let w: f32 = number.chars().map(|c| advance(c) * BODY_SIZE).sum();
+                page.push(Line {
+                    x: PAGE_W - MARGIN - w,
+                    y: y + BODY_SIZE,
+                    size: BODY_SIZE,
+                    text: number.clone(),
+                });
+            }
+            page.push(Line {
+                x: MARGIN + indent,
+                y: y + BODY_SIZE,
+                size: BODY_SIZE,
+                text,
+            });
+            y += lead;
+        }
+    }
+    pages
 }
 
 fn heading_size(level: u8) -> f32 {
@@ -147,8 +271,9 @@ fn heading_size(level: u8) -> f32 {
 }
 
 /// Lay `blocks` out on A4 pages. `advance` is a character's width in em.
-fn layout(blocks: &[Block], advance: &mut dyn FnMut(char) -> f32) -> Vec<Page> {
+fn layout(blocks: &[Block], advance: &mut dyn FnMut(char) -> f32) -> Laid {
     let mut pages: Vec<Page> = vec![Vec::new()];
+    let mut headings = Vec::new();
     let bottom = PAGE_H - MARGIN;
     let mut y = MARGIN;
 
@@ -199,6 +324,14 @@ fn layout(blocks: &[Block], advance: &mut dyn FnMut(char) -> f32) -> Vec<Page> {
         if heading && y > MARGIN {
             y += BODY_SIZE * BLOCK_GAP;
         }
+        if let Block::Heading { level, text } = block {
+            headings.push(Heading {
+                level: *level,
+                text: text.clone(),
+                page: pages.len() - 1,
+                y,
+            });
+        }
         for (i, line) in lines.into_iter().enumerate() {
             if y + leading > bottom && !pages.last().unwrap().is_empty() {
                 pages.push(Vec::new());
@@ -223,7 +356,7 @@ fn layout(blocks: &[Block], advance: &mut dyn FnMut(char) -> f32) -> Vec<Page> {
         }
         y += BODY_SIZE * BLOCK_GAP;
     }
-    pages
+    Laid { pages, headings }
 }
 
 fn no_line_start(c: char) -> bool {
@@ -332,7 +465,7 @@ mod tests {
             level: 1,
             text: "Late heading".into(),
         });
-        let pages = layout(&blocks, &mut adv);
+        let pages = layout(&blocks, &mut adv).pages;
         assert!(pages.len() >= 2, "{} pages", pages.len());
         assert!(pages.iter().all(|p| !p.is_empty()));
         // The heading is on a page that also holds something after it, or
@@ -348,8 +481,28 @@ mod tests {
     }
 
     #[test]
+    fn toc_numbers_headings_past_its_own_pages() {
+        let mut blocks = Vec::new();
+        for i in 0..60 {
+            blocks.push(Block::Heading {
+                level: if i % 3 == 0 { 1 } else { 2 },
+                text: format!("Heading {i}"),
+            });
+            blocks.push(Block::Paragraph("body text ".repeat(120)));
+        }
+        let body = layout(&blocks, &mut adv);
+        assert_eq!(body.headings.len(), 60);
+        let measured = layout_toc("Contents", &body.headings, 0, &mut adv);
+        assert!(measured.len() >= 2);
+        let toc = layout_toc("Contents", &body.headings, measured.len(), &mut adv);
+        assert_eq!(toc.len(), measured.len());
+        let first = format!("{}", body.headings[0].page + toc.len() + 1);
+        assert!(toc[0].iter().any(|l| l.text == first));
+    }
+
+    #[test]
     fn empty_input_yields_one_blank_page() {
-        assert_eq!(layout(&[], &mut adv).len(), 1);
+        assert_eq!(layout(&[], &mut adv).pages.len(), 1);
     }
 
     #[test]
@@ -376,6 +529,10 @@ mod tests {
                 text: "Title 見出し".into(),
             },
             Block::Paragraph("Hello world. 日本語の文章です。".repeat(40)),
+            Block::Heading {
+                level: 2,
+                text: "Sub".into(),
+            },
             Block::ListItem("an item".into()),
         ];
         for wants_cjk in [false, true] {
