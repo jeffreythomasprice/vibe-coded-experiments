@@ -17,3 +17,5 @@ document-search export '/home/jeff/scratch/books/Final Fantasy IV (Volume 2).pdf
 	--output-pdf 'tmp/Final Fantasy IV (Volume 2)/output.pdf' \
 	--output-intermediates 'tmp/Final Fantasy IV (Volume 2)/intermediates' \
 	--detach
+
+document-search status -w

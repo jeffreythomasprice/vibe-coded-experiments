@@ -365,12 +365,23 @@ document-search export notes.pdf --no-edit > notes.txt
 
 # Translate bigger or smaller windows, with more or less overlap.
 document-search export manual-ja.pdf --to en --window-chunks 6 --overlap-chunks 2 --output-md manual-en.md
+
+# Queue it and return immediately (monitor with `status` / `queue list`).
+# Every output must be a file: --detach with stdout is rejected up front.
+document-search export manual-ja.pdf --to en --output-md manual-en.md --detach
 ```
 
 `--to <code>` takes an ISO 639-1 code. If it is the document's own language
 nothing is translated. An export that neither translates nor edits (`--no-edit`
 without `--to`) only reads, so it is answered immediately even while an ingest
 is running; any other export queues like an ingest.
+
+`--detach` (`-d`) queues the export and returns immediately, like `ingest
+--detach`; watch it with `status` or `queue list`, cancel it with `queue
+delete`. It needs every output to be a file, because nothing is left to
+receive stdout: `--detach` with `-` or with no `--output-*` fails straight away.
+A detached export always queues, even one that would otherwise be answered
+immediately.
 
 By default the final text, translated or not, goes through a grammar-edit pass
 (`[export].edit`; `--edit` / `--no-edit` override it per run). The LLM works

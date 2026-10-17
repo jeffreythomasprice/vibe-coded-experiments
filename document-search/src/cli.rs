@@ -186,6 +186,13 @@ pub enum Command {
         /// an error. Without it everything stays in memory.
         #[arg(long, value_name = "DIR")]
         output_intermediates: Option<PathBuf>,
+
+        /// Queue the export and return immediately without waiting for it
+        /// to finish. Needs at least one file output (--output-txt/-md/-pdf
+        /// with a real path), since there is no client left to receive
+        /// stdout. Use `status` or `queue list` to monitor progress.
+        #[arg(short = 'd', long)]
+        detach: bool,
     },
 
     /// Print a document's summary tree. With no filters, prints every

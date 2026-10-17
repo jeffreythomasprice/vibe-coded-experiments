@@ -404,6 +404,7 @@ pub async fn handle(
         overlap_chunks,
         edit,
         intermediates,
+        detach: _,
     } = req
     else {
         unreachable!("export::handle is only called for Request::Export");

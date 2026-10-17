@@ -165,6 +165,7 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             edit,
             no_edit,
             output_intermediates,
+            detach,
         } => {
             let mut outputs = Vec::new();
             for (format, target) in [
@@ -187,6 +188,11 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             if outputs.iter().filter(|o| o.path.is_none()).count() > 1 {
                 return Err(Error::Cli("only one output can go to stdout (\"-\")".into()));
             }
+            if detach && outputs.iter().any(|o| o.path.is_none()) {
+                return Err(Error::Cli(
+                    "--detach needs every output to be a file: pass --output-txt/--output-md/--output-pdf with a path, not stdout (\"-\" or no --output-*)".into(),
+                ));
+            }
             Ok(Request::Export {
                 path,
                 outputs,
@@ -201,6 +207,7 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
                     None
                 },
                 intermediates: output_intermediates,
+                detach,
             })
         }
         Command::PrintConfig => Ok(Request::PrintConfig),
@@ -336,5 +343,42 @@ fn pair_u32(v: &[u32]) -> Result<(u32, u32), String> {
     match v {
         [a, b] => Ok((*a, *b)),
         _ => Err(format!("expected 2 values, got {}", v.len())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    fn export_request(args: &[&str]) -> Result<Request, Error> {
+        let mut argv = vec!["document-search", "export", "/x.pdf"];
+        argv.extend_from_slice(args);
+        command_to_request(Cli::try_parse_from(argv).unwrap().command)
+    }
+
+    #[test]
+    fn export_detach_needs_file_outputs() {
+        for args in [
+            &["--detach"][..],
+            &["--detach", "--output-txt", "-"],
+            &["-d", "--output-md", "-"],
+            &["-d", "--output-txt", "/o.txt", "--output-md", "-"],
+        ] {
+            let err = export_request(args).expect_err(&format!("{args:?} should fail"));
+            assert!(err.to_string().contains("--detach needs every output to be a file"));
+        }
+    }
+
+    #[test]
+    fn export_detach_with_files_is_accepted() {
+        let req = export_request(&["-d", "--output-txt", "/o.txt", "--output-pdf", "/o.pdf"]).unwrap();
+        assert!(matches!(req, Request::Export { detach: true, .. }));
+    }
+
+    #[test]
+    fn export_without_detach_may_use_stdout() {
+        let req = export_request(&[]).unwrap();
+        assert!(matches!(req, Request::Export { detach: false, .. }));
     }
 }

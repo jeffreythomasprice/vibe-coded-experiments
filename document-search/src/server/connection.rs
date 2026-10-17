@@ -271,6 +271,7 @@ pub(crate) async fn handle(
     if let Request::Export {
         to_language: None,
         edit: Some(false),
+        detach: false,
         ..
     } = &req
     {

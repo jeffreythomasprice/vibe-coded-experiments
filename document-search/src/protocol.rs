@@ -91,8 +91,8 @@ pub enum Request {
         outline: bool,
     },
     /// Write a whole ingested document as txt / markdown / PDF, optionally
-    /// translated. Without `to_language` it only reads, so it bypasses the
-    /// queue; with it, it is a cancellable worker job.
+    /// translated. Without `to_language`, editing or `detach` it only reads,
+    /// so it bypasses the queue; otherwise it is a cancellable worker job.
     Export {
         path: PathBuf,
         /// Every format to produce from one (possibly translated) text.
@@ -112,6 +112,10 @@ pub enum Request {
         /// Directory that keeps (and reuses) every intermediate step.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         intermediates: Option<PathBuf>,
+        /// Same as `Ingest::detach`. The CLI only allows it when every
+        /// output is a file.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        detach: bool,
     },
     PrintConfig,
     Status {
@@ -419,6 +423,7 @@ impl Request {
         match self {
             Request::Ingest { path, detach: true, .. } => Some(("ingest", path)),
             Request::Summarize { path, detach: true, .. } => Some(("summarize", path)),
+            Request::Export { path, detach: true, .. } => Some(("export", path)),
             _ => None,
         }
     }
@@ -443,8 +448,9 @@ impl Request {
                 path,
                 to_language,
                 edit,
+                detach,
                 ..
-            } if to_language.is_some() || *edit == Some(true) => Some((
+            } if to_language.is_some() || *edit == Some(true) || *detach => Some((
                 "export",
                 Some(path.display().to_string()),
                 to_language.clone(),
@@ -823,6 +829,7 @@ mod tests {
                 overlap_chunks: None,
                 edit: None,
                 intermediates: None,
+                detach: false,
             }),
             None
         );
@@ -848,6 +855,7 @@ mod tests {
             overlap_chunks: None,
             edit: None,
             intermediates: Some(PathBuf::from("/tmp/inter")),
+            detach: false,
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("\"cmd\":\"export\""), "{json}");
@@ -864,6 +872,7 @@ mod tests {
             overlap_chunks: None,
             edit: Some(false),
             intermediates: None,
+            detach: false,
         };
         assert!(plain.task_metrics().is_none());
         let edited = Request::Export {
@@ -874,6 +883,7 @@ mod tests {
             overlap_chunks: None,
             edit: Some(true),
             intermediates: None,
+            detach: false,
         };
         assert_eq!(edited.task_metrics().map(|m| m.0), Some("export"));
         assert!(edited.label().find("--no-edit").is_none());
@@ -885,6 +895,43 @@ mod tests {
         let json = r#"{"cmd":"export","path":"/x.pdf","outputs":[{"format":"txt","path":null}]}"#;
         let req: Request = serde_json::from_str(json).unwrap();
         assert!(matches!(req, Request::Export { edit: None, .. }));
+    }
+
+    #[test]
+    fn detached_target_covers_export_only_when_detached() {
+        let export = |detach| Request::Export {
+            path: PathBuf::from("/x.pdf"),
+            outputs: vec![ExportOutput {
+                format: ExportFormat::Txt,
+                path: Some(PathBuf::from("/out.txt")),
+            }],
+            to_language: None,
+            window_chunks: None,
+            overlap_chunks: None,
+            edit: Some(false),
+            intermediates: None,
+            detach,
+        };
+        assert_eq!(
+            export(true).detached_target().map(|(v, p)| (v, p.clone())),
+            Some(("export", PathBuf::from("/x.pdf")))
+        );
+        assert!(export(false).detached_target().is_none());
+        // A detached export is queued, so it logs like any other worker job.
+        assert_eq!(export(true).task_metrics().map(|m| m.0), Some("export"));
+    }
+
+    #[test]
+    fn export_detach_round_trips_and_defaults_off() {
+        let json = r#"{"cmd":"export","path":"/x.pdf","outputs":[{"format":"txt","path":"/o.txt"}],"detach":true}"#;
+        let req: Request = serde_json::from_str(json).unwrap();
+        assert!(matches!(req, Request::Export { detach: true, .. }));
+        let back: Request = serde_json::from_str(&serde_json::to_string(&req).unwrap()).unwrap();
+        assert!(matches!(back, Request::Export { detach: true, .. }));
+        let json = r#"{"cmd":"export","path":"/x.pdf","outputs":[{"format":"txt","path":"/o.txt"}]}"#;
+        let req: Request = serde_json::from_str(json).unwrap();
+        assert!(matches!(req, Request::Export { detach: false, .. }));
+        assert!(!serde_json::to_string(&req).unwrap().contains("detach"));
     }
 
     #[test]

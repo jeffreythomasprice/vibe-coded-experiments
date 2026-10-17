@@ -524,8 +524,8 @@ async fn worker_loop(
                 unreachable!("summaries is handled inline by the connection task")
             }
             Request::Export { .. } => {
-                // Untranslated exports are served inline by the connection
-                // task; only `--to` reaches the worker.
+                // Untranslated, unedited, non-detached exports are served
+                // inline by the connection task; the rest reach the worker.
                 let (relay_tx, relay) = spawn_relay(&job.event_tx, &tracker, &label);
                 let result = crate::export::handle(
                     &db,
