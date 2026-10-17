@@ -13,6 +13,7 @@ use std::time::Duration;
 use similar::{Algorithm, TextDiff};
 use tokio::sync::{mpsc, watch};
 
+use super::intermediates::{Cached, Store};
 use super::translate::{check_cancel, emit, floor_boundary, is_sentence_end, llm_error, strip_wrapper};
 use super::{ExportError, Llm};
 use crate::language;
@@ -184,6 +185,7 @@ pub(super) async fn edit_document(
     text: &str,
     lang: Option<&str>,
     segment_bytes: usize,
+    store: Option<&Store>,
     progress: Option<&mpsc::UnboundedSender<Event>>,
     cancel: Option<&watch::Receiver<bool>>,
 ) -> Result<Edited, ExportError> {
@@ -195,6 +197,7 @@ pub(super) async fn edit_document(
         .filter(|r| !text[r.start..r.end].trim().is_empty())
         .count();
     let prompts = Prompts::edit(lang);
+    let stage = format!("edit-{}", lang.unwrap_or("source"));
 
     let mut out = String::with_capacity(text.len());
     let mut kept = 0;
@@ -213,7 +216,28 @@ pub(super) async fn edit_document(
         // paragraph breaks at the cut points survive exactly.
         let lead = &seg[..seg.len() - seg.trim_start().len()];
         let trail = &seg[seg.trim_end().len()..];
-        match edit_segment(llm, &prompts, core, lang, done, total, cancel).await? {
+        let name = format!("segment-{done:04}");
+        let cached = match store {
+            Some(s) => s.lookup(
+                &stage,
+                &name,
+                &format!("editing segment {done}/{total}"),
+                core,
+            )?,
+            None => None,
+        };
+        let result = match cached {
+            Some(Cached::Output(e)) => Some(e),
+            Some(Cached::Kept) => None,
+            None => {
+                let r = edit_segment(llm, &prompts, core, lang, done, total, cancel).await?;
+                if let Some(s) = store {
+                    s.record(&stage, &name, r.as_deref())?;
+                }
+                r
+            }
+        };
+        match result {
             Some(edited) => {
                 out.push_str(lead);
                 out.push_str(&edited);

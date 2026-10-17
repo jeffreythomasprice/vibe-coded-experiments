@@ -164,6 +164,7 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
             overlap_chunks,
             edit,
             no_edit,
+            output_intermediates,
         } => {
             let mut outputs = Vec::new();
             for (format, target) in [
@@ -199,6 +200,7 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
                 } else {
                     None
                 },
+                intermediates: output_intermediates,
             })
         }
         Command::PrintConfig => Ok(Request::PrintConfig),
@@ -257,8 +259,17 @@ fn command_to_request(cmd: Command) -> Result<Request, Error> {
 /// it can't resolve them itself. Lexical only: the file need not exist (e.g.
 /// `info` on a path a queued ingest will create).
 fn absolutize_paths(req: &mut Request) {
-    if let Request::Export { outputs, .. } = req {
-        for out in outputs.iter_mut().filter_map(|o| o.path.as_mut()) {
+    if let Request::Export {
+        outputs,
+        intermediates,
+        ..
+    } = req
+    {
+        for out in outputs
+            .iter_mut()
+            .filter_map(|o| o.path.as_mut())
+            .chain(intermediates.iter_mut())
+        {
             if let Ok(abs) = std::path::absolute(&*out) {
                 *out = abs;
             }

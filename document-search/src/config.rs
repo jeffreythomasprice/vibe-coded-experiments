@@ -461,7 +461,7 @@ pub fn render_toml(cfg: &Config) -> Result<String, ConfigError> {
     Ok(toml::to_string_pretty(cfg)?)
 }
 
-fn embedded_defaults() -> Config {
+pub(crate) fn embedded_defaults() -> Config {
     toml::from_str(DEFAULT_CONFIG_TOML)
         .expect("embedded config.example.toml must parse as a complete Config")
 }

@@ -177,6 +177,15 @@ pub enum Command {
         /// Skip the grammar-edit pass.
         #[arg(long, overrides_with = "edit")]
         no_edit: bool,
+
+        /// Keep every intermediate step (each translated window, seam merge
+        /// and edited segment, with its input) in this directory, and skip
+        /// steps whose files are already there, so a cancelled or failed
+        /// export resumes where it stopped. Reusing a directory built with a
+        /// different --window-chunks, --overlap-chunks, model or document is
+        /// an error. Without it everything stays in memory.
+        #[arg(long, value_name = "DIR")]
+        output_intermediates: Option<PathBuf>,
     },
 
     /// Print a document's summary tree. With no filters, prints every

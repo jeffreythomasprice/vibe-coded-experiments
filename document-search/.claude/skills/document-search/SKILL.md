@@ -132,7 +132,7 @@ document-search export --no-edit --output-mode json "<path>"                  # 
 document-search export --no-edit --output-md - --output-mode json "<path>"    # markdown, headings guessed
 ```
 
-→ `{ ok, path, format, source_language, language, translated: false, translation_skipped: false, edited: false, edit_segments_kept: 0, outputs: [{ format, path: null, bytes }], text }`. A large document floods the context just like a large `text` range, so prefer `summaries` or a page range unless the user wants the whole thing. Always pass `--no-edit`: without it the export runs an LLM grammar-edit pass as a long queued job. Don't use `--to` (LLM translation, also a long queued job) or `--output-*` file paths unless the user asks for a file.
+→ `{ ok, path, format, source_language, language, translated: false, translation_skipped: false, edited: false, edit_segments_kept: 0, intermediates: null, outputs: [{ format, path: null, bytes }], text }`. A large document floods the context just like a large `text` range, so prefer `summaries` or a page range unless the user wants the whole thing. Always pass `--no-edit`: without it the export runs an LLM grammar-edit pass as a long queued job. Don't use `--to` (LLM translation, also a long queued job) or `--output-*` file paths unless the user asks for a file.
 
 The text is what was extracted at ingest (pdftotext, or OCR for scanned/garbled pages), not the original layout: tables and figures come out as fragments, and OCR'd pages can contain misreads. Read a few pages at a time rather than a whole book — large ranges flood the context.
 

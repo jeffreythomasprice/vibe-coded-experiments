@@ -109,6 +109,9 @@ pub enum Request {
         /// and so the worker.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         edit: Option<bool>,
+        /// Directory that keeps (and reuses) every intermediate step.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        intermediates: Option<PathBuf>,
     },
     PrintConfig,
     Status {
@@ -323,6 +326,7 @@ impl Request {
                 outputs,
                 to_language,
                 edit,
+                intermediates,
                 ..
             } => {
                 let mut s = format!("export {}", path.display());
@@ -331,6 +335,9 @@ impl Request {
                 }
                 if *edit == Some(false) {
                     s.push_str(" --no-edit");
+                }
+                if let Some(d) = intermediates {
+                    s.push_str(&format!(" --output-intermediates {}", d.display()));
                 }
                 for o in outputs {
                     let target = o
@@ -815,6 +822,7 @@ mod tests {
                 window_chunks: None,
                 overlap_chunks: None,
                 edit: None,
+                intermediates: None,
             }),
             None
         );
@@ -839,11 +847,14 @@ mod tests {
             window_chunks: Some(3),
             overlap_chunks: None,
             edit: None,
+            intermediates: Some(PathBuf::from("/tmp/inter")),
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("\"cmd\":\"export\""), "{json}");
         assert!(json.contains("\"format\":\"pdf\""), "{json}");
         let back: Request = serde_json::from_str(&json).unwrap();
+        assert!(matches!(&back, Request::Export { intermediates: Some(d), .. } if d == &PathBuf::from("/tmp/inter")));
+        assert!(back.label().contains("--output-intermediates /tmp/inter"));
         assert_eq!(back.task_metrics().map(|m| m.0), Some("export"));
         let plain = Request::Export {
             path: PathBuf::from("/x.pdf"),
@@ -852,6 +863,7 @@ mod tests {
             window_chunks: None,
             overlap_chunks: None,
             edit: Some(false),
+            intermediates: None,
         };
         assert!(plain.task_metrics().is_none());
         let edited = Request::Export {
@@ -861,6 +873,7 @@ mod tests {
             window_chunks: None,
             overlap_chunks: None,
             edit: Some(true),
+            intermediates: None,
         };
         assert_eq!(edited.task_metrics().map(|m| m.0), Some("export"));
         assert!(edited.label().find("--no-edit").is_none());

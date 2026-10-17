@@ -6,6 +6,7 @@ use std::ops::Range;
 use tokio::sync::{mpsc, watch};
 
 use super::blocks::is_cjk;
+use super::intermediates::{Cached, Store};
 use super::{Chunk, ExportError, Llm, stitch};
 use crate::language;
 use crate::llm::LlmError;
@@ -140,9 +141,11 @@ pub(super) async fn translate_document(
     target: &str,
     window: usize,
     overlap: usize,
+    store: Option<&Store>,
     progress: Option<&mpsc::UnboundedSender<Event>>,
     cancel: Option<&watch::Receiver<bool>>,
 ) -> Result<String, ExportError> {
+    let stage = format!("translate-{target}");
     let ws = windows(chunks.len(), window, overlap);
     let total = ws.len();
     let seams = if overlap > 0 {
@@ -166,8 +169,29 @@ pub(super) async fn translate_document(
         );
         // Page breaks have no meaning once translated; make them paragraphs.
         let source = stitch(chunks, w.clone())?.replace('\u{c}', "\n\n");
-        let translated =
-            translate_window(llm, &prompts, &source, target, i + 1, total, cancel).await?;
+        let name = format!(
+            "window-{:04}_chunks-{:04}-{:04}",
+            i + 1,
+            w.start,
+            w.end.saturating_sub(1)
+        );
+        let what = format!("translating window {}/{total} (chunks {}..{})", i + 1, w.start, w.end);
+        let cached = match store {
+            Some(s) => s.lookup(&stage, &name, &what, &source)?,
+            None => None,
+        };
+        let translated = match cached {
+            Some(Cached::Output(t)) => t,
+            // A window always has an answer or fails the export.
+            Some(Cached::Kept) | None => {
+                let t = translate_window(llm, &prompts, &source, target, i + 1, total, cancel)
+                    .await?;
+                if let Some(s) = store {
+                    s.record(&stage, &name, Some(&t))?;
+                }
+                t
+            }
+        };
         sources.push(source);
         translations.push(translated);
     }
@@ -210,6 +234,7 @@ pub(super) async fn translate_document(
             head_bytes as usize,
             target,
             i,
+            store,
             cancel,
         )
         .await?;
@@ -289,6 +314,7 @@ async fn merge_seam(
     head_bytes: usize,
     target: &str,
     seam: usize,
+    store: Option<&Store>,
     cancel: Option<&watch::Receiver<bool>>,
 ) -> Result<String, ExportError> {
     let tail_start = snap_back(acc, acc.len().saturating_sub(tail_bytes));
@@ -304,6 +330,16 @@ async fn merge_seam(
     let min_len = (0.6 * tail_len.max(head_len) as f64) as usize;
     let max_len = (1.1 * (tail_len + head_len) as f64) as usize;
     let input = format!("<a>\n{tail_t}\n</a>\n<b>\n{head_t}\n</b>");
+
+    let stage = format!("translate-{target}");
+    let name = format!("seam-{seam:04}");
+    if let Some(s) = store {
+        match s.lookup(&stage, &name, &format!("merging seam {seam}"), &input)? {
+            Some(Cached::Output(merged)) => return Ok(glue(&glue(before, &merged), rest)),
+            Some(Cached::Kept) => return Ok(glue(acc, next)),
+            None => {}
+        }
+    }
 
     for reminder in [&prompts.reminder, &prompts.strict_reminder] {
         let user = format!("{input}\n\n{reminder}");
@@ -333,6 +369,9 @@ async fn merge_seam(
             .iter()
             .any(|t| merged.contains(t));
         if !tagged && len >= min_len && len <= max_len && output_language_ok(merged, target) {
+            if let Some(s) = store {
+                s.record(&stage, &name, Some(merged))?;
+            }
             let mid = glue(&glue(before, merged), rest);
             return Ok(mid);
         }
@@ -349,6 +388,9 @@ async fn merge_seam(
         seam,
         "export: keeping both overlapping passages for this seam"
     );
+    if let Some(s) = store {
+        s.record(&stage, &name, None)?;
+    }
     Ok(glue(acc, next))
 }
 

@@ -14,9 +14,16 @@
 //!
 //! Structure (headings, list items) is guessed from the text alone by
 //! `blocks`; markdown and PDF render the same blocks, so they agree.
+//!
+//! With `--output-intermediates DIR` every LLM step (each translated window,
+//! seam merge and edited segment) also leaves its input and answer in `DIR`,
+//! and a step whose files are already there is skipped (see `intermediates`).
+//! Without it everything stays in memory. The final outputs are still only
+//! written once the whole export has succeeded.
 
 mod blocks;
 mod edit;
+mod intermediates;
 mod pdf;
 mod render;
 mod translate;
@@ -30,6 +37,8 @@ use crate::config::{self, Config, ExportConfig};
 use crate::db::Db;
 use crate::language;
 use crate::llm::LlmError;
+use intermediates::{Manifest, Store};
+
 use crate::protocol::{Event, ExportFormat, ExportOutput, OutputMode, ProgressEnvelope, ProgressEvent, Request};
 
 #[derive(thiserror::Error, Debug)]
@@ -89,6 +98,24 @@ pub enum ExportError {
     #[error("translation needs the LLM, which this export was not given (internal error)")]
     NoLlm,
 
+    #[error(
+        "intermediates directory {dir} was built with {field} = {recorded}, but this export \
+         uses {requested}; use another --output-intermediates directory or delete this one"
+    )]
+    IntermediatesMismatch {
+        dir: PathBuf,
+        field: &'static str,
+        recorded: String,
+        requested: String,
+    },
+
+    #[error("intermediates {path}: {source}")]
+    IntermediatesIo {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
     #[error("reading font {path}: {source}")]
     FontRead {
         path: PathBuf,
@@ -128,6 +155,8 @@ pub struct Params {
     /// Run the grammar-edit pass.
     pub edit: bool,
     pub edit_segment_bytes: usize,
+    /// Directory that keeps (and reuses) every intermediate step.
+    pub intermediates: Option<PathBuf>,
 }
 
 impl Params {
@@ -176,7 +205,13 @@ impl Params {
             overlap_chunks,
             edit: edit.unwrap_or(cfg.edit),
             edit_segment_bytes: cfg.edit_segment_bytes,
+            intermediates: None,
         })
+    }
+
+    pub fn with_intermediates(mut self, dir: Option<PathBuf>) -> Self {
+        self.intermediates = dir;
+        self
     }
 }
 
@@ -196,6 +231,8 @@ pub struct Outcome {
     /// Segments the edit pass left as they were because its answer failed
     /// the checks.
     pub edit_segments_kept: usize,
+    /// The intermediates directory used, if any.
+    pub intermediates: Option<PathBuf>,
     pub outputs: Vec<WrittenOutput>,
     /// txt / markdown returned to the client instead of a file.
     pub text: Option<String>,
@@ -273,6 +310,7 @@ impl Outcome {
             "translation_skipped": self.translation_skipped,
             "edited": self.edited,
             "edit_segments_kept": self.edit_segments_kept,
+            "intermediates": self.intermediates.as_ref().map(|p| p.display().to_string()),
             "outputs": outputs,
             "text": self.text,
         })
@@ -365,6 +403,7 @@ pub async fn handle(
         window_chunks,
         overlap_chunks,
         edit,
+        intermediates,
     } = req
     else {
         unreachable!("export::handle is only called for Request::Export");
@@ -377,7 +416,8 @@ pub async fn handle(
         *overlap_chunks,
         *edit,
         export_cfg,
-    )?;
+    )?
+    .with_intermediates(intermediates.clone());
     let conn = db.fresh_conn().await?;
     let outcome = run(&conn, export_cfg, llm, &params, progress, cancel).await?;
     Ok(match mode {
@@ -419,6 +459,37 @@ pub async fn run(
     let target = p.to_language.as_deref();
     let skipped = target.is_some() && target == doc.language.as_deref();
     let translated = target.is_some() && !skipped;
+    // Language of the text being produced; names the per-language files.
+    let out_lang = if translated { target } else { doc.language.as_deref() };
+    let lang_tag = out_lang.unwrap_or("source");
+    let store = match &p.intermediates {
+        Some(dir) => {
+            let uses_llm = translated || p.edit;
+            let manifest = Manifest {
+                version: 1,
+                document: path.display().to_string(),
+                document_sha256: Manifest::sha256(&full),
+                llm_provider: match (uses_llm, llm.as_ref()) {
+                    (true, Some(l)) => Some(format!("{:?}", l.cfg.llm.provider).to_lowercase()),
+                    _ => None,
+                },
+                llm_model: match (uses_llm, llm.as_ref()) {
+                    (true, Some(l)) => Some(match l.cfg.llm.provider {
+                        config::LlmProvider::Ollama => l.cfg.ollama.chat_model.clone(),
+                        config::LlmProvider::Anthropic => l.cfg.anthropic.model.clone(),
+                    }),
+                    _ => None,
+                },
+                window_chunks: translated.then_some(p.window_chunks),
+                overlap_chunks: translated.then_some(p.overlap_chunks),
+                edit_segment_bytes: p.edit.then_some(p.edit_segment_bytes),
+            };
+            let store = Store::open(dir, &manifest)?;
+            store.write_whole("source.txt", &full)?;
+            Some(store)
+        }
+        None => None,
+    };
     let text = match target {
         Some(target) if translated => {
             let llm = llm.as_ref().ok_or(ExportError::NoLlm)?;
@@ -429,6 +500,7 @@ pub async fn run(
                 target,
                 p.window_chunks,
                 p.overlap_chunks,
+                store.as_ref(),
                 progress,
                 cancel,
             )
@@ -437,19 +509,25 @@ pub async fn run(
         _ => full,
     };
     drop(chunks);
+    if let (Some(store), true) = (&store, translated) {
+        store.write_whole(&format!("translated-{lang_tag}.txt"), &text)?;
+    }
     let (text, edit_segments_kept) = if p.edit {
         let llm = llm.as_ref().ok_or(ExportError::NoLlm)?;
         emit_stage(progress, "editing");
-        let lang = if translated { target } else { doc.language.as_deref() };
         let edited = edit::edit_document(
             llm,
             &text,
-            lang,
+            out_lang,
             p.edit_segment_bytes,
+            store.as_ref(),
             progress,
             cancel,
         )
         .await?;
+        if let Some(store) = &store {
+            store.write_whole(&format!("edited-{lang_tag}.txt"), &edited.text)?;
+        }
         (edited.text, edited.kept)
     } else {
         (text, 0)
@@ -518,6 +596,7 @@ pub async fn run(
         translation_skipped: skipped,
         edited: p.edit,
         edit_segments_kept,
+        intermediates: store.as_ref().map(|s| s.dir().to_path_buf()),
         outputs: written,
         text: text_out,
     })
@@ -675,6 +754,54 @@ mod tests {
             ])
             .is_ok()
         );
+    }
+
+    /// With every step already on disk, no LLM call is made: the config
+    /// points at a port nothing listens on, so a call would fail the export.
+    #[tokio::test]
+    async fn cached_steps_make_no_llm_calls() {
+        let mut cfg = config::embedded_defaults();
+        cfg.ollama.url = "http://127.0.0.1:1".to_string();
+        let http = reqwest::Client::new();
+        let llm = Llm { cfg: &cfg, http: &http };
+        let tmp = tempfile::tempdir().unwrap();
+        let manifest = Manifest {
+            version: 1,
+            document: "/d.pdf".into(),
+            document_sha256: Manifest::sha256("x"),
+            ..Default::default()
+        };
+        let store = Store::open(tmp.path(), &manifest).unwrap();
+
+        // Three one-chunk windows, no overlap (so no seams).
+        let c = chunks();
+        for (i, src) in ["012345", "456789", "89abcdef"].into_iter().enumerate() {
+            let name = format!("window-{:04}_chunks-{i:04}-{i:04}", i + 1);
+            assert!(store.lookup("translate-en", &name, "w", src).unwrap().is_none());
+            store.record("translate-en", &name, Some(&format!("T{i}."))).unwrap();
+        }
+        let got = translate::translate_document(
+            &llm, &c, "en", 1, 0, Some(&store), None, None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(got, "T0. T1. T2.");
+
+        let text = "Hello world.\n\nSecond paragraph.";
+        assert!(store.lookup("edit-en", "segment-0001", "s", text).unwrap().is_none());
+        store.record("edit-en", "segment-0001", Some("Edited.")).unwrap();
+        let edited = edit::edit_document(&llm, text, Some("en"), 4000, Some(&store), None, None)
+            .await
+            .unwrap();
+        assert_eq!((edited.text.as_str(), edited.kept), ("Edited.", 0));
+
+        // A kept marker counts as a kept segment and leaves the original.
+        assert!(store.lookup("edit-en", "segment-0001", "s", "Other text.").unwrap().is_none());
+        store.record("edit-en", "segment-0001", None).unwrap();
+        let kept = edit::edit_document(&llm, "Other text.", Some("en"), 4000, Some(&store), None, None)
+            .await
+            .unwrap();
+        assert_eq!((kept.text.as_str(), kept.kept), ("Other text.", 1));
     }
 
     #[test]
