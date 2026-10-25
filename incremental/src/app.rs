@@ -7,16 +7,18 @@ use web_sys::{AddEventListenerOptions, EventTarget, KeyboardEvent, MouseEvent, W
 
 use crate::camera::Camera;
 use crate::canvas::Canvas;
+use crate::config::game::{HEX_SIZE, MAX_FRAME_DT};
+use crate::config::input::InputConfig;
+use crate::config::theme::{self, Theme};
 use crate::error::AppError;
 use crate::game::Game;
 use crate::hex::{Axial, Layout, Point};
-use crate::input::{Command, Input, InputConfig, RawInput};
-use crate::overlay::Overlay;
+use crate::icon;
+use crate::input::{Command, Input, RawInput};
+use crate::overlay::{self, Overlay};
 use crate::render;
-use crate::theme::{self, Theme};
-
-const HEX_SIZE: f64 = 32.0;
-const MAX_FRAME_DT: f64 = 0.1;
+use crate::resource::Resource;
+use crate::toast::Toasts;
 
 pub struct App {
     canvas: Canvas,
@@ -27,6 +29,7 @@ pub struct App {
     selected: Option<Axial>,
     input: Input,
     overlay: Overlay,
+    toasts: Toasts,
     cursor: Option<Point>,
     last_frame: Option<f64>,
     dirty: bool,
@@ -47,6 +50,7 @@ impl App {
             selected: None,
             input: Input::new(InputConfig::default()),
             overlay: Overlay::new(&theme::DARK)?,
+            toasts: Toasts::default(),
             cursor: None,
             last_frame: None,
             dirty: true,
@@ -73,6 +77,14 @@ impl App {
         let a = Rc::clone(&app);
         listen(&canvas_target, "mouseleave", move |_: web_sys::Event| {
             a.borrow_mut().cursor = None;
+        })?;
+
+        let a = Rc::clone(&app);
+        let sidebar_target = app.borrow().overlay.sidebar_target();
+        listen(&sidebar_target, "click", move |e: MouseEvent| {
+            if let Some(r) = overlay::sidebar_resource(&e) {
+                a.borrow_mut().gather_selected(r, mouse_point(&e));
+            }
         })?;
 
         let a = Rc::clone(&app);
@@ -152,18 +164,47 @@ impl App {
     fn apply(&mut self, command: Command) {
         match command {
             Command::Select(p) => self.select(p),
-            Command::Gather(p, dt) => {
-                let pos = self.hex_at(p);
-                if let Err(e) = self.game.gather(pos, dt) {
-                    log::debug!("gather rejected: {e}");
-                }
-            }
+            Command::Gather(p) => self.gather_at(p),
             Command::Deselect => self.selected = None,
             Command::PanBy(delta) => self.camera.pan_by_screen(delta),
             Command::ZoomAt(p, factor) => self.zoom_at(p, factor),
             Command::ZoomAtCenter(factor) => self.zoom_at(self.viewport() * 0.5, factor),
         }
         self.dirty = true;
+    }
+
+    fn gather_at(&mut self, screen: Point) {
+        let pos = self.hex_at(screen);
+        let world = self.camera.screen_to_world(screen, self.viewport());
+        let Some(cell) = self.game.cell(pos) else {
+            return;
+        };
+        let picked = cell.sole_resource().or_else(|| {
+            let slot = icon::icon_at(self.layout, pos, cell.resources().count(), world)?;
+            cell.resources().nth(slot).map(|(r, _, _)| r)
+        });
+        if let Some(r) = picked {
+            self.gather(pos, r, screen);
+        }
+    }
+
+    fn gather_selected(&mut self, resource: Resource, at: Point) {
+        if let Some(pos) = self.selected {
+            self.gather(pos, resource, at);
+            self.dirty = true;
+        }
+    }
+
+    fn gather(&mut self, pos: Axial, resource: Resource, at: Point) {
+        match self.game.gather(pos, resource) {
+            Ok(0) => {}
+            Ok(amount) => {
+                if let Some(icon) = self.game.cell(pos).and_then(|c| c.icon(resource)) {
+                    self.toasts.push(resource, amount, icon.to_svg(), at);
+                }
+            }
+            Err(e) => log::debug!("gather rejected: {e}"),
+        }
     }
 
     fn hex_at(&self, screen: Point) -> Axial {
@@ -198,6 +239,8 @@ impl App {
             .map_or(0.0, |last| ((now_ms - last) / 1000.0).min(MAX_FRAME_DT));
         self.last_frame = Some(now_ms);
         self.step(dt);
+        self.toasts.tick(dt, self.theme.toast.duration);
+        self.overlay.sync_toasts(&self.toasts, &self.theme.toast)?;
         if self.dirty {
             self.dirty = false;
             render::draw(

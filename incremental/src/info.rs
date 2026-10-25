@@ -1,6 +1,6 @@
 use crate::game::Game;
 use crate::hex::Axial;
-use crate::resource::ResourceState;
+use crate::resource::{Resource, ResourceState};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SummaryRow {
@@ -18,6 +18,7 @@ pub struct Summary {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceDetails {
+    pub resource: Resource,
     pub icon_svg: String,
     pub lines: Vec<(&'static str, String)>,
 }
@@ -33,20 +34,15 @@ fn title(pos: Axial) -> String {
 }
 
 fn short(s: &ResourceState) -> String {
-    format!(
-        "{:.1} / {:.1} / {:.1}",
-        s.current,
-        s.max_generate,
-        s.capacity()
-    )
+    format!("{} / {} / {}", s.current, s.max_generate, s.capacity())
 }
 
 fn lines(s: &ResourceState) -> Vec<(&'static str, String)> {
     vec![
-        ("Current", format!("{:.1}", s.current)),
-        ("Max generate", format!("{:.1}", s.max_generate)),
-        ("Max overfill", format!("{:.1}", s.max_overfill)),
-        ("Per second", format!("{:.1}", s.per_second)),
+        ("Current", s.current.to_string()),
+        ("Max generate", s.max_generate.to_string()),
+        ("Max overfill", s.max_overfill.to_string()),
+        ("Per click", s.per_click.to_string()),
     ]
 }
 
@@ -72,7 +68,8 @@ pub fn details(game: &Game, pos: Axial) -> Option<Details> {
         title: title(pos),
         resources: cell
             .resources()
-            .map(|(_, state, icon)| ResourceDetails {
+            .map(|(resource, state, icon)| ResourceDetails {
+                resource,
                 icon_svg: icon.to_svg(),
                 lines: lines(state),
             })
@@ -83,6 +80,15 @@ pub fn details(game: &Game, pos: Axial) -> Option<Details> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn first(game: &Game) -> Resource {
+        game.cell(Axial::ORIGIN)
+            .unwrap()
+            .resources()
+            .next()
+            .unwrap()
+            .0
+    }
 
     #[test]
     fn owned_hex_has_info() {
@@ -99,13 +105,16 @@ mod tests {
     fn summary_uses_shorthand() {
         let game = Game::new(0);
         let s = summary(&game, Axial::ORIGIN).unwrap();
-        assert_eq!(s.rows[0].text, "0.0 / 10.0 / 100.0");
+        assert_eq!(s.rows[0].text, "0 / 10 / 100");
     }
 
     #[test]
     fn summary_reports_fills() {
         let mut game = Game::new(0);
-        game.gather(Axial::ORIGIN, 5.0).unwrap();
+        for _ in 0..5 {
+            let r = first(&game);
+            game.gather(Axial::ORIGIN, r).unwrap();
+        }
         let s = summary(&game, Axial::ORIGIN).unwrap();
         assert_eq!(s.rows[0].generate_fill, 0.5);
         assert_eq!(s.rows[0].overfill_fill, 0.0);
@@ -114,9 +123,10 @@ mod tests {
     #[test]
     fn info_tracks_gathering() {
         let mut game = Game::new(0);
-        game.gather(Axial::ORIGIN, 2.0).unwrap();
+        game.gather(Axial::ORIGIN, first(&game)).unwrap();
+        game.gather(Axial::ORIGIN, first(&game)).unwrap();
         let d = details(&game, Axial::ORIGIN).unwrap();
-        assert_eq!(d.resources[0].lines[0], ("Current", "2.0".to_string()));
+        assert_eq!(d.resources[0].lines[0], ("Current", "2".to_string()));
     }
 
     #[test]

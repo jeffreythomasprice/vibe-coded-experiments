@@ -1,13 +1,13 @@
 use rand::Rng;
 use rand::seq::IndexedRandom;
 
+use crate::config::game::{
+    COUNT_WEIGHTS, INITIAL_MAX_GENERATE, INITIAL_MAX_OVERFILL, INITIAL_PER_CLICK,
+};
+
 pub const RESOURCE_COUNT: usize = 5;
 
-const COUNT_WEIGHTS: [f64; RESOURCE_COUNT] = [85.0, 10.0, 4.0, 0.9, 0.1];
-
-const INITIAL_MAX_GENERATE: f64 = 10.0;
-const INITIAL_MAX_OVERFILL: f64 = 90.0;
-const INITIAL_PER_SECOND: f64 = 1.0;
+pub type Amount = u64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Resource {
@@ -52,48 +52,58 @@ impl Resource {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ResourceState {
-    pub current: f64,
-    pub max_generate: f64,
-    pub max_overfill: f64,
-    pub per_second: f64,
+    pub current: Amount,
+    pub max_generate: Amount,
+    pub max_overfill: Amount,
+    pub per_click: Amount,
 }
 
 impl Default for ResourceState {
     fn default() -> Self {
         Self {
-            current: 0.0,
+            current: 0,
             max_generate: INITIAL_MAX_GENERATE,
             max_overfill: INITIAL_MAX_OVERFILL,
-            per_second: INITIAL_PER_SECOND,
+            per_click: INITIAL_PER_CLICK,
         }
     }
 }
 
+fn ratio(part: Amount, whole: Amount) -> f64 {
+    part.min(whole) as f64 / whole as f64
+}
+
 impl ResourceState {
-    pub fn gather(&mut self, dt: f64) {
-        if self.current < self.max_generate {
-            self.current = (self.current + self.per_second * dt).min(self.max_generate);
+    pub fn gather(&mut self) -> Amount {
+        if self.current >= self.max_generate {
+            return 0;
         }
+        let before = self.current;
+        self.current = before.saturating_add(self.per_click).min(self.max_generate);
+        self.current - before
     }
 
-    pub fn capacity(&self) -> f64 {
-        self.max_generate + self.max_overfill
+    pub fn capacity(&self) -> Amount {
+        self.max_generate.saturating_add(self.max_overfill)
     }
 
     pub fn generate_fill(&self) -> f64 {
-        if self.max_generate <= 0.0 {
+        if self.max_generate == 0 {
             return 1.0;
         }
-        (self.current / self.max_generate).clamp(0.0, 1.0)
+        ratio(self.current, self.max_generate)
     }
 
     pub fn overfill_fill(&self) -> f64 {
-        if self.max_overfill <= 0.0 {
+        if self.max_overfill == 0 {
             return 0.0;
         }
-        ((self.current - self.max_generate) / self.max_overfill).clamp(0.0, 1.0)
+        ratio(
+            self.current.saturating_sub(self.max_generate),
+            self.max_overfill,
+        )
     }
 }
 
@@ -120,26 +130,55 @@ mod tests {
 
     #[test]
     fn gather_accumulates_up_to_cap() {
-        let mut s = ResourceState::default();
-        s.gather(4.0);
-        assert_eq!(s.current, 4.0);
-        s.gather(100.0);
+        let mut s = ResourceState {
+            per_click: 4,
+            ..ResourceState::default()
+        };
+        s.gather();
+        assert_eq!(s.current, 4);
+        s.gather();
+        s.gather();
         assert_eq!(s.current, s.max_generate);
+    }
+
+    #[test]
+    fn gather_reports_actual_gain() {
+        let mut s = ResourceState {
+            current: 8,
+            per_click: 4,
+            ..ResourceState::default()
+        };
+        assert_eq!(s.gather(), 2);
+        assert_eq!(s.gather(), 0);
+        let mut s = ResourceState::default();
+        assert_eq!(s.gather(), 1);
     }
 
     #[test]
     fn gather_does_not_reduce_values_above_cap() {
         let mut s = ResourceState {
-            current: 50.0,
+            current: 50,
             ..ResourceState::default()
         };
-        s.gather(1.0);
-        assert_eq!(s.current, 50.0);
+        s.gather();
+        assert_eq!(s.current, 50);
+    }
+
+    #[test]
+    fn gather_saturates_instead_of_overflowing() {
+        let mut s = ResourceState {
+            current: 1,
+            max_generate: u64::MAX,
+            per_click: u64::MAX,
+            ..ResourceState::default()
+        };
+        s.gather();
+        assert_eq!(s.current, u64::MAX);
     }
 
     #[test]
     fn capacity_is_generate_plus_overfill() {
-        assert_eq!(ResourceState::default().capacity(), 100.0);
+        assert_eq!(ResourceState::default().capacity(), 100);
     }
 
     #[test]
@@ -148,20 +187,11 @@ mod tests {
             current,
             ..ResourceState::default()
         };
+        assert_eq!((at(5).generate_fill(), at(5).overfill_fill()), (0.5, 0.0));
+        assert_eq!((at(10).generate_fill(), at(10).overfill_fill()), (1.0, 0.0));
+        assert_eq!((at(55).generate_fill(), at(55).overfill_fill()), (1.0, 0.5));
         assert_eq!(
-            (at(5.0).generate_fill(), at(5.0).overfill_fill()),
-            (0.5, 0.0)
-        );
-        assert_eq!(
-            (at(10.0).generate_fill(), at(10.0).overfill_fill()),
-            (1.0, 0.0)
-        );
-        assert_eq!(
-            (at(55.0).generate_fill(), at(55.0).overfill_fill()),
-            (1.0, 0.5)
-        );
-        assert_eq!(
-            (at(100.0).generate_fill(), at(100.0).overfill_fill()),
+            (at(100).generate_fill(), at(100).overfill_fill()),
             (1.0, 1.0)
         );
     }
@@ -169,16 +199,16 @@ mod tests {
     #[test]
     fn fills_handle_zero_maximums() {
         let s = ResourceState {
-            current: 3.0,
-            max_generate: 0.0,
-            max_overfill: 6.0,
-            per_second: 1.0,
+            current: 3,
+            max_generate: 0,
+            max_overfill: 6,
+            per_click: 1,
         };
         assert_eq!((s.generate_fill(), s.overfill_fill()), (1.0, 0.5));
         let s = ResourceState {
-            max_generate: 4.0,
-            max_overfill: 0.0,
-            current: 4.0,
+            max_generate: 4,
+            max_overfill: 0,
+            current: 4,
             ..s
         };
         assert_eq!((s.generate_fill(), s.overfill_fill()), (1.0, 0.0));

@@ -1,9 +1,7 @@
 use std::collections::HashSet;
 
+use crate::config::input::{InputConfig, WHEEL_DELTA_LIMIT, WHEEL_DELTA_UNIT};
 use crate::hex::Point;
-
-const WHEEL_DELTA_LIMIT: f64 = 200.0;
-const WHEEL_DELTA_UNIT: f64 = 100.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MouseButton {
@@ -32,7 +30,7 @@ pub enum Trigger {
 }
 
 impl Trigger {
-    fn key(name: &str) -> Self {
+    pub(crate) fn key(name: &str) -> Self {
         Trigger::Key(name.to_lowercase())
     }
 }
@@ -58,7 +56,6 @@ enum Gesture {
     Press,
     Click,
     Drag,
-    HeldPress,
     Wheel,
 }
 
@@ -72,53 +69,9 @@ impl Action {
             | Action::ZoomIn
             | Action::ZoomOut => Gesture::Held,
             Action::Deselect => Gesture::Press,
-            Action::Select => Gesture::Click,
+            Action::Select | Action::Gather => Gesture::Click,
             Action::DragPan => Gesture::Drag,
-            Action::Gather => Gesture::HeldPress,
             Action::ScrollZoom => Gesture::Wheel,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct InputConfig {
-    pub bindings: Vec<(Trigger, Action)>,
-    pub drag_threshold: f64,
-    pub key_pan_speed: f64,
-    pub key_zoom_rate: f64,
-    pub wheel_zoom_base: f64,
-}
-
-impl Default for InputConfig {
-    fn default() -> Self {
-        let keys = |names: &[&str], action| {
-            names
-                .iter()
-                .map(|n| (Trigger::key(n), action))
-                .collect::<Vec<_>>()
-        };
-        let bindings = [
-            keys(&["a", "arrowleft"], Action::PanLeft),
-            keys(&["d", "arrowright"], Action::PanRight),
-            keys(&["w", "arrowup"], Action::PanUp),
-            keys(&["s", "arrowdown"], Action::PanDown),
-            keys(&["=", "+"], Action::ZoomIn),
-            keys(&["-", "_"], Action::ZoomOut),
-            keys(&["escape"], Action::Deselect),
-            vec![
-                (Trigger::Mouse(MouseButton::Left), Action::Select),
-                (Trigger::Mouse(MouseButton::Left), Action::DragPan),
-                (Trigger::Mouse(MouseButton::Left), Action::Gather),
-                (Trigger::Wheel, Action::ScrollZoom),
-            ],
-        ]
-        .concat();
-        InputConfig {
-            bindings,
-            drag_threshold: 4.0,
-            key_pan_speed: 600.0,
-            key_zoom_rate: 2.0,
-            wheel_zoom_base: 1.1,
         }
     }
 }
@@ -137,7 +90,7 @@ pub enum RawInput {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     Select(Point),
-    Gather(Point, f64),
+    Gather(Point),
     Deselect,
     PanBy(Point),
     ZoomAt(Point, f64),
@@ -203,15 +156,6 @@ impl Input {
         );
         let zoom = axis(Action::ZoomOut, Action::ZoomIn);
         let mut commands = Vec::new();
-        if let Some(press) = &self.press
-            && !press.dragging
-            && self
-                .actions(&press.trigger, Gesture::HeldPress)
-                .next()
-                .is_some()
-        {
-            commands.push(Command::Gather(press.start, dt));
-        }
         if pan != Point::default() {
             commands.push(Command::PanBy(pan * (self.config.key_pan_speed * dt)));
         }
@@ -249,8 +193,7 @@ impl Input {
         if let Some(p) = at
             && self.press.is_none()
             && (self.actions(&trigger, Gesture::Click).next().is_some()
-                || self.actions(&trigger, Gesture::Drag).next().is_some()
-                || self.actions(&trigger, Gesture::HeldPress).next().is_some())
+                || self.actions(&trigger, Gesture::Drag).next().is_some())
         {
             self.press = Some(Press {
                 trigger,
@@ -292,6 +235,7 @@ impl Input {
         self.actions(&trigger, Gesture::Click)
             .filter_map(|a| match a {
                 Action::Select => Some(Command::Select(p)),
+                Action::Gather => Some(Command::Gather(p)),
                 _ => None,
             })
             .collect()
@@ -336,7 +280,7 @@ mod tests {
         );
         assert_eq!(
             i.handle(RawInput::MouseUp(MouseButton::Left, p)),
-            vec![Command::Select(p)]
+            vec![Command::Gather(p), Command::Select(p)]
         );
     }
 
@@ -352,7 +296,7 @@ mod tests {
         let up = Point::new(12.0, 21.0);
         assert_eq!(
             i.handle(RawInput::MouseUp(MouseButton::Left, up)),
-            vec![Command::Select(up)]
+            vec![Command::Gather(up), Command::Select(up)]
         );
     }
 
@@ -371,25 +315,27 @@ mod tests {
     }
 
     #[test]
-    fn holding_gathers_each_frame_and_release_still_selects() {
+    fn holding_does_not_gather_until_release() {
         let mut i = input();
         let p = Point::new(3.0, 4.0);
         i.handle(RawInput::MouseDown(MouseButton::Left, p));
-        assert_eq!(i.frame(0.5), vec![Command::Gather(p, 0.5)]);
-        assert_eq!(i.frame(0.25), vec![Command::Gather(p, 0.25)]);
+        assert!(i.frame(0.5).is_empty());
         assert_eq!(
             i.handle(RawInput::MouseUp(MouseButton::Left, p)),
-            vec![Command::Select(p)]
+            vec![Command::Gather(p), Command::Select(p)]
         );
-        assert!(i.frame(0.5).is_empty());
     }
 
     #[test]
-    fn dragging_stops_gathering() {
+    fn dragging_does_not_gather() {
         let mut i = input();
         i.handle(RawInput::MouseDown(MouseButton::Left, Point::new(0.0, 0.0)));
         i.handle(RawInput::MouseMove(Point::new(20.0, 0.0)));
         assert!(i.frame(0.5).is_empty());
+        assert!(
+            i.handle(RawInput::MouseUp(MouseButton::Left, Point::new(20.0, 0.0)))
+                .is_empty()
+        );
     }
 
     #[test]

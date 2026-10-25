@@ -3,7 +3,7 @@ use rand_pcg::Pcg64Mcg;
 
 use crate::hex::{Axial, HexGrid};
 use crate::icon::Icon;
-use crate::resource::{self, RESOURCE_COUNT, Resource, ResourceState};
+use crate::resource::{self, Amount, RESOURCE_COUNT, Resource, ResourceState};
 
 #[derive(Debug, Clone)]
 pub struct Cell {
@@ -38,10 +38,21 @@ impl Cell {
             .filter_map(|(r, (state, icon))| Some((r, state.as_ref()?, icon.as_ref()?)))
     }
 
-    fn gather(&mut self, dt: f64) {
-        for state in self.resources.iter_mut().flatten() {
-            state.gather(dt);
-        }
+    pub fn sole_resource(&self) -> Option<Resource> {
+        let mut all = self.resources();
+        let (first, _, _) = all.next()?;
+        all.next().is_none().then_some(first)
+    }
+
+    pub fn icon(&self, r: Resource) -> Option<&Icon> {
+        self.icons[r.index()].as_ref()
+    }
+
+    fn gather(&mut self, r: Resource) -> Result<Amount, GameError> {
+        Ok(self.resources[r.index()]
+            .as_mut()
+            .ok_or(GameError::ResourceMissing)?
+            .gather())
     }
 }
 
@@ -55,6 +66,8 @@ pub enum GameError {
     NotAdjacent,
     #[error("hex is not owned")]
     NotOwned,
+    #[error("hex has no such resource")]
+    ResourceMissing,
 }
 
 #[derive(Debug, Clone)]
@@ -77,12 +90,11 @@ impl Game {
         self.grid.get(pos)
     }
 
-    pub fn gather(&mut self, pos: Axial, dt: f64) -> Result<(), GameError> {
+    pub fn gather(&mut self, pos: Axial, resource: Resource) -> Result<Amount, GameError> {
         self.grid
             .get_mut(pos)
             .ok_or(GameError::NotOwned)?
-            .gather(dt);
-        Ok(())
+            .gather(resource)
     }
 
     pub fn grid(&self) -> &HexGrid<Cell> {
@@ -161,12 +173,46 @@ mod tests {
     }
 
     #[test]
-    fn gather_fills_every_resource_of_the_hex() {
+    fn gather_fills_only_the_chosen_resource() {
         let mut game = Game::new(9);
-        game.gather(Axial::ORIGIN, 2.0).unwrap();
-        for (_, state, _) in game.cell(Axial::ORIGIN).unwrap().resources() {
-            assert_eq!(state.current, 2.0);
+        let held: Vec<Resource> = game
+            .cell(Axial::ORIGIN)
+            .unwrap()
+            .resources()
+            .map(|(r, _, _)| r)
+            .collect();
+        game.gather(Axial::ORIGIN, held[0]).unwrap();
+        game.gather(Axial::ORIGIN, held[0]).unwrap();
+        for (r, state, _) in game.cell(Axial::ORIGIN).unwrap().resources() {
+            assert_eq!(state.current, if r == held[0] { 2 } else { 0 });
         }
-        assert_eq!(game.gather(Axial::new(4, 4), 1.0), Err(GameError::NotOwned));
+        assert_eq!(
+            game.gather(Axial::new(4, 4), held[0]),
+            Err(GameError::NotOwned)
+        );
+        if let Some(missing) = Resource::ALL.into_iter().find(|r| !held.contains(r)) {
+            assert_eq!(
+                game.gather(Axial::ORIGIN, missing),
+                Err(GameError::ResourceMissing)
+            );
+        }
+    }
+
+    #[test]
+    fn sole_resource_only_for_single_resource_cells() {
+        let mut game = Game::new(9);
+        for _ in 0..20 {
+            let pos = game.grid().frontier().next().unwrap();
+            let from = pos
+                .neighbors()
+                .into_iter()
+                .find(|n| game.is_owned(*n))
+                .unwrap();
+            game.expand(from, pos).unwrap();
+        }
+        for (_, cell) in game.grid().iter() {
+            let n = cell.resources().count();
+            assert_eq!(cell.sole_resource().is_some(), n == 1);
+        }
     }
 }

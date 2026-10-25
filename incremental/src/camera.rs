@@ -1,7 +1,5 @@
+use crate::config::game::{MAX_ZOOM, MIN_ZOOM};
 use crate::hex::Point;
-
-pub const MIN_ZOOM: f64 = 0.2;
-pub const MAX_ZOOM: f64 = 8.0;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Camera {

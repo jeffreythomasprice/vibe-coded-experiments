@@ -1,6 +1,7 @@
 mod app;
 mod camera;
 mod canvas;
+mod config;
 mod error;
 mod game;
 mod hex;
@@ -10,7 +11,7 @@ mod input;
 mod overlay;
 mod render;
 mod resource;
-mod theme;
+mod toast;
 
 use wasm_bindgen::prelude::*;
 

@@ -1,17 +1,22 @@
-use wasm_bindgen::JsCast;
-use web_sys::{Document, HtmlElement, Node};
+use std::collections::HashMap;
 
+use wasm_bindgen::JsCast;
+use web_sys::{Document, Element, Event, EventTarget, HtmlElement, Node};
+
+use crate::config::game::TOOLTIP_OFFSET;
+use crate::config::theme::{Theme, ToastTheme};
 use crate::error::AppError;
 use crate::game::Game;
 use crate::hex::{Axial, Point};
 use crate::info::{self, Details, Summary, SummaryRow};
-use crate::theme::Theme;
-
-const TOOLTIP_OFFSET: f64 = 14.0;
+use crate::resource::Resource;
+use crate::toast::{self, Toasts};
 
 pub struct Overlay {
     tooltip: HtmlElement,
     sidebar: HtmlElement,
+    toasts: HtmlElement,
+    toast_elements: HashMap<u64, HtmlElement>,
     summary: Option<Summary>,
     details: Option<Details>,
 }
@@ -33,9 +38,15 @@ impl Overlay {
         Ok(Self {
             tooltip,
             sidebar,
+            toasts: element("toasts")?,
+            toast_elements: HashMap::new(),
             summary: None,
             details: None,
         })
+    }
+
+    pub fn sidebar_target(&self) -> EventTarget {
+        self.sidebar.clone().into()
     }
 
     pub fn set_hover(
@@ -76,6 +87,50 @@ impl Overlay {
         Ok(())
     }
 
+    pub fn sync_toasts(&mut self, toasts: &Toasts, theme: &ToastTheme) -> Result<(), AppError> {
+        let document = self.toasts.owner_document().ok_or(AppError::NoDocument)?;
+        for t in toasts.iter() {
+            if !self.toast_elements.contains_key(&t.id) {
+                let el = document
+                    .create_element("div")?
+                    .dyn_into::<HtmlElement>()
+                    .map_err(|_| AppError::NotAnHtmlElement("toast"))?;
+                el.set_class_name("toast");
+                el.append_child(&icon_element(&document, &t.icon_svg)?)?;
+                el.append_child(&text_element(&document, "span", "", &t.label())?)?;
+                let style = el.style();
+                style.set_property("color", theme.color(t.resource))?;
+                style.set_property("font-size", &format!("{}px", theme.font_size))?;
+                style.set_property(
+                    "-webkit-text-stroke",
+                    &format!("{}px {}", theme.outline_width, theme.outline(t.resource)),
+                )?;
+                self.toasts.append_child(&el)?;
+                self.toast_elements.insert(t.id, el);
+            }
+            let Some(el) = self.toast_elements.get(&t.id) else {
+                continue;
+            };
+            let rise = toast::offset(t.age, theme.duration, theme.rise);
+            let style = el.style();
+            style.set_property("left", &format!("{}px", t.at.x))?;
+            style.set_property("top", &format!("{}px", t.at.y - rise))?;
+            style.set_property(
+                "opacity",
+                &toast::opacity(t.age, theme.duration, theme.fade).to_string(),
+            )?;
+        }
+        let live: Vec<u64> = toasts.iter().map(|t| t.id).collect();
+        self.toast_elements.retain(|id, el| {
+            let keep = live.contains(id);
+            if !keep {
+                el.remove();
+            }
+            keep
+        });
+        Ok(())
+    }
+
     pub fn set_selected(&mut self, selected: Option<Axial>, game: &Game) -> Result<(), AppError> {
         let details = selected.and_then(|pos| info::details(game, pos));
         if self.details == details {
@@ -93,7 +148,11 @@ impl Overlay {
         for resource in &d.resources {
             let section = document.create_element("div")?;
             section.set_class_name("resource");
-            section.append_child(&icon_element(&document, &resource.icon_svg)?)?;
+            let icon = icon_element(&document, &resource.icon_svg)?;
+            icon.dyn_ref::<Element>()
+                .ok_or(AppError::NotAnHtmlElement("icon"))?
+                .set_attribute("data-resource", &resource.resource.index().to_string())?;
+            section.append_child(&icon)?;
             for (label, value) in &resource.lines {
                 let p = document.create_element("p")?;
                 p.append_child(&text_element(&document, "span", "label", label)?)?;
@@ -106,6 +165,17 @@ impl Overlay {
         self.details = details;
         Ok(())
     }
+}
+
+pub fn sidebar_resource(event: &Event) -> Option<Resource> {
+    let hit = event
+        .target()?
+        .dyn_into::<Element>()
+        .ok()?
+        .closest("[data-resource]")
+        .ok()??;
+    let index: usize = hit.get_attribute("data-resource")?.parse().ok()?;
+    Resource::ALL.get(index).copied()
 }
 
 fn text_element(document: &Document, tag: &str, class: &str, text: &str) -> Result<Node, AppError> {

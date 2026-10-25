@@ -18,18 +18,23 @@
         #sidebar .resource { margin-bottom: 14px; }
         .icon { display: inline-block; width: 16px; height: 16px; vertical-align: middle; }
         #sidebar .icon { width: 32px; height: 32px; margin-bottom: 4px; }
+        #sidebar .icon { cursor: pointer; }
         .title { font-weight: bold; margin-bottom: 4px; }
         .bar { position: relative; flex: 1; min-width: 140px; height: 16px; background: var(--bar-background); border-radius: 2px; overflow: hidden; }
         .fill { position: absolute; left: 0; top: 0; bottom: 0; }
         .fill.generate { background: var(--bar-generate); }
         .fill.overfill { background: var(--bar-overfill); }
         .bar-text { position: relative; display: block; text-align: center; font-size: 11px; line-height: 16px; text-shadow: 0 0 2px #000; }
+        #toasts { position: fixed; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
+        .toast { position: absolute; display: flex; align-items: center; gap: 4px; white-space: nowrap; font: bold 18px system-ui, sans-serif; paint-order: stroke fill; transform: translate(-50%, -100%); }
+        .toast .icon { width: 1.2em; height: 1.2em; filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
         .row { display: flex; align-items: center; gap: 6px; }
     </style>
 </head>
 <body>
     <canvas id="canvas"></canvas>
     <div id="tooltip" class="panel" hidden></div>
+    <div id="toasts"></div>
     <aside id="sidebar" class="panel" hidden></aside>
     <link data-trunk rel="rust" data-target-name="incremental_game" />
 </body>

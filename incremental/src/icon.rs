@@ -3,7 +3,8 @@ use std::f64::consts::{PI, TAU};
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64Mcg;
 
-use crate::hex::Point;
+use crate::config::game::ICON_AREA;
+use crate::hex::{Axial, Layout, Point};
 use crate::resource::Resource;
 
 const SEED_SALT: u64 = 0x9E37_79B9_7F4A_7C15;
@@ -89,6 +90,24 @@ pub fn icon_slots(n: usize) -> Vec<(Point, f64)> {
                 .collect()
         }
     }
+}
+
+pub fn icon_placements(layout: Layout, a: Axial, n: usize) -> Vec<(Point, f64)> {
+    let center = layout.hex_to_pixel(a);
+    let area = layout.size * ICON_AREA;
+    icon_slots(n)
+        .into_iter()
+        .map(|(offset, radius)| (center + offset * area, radius * area))
+        .collect()
+}
+
+pub fn icon_at(layout: Layout, a: Axial, n: usize, world: Point) -> Option<usize> {
+    icon_placements(layout, a, n)
+        .into_iter()
+        .position(|(origin, scale)| {
+            let d = world - origin;
+            d.x.hypot(d.y) <= scale
+        })
 }
 
 fn p(x: f64, y: f64) -> Point {
@@ -348,5 +367,25 @@ mod tests {
     fn slots_shrink_as_count_grows() {
         let radii: Vec<f64> = (1..=5).map(|n| icon_slots(n)[0].1).collect();
         assert!(radii.windows(2).all(|w| w[0] > w[1]));
+    }
+
+    #[test]
+    fn icon_at_hits_slot_centres() {
+        let layout = Layout::new(32.0);
+        let a = Axial::new(2, -1);
+        for n in 1..=5 {
+            for (i, (origin, _)) in icon_placements(layout, a, n).into_iter().enumerate() {
+                assert_eq!(icon_at(layout, a, n, origin), Some(i));
+            }
+        }
+    }
+
+    #[test]
+    fn icon_at_misses_gaps() {
+        let layout = Layout::new(32.0);
+        let a = Axial::ORIGIN;
+        assert_eq!(icon_at(layout, a, 3, layout.hex_to_pixel(a)), None);
+        assert_eq!(icon_at(layout, a, 1, layout.hex_to_pixel(a)), Some(0));
+        assert_eq!(icon_at(layout, a, 1, Point::new(31.0, 0.0)), None);
     }
 }

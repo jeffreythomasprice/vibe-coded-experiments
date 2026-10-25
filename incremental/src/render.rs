@@ -1,12 +1,10 @@
 use crate::camera::Camera;
 use crate::canvas::Canvas;
+use crate::config::theme::Theme;
 use crate::error::AppError;
 use crate::game::Game;
 use crate::hex::{Axial, DIRECTIONS, FORWARD_DIRS, Layout, Point};
-use crate::icon::{Icon, Segment, icon_slots};
-use crate::theme::Theme;
-
-const ICON_AREA: f64 = 0.6;
+use crate::icon::{Icon, Segment, icon_placements};
 
 pub fn draw(
     canvas: &Canvas,
@@ -91,12 +89,9 @@ fn draw_icons(canvas: &Canvas, layout: Layout, game: &Game, a: Axial) {
     let Some(cell) = game.cell(a) else {
         return;
     };
-    let icons: Vec<&Icon> = cell.resources().map(|(_, _, icon)| icon).collect();
-    let center = layout.hex_to_pixel(a);
-    let area = layout.size * ICON_AREA;
-    for (icon, (offset, radius)) in icons.into_iter().zip(icon_slots(cell.resources().count())) {
-        let origin = center + offset * area;
-        let scale = radius * area;
+    let icons = cell.resources().map(|(_, _, icon)| icon);
+    let placements = icon_placements(layout, a, cell.resources().count());
+    for (icon, (origin, scale)) in icons.zip(placements) {
         draw_icon(canvas, icon, origin, scale);
     }
 }

@@ -4,7 +4,7 @@ in flight:
 
 todo:
 
-when clicking and holding on a tile that has multiple resource generation options, you have to pick one, it doesn't generate all
+shared max for hexes with multiple resources
 
 
 aquire more hexes with resources
@@ -19,6 +19,9 @@ at its fastest value this should still be slower than the amount gained by holdi
 hexes lose resource faster the more unclaimed areas around them are unclaimed, dropping to no loss at all when all 6 borders are claimed
 
 
+each new hex claimed costs more
+
+
 you can transfer resources between hexes instead of generating new ones, holding down on an arrow between hexes
 this uses the extra max_overfill amount to see how much can actually be there
 
@@ -26,6 +29,8 @@ this uses the extra max_overfill amount to see how much can actually be there
 upgrades
 auto generator
 auto transfer, must have one on each side of the boundary
+increased max
+increased generate per click
 upgrades are typed to a resource
 hexes have max upgrade slots? or the number of slots is itself an upgrade?
 resources spent on an upgrade must be physically present on the tile
