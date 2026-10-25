@@ -1,4 +1,5 @@
 use crate::hex::Point;
+use crate::icon::Icon;
 use crate::resource::{Amount, Resource};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -6,7 +7,7 @@ pub struct Toast {
     pub id: u64,
     pub resource: Resource,
     pub amount: Amount,
-    pub icon_svg: String,
+    pub icon: Icon,
     pub at: Point,
     pub age: f64,
 }
@@ -24,12 +25,12 @@ pub struct Toasts {
 }
 
 impl Toasts {
-    pub fn push(&mut self, resource: Resource, amount: Amount, icon_svg: String, at: Point) {
+    pub fn push(&mut self, resource: Resource, amount: Amount, icon: Icon, at: Point) {
         self.items.push(Toast {
             id: self.next_id,
             resource,
             amount,
-            icon_svg,
+            icon,
             at,
             age: 0.0,
         });
@@ -41,6 +42,10 @@ impl Toasts {
             t.age += dt;
         }
         self.items.retain(|t| t.age < duration);
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Toast> {
@@ -67,8 +72,12 @@ pub fn offset(age: f64, duration: f64, rise: f64) -> f64 {
 mod tests {
     use super::*;
 
+    fn test_icon() -> Icon {
+        Icon::generate(Resource::Water, 0)
+    }
+
     fn push(toasts: &mut Toasts) {
-        toasts.push(Resource::Water, 1, String::new(), Point::new(0.0, 0.0));
+        toasts.push(Resource::Water, 1, test_icon(), Point::new(0.0, 0.0));
     }
 
     #[test]
@@ -118,7 +127,7 @@ mod tests {
     #[test]
     fn label_shows_amount() {
         let mut toasts = Toasts::default();
-        toasts.push(Resource::Fire, 3, String::new(), Point::new(0.0, 0.0));
+        toasts.push(Resource::Fire, 3, test_icon(), Point::new(0.0, 0.0));
         assert_eq!(toasts.iter().next().unwrap().label(), "+3");
     }
 }

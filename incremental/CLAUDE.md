@@ -21,21 +21,23 @@ Never run git commands that change repository or remote state — commit, add, b
 
 ## Architecture
 
-Rust compiled to WASM via Trunk, drawing a hex-grid incremental game onto a single `<canvas id="canvas">` in `index.html`. No JS framework; `lib.rs::start` is the `#[wasm_bindgen(start)]` entry and calls `App::start`.
+Rust compiled to WASM via Trunk, drawing a hex-grid incremental game with wgpu (WebGPU, falling back to WebGL2) onto a single `<canvas id="canvas">` in `index.html`. winit owns the window and events; everything else, including all UI text and panels, is drawn on the canvas. No JS framework; `lib.rs::start` is the `#[wasm_bindgen(start)]` entry and calls `app::run`. `app`, `gpu` and their winit/wgpu/web dependencies are `wasm32`-only, so `cargo test` builds natively without them.
 
-Layering is deliberate: only `app.rs`, `canvas.rs`/`render.rs` and `overlay.rs` touch `web_sys`. Everything else is pure and testable natively.
+Layering is deliberate: only `app.rs` and `gpu/` touch winit, wgpu or `web_sys`. Everything that decides *what* to draw (`scene.rs`, `ui.rs`, `text.rs`) is pure and testable natively.
 
-- `app.rs` — owns all state in `Rc<RefCell<App>>`, registers DOM listeners (closures are `forget()`-ed), and runs the `requestAnimationFrame` loop. Rendering is dirty-flag driven: `apply(Command)` sets `dirty`, and `frame` only redraws when it is set. Frame `dt` is clamped by `MAX_FRAME_DT`.
+- `app.rs` — winit `ApplicationHandler` owning all state. Maps winit events to `RawInput`, creates the window from the existing canvas, and hands the async-built `Gpu` back through a user event. Redraws only while `dirty`, toasts are alive, or `Input::wants_frames()` (held keys); frame `dt` is clamped by `MAX_FRAME_DT`. Presses inside the sidebar are not forwarded to `Input`; releasing over the same sidebar icon gathers that resource.
 - `input.rs` — turns `RawInput` (key/mouse/wheel/blur) into `Command`s. Bindings live in `InputConfig` (`config/input.rs`) as `(Trigger, Action)` pairs; each `Action` maps to a `Gesture` (Held/Press/Click/Drag/Wheel). The same trigger can bind several actions (left mouse is `Gather` then `Select` on click, and `DragPan` past `drag_threshold`). `Input::frame(dt)` emits commands for held keys.
 - `game.rs` — game rules over `HexGrid<Cell>` (`expand`, `remove`, `gather(pos, resource)`) returning `GameError`. A cell is "owned" if it is in the grid. Each `Cell` has optional `ResourceState`s per `Resource`, a seed, and the icons generated from it; new cells get a random resource set. Knows nothing about rendering or screen coordinates.
 - `hex.rs` — axial coordinates (`Axial`), `Layout` for hex↔pixel conversion, and the generic `HexGrid<T>`.
 - `camera.rs` — pan/zoom with `screen_to_world` conversion; zoom clamped to `MIN_ZOOM`/`MAX_ZOOM`.
-- `icon.rs` / `resource.rs` — `Resource` (five elements) and `ResourceState` (integer `Amount`s, a type alias for `u64`; each click adds `per_click` up to `max_generate`); procedural per-`Resource` icons built from vector `Layer`s in a [-1, 1] box, seeded with `rand_pcg` from the cell seed. `icon_slots(n)` gives the shared-footprint layout for n icons on a hex.
-- `config/` — the one place for tunables: `config::theme` (`Theme`, `ToastTheme`, `DARK` colors/sizes), `config::input` (`InputConfig` key/mouse bindings and input tuning), `config::game` (hex size, zoom limits, resource weights/initial amounts, and other numeric constants). Change settings here rather than in the consuming modules.
-- `render.rs` — stateless canvas drawing of grid, selection and hex icons using a `Theme`.
-- `overlay.rs` / `info.rs` — DOM tooltip (`#tooltip`, hovered owned hex) and sidebar (`#sidebar`, selected hex) in `index.html`, themed via `Theme`; `info.rs` builds their content (icon SVGs plus resource values) from `Game`; `Overlay` rebuilds the DOM only when that content changes.
-- `toast.rs` — pure state for transient gather toasts (`+N <icon>`): `Toasts` ages and expires them, `opacity`/`offset` give the fade and rise. `App::gather` pushes one when `Game::gather` returns a non-zero gain; `Overlay::sync_toasts` mirrors them into `#toasts` DOM. Colors, outline, font size, duration, fade and rise live in `Theme::toast` (`ToastTheme`).
-- `error.rs` — `AppError` (browser/setup failures, convertible to/from `JsValue`); `GameError` is separate and lives in `game.rs`.
+- `icon.rs` / `resource.rs` — `Resource` (five elements) and `ResourceState` (integer `Amount`s, a type alias for `u64`; each click adds `per_click` up to `max_generate`); procedural per-`Resource` icons built from vector `Layer`s in a [-1, 1] box, seeded with `rand_pcg` from the cell seed and tessellated once into a `Mesh`. `icon_slots(n)` gives the shared-footprint layout for n icons on a hex.
+- `config/` — the one place for tunables: `config::theme` (`Color`, `Theme`, `PanelTheme`, `ToastTheme`, `DARK` colors/sizes), `config::input` (`InputConfig` key/mouse bindings and input tuning), `config::game` (hex size, zoom limits, resource weights/initial amounts, and other numeric constants). Change settings here rather than in the consuming modules.
+- `scene.rs` — world draw data: `GridUniforms` for the procedural empty grid, `HexInstance`s for owned/selected hexes (fills, then borders, selected last), and `world_icons`. Only owned hexes are enumerated, so cost doesn't grow with zoom-out.
+- `ui.rs` / `info.rs` — `info.rs` builds tooltip/sidebar content (`Summary`, `Details`, with `Icon`s) from `Game`; `ui.rs` lays that out plus toasts into `prim.rs` primitives (`Layer` of rects, icons, text) and records the sidebar rect and icon hit rects for input. Layout metrics live in `Theme::panel`/`Theme::toast`.
+- `text.rs` — `Fonts` loads `assets/NotoSerif-VariableFont_wdth,wght.ttf` via `ab_glyph` (Regular and Bold through the `wght` axis); single-line measure/layout with kerning, no shaping.
+- `gpu/` — wgpu renderer. One pass: `grid.wgsl` (full-screen shader that draws the empty hex grid per pixel), `hex.wgsl` (instanced owned/selected hexes), `mesh.wgsl` (icon triangles tessellated by lyon in `Icon::mesh`), `rect.wgsl` (rounded panels/bars), `text.wgsl` (glyph quads from the R8 atlas in `atlas.rs`). `batch.rs` turns primitives into instance/vertex data. Colors are written as-is to a non-sRGB surface to match the CSS look.
+- `toast.rs` — pure state for transient gather toasts (`+N <icon>`): `Toasts` ages and expires them, `opacity`/`offset` give the fade and rise. `App::gather` pushes one when `Game::gather` returns a non-zero gain; `ui.rs` draws them. Colors, outline, font size, duration, fade and rise live in `Theme::toast` (`ToastTheme`).
+- `error.rs` — `AppError` (browser/winit/wgpu setup failures, convertible to/from `JsValue`); `GameError` is separate and lives in `game.rs`.
 
 ### Resource assignment (temporary)
 
@@ -43,6 +45,6 @@ Which resources a hex gets is currently pure randomness, and is a placeholder. `
 
 The intended direction is for assignment to be customizable, based on neighboring hexes, or both. Keep that seam in mind: don't spread assumptions about random assignment into rendering, `info.rs`, or tests (existing tests rely only on "at least one resource" and on the weight distribution inside `resource.rs`). Changes will mainly touch `Cell::random`/`Game::expand` (which will need access to neighbors or a chosen set) and `random_set`.
 
-Gather flow: a left click emits `Gather` then `Select`. `App::gather_at` gathers the hex's only resource, or on multi-resource hexes the resource whose icon (`icon::icon_at`) is under the cursor; clicking a sidebar icon (`data-resource`) gathers that resource on the selected hex.
+Gather flow: a left click emits `Gather` then `Select`. `App::gather_at` gathers the hex's only resource, or on multi-resource hexes the resource whose icon (`icon::icon_at`) is under the cursor; clicking a sidebar icon gathers that resource on the selected hex.
 
 Click flow: `Command::Select(screen)` → `App::select` converts via camera and layout to an `Axial`; selecting an owned hex selects it, clicking an empty hex expands from the current selection.

@@ -1,7 +1,6 @@
 in flight:
 
 
-
 todo:
 
 shared max for hexes with multiple resources

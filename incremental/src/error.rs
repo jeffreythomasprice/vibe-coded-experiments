@@ -8,14 +8,30 @@ pub enum AppError {
     NoDocument,
     #[error("element #{0} not found")]
     ElementNotFound(&'static str),
-    #[error("element #{0} is not an html element")]
-    NotAnHtmlElement(&'static str),
     #[error("element #{0} is not a canvas")]
     NotACanvas(&'static str),
-    #[error("canvas has no 2d context")]
-    NoContext2d,
     #[error("javascript error: {0}")]
     Js(String),
+    #[error("invalid font: {0}")]
+    Font(#[from] ab_glyph::InvalidFont),
+    #[cfg(target_arch = "wasm32")]
+    #[error("event loop error: {0}")]
+    EventLoop(#[from] winit::error::EventLoopError),
+    #[cfg(target_arch = "wasm32")]
+    #[error("window error: {0}")]
+    Window(#[from] winit::error::OsError),
+    #[cfg(target_arch = "wasm32")]
+    #[error("could not create surface: {0}")]
+    Surface(#[from] wgpu::CreateSurfaceError),
+    #[cfg(target_arch = "wasm32")]
+    #[error("no suitable gpu adapter: {0}")]
+    Adapter(#[from] wgpu::RequestAdapterError),
+    #[cfg(target_arch = "wasm32")]
+    #[error("could not create gpu device: {0}")]
+    Device(#[from] wgpu::RequestDeviceError),
+    #[cfg(target_arch = "wasm32")]
+    #[error("surface is not supported by the adapter")]
+    SurfaceConfig,
 }
 
 impl From<JsValue> for AppError {

@@ -35,13 +35,6 @@ impl Camera {
         let moved = self.screen_to_world(screen, viewport);
         self.center = self.center + (anchor - moved);
     }
-
-    pub fn visible_world_rect(&self, viewport: Point) -> (Point, Point) {
-        (
-            self.screen_to_world(Point::new(0.0, 0.0), viewport),
-            self.screen_to_world(viewport, viewport),
-        )
-    }
 }
 
 #[cfg(test)]

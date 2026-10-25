@@ -1,10 +1,11 @@
 use crate::game::Game;
 use crate::hex::Axial;
+use crate::icon::Icon;
 use crate::resource::{Resource, ResourceState};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SummaryRow {
-    pub icon_svg: String,
+    pub icon: Icon,
     pub text: String,
     pub generate_fill: f64,
     pub overfill_fill: f64,
@@ -16,14 +17,14 @@ pub struct Summary {
     pub rows: Vec<SummaryRow>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResourceDetails {
     pub resource: Resource,
-    pub icon_svg: String,
+    pub icon: Icon,
     pub lines: Vec<(&'static str, String)>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Details {
     pub title: String,
     pub resources: Vec<ResourceDetails>,
@@ -53,7 +54,7 @@ pub fn summary(game: &Game, pos: Axial) -> Option<Summary> {
         rows: cell
             .resources()
             .map(|(_, state, icon)| SummaryRow {
-                icon_svg: icon.to_svg(),
+                icon: icon.clone(),
                 text: short(state),
                 generate_fill: state.generate_fill(),
                 overfill_fill: state.overfill_fill(),
@@ -70,7 +71,7 @@ pub fn details(game: &Game, pos: Axial) -> Option<Details> {
             .resources()
             .map(|(resource, state, icon)| ResourceDetails {
                 resource,
-                icon_svg: icon.to_svg(),
+                icon: icon.clone(),
                 lines: lines(state),
             })
             .collect(),

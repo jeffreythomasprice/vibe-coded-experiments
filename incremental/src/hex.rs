@@ -106,34 +106,6 @@ impl Layout {
         let q = p.x / (self.size * SQRT3) - r / 2.0;
         round_axial(q, r)
     }
-
-    pub fn corners(self, a: Axial) -> [Point; 6] {
-        let center = self.hex_to_pixel(a);
-        std::array::from_fn(|i| {
-            let angle = (60.0 * i as f64 - 30.0).to_radians();
-            center + Point::new(angle.cos(), angle.sin()) * self.size
-        })
-    }
-
-    /// The edge shared with the neighbor in direction `DIRECTIONS[dir]`.
-    pub fn edge(self, a: Axial, dir: usize) -> (Point, Point) {
-        let corners = self.corners(a);
-        (corners[(6 - dir) % 6], corners[(7 - dir) % 6])
-    }
-
-    /// Every hex that may intersect the rectangle (slightly over-inclusive).
-    pub fn covering(self, min: Point, max: Point) -> impl Iterator<Item = Axial> {
-        let row_height = self.size * 1.5;
-        let col_width = self.size * SQRT3;
-        let r_min = ((min.y - self.size) / row_height).floor() as i32;
-        let r_max = ((max.y + self.size) / row_height).ceil() as i32;
-        (r_min..=r_max).flat_map(move |r| {
-            let shift = f64::from(r) / 2.0;
-            let q_min = (min.x / col_width - shift).floor() as i32 - 1;
-            let q_max = (max.x / col_width - shift).ceil() as i32 + 1;
-            (q_min..=q_max).map(move |q| Axial::new(q, r))
-        })
-    }
 }
 
 fn round_axial(q: f64, r: f64) -> Axial {
@@ -332,32 +304,6 @@ mod tests {
         let c = LAYOUT.hex_to_pixel(a);
         for (dx, dy) in [(4.0, 0.0), (-4.0, 0.0), (0.0, 4.0), (0.0, -4.0), (3.0, 3.0)] {
             assert_eq!(LAYOUT.pixel_to_hex(c + Point::new(dx, dy)), a);
-        }
-    }
-
-    #[test]
-    fn edge_midpoint_is_between_neighbor_centers() {
-        let a = Axial::new(1, 2);
-        for (d, dir) in DIRECTIONS.iter().enumerate() {
-            let (p, q) = LAYOUT.edge(a, d);
-            let mid = (p + q) * 0.5;
-            let expected = (LAYOUT.hex_to_pixel(a) + LAYOUT.hex_to_pixel(a + *dir)) * 0.5;
-            assert!((mid.x - expected.x).abs() < 1e-9 && (mid.y - expected.y).abs() < 1e-9);
-        }
-    }
-
-    #[test]
-    fn covering_includes_all_centers_in_rect() {
-        let (min, max) = (Point::new(-57.0, -33.0), Point::new(81.0, 49.0));
-        let covered: std::collections::HashSet<_> = LAYOUT.covering(min, max).collect();
-        for q in -20..=20 {
-            for r in -20..=20 {
-                let a = Axial::new(q, r);
-                let c = LAYOUT.hex_to_pixel(a);
-                if c.x >= min.x && c.x <= max.x && c.y >= min.y && c.y <= max.y {
-                    assert!(covered.contains(&a), "{a:?}");
-                }
-            }
         }
     }
 

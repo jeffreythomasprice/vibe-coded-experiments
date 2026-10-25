@@ -4,6 +4,7 @@ use rand::seq::IndexedRandom;
 use crate::config::game::{
     COUNT_WEIGHTS, INITIAL_MAX_GENERATE, INITIAL_MAX_OVERFILL, INITIAL_PER_CLICK,
 };
+use crate::config::theme::Color;
 
 pub const RESOURCE_COUNT: usize = 5;
 
@@ -31,23 +32,23 @@ impl Resource {
         self as usize
     }
 
-    pub fn color(self) -> &'static str {
+    pub fn color(self) -> Color {
         match self {
-            Resource::Wood => "#4caf50",
-            Resource::Fire => "#e53935",
-            Resource::Earth => "#a1792f",
-            Resource::Metal => "#9aa5b1",
-            Resource::Water => "#29b6f6",
+            Resource::Wood => Color::hex(0x4caf50),
+            Resource::Fire => Color::hex(0xe53935),
+            Resource::Earth => Color::hex(0xa1792f),
+            Resource::Metal => Color::hex(0x9aa5b1),
+            Resource::Water => Color::hex(0x29b6f6),
         }
     }
 
-    pub fn accent(self) -> &'static str {
+    pub fn accent(self) -> Color {
         match self {
-            Resource::Wood => "#c5e8a8",
-            Resource::Fire => "#ffb74d",
-            Resource::Earth => "#e0c58a",
-            Resource::Metal => "#eef2f6",
-            Resource::Water => "#e1f5fe",
+            Resource::Wood => Color::hex(0xc5e8a8),
+            Resource::Fire => Color::hex(0xffb74d),
+            Resource::Earth => Color::hex(0xe0c58a),
+            Resource::Metal => Color::hex(0xeef2f6),
+            Resource::Water => Color::hex(0xe1f5fe),
         }
     }
 }

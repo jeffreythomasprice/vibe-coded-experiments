@@ -3,11 +3,19 @@ use std::f64::consts::{PI, TAU};
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64Mcg;
 
+use lyon_tessellation::geom::point;
+use lyon_tessellation::path::Path;
+use lyon_tessellation::{
+    BuffersBuilder, FillOptions, FillRule, FillTessellator, FillVertex, VertexBuffers,
+};
+
 use crate::config::game::ICON_AREA;
+use crate::config::theme::Color;
 use crate::hex::{Axial, Layout, Point};
 use crate::resource::Resource;
 
 const SEED_SALT: u64 = 0x9E37_79B9_7F4A_7C15;
+const MESH_TOLERANCE: f32 = 0.005;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Segment {
@@ -21,12 +29,82 @@ pub enum Segment {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Layer {
     pub segments: Vec<Segment>,
-    pub fill: &'static str,
+    pub fill: Color,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Icon {
     pub layers: Vec<Layer>,
+    pub mesh: Mesh,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Mesh {
+    pub vertices: Vec<(Point, Color)>,
+    pub indices: Vec<u32>,
+}
+
+impl Mesh {
+    fn build(layers: &[Layer]) -> Self {
+        let mut mesh = Mesh::default();
+        let mut tessellator = FillTessellator::new();
+        for layer in layers {
+            let mut buffers: VertexBuffers<Point, u32> = VertexBuffers::new();
+            let options = FillOptions::tolerance(MESH_TOLERANCE).with_fill_rule(FillRule::NonZero);
+            let result = tessellator.tessellate_path(
+                &lyon_path(&layer.segments),
+                &options,
+                &mut BuffersBuilder::new(&mut buffers, |v: FillVertex| {
+                    let q = v.position();
+                    Point::new(f64::from(q.x), f64::from(q.y))
+                }),
+            );
+            if let Err(e) = result {
+                log::warn!("icon tessellation failed: {e:?}");
+                continue;
+            }
+            let base = mesh.vertices.len() as u32;
+            mesh.vertices
+                .extend(buffers.vertices.into_iter().map(|q| (q, layer.fill)));
+            mesh.indices
+                .extend(buffers.indices.into_iter().map(|i| base + i));
+        }
+        mesh
+    }
+}
+
+fn lyon_path(segments: &[Segment]) -> Path {
+    let pt = |q: Point| point(q.x as f32, q.y as f32);
+    let mut builder = Path::builder();
+    let mut open = false;
+    for segment in segments {
+        match *segment {
+            Segment::MoveTo(a) => {
+                if open {
+                    builder.end(false);
+                }
+                builder.begin(pt(a));
+                open = true;
+            }
+            Segment::LineTo(a) => {
+                builder.line_to(pt(a));
+            }
+            Segment::QuadTo(c, a) => {
+                builder.quadratic_bezier_to(pt(c), pt(a));
+            }
+            Segment::CubicTo(c1, c2, a) => {
+                builder.cubic_bezier_to(pt(c1), pt(c2), pt(a));
+            }
+            Segment::Close => {
+                builder.end(true);
+                open = false;
+            }
+        }
+    }
+    if open {
+        builder.end(false);
+    }
+    builder.build()
 }
 
 impl Icon {
@@ -40,36 +118,9 @@ impl Icon {
             Resource::Metal => metal(&mut rng),
             Resource::Water => water(&mut rng),
         };
-        Icon { layers }
+        let mesh = Mesh::build(&layers);
+        Icon { layers, mesh }
     }
-
-    pub fn to_svg(&self) -> String {
-        let mut out = String::from(r#"<svg viewBox="-1 -1 2 2" width="100%" height="100%">"#);
-        for layer in &self.layers {
-            out.push_str(&format!(
-                r#"<path fill="{}" d="{}"/>"#,
-                layer.fill,
-                path_data(&layer.segments)
-            ));
-        }
-        out.push_str("</svg>");
-        out
-    }
-}
-
-fn path_data(segments: &[Segment]) -> String {
-    let pt = |q: &Point| format!("{:.3} {:.3}", q.x, q.y);
-    segments
-        .iter()
-        .map(|s| match s {
-            Segment::MoveTo(a) => format!("M{}", pt(a)),
-            Segment::LineTo(a) => format!("L{}", pt(a)),
-            Segment::QuadTo(c, a) => format!("Q{} {}", pt(c), pt(a)),
-            Segment::CubicTo(c1, c2, a) => format!("C{} {} {}", pt(c1), pt(c2), pt(a)),
-            Segment::Close => "Z".to_string(),
-        })
-        .collect::<Vec<_>>()
-        .join("")
 }
 
 // Unit-disk placements (offset, radius) so that n icons share one fixed footprint.
@@ -342,11 +393,25 @@ mod tests {
     }
 
     #[test]
-    fn svg_has_one_path_per_layer() {
-        let icon = Icon::generate(Resource::Fire, 7);
-        let svg = icon.to_svg();
-        assert_eq!(svg.matches("<path").count(), icon.layers.len());
-        assert!(svg.starts_with("<svg") && svg.ends_with("</svg>"));
+    fn mesh_is_non_empty_and_inside_the_unit_box() {
+        for r in Resource::ALL {
+            for seed in 0..50 {
+                let mesh = Icon::generate(r, seed).mesh;
+                assert!(!mesh.indices.is_empty(), "{r:?} {seed}");
+                assert_eq!(mesh.indices.len() % 3, 0);
+                for (q, _) in &mesh.vertices {
+                    assert!(
+                        q.x.abs() <= 1.001 && q.y.abs() <= 1.001,
+                        "{r:?} {seed} {q:?}"
+                    );
+                }
+                assert!(
+                    mesh.indices
+                        .iter()
+                        .all(|&i| (i as usize) < mesh.vertices.len())
+                );
+            }
+        }
     }
 
     #[test]

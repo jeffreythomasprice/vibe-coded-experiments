@@ -8,18 +8,7 @@ pub enum MouseButton {
     Left,
     Middle,
     Right,
-    Other(i16),
-}
-
-impl From<i16> for MouseButton {
-    fn from(value: i16) -> Self {
-        match value {
-            0 => MouseButton::Left,
-            1 => MouseButton::Middle,
-            2 => MouseButton::Right,
-            n => MouseButton::Other(n),
-        }
-    }
+    Other(u16),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -140,6 +129,13 @@ impl Input {
 
     pub fn is_dragging(&self) -> bool {
         self.press.as_ref().is_some_and(|p| p.dragging)
+    }
+
+    pub fn wants_frames(&self) -> bool {
+        self.config
+            .bindings
+            .iter()
+            .any(|(t, a)| a.gesture() == Gesture::Held && self.held.contains(t))
     }
 
     pub fn frame(&self, dt: f64) -> Vec<Command> {
@@ -268,6 +264,18 @@ mod tests {
 
     fn key_up(k: &str) -> RawInput {
         RawInput::KeyUp(k.to_string())
+    }
+
+    #[test]
+    fn wants_frames_only_while_movement_keys_held() {
+        let mut i = input();
+        assert!(!i.wants_frames());
+        i.handle(key_down("Escape"));
+        assert!(!i.wants_frames());
+        i.handle(key_down("a"));
+        assert!(i.wants_frames());
+        i.handle(key_up("a"));
+        assert!(!i.wants_frames());
     }
 
     #[test]
