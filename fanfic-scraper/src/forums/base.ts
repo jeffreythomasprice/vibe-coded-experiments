@@ -1,5 +1,5 @@
 import type { HttpClient } from "../http";
-import type { Subforum, Thread, Post } from "../models";
+import type { Subforum, Thread, Post, Threadmark, ThreadmarkCategory } from "../models";
 
 export interface ThreadListResult {
     threads: Thread[];
@@ -19,4 +19,10 @@ export interface ForumAdapter {
     getSubforums(http: HttpClient): Promise<Subforum[]>;
     getThreadList(http: HttpClient, subforum: Subforum, page?: number): Promise<ThreadListResult>;
     getPosts(http: HttpClient, thread: Thread, page?: number): Promise<PostListResult>;
+    getThreadmarks?(
+        http: HttpClient,
+        thread: Thread,
+        opts: { checkEdits: boolean },
+    ): Promise<Threadmark[]>;
+    getThreadmarkCategories?(http: HttpClient, thread: Thread): Promise<ThreadmarkCategory[]>;
 }

@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import type { HttpClient } from "../http";
-import type { Subforum, Thread, Post } from "../models";
+import type { Subforum, Thread, Post, Threadmark, ThreadmarkCategory } from "../models";
+import { parseWordCount } from "../wordcount";
 import type { ForumAdapter, ThreadListResult, PostListResult } from "./base";
 
 export interface XenForoConfig {
@@ -106,8 +107,15 @@ export class XenForoAdapter implements ForumAdapter {
                     characters.push(text);
             });
 
+            const wordsText = $el
+                .find(".structItem-parts a[href$='/threadmarks']")
+                .text()
+                .match(/Words:\s*([\d.,]+\s*[km]?)/i)?.[1];
+            const wordCount = wordsText ? parseWordCount(wordsText) : undefined;
+
             threads.push({
                 siteName: this.siteName,
+                wordCount,
                 subforumId: subforum.subforumId,
                 threadId,
                 title,
@@ -119,6 +127,7 @@ export class XenForoAdapter implements ForumAdapter {
                 fandoms,
                 genres,
                 characters,
+                hasThreadmarks: $el.find("a[href$='/threadmarks']").length > 0,
             });
         });
 
@@ -165,5 +174,117 @@ export class XenForoAdapter implements ForumAdapter {
         const hasNext = $("a.pageNav-jump--next").length > 0;
 
         return { posts, hasNext };
+    }
+
+    /** Ordered threadmark categories (tab order) with per-category word totals. */
+    async getThreadmarkCategories(http: HttpClient, thread: Thread): Promise<ThreadmarkCategory[]> {
+        const base = thread.url.endsWith("/") ? thread.url : `${thread.url}/`;
+        const statsRe = /Statistics \(([\d,]+) threadmarks?, ([\d.,]+\s*[km]?) words?\)/i;
+        const parseStats = (html: string) => {
+            const m = html.match(statsRe);
+            return {
+                threadmarkCount: m ? parseInt(m[1]!.replace(/,/g, ""), 10) : undefined,
+                words: m ? parseWordCount(m[2]!) : undefined,
+            };
+        };
+
+        const res = await http.get(`${base}threadmarks`);
+        if (res.status < 200 || res.status >= 300) {
+            throw new Error(`Threadmarks page returned HTTP ${res.status}`);
+        }
+        const html = res.text();
+        const $ = cheerio.load(html);
+
+        const cats: ThreadmarkCategory[] = [];
+        $(".block-tabHeader--threadmarkCategoryTabs a.tabs-tab").each((_, el) => {
+            const href = $(el).attr("href") ?? "";
+            const id = href.match(/threadmark_category=(\d+)/)?.[1] ?? "1";
+            cats.push({ id, name: $(el).text().trim() });
+        });
+        if (cats.length === 0) cats.push({ id: "1", name: "Threadmarks" });
+
+        // The page we fetched shows the first (main) category's statistics.
+        Object.assign(cats[0]!, parseStats(html));
+
+        await Promise.all(
+            cats.slice(1).map(async (cat) => {
+                try {
+                    const r = await http.get(`${base}threadmarks?threadmark_category=${cat.id}`);
+                    if (r.status < 200 || r.status >= 300) return;
+                    Object.assign(cat, parseStats(r.text()));
+                } catch {
+                    // leave words undefined for this category
+                }
+            }),
+        );
+
+        return cats;
+    }
+
+    async getThreadmarks(
+        http: HttpClient,
+        thread: Thread,
+        opts: { checkEdits: boolean },
+    ): Promise<Threadmark[]> {
+        const base = thread.url.endsWith("/") ? thread.url : `${thread.url}/`;
+        const marks = new Map<string, Threadmark>();
+
+        // RSS: newest 10 threadmarks with creation dates and word counts
+        const rss = await http.get(`${base}threadmarks.rss?threadmark_category=1`);
+        const $rss = cheerio.load(rss.text(), { xmlMode: true });
+        $rss("item").each((_, el) => {
+            const $el = $rss(el);
+            const guid = $el.children("guid").text();
+            const postId = guid.match(/posts\/(\d+)/)?.[1];
+            if (!postId) return;
+            const pub = $el.children("pubDate").text();
+            const words = parseInt($el.children("threadmarks\\:words").text(), 10);
+            marks.set(postId, {
+                postId,
+                title: $el.children("title").text().trim(),
+                url: $el.children("link").text().trim(),
+                createdAt: pub ? new Date(pub) : null,
+                editedAt: null,
+                words: Number.isNaN(words) ? undefined : words,
+            });
+        });
+
+        if (opts.checkEdits) {
+            // Reader mode: 10 threadmarked posts per page, oldest first, with edit times
+            for (let page = 1; ; page++) {
+                const url = page === 1 ? `${base}reader/` : `${base}reader/page-${page}`;
+                const res = await http.get(url);
+                if (res.status < 200 || res.status >= 300) {
+                    throw new Error(`Reader page returned HTTP ${res.status}: ${url}`);
+                }
+                const $ = cheerio.load(res.text());
+                if ($("article.message--post").length === 0 && page === 1) {
+                    throw new Error(`Reader page had no posts (blocked or empty): ${url}`);
+                }
+                $("article.message--post").each((_, el) => {
+                    const $el = $(el);
+                    const postId = ($el.attr("data-content") ?? "").match(/post-(\d+)/)?.[1];
+                    if (!postId) return;
+                    const edited = $el.find(".message-lastEdit time").first().attr("datetime");
+                    const posted = $el.find("time.u-dt").first().attr("datetime");
+                    const editedAt = edited ? new Date(edited) : null;
+                    const existing = marks.get(postId);
+                    if (existing) {
+                        existing.editedAt = editedAt;
+                    } else {
+                        marks.set(postId, {
+                            postId,
+                            title: "",
+                            url: `${this.baseUrl}/posts/${postId}`,
+                            createdAt: posted ? new Date(posted) : null,
+                            editedAt,
+                        });
+                    }
+                });
+                if ($("a.pageNav-jump--next").length === 0) break;
+            }
+        }
+
+        return [...marks.values()];
     }
 }

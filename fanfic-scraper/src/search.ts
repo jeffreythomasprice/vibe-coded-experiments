@@ -2,6 +2,8 @@ import Fuse from "fuse.js";
 import type { Thread, Story } from "./models";
 import type { ScraperConfig, SearchSourceConfig } from "./config";
 import { parseDuration } from "./config";
+import { applyThreadmarkCategories, applyThreadmarkFilter, threadSortDate } from "./threadmarks";
+import { formatThreadWords, formatWordCount } from "./wordcount";
 import { getAdapter, getStoryAdapter, getSiteType } from "./scraper";
 import { buildStatusMap, getListPrefix, loadLists } from "./lists";
 import type { HttpClient } from "./http";
@@ -35,6 +37,9 @@ export interface SearchOptions {
     favoritesOnly: boolean;
     maxPages: number;
     sortMode: "mixed" | "separate";
+    byPosts: boolean;
+    checkEdits: boolean;
+    wordCategories: boolean;
 }
 
 export function parseSourceArg(arg: string): SearchSource {
@@ -93,6 +98,10 @@ function getItemTags(item: SearchResultItem): string[] {
             ]),
         ];
     }
+}
+
+function getItemSortDate(item: SearchResultItem): Date | null {
+    return item.kind === "thread" ? threadSortDate(item.data) : item.data.lastUpdated;
 }
 
 function getItemUrl(item: SearchResultItem): string {
@@ -218,6 +227,20 @@ async function collectFromSource(
             }
 
             if (pagePastCutoff || !hasNext) break;
+        }
+
+        if (!options.byPosts) {
+            const threadItems = items.filter((i) => i.kind === "thread");
+            const kept = await applyThreadmarkFilter(
+                http,
+                adapter,
+                threadItems.map((i) => i.data as Thread),
+                cutoff,
+                { checkEdits: options.checkEdits },
+                logger,
+            );
+            const keptSet = new Set(kept);
+            return items.filter((i) => i.kind !== "thread" || keptSet.has(i.data as Thread));
         }
     } else {
         const adapter = getStoryAdapter(source.site);
@@ -369,21 +392,34 @@ export async function executeSearch(
         });
     }
 
+    if (options.wordCategories) {
+        const bySite = new Map<string, Thread[]>();
+        for (const r of results) {
+            if (r.item.kind !== "thread") continue;
+            const list = bySite.get(r.item.data.siteName) ?? [];
+            list.push(r.item.data);
+            bySite.set(r.item.data.siteName, list);
+        }
+        for (const [site, threads] of bySite) {
+            await applyThreadmarkCategories(http, getAdapter(site), threads, logger);
+        }
+    }
+
     // Sort results based on sort mode
     if (options.sortMode === "separate") {
         // Group by source, then by date within each group
         results.sort((a, b) => {
             const si = (a.item.sourceIndex ?? 0) - (b.item.sourceIndex ?? 0);
             if (si !== 0) return si;
-            const dateA = a.item.data.lastUpdated?.getTime() ?? 0;
-            const dateB = b.item.data.lastUpdated?.getTime() ?? 0;
+            const dateA = getItemSortDate(a.item)?.getTime() ?? 0;
+            const dateB = getItemSortDate(b.item)?.getTime() ?? 0;
             return dateB - dateA;
         });
     } else {
         // "mixed" — interleave all results by date, score as tiebreaker
         results.sort((a, b) => {
-            const dateA = a.item.data.lastUpdated?.getTime() ?? 0;
-            const dateB = b.item.data.lastUpdated?.getTime() ?? 0;
+            const dateA = getItemSortDate(a.item)?.getTime() ?? 0;
+            const dateB = getItemSortDate(b.item)?.getTime() ?? 0;
             if (dateB !== dateA) return dateB - dateA;
             return b.tagScore + b.keywordScore - (a.tagScore + a.keywordScore);
         });
@@ -399,13 +435,16 @@ export function formatSearchResult(result: ScoredSearchResult, showUrls?: boolea
     const kind = item.kind === "thread" ? "[thread]" : "[story]";
     const site = item.data.siteName;
     const id = item.kind === "thread" ? item.data.threadId : item.data.storyId;
-    const updated = item.data.lastUpdated?.toISOString() ?? "unknown";
+    const updated = getItemSortDate(item)?.toISOString() ?? "unknown";
     const title = item.data.title;
     const author = item.data.author;
 
     let extra = "";
     if (item.kind === "story" && item.data.wordCount) {
-        extra = `${item.data.wordCount}w`;
+        extra = `${formatWordCount(item.data.wordCount)}w`;
+    } else if (item.kind === "thread") {
+        const words = formatThreadWords(item.data);
+        if (words) extra = `${words}w`;
     }
 
     const allTags = getItemTags(item);

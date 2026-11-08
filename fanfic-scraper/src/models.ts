@@ -7,6 +7,22 @@ export interface Subforum {
     url: string;
 }
 
+export interface Threadmark {
+    postId: string;
+    title: string;
+    url: string;
+    createdAt: Date | null;
+    editedAt: Date | null;
+    words?: number;
+}
+
+export interface ThreadmarkCategory {
+    id: string;
+    name: string;
+    threadmarkCount?: number;
+    words?: number;
+}
+
 export interface Thread {
     siteName: string;
     subforumId: string;
@@ -20,6 +36,12 @@ export interface Thread {
     fandoms: string[];
     genres: string[];
     characters: string[];
+    hasThreadmarks: boolean;
+    threadmarks?: Threadmark[];
+    lastThreadmarkAt?: Date | null;
+    /** Main-category word count from the thread list page. */
+    wordCount?: number;
+    threadmarkCategories?: ThreadmarkCategory[];
 }
 
 export interface Post {

@@ -22,6 +22,27 @@ interface HostState {
     inflight: number;
     queue: Array<() => void>;
     lastRequest: number;
+    /** Host-wide cooldown (epoch ms) set after a 429; all requests wait until it passes. */
+    blockedUntil: number;
+    /** Extra per-request delay added after rate limiting; decays on success. */
+    penaltyMs: number;
+    /** Consecutive rate-limit episodes for this host; reset by any non-429 response. */
+    rateLimitStreak: number;
+    /** When the current cooldown was triggered; 429s from requests sent earlier don't re-escalate. */
+    cooldownStartedAt: number;
+}
+
+const RATE_LIMIT_BASE_MS = 5000;
+const RATE_LIMIT_MAX_MS = 120000;
+const MAX_PENALTY_MS = 10000;
+const MAX_RATE_LIMIT_RETRIES = 6;
+
+function parseRetryAfter(value: string | null): number | null {
+    if (!value) return null;
+    const secs = Number(value);
+    if (Number.isFinite(secs)) return Math.max(0, secs * 1000);
+    const date = Date.parse(value);
+    return Number.isNaN(date) ? null : Math.max(0, date - Date.now());
 }
 
 const DEFAULT_USER_AGENT =
@@ -67,7 +88,15 @@ export class HttpClient {
     private getHostState(host: string): HostState {
         let state = this.hosts.get(host);
         if (!state) {
-            state = { inflight: 0, queue: [], lastRequest: 0 };
+            state = {
+                inflight: 0,
+                queue: [],
+                lastRequest: 0,
+                blockedUntil: 0,
+                penaltyMs: 0,
+                rateLimitStreak: 0,
+                cooldownStartedAt: 0,
+            };
             this.hosts.set(host, state);
         }
         return state;
@@ -82,10 +111,19 @@ export class HttpClient {
 
         state.inflight++;
 
-        const minDelay = this.hostMinDelays.get(host) ?? this.minDelayMs;
+        await this.waitForCooldown(state);
+
+        const minDelay = (this.hostMinDelays.get(host) ?? this.minDelayMs) + state.penaltyMs;
         const elapsed = Date.now() - state.lastRequest;
         if (elapsed < minDelay && state.lastRequest > 0) {
             await Bun.sleep(minDelay - elapsed);
+        }
+    }
+
+    /** Wait out any host-wide cooldown (re-checks, since it can be extended while waiting). */
+    private async waitForCooldown(state: HostState): Promise<void> {
+        while (state.blockedUntil > Date.now()) {
+            await Bun.sleep(state.blockedUntil - Date.now());
         }
     }
 
@@ -117,17 +155,27 @@ export class HttpClient {
         await this.acquireSlot(host);
 
         try {
-            return await this.fetchWithRetry(url, useCache);
+            return await this.fetchWithRetry(url, useCache, host);
         } finally {
             this.releaseSlot(host);
         }
     }
 
-    private async fetchWithRetry(url: string, useCache: boolean): Promise<HttpResponse> {
+    private async fetchWithRetry(
+        url: string,
+        useCache: boolean,
+        host: string,
+    ): Promise<HttpResponse> {
         let lastError: Error | null = null;
+        const state = this.getHostState(host);
+        let rateLimitHits = 0;
 
-        for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+        for (let attempt = 0; attempt <= this.maxRetries + rateLimitHits; attempt++) {
             try {
+                // Retries of every in-flight request share the host cooldown.
+                await this.waitForCooldown(state);
+                const sentAt = Date.now();
+
                 if (attempt === 0) {
                     this.logger?.info("Fetching", { url });
                 } else {
@@ -142,7 +190,46 @@ export class HttpClient {
                     redirect: "follow",
                 });
 
-                if (res.status === 429 || (res.status >= 500 && res.status < 600)) {
+                if (res.status === 429) {
+                    // Rate limited: pause the whole host so every in-flight request backs
+                    // off together. Only the first 429 of a burst (i.e. from a request sent
+                    // after the current cooldown began) escalates the backoff; the rest just
+                    // wait out the shared cooldown.
+                    rateLimitHits++;
+                    await res.arrayBuffer().catch(() => {});
+                    if (rateLimitHits <= MAX_RATE_LIMIT_RETRIES) {
+                        if (sentAt >= state.cooldownStartedAt) {
+                            state.rateLimitStreak++;
+                            state.penaltyMs = Math.min(
+                                Math.max(state.penaltyMs * 2, 1000),
+                                MAX_PENALTY_MS,
+                            );
+                            const retryAfter = parseRetryAfter(res.headers.get("retry-after"));
+                            const backoff = Math.min(
+                                RATE_LIMIT_BASE_MS * 2 ** (state.rateLimitStreak - 1),
+                                RATE_LIMIT_MAX_MS,
+                            );
+                            const delay = Math.min(
+                                Math.max(retryAfter ?? 0, backoff) + Math.random() * 1000,
+                                RATE_LIMIT_MAX_MS * 2,
+                            );
+                            state.cooldownStartedAt = Date.now();
+                            state.blockedUntil = Math.max(state.blockedUntil, Date.now() + delay);
+                            this.logger?.warn("Rate limited (429), cooling down host", {
+                                url,
+                                retryAfter: res.headers.get("retry-after"),
+                                retryInMs: Math.round(delay),
+                                streak: state.rateLimitStreak,
+                                penaltyMs: state.penaltyMs,
+                            });
+                        } else {
+                            this.logger?.debug("Rate limited (429), joining existing cooldown", {
+                                url,
+                            });
+                        }
+                        continue; // waitForCooldown at loop start handles the sleep
+                    }
+                } else if (res.status >= 500 && res.status < 600) {
                     if (attempt < this.maxRetries) {
                         const delay = Math.min(1000 * 2 ** attempt, 30000);
                         this.logger?.warn("Retryable HTTP error", {
@@ -153,6 +240,11 @@ export class HttpClient {
                         await Bun.sleep(delay);
                         continue;
                     }
+                }
+
+                if (res.status !== 429) {
+                    state.rateLimitStreak = 0;
+                    state.penaltyMs = Math.floor(state.penaltyMs / 2);
                 }
 
                 const body = new Uint8Array(await res.arrayBuffer());
