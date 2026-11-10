@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "editor": {
+      "command": "/home/jeff/workspaces/personal/vibe-coded-experiments/3d-editor/target/debug/level-mcp",
+      "args": ["--allow-destructive"]
+    }
+  }
+}

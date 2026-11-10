@@ -1,0 +1,52 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/level-core",
+    "crates/level-geom",
+    "crates/level-cmd",
+    "crates/level-fmt",
+    "crates/level-render",
+    "crates/level-host",
+    "crates/level-mcp",
+    "crates/level-cli",
+    "crates/editor-app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+level-core = { path = "crates/level-core" }
+level-geom = { path = "crates/level-geom" }
+level-cmd = { path = "crates/level-cmd" }
+level-fmt = { path = "crates/level-fmt" }
+level-render = { path = "crates/level-render" }
+level-host = { path = "crates/level-host" }
+
+glam = { version = "0.34", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "1"
+toml = "1"
+thiserror = "2"
+proptest = "1"
+
+wgpu = "30"
+winit = "0.30"
+egui = "0.36"
+egui-wgpu = "0.36"
+egui-winit = "0.36"
+egui_dock = "0.21"
+ab_glyph = "0.2"
+epaint_default_fonts = "0.36"
+bytemuck = { version = "1", features = ["derive"] }
+pollster = "1"
+image = { version = "0.25", default-features = false, features = ["png"] }
+rfd = "0.18"
+
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std"] }
+base64 = "0.23"
+rmcp = { version = "3.9", features = ["server", "transport-io"] }

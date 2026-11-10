@@ -1,0 +1,4 @@
+{
+  "enabledMcpjsonServers": ["editor"],
+  "permissions": { "allow": ["mcp__editor"] }
+}

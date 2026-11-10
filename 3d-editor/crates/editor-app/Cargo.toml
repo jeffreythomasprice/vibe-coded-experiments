@@ -1,0 +1,20 @@
+[package]
+name = "editor-app"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+level-core.workspace = true
+level-cmd.workspace = true
+level-fmt.workspace = true
+level-render.workspace = true
+winit.workspace = true
+wgpu.workspace = true
+egui.workspace = true
+egui-wgpu.workspace = true
+egui-winit.workspace = true
+egui_dock.workspace = true
+rfd.workspace = true
+pollster.workspace = true
+thiserror.workspace = true

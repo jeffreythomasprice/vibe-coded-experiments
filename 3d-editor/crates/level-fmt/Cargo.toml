@@ -1,0 +1,15 @@
+[package]
+name = "level-fmt"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+level-core.workspace = true
+glam.workspace = true
+level-geom.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
