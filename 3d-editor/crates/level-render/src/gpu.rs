@@ -16,6 +16,7 @@ pub struct Renderer {
     faces: wgpu::RenderPipeline,
     lines: wgpu::RenderPipeline,
     lines_on_top: wgpu::RenderPipeline,
+    id_faces: wgpu::RenderPipeline,
     adapter: String,
 }
 
@@ -30,6 +31,14 @@ pub struct DrawParams {
     pub width: u32,
     pub height: u32,
     pub clear: [f64; 3],
+    pub clip_z: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct Globals {
+    view_proj: [[f32; 4]; 4],
+    clip: [f32; 4],
 }
 
 impl Renderer {
@@ -64,7 +73,7 @@ impl Renderer {
             label: Some("globals"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -78,7 +87,7 @@ impl Renderer {
             bind_group_layouts: &[Some(&bind_group_layout)],
             immediate_size: 0,
         });
-        let make = |topology, compare, write, bias: wgpu::DepthBiasState| {
+        let make = |topology, compare, write, bias: wgpu::DepthBiasState, samples: u32| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: None,
                 layout: Some(&layout),
@@ -104,7 +113,7 @@ impl Renderer {
                     bias,
                 }),
                 multisample: wgpu::MultisampleState {
-                    count: SAMPLES,
+                    count: samples,
                     ..Default::default()
                 },
                 fragment: Some(wgpu::FragmentState {
@@ -127,18 +136,28 @@ impl Renderer {
             wgpu::CompareFunction::LessEqual,
             true,
             push_back,
+            SAMPLES,
         );
         let lines = make(
             wgpu::PrimitiveTopology::LineList,
             wgpu::CompareFunction::LessEqual,
             true,
             Default::default(),
+            SAMPLES,
         );
         let lines_on_top = make(
             wgpu::PrimitiveTopology::LineList,
             wgpu::CompareFunction::Always,
             false,
             Default::default(),
+            SAMPLES,
+        );
+        let id_faces = make(
+            wgpu::PrimitiveTopology::TriangleList,
+            wgpu::CompareFunction::LessEqual,
+            true,
+            Default::default(),
+            1,
         );
 
         Ok(Self {
@@ -148,6 +167,7 @@ impl Renderer {
             faces,
             lines,
             lines_on_top,
+            id_faces,
             adapter: format!("{} ({:?})", info.name, info.backend),
         })
     }
@@ -158,6 +178,28 @@ impl Renderer {
 
     /// Renders and returns tightly packed RGBA8 rows.
     pub fn draw(&self, params: &DrawParams, lists: &DrawLists) -> Result<Vec<u8>, RenderError> {
+        self.render(
+            params,
+            SAMPLES,
+            &[
+                (&self.faces, lists.tris),
+                (&self.lines, lists.lines),
+                (&self.lines_on_top, lists.on_top),
+            ],
+        )
+    }
+
+    /// Single-sample, unlit triangles whose vertex colours are read back exactly (object id buffer).
+    pub fn draw_ids(&self, params: &DrawParams, tris: &[Vertex]) -> Result<Vec<u8>, RenderError> {
+        self.render(params, 1, &[(&self.id_faces, tris)])
+    }
+
+    fn render(
+        &self,
+        params: &DrawParams,
+        samples: u32,
+        batches: &[(&wgpu::RenderPipeline, &[Vertex])],
+    ) -> Result<Vec<u8>, RenderError> {
         let (w, h) = (params.width, params.height);
         let size = wgpu::Extent3d {
             width: w,
@@ -165,46 +207,48 @@ impl Renderer {
             depth_or_array_layers: 1,
         };
         let texture = |label, samples, format, usage| {
-            self.device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size,
-                    mip_level_count: 1,
-                    sample_count: samples,
-                    dimension: wgpu::TextureDimension::D2,
-                    format,
-                    usage,
-                    view_formats: &[],
-                })
-                .create_view(&Default::default())
+            self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size,
+                mip_level_count: 1,
+                sample_count: samples,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage,
+                view_formats: &[],
+            })
         };
-        let resolve_tex = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("resolve"),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: COLOR_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let resolve_view = resolve_tex.create_view(&Default::default());
-        let msaa_view = texture(
-            "msaa",
-            SAMPLES,
+        let resolve_tex = texture(
+            "resolve",
+            1,
             COLOR_FORMAT,
-            wgpu::TextureUsages::RENDER_ATTACHMENT,
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         );
+        let resolve_view = resolve_tex.create_view(&Default::default());
+        let msaa_view = (samples > 1).then(|| {
+            texture(
+                "msaa",
+                samples,
+                COLOR_FORMAT,
+                wgpu::TextureUsages::RENDER_ATTACHMENT,
+            )
+            .create_view(&Default::default())
+        });
         let depth_view = texture(
             "depth",
-            SAMPLES,
+            samples,
             DEPTH_FORMAT,
             wgpu::TextureUsages::RENDER_ATTACHMENT,
-        );
+        )
+        .create_view(&Default::default());
 
+        let globals = Globals {
+            view_proj: params.view_proj,
+            clip: [params.clip_z, 0.0, 0.0, 0.0],
+        };
         let globals = self.device.create_buffer_init(&BufferInitDescriptor {
             label: Some("globals"),
-            contents: bytemuck::bytes_of(&params.view_proj),
+            contents: bytemuck::bytes_of(&globals),
             usage: wgpu::BufferUsages::UNIFORM,
         });
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -215,24 +259,19 @@ impl Renderer {
                 resource: globals.as_entire_binding(),
             }],
         });
-        let vertex_buffer = |data: &[Vertex]| {
-            (!data.is_empty()).then(|| {
-                self.device.create_buffer_init(&BufferInitDescriptor {
-                    label: None,
-                    contents: bytemuck::cast_slice(data),
-                    usage: wgpu::BufferUsages::VERTEX,
-                })
+        let buffers: Vec<_> = batches
+            .iter()
+            .map(|(pipeline, data)| {
+                let buffer = (!data.is_empty()).then(|| {
+                    self.device.create_buffer_init(&BufferInitDescriptor {
+                        label: None,
+                        contents: bytemuck::cast_slice(data),
+                        usage: wgpu::BufferUsages::VERTEX,
+                    })
+                });
+                (*pipeline, buffer, data.len())
             })
-        };
-        let batches = [
-            (&self.faces, vertex_buffer(lists.tris), lists.tris.len()),
-            (&self.lines, vertex_buffer(lists.lines), lists.lines.len()),
-            (
-                &self.lines_on_top,
-                vertex_buffer(lists.on_top),
-                lists.on_top.len(),
-            ),
-        ];
+            .collect();
 
         let row_bytes = w * 4;
         let padded = row_bytes.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
@@ -246,15 +285,23 @@ impl Renderer {
         let mut encoder = self.device.create_command_encoder(&Default::default());
         {
             let [r, g, b] = params.clear;
+            let (view, resolve_target) = match &msaa_view {
+                Some(msaa) => (msaa, Some(&resolve_view)),
+                None => (&resolve_view, None),
+            };
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("scene"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &msaa_view,
+                    view,
                     depth_slice: None,
-                    resolve_target: Some(&resolve_view),
+                    resolve_target,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color { r, g, b, a: 1.0 }),
-                        store: wgpu::StoreOp::Discard,
+                        store: if samples > 1 {
+                            wgpu::StoreOp::Discard
+                        } else {
+                            wgpu::StoreOp::Store
+                        },
                     },
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
@@ -270,7 +317,7 @@ impl Renderer {
                 multiview_mask: None,
             });
             pass.set_bind_group(0, &bind_group, &[]);
-            for (pipeline, buffer, count) in &batches {
+            for (pipeline, buffer, count) in &buffers {
                 if let Some(buffer) = buffer {
                     pass.set_pipeline(pipeline);
                     pass.set_vertex_buffer(0, buffer.slice(..));

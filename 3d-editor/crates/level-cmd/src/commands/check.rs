@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 
-use level_core::{ObjectId, PropertyValue};
+use level_core::{ElementRef, ObjectId, Part, PropertyValue};
 use level_geom::mesh::{MeshIssue, Severity, validate};
 use level_geom::{BrushError, brush_geometry};
 use schemars::JsonSchema;
@@ -22,6 +22,8 @@ pub struct Issue {
     pub code: &'static str,
     pub severity: &'static str,
     pub ids: Vec<ObjectId>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub elements: Vec<ElementRef>,
     pub message: String,
     pub hint: &'static str,
 }
@@ -56,11 +58,71 @@ fn mesh_issue(id: ObjectId, issue: &MeshIssue) -> Issue {
             "fix or delete the referenced face or vertex",
         ),
     };
+    let face = |f: level_core::FaceId| ElementRef {
+        object: id,
+        part: Part::Face(f),
+    };
+    let vertex = |v: level_core::VertexId| ElementRef {
+        object: id,
+        part: Part::Vertex(v),
+    };
+    let (elements, detail) = match issue {
+        MeshIssue::DanglingVertex { face: f, vertex: v } => (
+            vec![face(*f), vertex(*v)],
+            format!("{} uses missing vertex {}", face(*f), vertex(*v)),
+        ),
+        MeshIssue::FaceTooSmall { face: f } => (
+            vec![face(*f)],
+            format!("{} has fewer than 3 vertices", face(*f)),
+        ),
+        MeshIssue::DuplicateVertexInFace { face: f, vertex: v } => (
+            vec![face(*f), vertex(*v)],
+            format!("{} repeats vertex {}", face(*f), vertex(*v)),
+        ),
+        MeshIssue::ZeroAreaFace { face: f } => {
+            (vec![face(*f)], format!("{} has no area", face(*f)))
+        }
+        MeshIssue::NonPlanarFace { face: f, deviation } => (
+            vec![face(*f)],
+            format!("{} is not planar (off by {deviation:.3})", face(*f)),
+        ),
+        MeshIssue::OpenEdge { a, b } => (
+            vec![vertex(*a), vertex(*b)],
+            format!("open edge {}-{}", vertex(*a), vertex(*b)),
+        ),
+        MeshIssue::NonManifoldEdge {
+            a,
+            b,
+            forward,
+            backward,
+        } => (
+            vec![vertex(*a), vertex(*b)],
+            format!(
+                "edge {}-{} is shared by {forward} forward and {backward} backward faces",
+                vertex(*a),
+                vertex(*b)
+            ),
+        ),
+        MeshIssue::InconsistentWinding { a, b } => (
+            vec![vertex(*a), vertex(*b)],
+            format!(
+                "faces on edge {}-{} wind the same way",
+                vertex(*a),
+                vertex(*b)
+            ),
+        ),
+        MeshIssue::UnusedVertex { vertex: v } => (
+            vec![vertex(*v)],
+            format!("{} belongs to no face", vertex(*v)),
+        ),
+        MeshIssue::InsideOut => (vec![], "faces point inward".to_string()),
+    };
     Issue {
         code,
         severity: severity(issue.severity()),
         ids: vec![id],
-        message: format!("{id}: {issue:?}"),
+        elements,
+        message: format!("{id}: {detail}"),
         hint,
     }
 }
@@ -99,6 +161,7 @@ pub fn validate_doc(ctx: &Ctx) -> Vec<Issue> {
                     code,
                     severity: "error",
                     ids: vec![b.id.into()],
+                    elements: vec![],
                     message: format!("{}: {e}", b.id),
                     hint,
                 });
@@ -117,6 +180,7 @@ pub fn validate_doc(ctx: &Ctx) -> Vec<Issue> {
                     .join(", ")
             ),
             ids,
+            elements: vec![],
             hint: "delete the duplicates",
         });
     }
@@ -141,6 +205,7 @@ pub fn validate_doc(ctx: &Ctx) -> Vec<Issue> {
                 code: "empty_brush_entity",
                 severity: "warning",
                 ids: vec![e.id.into()],
+                elements: vec![],
                 message: format!("{} ({}) owns no brushes or meshes", e.id, e.classname),
                 hint: "assign geometry to the entity or delete it",
             });
@@ -152,6 +217,7 @@ pub fn validate_doc(ctx: &Ctx) -> Vec<Issue> {
                 code: "missing_target",
                 severity: "warning",
                 ids: vec![e.id.into()],
+                elements: vec![],
                 message: format!("{} targets \"{t}\" but no entity has that targetname", e.id),
                 hint: "set targetname on the entity it should point at, or fix the target",
             });

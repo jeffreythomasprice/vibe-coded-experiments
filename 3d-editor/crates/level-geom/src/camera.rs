@@ -191,11 +191,21 @@ pub fn frame_camera(camera: &Camera, bounds: &Aabb, width: u32, height: u32) -> 
     match camera.projection {
         Projection::Perspective { fov } => {
             let forward = forward_from_angles(camera.yaw, camera.pitch);
-            let r = (bounds.radius() * FRAME_MARGIN).max(1.0);
+            let right = forward.cross(DVec3::Z).normalize();
+            let up = right.cross(forward);
             let tan_y = (fov.to_radians() * 0.5).tan();
             let tan_x = tan_y * w / h;
-            let half = tan_y.min(tan_x).atan();
-            out.position = bounds.center() - forward * (r / half.sin());
+            let centre = bounds.center();
+            let mut back = 1.0_f64;
+            for corner in bounds.corners() {
+                let d = corner - centre;
+                let ahead = d.dot(forward);
+                back = back
+                    .max(d.dot(right).abs() * FRAME_MARGIN / tan_x - ahead)
+                    .max(d.dot(up).abs() * FRAME_MARGIN / tan_y - ahead)
+                    .max(1.0 - ahead);
+            }
+            out.position = centre - forward * back;
         }
         Projection::Orthographic { view, .. } => {
             let (_, right, up) = ortho_axes(view);
@@ -372,5 +382,28 @@ mod tests {
         let cam = base_camera("t", Projection::Perspective { fov: 60.0 }, 0.0, 0.0);
         let view = View::new(&cam, 100, 100, 100.0);
         assert_eq!(view.project(DVec3::new(-5.0, 0.0, 0.0)), None);
+    }
+}
+
+#[cfg(test)]
+mod frame_tests {
+    use super::*;
+
+    #[test]
+    fn wide_scene_fits_every_corner() {
+        let bounds = Aabb {
+            min: DVec3::new(-1000.0, -100.0, 0.0),
+            max: DVec3::new(1000.0, 100.0, 120.0),
+        };
+        let camera = viewport_camera("viewport.persp", Some(&bounds), 1024, 768).unwrap();
+        let view = View::new(&camera, 1024, 768, bounds.reach());
+        for corner in bounds.corners() {
+            let p = view.project(corner).expect("in front of the eye");
+            assert!((0.0..1024.0).contains(&p.px.x), "{corner} -> {}", p.px);
+            assert!((0.0..768.0).contains(&p.px.y), "{corner} -> {}", p.px);
+        }
+        let sphere = bounds.radius() * FRAME_MARGIN;
+        let distance = (camera.position - bounds.center()).length();
+        assert!(distance < sphere / ((DEFAULT_FOV.to_radians() * 0.5).tan().atan()).sin());
     }
 }

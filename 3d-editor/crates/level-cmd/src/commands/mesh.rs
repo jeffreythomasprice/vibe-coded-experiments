@@ -185,6 +185,7 @@ pub fn mesh_to_brush_cmd(ctx: &mut Ctx, args: Convert) -> CmdResult {
         converted.push((source, brush));
     }
     let mut created = Vec::new();
+    let mut map = Vec::new();
     for (source, brush) in converted {
         let new_id = BrushId(ctx.alloc_id());
         ctx.remove(source.id.into());
@@ -196,9 +197,10 @@ pub fn mesh_to_brush_cmd(ctx: &mut Ctx, args: Convert) -> CmdResult {
             brush,
             extra: source.extra,
         }));
+        map.push((source.id.into(), vec![new_id.into()]));
         created.push(new_id.into());
     }
-    Ok(Outcome::created(created, vec![]))
+    Ok(Outcome::created(created, vec![]).with_map(map))
 }
 
 pub fn brush_to_mesh_cmd(ctx: &mut Ctx, args: Convert) -> CmdResult {
@@ -210,6 +212,7 @@ pub fn brush_to_mesh_cmd(ctx: &mut Ctx, args: Convert) -> CmdResult {
         converted.push((source, mesh));
     }
     let mut created = Vec::new();
+    let mut map = Vec::new();
     for (source, mesh) in converted {
         let new_id = MeshId(ctx.alloc_id());
         ctx.remove(source.id.into());
@@ -221,7 +224,8 @@ pub fn brush_to_mesh_cmd(ctx: &mut Ctx, args: Convert) -> CmdResult {
             mesh,
             extra: source.extra,
         }));
+        map.push((source.id.into(), vec![new_id.into()]));
         created.push(new_id.into());
     }
-    Ok(Outcome::created(created, vec![]))
+    Ok(Outcome::created(created, vec![]).with_map(map))
 }

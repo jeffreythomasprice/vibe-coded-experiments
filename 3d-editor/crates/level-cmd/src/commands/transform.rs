@@ -23,7 +23,7 @@ pub enum AxisArg {
 }
 
 impl AxisArg {
-    fn unit(&self, field: &str) -> Result<DVec3, CommandError> {
+    pub(super) fn unit(&self, field: &str) -> Result<DVec3, CommandError> {
         let v = match self {
             AxisArg::Named(Axis::X) => DVec3::X,
             AxisArg::Named(Axis::Y) => DVec3::Y,
@@ -175,7 +175,11 @@ fn pivot_point(pivot: Pivot, leaves: &[Object]) -> Result<DVec3, CommandError> {
     }
 }
 
-fn about(pivot: DVec3, linear: DMat3) -> DAffine3 {
+pub(super) fn reflection(n: DVec3) -> DMat3 {
+    DMat3::IDENTITY - DMat3::from_cols(n * n.x, n * n.y, n * n.z) * 2.0
+}
+
+pub(super) fn about(pivot: DVec3, linear: DMat3) -> DAffine3 {
     DAffine3::from_translation(pivot)
         * DAffine3::from_mat3(linear)
         * DAffine3::from_translation(-pivot)
@@ -269,6 +273,5 @@ pub fn flip(ctx: &mut Ctx, args: Flip) -> CmdResult {
     let n = args.axis.unit("axis")?;
     let leaves = gather(ctx, &args.ids)?;
     let pivot = pivot_point(args.pivot, &leaves)?;
-    let linear = DMat3::IDENTITY - DMat3::from_cols(n * n.x, n * n.y, n * n.z) * 2.0;
-    apply(ctx, &leaves, &about(pivot, linear))
+    apply(ctx, &leaves, &about(pivot, reflection(n)))
 }

@@ -22,6 +22,8 @@ cameras (viewport.persp, viewport.top, viewport.front, viewport.side) with the `
 to object ids; adjust; history_commit (or history_rollback). Errors are structured: read `code`, `hint` and \
 `field`. Use dry_run on a mutation to preview it. Changes only reach disk with file_save.
 
+In `batch`, items are {op, args, as?}; op names may be dotted or underscored. Reference earlier results as \"$name\" (the item's `as`), \"$N\", \"$name.ids[k]\" or \"$name/v2\" (a vertex or face of a created mesh).
+
 Tools you cannot see are not enabled: mutating tools need the server started with --allow-mutate and \
 destructive ones with --allow-destructive.";
 

@@ -29,6 +29,7 @@ struct Cli {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 enum Cmd {
     /// Create an empty level file
     New {
@@ -70,6 +71,23 @@ enum Cmd {
         /// Comma-separated object ids to highlight
         #[arg(long, value_delimiter = ',')]
         highlight: Vec<String>,
+        /// Comma-separated ids, groups or layers to leave out
+        #[arg(long, value_delimiter = ',')]
+        hide: Vec<String>,
+        /// Draw nothing above this world z (plan and section views)
+        #[arg(long)]
+        clip_above: Option<f64>,
+        /// Comma-separated ids to restrict labels to
+        #[arg(long, value_delimiter = ',')]
+        label_ids: Vec<String>,
+        #[arg(long)]
+        max_labels: Option<usize>,
+        /// material, orientation or layer
+        #[arg(long)]
+        colors: Option<String>,
+        /// Colour override NAME=#rrggbb (repeatable)
+        #[arg(long = "material-color")]
+        material_color: Vec<String>,
         /// Full view.screenshot arguments as JSON; flags override it
         #[arg(long)]
         args: Option<String>,
@@ -204,6 +222,12 @@ struct ScreenshotFlags<'a> {
     mode: &'a Option<String>,
     overlay: &'a [String],
     highlight: &'a [String],
+    hide: &'a [String],
+    clip_above: Option<f64>,
+    label_ids: &'a [String],
+    max_labels: Option<usize>,
+    colors: &'a Option<String>,
+    material_color: &'a [String],
 }
 
 fn screenshot_args(base: &Option<String>, flags: ScreenshotFlags) -> Result<Value, CliError> {
@@ -231,6 +255,36 @@ fn screenshot_args(base: &Option<String>, flags: ScreenshotFlags) -> Result<Valu
     }
     if !flags.highlight.is_empty() {
         map.insert("highlight".into(), json!(flags.highlight));
+    }
+    if !flags.hide.is_empty() {
+        map.insert("hide".into(), json!(flags.hide));
+    }
+    if let Some(z) = flags.clip_above {
+        map.insert("clip_above".into(), json!(z));
+    }
+    if !flags.label_ids.is_empty() {
+        map.insert("label_ids".into(), json!(flags.label_ids));
+    }
+    if let Some(n) = flags.max_labels {
+        map.insert("max_labels".into(), json!(n));
+    }
+    if let Some(colors) = flags.colors {
+        map.insert("colors".into(), json!(colors));
+    }
+    if !flags.material_color.is_empty() {
+        let mut overrides = map
+            .remove("material_colors")
+            .and_then(|v| v.as_object().cloned())
+            .unwrap_or_default();
+        for entry in flags.material_color {
+            let (name, color) = entry.split_once('=').ok_or_else(|| {
+                CliError::Usage(format!(
+                    "--material-color expects NAME=#rrggbb, got `{entry}`"
+                ))
+            })?;
+            overrides.insert(name.to_string(), json!(color));
+        }
+        map.insert("material_colors".into(), Value::Object(overrides));
     }
     Ok(args)
 }
@@ -301,6 +355,12 @@ fn run(cli: &Cli) -> Result<Response, CliError> {
             mode,
             overlay,
             highlight,
+            hide,
+            clip_above,
+            label_ids,
+            max_labels,
+            colors,
+            material_color,
             args,
         } => {
             let args = screenshot_args(
@@ -312,6 +372,12 @@ fn run(cli: &Cli) -> Result<Response, CliError> {
                     mode,
                     overlay,
                     highlight,
+                    hide,
+                    clip_above: *clip_above,
+                    label_ids,
+                    max_labels: *max_labels,
+                    colors,
+                    material_color,
                 },
             )?;
             take_screenshot(&cli.file, out, args)
@@ -402,7 +468,7 @@ fn exec_name(exec: Exec) -> &'static str {
 }
 
 fn session_reply(host: &mut Host, line: &str) -> Value {
-    let mut request = match serde_json::from_str::<Value>(line) {
+    let request = match serde_json::from_str::<Value>(line) {
         Ok(v) => v,
         Err(e) => {
             return Response::error(&CommandError::InvalidArgument {
@@ -413,33 +479,13 @@ fn session_reply(host: &mut Host, line: &str) -> Value {
             .to_value();
         }
     };
-    let out_path = if request.get("op").and_then(Value::as_str) == Some("view.screenshot") {
-        request
-            .get_mut("args")
-            .and_then(Value::as_object_mut)
-            .and_then(|a| a.remove("path"))
-            .and_then(|p| p.as_str().map(PathBuf::from))
-    } else {
-        None
-    };
     let reply = host.execute_value(request, "cli");
     let mut value = reply.response.to_value();
-    if let Some(png) = reply.png {
-        match &out_path {
-            Some(path) => match level_fmt::write_atomic(path, &png) {
-                Ok(()) => value["result"]["path"] = json!(path.display().to_string()),
-                Err(e) => {
-                    return Response::error(&CommandError::Io {
-                        message: e.to_string(),
-                    })
-                    .to_value();
-                }
-            },
-            None => {
-                value["result"]["png_base64"] =
-                    json!(base64::engine::general_purpose::STANDARD.encode(png));
-            }
-        }
+    if let Some(png) = reply.png
+        && value["result"].get("path").is_none()
+    {
+        value["result"]["png_base64"] =
+            json!(base64::engine::general_purpose::STANDARD.encode(png));
     }
     value
 }

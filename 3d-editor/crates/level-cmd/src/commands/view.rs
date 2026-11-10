@@ -13,7 +13,7 @@ use serde_json::{Map, Value, json};
 
 use super::util::check_finite;
 use super::{CmdResult, NoArgs, Outcome, parse_args};
-use crate::bounds::{object_bounds, scene_bounds};
+use crate::bounds::{extent, scene_bounds};
 use crate::ctx::Ctx;
 use crate::error::CommandError;
 
@@ -431,11 +431,10 @@ pub fn frame(ctx: &mut Ctx, args: Frame) -> CmdResult {
     }
     let mut bounds: Option<Aabb> = None;
     for &id in &args.ids {
-        let object = ctx
-            .doc()
-            .get(id)
-            .ok_or_else(|| CommandError::not_found(id))?;
-        if let Some(b) = object_bounds(&object) {
+        if !ctx.doc().contains(id) {
+            return Err(CommandError::not_found(id));
+        }
+        if let Some(b) = extent(ctx.doc(), id) {
             bounds = Some(bounds.map_or(b, |acc| acc.merge(b)));
         }
     }

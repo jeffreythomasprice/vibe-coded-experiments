@@ -23,6 +23,9 @@ pub struct Subtract {
     targets: Vec<ObjectId>,
     cutters: Vec<ObjectId>,
     output: Option<Output>,
+    /// Delete the cutters in the same step.
+    #[serde(default)]
+    consume_cutters: bool,
 }
 
 fn csg_error(e: CsgError, target: ObjectId, cutter: ObjectId) -> CommandError {
@@ -99,42 +102,62 @@ pub fn subtract(ctx: &mut Ctx, args: Subtract) -> CmdResult {
     let mut created = Vec::new();
     let mut warnings = Vec::new();
 
+    let mut map = Vec::new();
     for target in &targets {
-        if mesh_mode {
-            subtract_mesh(ctx, target, &cutters, &mut created, &mut warnings)?;
+        let result = if mesh_mode {
+            subtract_mesh(ctx, target, &cutters, &mut warnings)?
         } else {
-            subtract_brush(ctx, target, &cutters, &mut created)?;
+            subtract_brush(ctx, target, &cutters)?
+        };
+        created.extend(result.iter().copied().filter(|id| *id != target.id()));
+        map.push((target.id(), result));
+    }
+    if args.consume_cutters {
+        for cutter in &args.cutters {
+            ctx.remove(*cutter);
         }
     }
-    Ok(Outcome::created(created, warnings))
+    Ok(Outcome::created(created, warnings).with_map(map))
 }
 
 fn subtract_brush(
     ctx: &mut Ctx,
     target: &Object,
     cutters: &[Object],
-    created: &mut Vec<ObjectId>,
-) -> Result<(), CommandError> {
+) -> Result<Vec<ObjectId>, CommandError> {
     let Object::Brush(t) = target else {
         unreachable!("brush mode has only brush operands")
     };
+    let cutters: Vec<Brush> = cutters
+        .iter()
+        .map(|c| match c {
+            Object::Brush(c) => c.brush.clone(),
+            _ => unreachable!(),
+        })
+        .collect();
+    subtract_brushes(ctx, t, &cutters)
+}
+
+pub(super) fn subtract_brushes(
+    ctx: &mut Ctx,
+    t: &BrushObject,
+    cutters: &[Brush],
+) -> Result<Vec<ObjectId>, CommandError> {
     let mut fragments: Vec<Brush> = vec![t.brush.clone()];
     for cutter in cutters {
-        let Object::Brush(c) = cutter else {
-            unreachable!()
-        };
         let mut next = Vec::new();
         for frag in &fragments {
-            next.extend(brush_subtract(frag, &c.brush).map_err(|e| geometry_error(t.id, e))?);
+            next.extend(brush_subtract(frag, cutter).map_err(|e| geometry_error(t.id, e))?);
         }
         fragments = next;
     }
 
     if fragments.len() == 1 && fragments[0] == t.brush {
-        return Ok(());
+        return Ok(vec![t.id.into()]);
     }
 
     let parents = Parents::of_brush(t);
+    let mut ids: Vec<ObjectId> = Vec::new();
     match fragments.len() {
         0 => {
             ctx.remove(t.id.into());
@@ -142,6 +165,7 @@ fn subtract_brush(
         1 => {
             let brush = fragments.pop().expect("one fragment");
             ctx.insert(Object::Brush(BrushObject { brush, ..t.clone() }));
+            ids.push(t.id.into());
         }
         _ => {
             ctx.remove(t.id.into());
@@ -155,20 +179,19 @@ fn subtract_brush(
                     brush,
                     extra: parents.extra.clone(),
                 }));
-                created.push(id.into());
+                ids.push(id.into());
             }
         }
     }
-    Ok(())
+    Ok(ids)
 }
 
 fn subtract_mesh(
     ctx: &mut Ctx,
     target: &Object,
     cutters: &[Object],
-    created: &mut Vec<ObjectId>,
     warnings: &mut Vec<String>,
-) -> Result<(), CommandError> {
+) -> Result<Vec<ObjectId>, CommandError> {
     let target_id = target.id();
     let mut acc = as_mesh(target)?;
     for cutter in cutters {
@@ -180,7 +203,7 @@ fn subtract_mesh(
     if acc.faces.is_empty() {
         warnings.push(format!("{target_id} was removed completely by the cutters"));
         ctx.remove(target_id);
-        return Ok(());
+        return Ok(Vec::new());
     }
 
     match target {
@@ -189,6 +212,7 @@ fn subtract_mesh(
                 mesh: acc,
                 ..m.clone()
             }));
+            Ok(vec![target_id])
         }
         Object::Brush(b) => {
             ctx.remove(b.id.into());
@@ -202,9 +226,8 @@ fn subtract_mesh(
                 mesh: acc,
                 extra: parents.extra,
             }));
-            created.push(id.into());
+            Ok(vec![id.into()])
         }
         _ => unreachable!(),
     }
-    Ok(())
 }

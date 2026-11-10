@@ -1,7 +1,8 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use bytemuck::{Pod, Zeroable};
 use glam::DVec3;
+use level_cmd::ColorMode;
 use level_core::{Document, ObjectId};
 use level_geom::mesh::triangulate;
 use level_geom::winding::newell;
@@ -49,6 +50,9 @@ pub struct Scene {
     pub edges: Vec<Vertex>,
     pub highlight_edges: Vec<Vertex>,
     pub drawn: Vec<Drawn>,
+    pub id_tris: Vec<Vertex>,
+    pub legend_faces: BTreeMap<String, [u8; 3]>,
+    pub legend_entities: BTreeMap<String, ([u8; 3], &'static str)>,
     pub warnings: Vec<String>,
 }
 
@@ -57,6 +61,48 @@ pub struct SceneOptions<'a> {
     pub edges: EdgeStyle,
     pub draw_faces: bool,
     pub tint: &'a HashMap<ObjectId, [f32; 3]>,
+    pub hidden: &'a HashSet<ObjectId>,
+    pub colors: ColorMode,
+    pub overrides: &'a HashMap<String, [u8; 3]>,
+    pub want_ids: bool,
+}
+
+pub fn id_color(code: u32) -> [f32; 3] {
+    [0, 8, 16].map(|shift| ((code >> shift) & 0xff) as f32 / 255.0)
+}
+
+pub fn decode_id(px: [u8; 4]) -> u32 {
+    u32::from(px[0]) | u32::from(px[1]) << 8 | u32::from(px[2]) << 16
+}
+
+const UP_RGB: [u8; 3] = [96, 170, 96];
+const DOWN_RGB: [u8; 3] = [90, 120, 190];
+const SIDE_RGB: [u8; 3] = [190, 170, 130];
+const LIGHT_RGB: [u8; 3] = [255, 214, 64];
+const PLAYER_RGB: [u8; 3] = [80, 210, 110];
+
+fn face_color(
+    opts: &SceneOptions,
+    legend: &mut BTreeMap<String, [u8; 3]>,
+    material: &str,
+    normal: DVec3,
+    layer: &str,
+) -> [u8; 3] {
+    let (rgb, name) = if let Some(&rgb) = opts.overrides.get(material) {
+        (rgb, material.to_string())
+    } else {
+        match opts.colors {
+            ColorMode::Material => (material_rgb8(material), material.to_string()),
+            ColorMode::Orientation if normal.z > 0.5 => (UP_RGB, "faces up (floors)".to_string()),
+            ColorMode::Orientation if normal.z < -0.5 => {
+                (DOWN_RGB, "faces down (ceilings)".to_string())
+            }
+            ColorMode::Orientation => (SIDE_RGB, "vertical (walls)".to_string()),
+            ColorMode::Layer => (material_rgb8(layer), layer.to_string()),
+        }
+    };
+    legend.insert(name, rgb);
+    rgb
 }
 
 const LIGHT: DVec3 = DVec3::new(0.35, -0.5, 0.8);
@@ -88,8 +134,16 @@ fn mix(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
     [0, 1, 2].map(|i| a[i] * (1.0 - t) + b[i] * t)
 }
 
-fn emit(scene: &mut Scene, polys: &[Poly], tint: Option<[f32; 3]>, opts: &SceneOptions) {
+fn emit(scene: &mut Scene, polys: &[Poly], tint: Option<[f32; 3]>, opts: &SceneOptions, code: u32) {
     for poly in polys {
+        if opts.want_ids && code != 0 {
+            let color = id_color(code);
+            for t in &poly.tris {
+                for &i in t {
+                    scene.id_tris.push(Vertex::new(poly.pts[i], color));
+                }
+            }
+        }
         let mut base = to_f32(poly.rgb);
         if let Some(tint) = tint {
             base = mix(base, tint, 0.5);
@@ -171,6 +225,10 @@ pub fn build_scene(doc: &Document, opts: &SceneOptions) -> Scene {
 
     for brush in doc.brushes.values() {
         let id = ObjectId::from(brush.id);
+        if opts.hidden.contains(&id) {
+            continue;
+        }
+        let layer = doc.layers.get(&brush.layer).map_or("", |l| l.name.as_str());
         let geo = match brush_geometry(&brush.brush) {
             Ok(g) => g,
             Err(e) => {
@@ -194,18 +252,29 @@ pub fn build_scene(doc: &Document, opts: &SceneOptions) -> Scene {
                     keys: f.loop_.clone(),
                     tris: (1..n.saturating_sub(1)).map(|i| [0, i, i + 1]).collect(),
                     normal: f.plane.normal,
-                    rgb: material_rgb8(material),
+                    rgb: face_color(
+                        opts,
+                        &mut scene.legend_faces,
+                        material,
+                        f.plane.normal,
+                        layer,
+                    ),
                 }
             })
             .collect();
         if let Some(bounds) = Aabb::from_points(geo.vertices.iter().copied()) {
             scene.drawn.push(Drawn { id, bounds });
         }
-        emit(&mut scene, &polys, opts.tint.get(&id).copied(), opts);
+        let code = scene.drawn.len() as u32;
+        emit(&mut scene, &polys, opts.tint.get(&id).copied(), opts, code);
     }
 
     for mesh in doc.meshes.values() {
         let id = ObjectId::from(mesh.id);
+        if opts.hidden.contains(&id) {
+            continue;
+        }
+        let layer = doc.layers.get(&mesh.layer).map_or("", |l| l.name.as_str());
         let index: HashMap<_, _> = mesh
             .mesh
             .vertices
@@ -225,18 +294,26 @@ pub fn build_scene(doc: &Document, opts: &SceneOptions) -> Scene {
             };
             let pts: Vec<DVec3> = keys.iter().map(|&k| mesh.mesh.vertices[k].pos).collect();
             let normal = newell(&pts).try_normalize().unwrap_or(DVec3::Z);
+            let rgb = face_color(
+                opts,
+                &mut scene.legend_faces,
+                &face.attrs.material,
+                normal,
+                layer,
+            );
             polys.push(Poly {
                 tris: triangulate(&pts),
                 pts,
                 keys,
                 normal,
-                rgb: material_rgb8(&face.attrs.material),
+                rgb,
             });
         }
         if let Some(bounds) = Aabb::from_points(mesh.mesh.vertices.iter().map(|v| v.pos)) {
             scene.drawn.push(Drawn { id, bounds });
         }
-        emit(&mut scene, &polys, opts.tint.get(&id).copied(), opts);
+        let code = scene.drawn.len() as u32;
+        emit(&mut scene, &polys, opts.tint.get(&id).copied(), opts, code);
     }
 
     for entity in doc.entities.values() {
@@ -244,14 +321,64 @@ pub fn build_scene(doc: &Document, opts: &SceneOptions) -> Scene {
             continue;
         };
         let id = ObjectId::from(entity.id);
-        let bounds = Aabb {
-            min: origin - DVec3::splat(ENTITY_HALF),
-            max: origin + DVec3::splat(ENTITY_HALF),
-        };
-        let polys = box_polys(&bounds, material_rgb8(&entity.classname));
+        if opts.hidden.contains(&id) {
+            continue;
+        }
+        let (polys, bounds, rgb, marker) = entity_marker(&entity.classname, origin);
+        scene
+            .legend_entities
+            .insert(entity.classname.clone(), (rgb, marker));
         scene.drawn.push(Drawn { id, bounds });
-        emit(&mut scene, &polys, opts.tint.get(&id).copied(), opts);
+        let code = scene.drawn.len() as u32;
+        emit(&mut scene, &polys, opts.tint.get(&id).copied(), opts, code);
     }
 
     scene
+}
+
+fn entity_marker(classname: &str, origin: DVec3) -> (Vec<Poly>, Aabb, [u8; 3], &'static str) {
+    if classname.starts_with("light") {
+        let r = 10.0;
+        let pts = [
+            DVec3::X,
+            DVec3::NEG_X,
+            DVec3::Y,
+            DVec3::NEG_Y,
+            DVec3::Z,
+            DVec3::NEG_Z,
+        ]
+        .map(|d| origin + d * r);
+        let mut polys = Vec::new();
+        for (sx, sy, sz) in (0..8).map(|i| (i & 1, (i >> 1) & 1, (i >> 2) & 1)) {
+            let keys = vec![sx, 2 + sy, 4 + sz];
+            let normal = DVec3::new(
+                if sx == 0 { 1.0 } else { -1.0 },
+                if sy == 0 { 1.0 } else { -1.0 },
+                if sz == 0 { 1.0 } else { -1.0 },
+            )
+            .normalize();
+            polys.push(Poly {
+                pts: keys.iter().map(|&k| pts[k]).collect(),
+                keys,
+                tris: vec![[0, 1, 2]],
+                normal,
+                rgb: LIGHT_RGB,
+            });
+        }
+        let bounds = Aabb {
+            min: origin - DVec3::splat(r),
+            max: origin + DVec3::splat(r),
+        };
+        return (polys, bounds, LIGHT_RGB, "octahedron");
+    }
+    let (half, rgb, marker) = if classname.starts_with("info_player") {
+        (DVec3::new(6.0, 6.0, 16.0), PLAYER_RGB, "tall box")
+    } else {
+        (DVec3::splat(ENTITY_HALF), material_rgb8(classname), "box")
+    };
+    let bounds = Aabb {
+        min: origin - half,
+        max: origin + half,
+    };
+    (box_polys(&bounds, rgb), bounds, rgb, marker)
 }

@@ -1,9 +1,11 @@
 mod brush;
+mod build;
 mod check;
 mod csg;
 mod entity;
 mod face;
 mod group;
+mod hints;
 mod layer;
 mod mesh;
 mod object;
@@ -27,7 +29,7 @@ use crate::error::CommandError;
 
 pub type CmdResult = Result<Outcome, CommandError>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Safety {
     Read,
     Mutate,
@@ -70,7 +72,13 @@ impl OpInfo {
     }
 
     pub fn find(name: &str) -> Option<&'static OpInfo> {
-        OPS.iter().find(|o| o.name == name)
+        OPS.iter()
+            .find(|o| o.name == name)
+            .or_else(|| OPS.iter().find(|o| o.tool_name() == name))
+    }
+
+    pub fn tool_name(&self) -> String {
+        self.name.replace('.', "_")
     }
 }
 
@@ -130,8 +138,9 @@ macro_rules! ops {
         ];
 
         pub fn dispatch(ctx: &mut Ctx, op: &str, args: Value) -> CmdResult {
+            let op = OpInfo::find(op).map_or(op, |o| o.name);
             match op {
-                $( $name => $handler(ctx, parse_args(args)?), )*
+                $( $name => $handler(ctx, parse_op_args(op, args)?), )*
                 _ => Err(unavailable(op)),
             }
         }
@@ -141,9 +150,10 @@ macro_rules! ops {
 ops! {
     document {
         "brush.create_box" Mutate brush::CreateBox => brush::create_box, "Create an axis-aligned box brush from min and max corners.";
+        "brush.create_wedge" Mutate brush::CreateWedge => brush::create_wedge, "Create a ramp as one convex brush: the box min..max rising from zero height to full height toward a direction (+x, -x, +y, -y).";
         "brush.create_prism" Mutate brush::CreatePrism => brush::create_prism, "Create a regular n-sided prism brush (cylinders, wedges) along an axis.";
         "brush.create_from_planes" Mutate brush::CreateFromPlanes => brush::create_from_planes, "Create a convex brush from face planes, each given by three points.";
-        "brush.clip" Mutate brush::Clip => brush::clip, "Clip brushes by a plane given as three points, keeping the front side, back side or both.";
+        "brush.clip" Mutate brush::Clip => brush::clip, "Clip brushes by a plane given as three points, keeping the front side, back side or both. result.map lists each brush -> resulting ids.";
         "brush.to_mesh" Mutate mesh::Convert => mesh::brush_to_mesh_cmd, "Convert brushes to meshes (new ids, same parents).";
         "mesh.create" Mutate mesh::Create => mesh::create, "Create a polygon mesh from vertices and face loops (counter-clockwise from outside).";
         "mesh.to_brush" Mutate mesh::Convert => mesh::mesh_to_brush_cmd, "Convert closed convex meshes to brushes (new ids, same parents).";
@@ -152,13 +162,17 @@ ops! {
         "face.set_uv" Mutate face::SetUv => face::set_uv, "Set face UV offset, scale and rotation; omitted fields are kept.";
         "face.translate" Mutate face::TranslateFaces => face::translate_faces, "Move the vertices of mesh faces by a delta.";
         "vertex.translate" Mutate face::TranslateVertices => face::translate_vertices, "Move mesh vertices (m3/v10) by a delta.";
-        "csg.subtract" Mutate csg::Subtract => csg::subtract, "Subtract cutter brushes or meshes from targets, leaving the cutters alone.";
+        "room.create" Mutate build::RoomCreate => build::room_create, "Create a hollow room: floor, ceiling and four wall brushes around the interior min..max. result.roles maps floor, ceiling, wall_north/south/east/west to ids.";
+        "room.cut_opening" Mutate build::CutOpening => build::cut_opening, "Cut a box-shaped opening (doorway, window, corridor mouth) through every brush it crosses. The cutter never enters the document; result.map lists target -> resulting ids.";
+        "stairs.create" Mutate build::StairsCreate => build::stairs_create, "Create stairs as non-overlapping step brushes, each solid from the floor up. result.ids run bottom to top; result.top is the landing point.";
+        "csg.subtract" Mutate csg::Subtract => csg::subtract, "Subtract cutter brushes or meshes from targets. result.map lists each target -> resulting ids; consume_cutters deletes the cutters too (destructive).";
         "transform.translate" Mutate transform::Translate => transform::translate, "Move objects by a delta. Groups and brush entities move their contents.";
         "transform.rotate" Mutate transform::Rotate => transform::rotate, "Rotate objects about an axis (right-hand rule, degrees) around a pivot: center, origin or a point.";
         "transform.scale" Mutate transform::Scale => transform::scale, "Scale objects by a factor or per-axis factors around a pivot; negative factors mirror.";
         "transform.flip" Mutate transform::Flip => transform::flip, "Mirror objects across the plane through the pivot whose normal is the axis.";
         "object.delete" Destructive object::Delete => object::delete, "Delete objects and everything they own. Undoable.";
         "object.duplicate" Mutate object::Duplicate => object::duplicate, "Deep-copy objects (with group and entity contents), optionally offset. result.map lists old -> new ids.";
+        "object.array" Mutate object::Array => object::array, "Make count extra deep copies at multiples of an offset, optionally with a mirrored copy of the whole row, as one step. result.map lists old -> new ids.";
         "object.rename" Mutate object::Rename => object::rename, "Rename a group, layer or camera.";
         "object.set_layer" Mutate object::SetLayer => object::set_layer, "Move objects, with their contents, to another layer.";
         "entity.create" Mutate entity::Create => entity::create, "Create a point entity with classname, origin, angles and properties.";
@@ -186,7 +200,7 @@ ops! {
         "view.camera.set" Mutate view::SetCameraArgs => view::set, "Edit a document camera.";
         "view.camera.delete" Destructive view::Delete => view::delete, "Delete document cameras.";
         "view.frame" Mutate view::Frame => view::frame, "Move a document camera so the given objects fill the image.";
-        "batch" Mutate batch::Batch => batch::run, "Run commands as one all-or-nothing transaction; later items can reference earlier results with $N or $N.ids[k].";
+        "batch" Mutate batch::Batch => batch::run, "Run commands as one all-or-nothing transaction. Items use dotted or underscored op names; name an item with `as` and reference results as $name, $N, $name.ids[k], $name/v2 or $name/f1.";
     }
     session {
         "history.begin" Mutate session_args::Begin, "Open a transaction; edits group into one undo step until commit or rollback.";
@@ -226,6 +240,15 @@ impl Outcome {
         }
     }
 
+    pub fn with_map(mut self, map: Vec<(ObjectId, Vec<ObjectId>)>) -> Self {
+        let map: serde_json::Map<String, Value> = map
+            .into_iter()
+            .map(|(from, to)| (from.to_string(), json!(to)))
+            .collect();
+        self.result["map"] = Value::Object(map);
+        self
+    }
+
     pub fn created(ids: Vec<ObjectId>, warnings: Vec<String>) -> Self {
         let mut result = json!({ "ids": ids });
         if let Some(first) = ids.first() {
@@ -235,15 +258,56 @@ impl Outcome {
     }
 }
 
-pub fn parse_args<T: DeserializeOwned>(args: Value) -> Result<T, CommandError> {
-    let args = if args.is_null() { json!({}) } else { args };
-    serde_json::from_value(args).map_err(|e| {
-        let message = e.to_string();
-        let field = message.split('`').nth(1).map(str::to_string);
+fn parse_failure(
+    e: serde_path_to_error::Error<serde_json::Error>,
+) -> (CommandError, Vec<hints::Step>) {
+    let steps = hints::path_steps(e.path());
+    let path = e.path().to_string();
+    let message = e.inner().to_string();
+    let field = if path == "." {
+        message.split('`').nth(1).map(str::to_string)
+    } else {
+        Some(path)
+    };
+    (
         CommandError::InvalidArgument {
             field,
             message,
             hint: None,
+        },
+        steps,
+    )
+}
+
+fn deserialize<T: DeserializeOwned>(args: Value) -> Result<T, (CommandError, Vec<hints::Step>)> {
+    let args = if args.is_null() { json!({}) } else { args };
+    serde_path_to_error::deserialize(args).map_err(parse_failure)
+}
+
+pub fn parse_args<T: DeserializeOwned>(args: Value) -> Result<T, CommandError> {
+    deserialize(args).map_err(|(e, _)| e)
+}
+
+fn parse_op_args<T: DeserializeOwned>(op: &str, args: Value) -> Result<T, CommandError> {
+    deserialize(args).map_err(|(e, steps)| {
+        let schema = OpInfo::find(op).and_then(|i| serde_json::to_value((i.args_schema)()).ok());
+        match schema.and_then(|s| hints::describe(&s, &steps)) {
+            Some(hint) => e.with_hint(hint),
+            None => e,
         }
+    })
+}
+
+/// The safety class an invocation needs: the op's own class, raised by arguments with side effects.
+pub fn required_safety(op: &str, args: &Value) -> Option<Safety> {
+    let info = OpInfo::find(op)?;
+    let flag = |key: &str| {
+        args.get(key)
+            .is_some_and(|v| !v.is_null() && v != &json!(false))
+    };
+    Some(match info.name {
+        "csg.subtract" if flag("consume_cutters") => Safety::Destructive,
+        "view.screenshot" if flag("path") => info.safety.max(Safety::Mutate),
+        _ => info.safety,
     })
 }

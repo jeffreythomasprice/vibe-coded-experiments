@@ -71,7 +71,7 @@ fn explicit_transaction_groups_into_one_undo_step() {
     );
     assert_eq!(err_code(&bad), "InvalidArgument");
     make_box(&mut s, [10, 0, 0], [18, 8, 8]);
-    assert_eq!(s.revision(), 0);
+    assert_eq!(s.revision(), 2);
 
     let r = exec(&mut s, "history.begin", json!({}));
     assert_eq!(err_code(&r), "TransactionOpen");
@@ -80,7 +80,7 @@ fn explicit_transaction_groups_into_one_undo_step() {
 
     let c = exec(&mut s, "history.commit", json!({}));
     assert_eq!(c["changes"]["created"].as_array().unwrap().len(), 2);
-    assert_eq!(s.revision(), 1);
+    assert_eq!(s.revision(), 2);
     assert_eq!(s.document().brushes.len(), 2);
 
     let l = exec(&mut s, "history.list", json!({}));

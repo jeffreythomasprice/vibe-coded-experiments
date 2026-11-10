@@ -49,3 +49,54 @@ pub fn prism(center: DVec3, radius: f64, height: f64, sides: usize) -> Brush {
     }
     Brush { faces }
 }
+
+/// A ramp in the box `min..max` that rises from zero height at the low end to the full height at the
+/// end `toward` points to (an axis-aligned unit vector in the xy plane).
+pub fn wedge(min: DVec3, max: DVec3, toward: DVec3) -> Brush {
+    let (mut lo, mut hi) = (min, max);
+    if toward.x < 0.0 {
+        std::mem::swap(&mut lo.x, &mut hi.x);
+    }
+    if toward.y < 0.0 {
+        std::mem::swap(&mut lo.y, &mut hi.y);
+    }
+    let along_x = toward.x != 0.0;
+    let v = DVec3::new;
+    let (a, b, c, d, e, f) = if along_x {
+        (
+            v(lo.x, min.y, min.z),
+            v(hi.x, min.y, min.z),
+            v(hi.x, max.y, min.z),
+            v(lo.x, max.y, min.z),
+            v(hi.x, min.y, max.z),
+            v(hi.x, max.y, max.z),
+        )
+    } else {
+        (
+            v(min.x, lo.y, min.z),
+            v(min.x, hi.y, min.z),
+            v(max.x, hi.y, min.z),
+            v(max.x, lo.y, min.z),
+            v(min.x, hi.y, max.z),
+            v(max.x, hi.y, max.z),
+        )
+    };
+    let centroid = [a, b, c, d, e, f].into_iter().sum::<DVec3>() / 6.0;
+    let outward = |id: u32, p: [DVec3; 3]| {
+        let normal = (p[1] - p[0]).cross(p[2] - p[0]);
+        if normal.dot(p[0] - centroid) >= 0.0 {
+            face(id, p[0], p[1], p[2])
+        } else {
+            face(id, p[0], p[2], p[1])
+        }
+    };
+    Brush {
+        faces: vec![
+            outward(1, [a, b, c]),
+            outward(2, [b, c, f]),
+            outward(3, [a, b, e]),
+            outward(4, [d, c, f]),
+            outward(5, [a, d, f]),
+        ],
+    }
+}

@@ -29,7 +29,7 @@ Every op has a safety class (`read`, `mutate`, `destructive`). The server starts
 | `--allow-mutate` | `read` + `mutate` |
 | `--allow-destructive` | everything (implies `--allow-mutate`) |
 
-Tools the policy does not allow are not listed. A call to one anyway, or a `batch` containing one, fails with `NotPermitted` (the check walks into `batch.commands`). `select.*`, `file.save` and the `history.*` ops that change state are `mutate`; `history.undo`, `file.new`, `file.open`, `object.delete`, `layer.delete` and `view.camera.delete` are `destructive`.
+Some arguments raise the class: `csg.subtract` with `consume_cutters: true` needs destructive (it deletes objects), and `view.screenshot` with `path` needs mutate (it writes a file). Tools the policy does not allow are not listed. A call to one anyway, or a `batch` containing one, fails with `NotPermitted` (the check walks into `batch.commands`). `select.*`, `file.save` and the `history.*` ops that change state are `mutate`; `history.undo`, `file.new`, `file.open`, `object.delete`, `layer.delete` and `view.camera.delete` are `destructive`.
 
 ## Tools
 
@@ -40,13 +40,13 @@ One tool per registry op, generated from `OPS`:
 - **Input schema:** the op's args schema with `$ref`s inlined and `type: "object"` at the root. Non-read ops also get `expect_revision`, and `Document` ops `dry_run`; the server moves both into the command envelope. Everything else is the command's `args`.
 - **Annotations:** `readOnlyHint` for `read` ops, `destructiveHint` for `destructive` ones, `openWorldHint: false`.
 - **Result:** a text block with the compact response JSON (`{ok, revision, result, changes, warnings}` or the structured error). `isError` is set when `ok` is false. Errors are tool results, not protocol errors, so the agent sees `code`, `hint` and `field`. An unknown tool name is a protocol error.
-- **`view_screenshot`:** the same text block, then an `image/png` content block.
+- **`view_screenshot`:** the same text block, then an `image/png` content block. With `path` the server also writes the PNG there; writing a file is a side effect, so that call needs `--allow-mutate` (a read-only server still renders without `path`).
 
 Results have no output schema yet; see the command docs.
 
 ## Instructions
 
-The server's `instructions` carry the workflow: `scene_summary` first; `history_begin` (or `batch`) for multi-step edits; `check_validate`; `view_screenshot` from a few cameras with the `labels` overlay to map pixels to ids; adjust; `history_commit` or `history_rollback`; `file_save` to persist.
+The server's `instructions` carry the workflow: `scene_summary` first; `history_begin` (or `batch`) for multi-step edits; `check_validate`; `view_screenshot` from a few cameras with the `labels` overlay to map pixels to ids; adjust; `history_commit` or `history_rollback`; `file_save` to persist; and the `batch` item shape (`{op, args, as?}`, dotted or underscored names, `$name` references).
 
 ## Attribution
 

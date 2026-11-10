@@ -148,7 +148,7 @@ fn bounds_each_and_combined() {
         ok(&r)["result"]["combined"],
         json!({ "min": [0.0, 0.0, 0.0], "max": [24.0, 8.0, 8.0] })
     );
-    assert!(r["result"]["bounds"][2]["bounds"].is_null());
+    assert_eq!(r["result"]["bounds"][2]["bounds"], r["result"]["combined"]);
     assert_eq!(
         err_code(&exec(&mut s, "scene.bounds", json!({ "ids": ["b99"] }))),
         "NotFound"
@@ -302,4 +302,136 @@ fn summary_reports_selection_size() {
     let a = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
     exec(&mut s, "select.set", json!({ "ids": [a] }));
     assert_eq!(summary(&mut s)["selection"], 1);
+}
+
+#[test]
+fn bounds_of_groups_entities_and_layers() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
+    let b = make_box(&mut s, [100, 0, 0], [108, 8, 8]);
+    let c = make_box(&mut s, [0, 50, 0], [8, 58, 8]);
+    let inner = id_of(&exec(&mut s, "group.create", json!({ "objects": [b] })));
+    let outer = id_of(&exec(
+        &mut s,
+        "group.create",
+        json!({ "objects": [a, inner] }),
+    ));
+    let ent = id_of(&exec(
+        &mut s,
+        "entity.create_brush_entity",
+        json!({ "classname": "func_door", "objects": [c] }),
+    ));
+    let r = exec(&mut s, "scene.bounds", json!({ "ids": [outer, ent] }));
+    let items = &ok(&r)["result"]["bounds"];
+    assert_eq!(
+        items[0]["bounds"],
+        json!({ "min": [0.0, 0.0, 0.0], "max": [108.0, 8.0, 8.0] })
+    );
+    assert_eq!(
+        items[1]["bounds"],
+        json!({ "min": [0.0, 50.0, 0.0], "max": [8.0, 58.0, 8.0] })
+    );
+    assert_eq!(
+        r["result"]["combined"],
+        json!({ "min": [0.0, 0.0, 0.0], "max": [108.0, 58.0, 8.0] })
+    );
+    let layer = layer_id(&mut s);
+    let r = exec(&mut s, "scene.bounds", json!({ "ids": [layer] }));
+    assert_eq!(
+        ok(&r)["result"]["combined"],
+        json!({ "min": [0.0, 0.0, 0.0], "max": [108.0, 58.0, 8.0] })
+    );
+}
+
+#[test]
+fn empty_group_and_layer_have_null_bounds() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
+    let g = id_of(&exec(&mut s, "group.create", json!({ "objects": [a] })));
+    exec(&mut s, "object.delete", json!({ "ids": [a] }));
+    let l = id_of(&exec(&mut s, "layer.create", json!({ "name": "empty" })));
+    let r = exec(&mut s, "scene.bounds", json!({ "ids": [g, l] }));
+    assert!(ok(&r)["result"]["bounds"][0]["bounds"].is_null());
+    assert!(r["result"]["bounds"][1]["bounds"].is_null());
+    assert!(r["result"]["combined"].is_null());
+}
+
+fn pair_count(s: &mut level_cmd::Session, extra: serde_json::Value) -> usize {
+    let mut args = json!({});
+    for (k, v) in extra.as_object().unwrap() {
+        args[k] = v.clone();
+    }
+    ok(&exec(s, "scene.overlaps", args))["result"]["pairs"]
+        .as_array()
+        .unwrap()
+        .len()
+}
+
+#[test]
+fn ignore_touching_drops_thin_interpenetration() {
+    let mut s = session();
+    let step1 = make_box(&mut s, [0, 0, 0], [16, 32, 8]);
+    let step2 = make_box(&mut s, [15, 0, 0], [32, 32, 16]);
+    let step3 = make_box(&mut s, [28, 0, 0], [48, 32, 24]);
+    let wall_a = make_box(&mut s, [100, 0, 0], [108, 64, 32]);
+    let wall_b = make_box(&mut s, [107, 0, 0], [140, 8, 32]);
+    assert_eq!(pair_count(&mut s, json!({})), 3);
+    let r = exec(&mut s, "scene.overlaps", json!({ "ignore_touching": true }));
+    let pairs = ok(&r)["result"]["pairs"].as_array().unwrap();
+    assert_eq!(pairs.len(), 1, "{pairs:?}");
+    assert_eq!(pairs[0]["a"], json!(step2));
+    assert_eq!(pairs[0]["b"], json!(step3));
+    assert_eq!(pairs[0]["depth"], 4.0);
+    let all = exec(&mut s, "scene.overlaps", json!({}));
+    let depths: Vec<f64> = all["result"]["pairs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["depth"].as_f64().unwrap())
+        .collect();
+    assert_eq!(depths, [1.0, 4.0, 1.0]);
+    let _ = (step1, wall_a, wall_b);
+}
+
+#[test]
+fn ignore_same_group_uses_the_direct_group() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [16, 16, 16]);
+    let b = make_box(&mut s, [8, 8, 8], [24, 24, 24]);
+    let c = make_box(&mut s, [4, 4, 4], [12, 12, 12]);
+    let inner = id_of(&exec(&mut s, "group.create", json!({ "objects": [a, b] })));
+    let outer = id_of(&exec(
+        &mut s,
+        "group.create",
+        json!({ "objects": [inner, c] }),
+    ));
+    assert_eq!(pair_count(&mut s, json!({})), 3);
+    let r = exec(
+        &mut s,
+        "scene.overlaps",
+        json!({ "ignore_same_group": true }),
+    );
+    let pairs = ok(&r)["result"]["pairs"].as_array().unwrap();
+    assert_eq!(pairs.len(), 2, "{pairs:?}");
+    assert!(
+        pairs
+            .iter()
+            .all(|p| p["a"] != json!(a) || p["b"] != json!(b))
+    );
+    assert_eq!(
+        pair_count(
+            &mut s,
+            json!({ "ignore_same_group": true, "ignore_touching": true })
+        ),
+        2
+    );
+    let _ = outer;
+}
+
+#[test]
+fn ignore_same_group_keeps_ungrouped_pairs() {
+    let mut s = session();
+    make_box(&mut s, [0, 0, 0], [16, 16, 16]);
+    make_box(&mut s, [8, 8, 8], [24, 24, 24]);
+    assert_eq!(pair_count(&mut s, json!({ "ignore_same_group": true })), 1);
 }

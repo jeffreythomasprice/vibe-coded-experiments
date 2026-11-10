@@ -6,7 +6,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::json;
 
-use super::transform::transform_object;
+use super::transform::{AxisArg, about, reflection, transform_object};
 use super::util::{check_finite, descendants, non_empty, renumber, with_layer, world_object};
 use super::{CmdResult, Outcome};
 use crate::ctx::Ctx;
@@ -117,18 +117,15 @@ fn remap(object: Object, new_id: ObjectId, map: &BTreeMap<ObjectId, ObjectId>) -
     }
 }
 
-pub fn duplicate(ctx: &mut Ctx, args: Duplicate) -> CmdResult {
-    non_empty("ids", &args.ids)?;
-    let offset = args.offset.unwrap_or(DVec3::ZERO);
-    check_finite("offset", offset)?;
-
+fn copy_order(ctx: &Ctx, ids: &[ObjectId]) -> Result<Vec<ObjectId>, CommandError> {
+    non_empty("ids", ids)?;
     let mut all = BTreeSet::new();
-    for &id in &args.ids {
+    for &id in ids {
         world_object(ctx.doc(), id)?;
         descendants(ctx.doc(), id, &mut all);
     }
     let mut order: Vec<ObjectId> = Vec::new();
-    for &id in &args.ids {
+    for &id in ids {
         if !order.contains(&id) {
             order.push(id);
         }
@@ -139,33 +136,143 @@ pub fn duplicate(ctx: &mut Ctx, args: Duplicate) -> CmdResult {
         .copied()
         .collect();
     order.extend(rest);
+    Ok(order)
+}
 
+/// Transformed deep copies of `order` with fresh ids; nothing is inserted.
+fn make_copy(
+    ctx: &mut Ctx,
+    order: &[ObjectId],
+    m: Option<&DAffine3>,
+) -> Result<(Vec<Object>, Vec<ObjectId>), CommandError> {
     let map: BTreeMap<ObjectId, ObjectId> = order
         .iter()
         .map(|&old| (old, renumber(old, ctx.alloc_id())))
         .collect();
-
-    let shift = DAffine3::from_translation(offset);
     let mut copies = Vec::new();
-    for &old in &order {
+    for &old in order {
         let source = ctx.doc().get(old).expect("collected from the document");
         let mut copy = remap(source, map[&old], &map);
-        if offset != DVec3::ZERO {
-            copy = transform_object(&copy, &shift)?;
+        if let Some(m) = m {
+            copy = transform_object(&copy, m)?;
         }
         copies.push(copy);
     }
+    Ok((copies, order.iter().map(|id| map[id]).collect()))
+}
+
+pub fn duplicate(ctx: &mut Ctx, args: Duplicate) -> CmdResult {
+    let offset = args.offset.unwrap_or(DVec3::ZERO);
+    check_finite("offset", offset)?;
+    let order = copy_order(ctx, &args.ids)?;
+    let shift = DAffine3::from_translation(offset);
+    let (copies, ids) = make_copy(ctx, &order, (offset != DVec3::ZERO).then_some(&shift))?;
     for copy in copies {
         ctx.insert(copy);
     }
-
-    let ids: Vec<ObjectId> = order.iter().map(|id| map[id]).collect();
-    let mut outcome = Outcome::created(ids, vec![]);
+    let mut outcome = Outcome::created(ids.clone(), vec![]);
     outcome.result["map"] = json!(
-        map.iter()
+        order
+            .iter()
+            .zip(&ids)
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect::<BTreeMap<_, _>>()
     );
+    Ok(outcome)
+}
+
+const MAX_ARRAY_COUNT: u32 = 256;
+const MAX_ARRAY_OBJECTS: usize = 10_000;
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Mirror {
+    axis: AxisArg,
+    #[schemars(with = "[f64; 3]")]
+    pivot: DVec3,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Array {
+    ids: Vec<ObjectId>,
+    /// Extra copies at 1..=count times the offset (1 to 256).
+    count: u32,
+    #[schemars(with = "[f64; 3]")]
+    offset: DVec3,
+    /// Also add a mirrored copy of the whole row (originals included) across this plane.
+    mirror: Option<Mirror>,
+}
+
+pub fn array(ctx: &mut Ctx, args: Array) -> CmdResult {
+    if args.count == 0 || args.count > MAX_ARRAY_COUNT {
+        return Err(CommandError::invalid_arg(
+            "count",
+            format!("count must be between 1 and {MAX_ARRAY_COUNT}"),
+        ));
+    }
+    check_finite("offset", args.offset)?;
+    if args.offset == DVec3::ZERO {
+        return Err(CommandError::invalid_arg(
+            "offset",
+            "offset must not be zero",
+        ));
+    }
+    let mirror = match &args.mirror {
+        Some(m) => {
+            check_finite("mirror.pivot", m.pivot)?;
+            let n = m.axis.unit("mirror.axis")?;
+            Some(about(m.pivot, reflection(n)))
+        }
+        None => None,
+    };
+    let order = copy_order(ctx, &args.ids)?;
+    let rows = args.count as usize + 1;
+    let total = order.len() * (args.count as usize + if mirror.is_some() { rows } else { 0 });
+    if total > MAX_ARRAY_OBJECTS {
+        return Err(CommandError::invalid_arg(
+            "count",
+            format!("this would create {total} objects; the limit is {MAX_ARRAY_OBJECTS}"),
+        ));
+    }
+
+    let mut inserts = Vec::new();
+    let mut ids = Vec::new();
+    let mut map: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut place = |ctx: &mut Ctx, k: usize, mirrored: bool| -> Result<(), CommandError> {
+        let shift = DAffine3::from_translation(args.offset * k as f64);
+        let m = match (&mirror, mirrored) {
+            (Some(r), true) => *r * shift,
+            _ => shift,
+        };
+        let identity = k == 0 && !mirrored;
+        if identity {
+            return Ok(());
+        }
+        let (copies, new_ids) = make_copy(ctx, &order, Some(&m))?;
+        for (old, new) in order.iter().zip(&new_ids) {
+            map.entry(old.to_string())
+                .or_default()
+                .push(new.to_string());
+        }
+        inserts.extend(copies);
+        ids.extend(new_ids);
+        Ok(())
+    };
+    for k in 1..rows {
+        place(ctx, k, false)?;
+    }
+    if mirror.is_some() {
+        for k in 0..rows {
+            place(ctx, k, true)?;
+        }
+    }
+    for copy in inserts {
+        ctx.insert(copy);
+    }
+    let mut outcome = Outcome::created(ids, vec![]);
+    outcome.result["map"] = json!(map);
+    outcome.result["copy_size"] = json!(order.len());
     Ok(outcome)
 }
 

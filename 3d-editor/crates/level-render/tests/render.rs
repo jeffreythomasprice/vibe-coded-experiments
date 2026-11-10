@@ -358,3 +358,266 @@ fn selection_overlay_tints_only_when_requested() {
     assert_ne!(rgb(&plain, 200, 200), rgb(&tinted, 200, 200));
     assert_eq!(rgb(&plain, 200, 200), material_rgb8("base/a"));
 }
+
+fn with(base: Value, extra: Value) -> Value {
+    let mut base = base;
+    for (k, v) in extra.as_object().unwrap() {
+        base[k] = v.clone();
+    }
+    base
+}
+
+fn label_ids(shot: &Shot) -> Vec<String> {
+    shot.labels
+        .as_ref()
+        .unwrap()
+        .iter()
+        .map(|l| l.id.to_string())
+        .collect()
+}
+
+#[test]
+fn labels_skip_occluded_objects() {
+    let mut s = session();
+    let near = make_box(&mut s, [0, 0, 0], [64, 64, 64], "near");
+    let far = make_box(&mut s, [8, 100, 8], [56, 164, 56], "far");
+    let (shot, _) = shoot(
+        &s,
+        with(flat("viewport.front"), json!({ "overlays": ["labels"] })),
+    );
+    let ids = label_ids(&shot);
+    assert!(ids.contains(&near), "{ids:?}");
+    assert!(!ids.contains(&far), "{ids:?}");
+    assert!(shot.labels.as_ref().unwrap().iter().all(|l| l.pixels >= 12));
+}
+
+#[test]
+fn label_anchor_lies_on_the_object() {
+    let mut s = session();
+    make_box(&mut s, [0, 0, 0], [64, 64, 64], "wall");
+    make_box(&mut s, [16, -40, 16], [48, 0, 48], "pillar");
+    let (shot, img) = shoot(
+        &s,
+        with(
+            flat("viewport.front"),
+            json!({ "overlays": ["labels"], "mode": "flat" }),
+        ),
+    );
+    for l in shot.labels.as_ref().unwrap() {
+        assert!(!is_background(&img, l.x, l.y) || l.pixels > 0);
+    }
+    assert_eq!(shot.labels.as_ref().unwrap().len(), 2);
+}
+
+#[test]
+fn label_ids_and_max_labels_restrict_labels() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [64, 64, 64], "a");
+    make_box(&mut s, [100, 0, 0], [164, 64, 64], "b");
+    let overlay = json!({ "overlays": ["labels"] });
+    let (shot, _) = shoot(
+        &s,
+        with(
+            flat("viewport.front"),
+            with(overlay.clone(), json!({ "label_ids": [a] })),
+        ),
+    );
+    assert_eq!(label_ids(&shot), vec![a]);
+    let (shot, _) = shoot(
+        &s,
+        with(
+            flat("viewport.front"),
+            with(overlay, json!({ "max_labels": 1 })),
+        ),
+    );
+    assert_eq!(shot.labels.as_ref().unwrap().len(), 1);
+    assert_eq!(shot.labels_omitted, 1);
+}
+
+#[test]
+fn hide_removes_objects_without_touching_the_document() {
+    let mut s = session();
+    let b = make_box(&mut s, [0, 0, 0], [64, 64, 64], "m/a");
+    let (_, img) = shoot(&s, with(flat("viewport.top"), json!({ "hide": [b] })));
+    assert!(is_background(&img, 200, 200));
+    assert_eq!(s.document().brushes.len(), 1);
+}
+
+#[test]
+fn clip_above_reveals_the_floor() {
+    let mut s = session();
+    make_box(&mut s, [0, 0, 0], [64, 64, 8], "floor");
+    make_box(&mut s, [0, 0, 64], [64, 64, 72], "ceiling");
+    let (_, img) = shoot(&s, flat("viewport.top"));
+    assert_eq!(rgb(&img, 200, 200), material_rgb8("ceiling"));
+    let (_, img) = shoot(
+        &s,
+        with(flat("viewport.top"), json!({ "clip_above": 32.0 })),
+    );
+    assert_eq!(rgb(&img, 200, 200), material_rgb8("floor"));
+}
+
+#[test]
+fn legend_and_colour_overrides() {
+    let mut s = session();
+    make_box(&mut s, [0, 0, 0], [64, 64, 64], "m/a");
+    exec(
+        &mut s,
+        "entity.create",
+        json!({ "classname": "light", "origin": [100, 0, 0] }),
+    );
+    let (shot, img) = shoot(
+        &s,
+        with(
+            flat("viewport.top"),
+            json!({ "material_colors": { "m/a": "#ff0000" } }),
+        ),
+    );
+    assert_eq!(rgb(&img, 200, 200), [255, 0, 0]);
+    let legend = shot.result()["legend"].clone();
+    assert_eq!(
+        legend["faces"][0],
+        json!({ "name": "m/a", "color": "#ff0000" })
+    );
+    assert_eq!(legend["entities"][0]["marker"], "octahedron");
+
+    let (shot, _) = shoot(
+        &s,
+        with(flat("viewport.top"), json!({ "colors": "orientation" })),
+    );
+    let names: Vec<String> = shot.result()["legend"]["faces"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["name"].as_str().unwrap().to_string())
+        .collect();
+    assert!(
+        names.contains(&"faces up (floors)".to_string()),
+        "{names:?}"
+    );
+    assert_eq!(shot.result()["legend"]["background"], "#292b30");
+    assert!(
+        screenshot(
+            renderer(),
+            s.document(),
+            with(
+                flat("viewport.top"),
+                json!({ "material_colors": { "m/a": "red" } })
+            )
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn orientation_legend_names_floors_ceilings_and_walls() {
+    let mut s = session();
+    make_box(&mut s, [0, 0, 0], [64, 64, 64], "m/a");
+    let (shot, _) = shoot(
+        &s,
+        with(
+            with(flat("viewport.persp"), json!({ "colors": "orientation" })),
+            json!({ "camera": { "position": [-80, -120, 90], "target": [32, 32, 32] } }),
+        ),
+    );
+    let names: Vec<String> = shot.result()["legend"]["faces"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["name"].as_str().unwrap().to_string())
+        .collect();
+    assert!(
+        names.contains(&"faces up (floors)".to_string()),
+        "{names:?}"
+    );
+    assert!(names.contains(&"vertical (walls)".to_string()), "{names:?}");
+}
+
+#[test]
+fn clip_above_gives_a_section_view_of_a_closed_room() {
+    let mut s = session();
+    exec(
+        &mut s,
+        "room.create",
+        json!({ "min": [0, 0, 0], "max": [96, 96, 64], "wall": 8,
+                "floor_material": "floor", "ceiling_material": "ceiling" }),
+    );
+    let (_, closed) = shoot(&s, flat("viewport.top"));
+    assert_eq!(rgb(&closed, 200, 200), material_rgb8("ceiling"));
+    let (_, open) = shoot(
+        &s,
+        with(flat("viewport.top"), json!({ "clip_above": 63.0 })),
+    );
+    assert_eq!(rgb(&open, 200, 200), material_rgb8("floor"));
+}
+
+#[test]
+fn label_kinds_and_min_label_pixels_filter_labels() {
+    let mut s = session();
+    let b = make_box(&mut s, [0, 0, 0], [64, 64, 64], "a");
+    exec(
+        &mut s,
+        "entity.create",
+        json!({ "classname": "light", "origin": [100, 32, 32] }),
+    );
+    let overlay = json!({ "overlays": ["labels"] });
+    let (shot, _) = shoot(&s, with(flat("viewport.front"), overlay.clone()));
+    assert_eq!(shot.labels.as_ref().unwrap().len(), 2);
+    assert_eq!(shot.result()["labels_drawn"], 2);
+
+    let (shot, _) = shoot(
+        &s,
+        with(
+            flat("viewport.front"),
+            with(overlay.clone(), json!({ "label_kinds": ["brush"] })),
+        ),
+    );
+    assert_eq!(label_ids(&shot), vec![b.clone()]);
+    assert_eq!(shot.labels_omitted, 0);
+
+    let (shot, _) = shoot(
+        &s,
+        with(
+            flat("viewport.front"),
+            with(overlay.clone(), json!({ "min_label_pixels": 1_000_000 })),
+        ),
+    );
+    assert!(shot.labels.as_ref().unwrap().is_empty());
+
+    for bad in [
+        json!({ "label_kinds": ["group"] }),
+        json!({ "min_label_pixels": 0 }),
+    ] {
+        assert!(
+            screenshot(
+                renderer(),
+                s.document(),
+                with(flat("viewport.front"), with(overlay.clone(), bad))
+            )
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn nudged_labels_get_leader_lines() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [400, 20, 4], "a");
+    let b = make_box(&mut s, [0, 0, 4], [400, 20, 8], "b");
+    let yellow = |img: &RgbaImage| img.pixels().filter(|p| p.0[..3] == [255, 235, 90]).count();
+    let shoot_labels = |ids: Value| {
+        shoot(
+            &s,
+            with(
+                flat("viewport.front"),
+                json!({ "overlays": ["labels"], "label_ids": ids }),
+            ),
+        )
+    };
+    let (shot, img) = shoot_labels(json!([a, b]));
+    assert_eq!(shot.labels.as_ref().unwrap().len(), 2);
+    assert!(yellow(&img) > 0);
+    let (shot, img) = shoot_labels(json!([a]));
+    assert_eq!(shot.labels.as_ref().unwrap().len(), 1);
+    assert_eq!(yellow(&img), 0);
+}

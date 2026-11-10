@@ -17,7 +17,7 @@ pub fn geometry_error(target: impl ToString, e: BrushError) -> CommandError {
     )
 }
 
-fn set_material(brush: &mut Brush, material: &str) {
+pub(super) fn set_material(brush: &mut Brush, material: &str) {
     for f in &mut brush.faces {
         f.attrs = FaceAttrs::with_material(material);
     }
@@ -61,6 +61,37 @@ pub fn create_box(ctx: &mut Ctx, args: CreateBox) -> CmdResult {
     let mut brush = shapes::cuboid(args.min, args.max);
     set_material(&mut brush, &args.material);
     let brush = normalize(&brush).map_err(|e| geometry_error("box", e))?;
+    let id = add_brush(ctx, brush, layer);
+    Ok(Outcome::created(vec![id], vec![]))
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CreateWedge {
+    #[schemars(with = "[f64; 3]")]
+    min: DVec3,
+    #[schemars(with = "[f64; 3]")]
+    max: DVec3,
+    /// The high end: the ramp rises toward this side of the box.
+    direction: super::build::StairDirection,
+    layer: Option<LayerId>,
+    #[serde(default)]
+    material: String,
+}
+
+pub fn create_wedge(ctx: &mut Ctx, args: CreateWedge) -> CmdResult {
+    check_finite("min", args.min)?;
+    check_finite("max", args.max)?;
+    if !args.min.cmplt(args.max).all() {
+        return Err(CommandError::invalid_arg(
+            "max",
+            "max must be greater than min on every axis",
+        ));
+    }
+    let layer = resolve_layer(ctx.doc(), args.layer)?;
+    let mut brush = shapes::wedge(args.min, args.max, args.direction.vector());
+    set_material(&mut brush, &args.material);
+    let brush = normalize(&brush).map_err(|e| geometry_error("wedge", e))?;
     let id = add_brush(ctx, brush, layer);
     Ok(Outcome::created(vec![id], vec![]))
 }
@@ -127,6 +158,17 @@ pub fn create_prism(ctx: &mut Ctx, args: CreatePrism) -> CmdResult {
     Ok(Outcome::created(vec![id], vec![]))
 }
 
+pub(super) fn dominant_material(brush: &Brush) -> String {
+    let mut counts: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for f in &brush.faces {
+        *counts.entry(f.attrs.material.as_str()).or_default() += 1;
+    }
+    counts
+        .into_iter()
+        .max_by_key(|&(_, n)| n)
+        .map_or_else(String::new, |(m, _)| m.to_string())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Keep {
@@ -155,13 +197,19 @@ pub fn clip(ctx: &mut Ctx, args: Clip) -> CmdResult {
     }
     let mut created = Vec::new();
     let mut warnings = Vec::new();
+    let mut map = Vec::new();
 
     for &id in &args.ids {
         let original = brush_of(ctx.doc(), id)?.clone();
+        let material = if args.material.is_empty() {
+            dominant_material(&original.brush)
+        } else {
+            args.material.clone()
+        };
         let result = clip_brush(
             &original.brush,
             args.plane,
-            FaceAttrs::with_material(&args.material),
+            FaceAttrs::with_material(&material),
         )
         .map_err(|e| geometry_error(id, e))?;
 
@@ -196,8 +244,10 @@ pub fn clip(ctx: &mut Ctx, args: Clip) -> CmdResult {
                     )
                 })?;
                 replace(ctx, brush);
+                map.push((id, vec![id]));
             }
             Keep::Both => {
+                map.push((id, vec![id]));
                 if let (Some(front), Some(back)) = (result.front, result.back) {
                     replace(ctx, back);
                     let parents = Parents::of_brush(&original);
@@ -211,11 +261,14 @@ pub fn clip(ctx: &mut Ctx, args: Clip) -> CmdResult {
                         extra: parents.extra,
                     }));
                     created.push(new_id.into());
+                    if let Some((_, to)) = map.last_mut() {
+                        to.push(new_id.into());
+                    }
                 }
             }
         }
     }
-    Ok(Outcome::created(created, warnings))
+    Ok(Outcome::created(created, warnings).with_map(map))
 }
 
 #[derive(Deserialize, JsonSchema)]

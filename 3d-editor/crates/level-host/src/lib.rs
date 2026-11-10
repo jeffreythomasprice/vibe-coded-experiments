@@ -90,6 +90,11 @@ impl Host {
         if self.renderer.is_none() {
             self.renderer = Some(Renderer::new()?);
         }
+        let out_path = request
+            .args
+            .get("path")
+            .and_then(serde_json::Value::as_str)
+            .map(std::path::PathBuf::from);
         let renderer = self.renderer.as_ref().expect("created above");
         let shot = level_render::screenshot_with_selection(
             renderer,
@@ -97,10 +102,21 @@ impl Host {
             self.session.selection(),
             request.args,
         )?;
+        let mut result = shot.result();
+        if let Some(path) = &out_path {
+            let io = |e: &dyn std::fmt::Display| CommandError::Io {
+                message: format!("{}: {e}", path.display()),
+            };
+            if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+                std::fs::create_dir_all(dir).map_err(|e| io(&e))?;
+            }
+            level_fmt::write_atomic(path, &shot.png).map_err(|e| io(&e))?;
+            result["path"] = serde_json::json!(path.display().to_string());
+        }
         let response = Response::Success(Success {
             ok: true,
             revision: self.session.revision(),
-            result: shot.result(),
+            result,
             changes: Changes::default(),
             warnings: shot.warnings.clone(),
         });

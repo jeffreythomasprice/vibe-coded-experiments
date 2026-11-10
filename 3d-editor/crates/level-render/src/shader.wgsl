@@ -1,5 +1,6 @@
 struct Globals {
     view_proj: mat4x4<f32>,
+    clip: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> globals: Globals;
@@ -12,6 +13,7 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip: vec4<f32>,
     @location(0) color: vec4<f32>,
+    @location(1) world_z: f32,
 };
 
 @vertex
@@ -19,10 +21,14 @@ fn vs_main(v: VertexInput) -> VertexOutput {
     var out: VertexOutput;
     out.clip = globals.view_proj * vec4<f32>(v.pos, 1.0);
     out.color = v.color;
+    out.world_z = v.pos.z;
     return out;
 }
 
 @fragment
 fn fs_main(v: VertexOutput) -> @location(0) vec4<f32> {
+    if (v.world_z > globals.clip.x) {
+        discard;
+    }
     return v.color;
 }

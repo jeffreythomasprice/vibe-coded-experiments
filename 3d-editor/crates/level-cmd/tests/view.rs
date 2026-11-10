@@ -228,10 +228,11 @@ fn frame_moves_a_document_camera() {
     assert_ne!(moved, json!([0.0, -100.0, 50.0]));
     assert_eq!(v["changes"]["modified"], json!([id]));
 
+    let empty = id_of(&exec(&mut s, "layer.create", json!({ "name": "empty" })));
     let v = exec(
         &mut s,
         "view.frame",
-        json!({ "ids": ["l1"], "camera": "main" }),
+        json!({ "ids": [empty], "camera": "main" }),
     );
     assert_eq!(err_code(&v), "InvalidArgument");
     let v = exec(
@@ -269,4 +270,27 @@ fn screenshot_is_client_side_only() {
             .count(),
         1
     );
+}
+
+#[test]
+fn frame_fits_groups() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
+    let b = make_box(&mut s, [4000, 0, 0], [4008, 8, 8]);
+    let g = id_of(&exec(&mut s, "group.create", json!({ "objects": [b] })));
+    create_persp(&mut s, "main");
+    let v = exec(
+        &mut s,
+        "view.frame",
+        json!({ "ids": [g], "camera": "main" }),
+    );
+    let near_b = ok(&v)["result"]["camera"]["position"][0].as_f64().unwrap();
+    let v = exec(
+        &mut s,
+        "view.frame",
+        json!({ "ids": [g, a], "camera": "main" }),
+    );
+    let both = ok(&v)["result"]["camera"]["position"][0].as_f64().unwrap();
+    assert!(near_b > 3000.0, "{near_b}");
+    assert!(both < near_b, "{both} {near_b}");
 }

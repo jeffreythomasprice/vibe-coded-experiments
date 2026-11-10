@@ -262,3 +262,17 @@ fn file_new_with_path_binds_without_writing() {
     assert_eq!(err_code(&r), "FileExists");
     std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
 }
+
+#[test]
+fn file_save_derives_name_from_path() {
+    let mut s = Session::new(Document::new("untitled"));
+    let dir = std::env::temp_dir().join(format!("level-save-name-{}", std::process::id()));
+    let p = dir.join("hall.level.toml");
+    ok(&exec(
+        &mut s,
+        "file.save",
+        json!({ "path": p.display().to_string() }),
+    ));
+    assert_eq!(s.document().name, "hall");
+    let _ = std::fs::remove_dir_all(dir);
+}

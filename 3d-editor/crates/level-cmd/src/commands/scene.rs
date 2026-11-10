@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use super::util::{BoxArg, brush_or_mesh, check_finite, non_empty};
 use super::{CmdResult, NoArgs, Outcome};
-use crate::bounds::{bounds_json, object_bounds, scene_bounds};
+use crate::bounds::{bounds_json, extent, object_bounds, scene_bounds};
 use crate::ctx::Ctx;
 use crate::error::CommandError;
 
@@ -278,11 +278,10 @@ pub fn bounds(ctx: &Ctx, args: Bounds) -> CmdResult {
     let mut combined: Option<Aabb> = None;
     let mut items = Vec::new();
     for &id in &args.ids {
-        let object = ctx
-            .doc()
-            .get(id)
-            .ok_or_else(|| CommandError::not_found(id))?;
-        let b = object_bounds(&object);
+        if !ctx.doc().contains(id) {
+            return Err(CommandError::not_found(id));
+        }
+        let b = extent(ctx.doc(), id);
         if let Some(b) = b {
             combined = Some(combined.map_or(b, |c| c.merge(b)));
         }
@@ -445,7 +444,15 @@ pub fn query_box(ctx: &Ctx, args: QueryBox) -> CmdResult {
 pub struct Overlaps {
     /// Brushes and meshes to compare among themselves; default is every brush and mesh.
     ids: Option<Vec<ObjectId>>,
+    /// Skip pairs that interpenetrate by at most 1 unit (butted pieces with a small error).
+    #[serde(default)]
+    ignore_touching: bool,
+    /// Skip pairs whose two objects sit directly in the same group.
+    #[serde(default)]
+    ignore_same_group: bool,
 }
+
+const TOUCH_DEPTH: f64 = 1.0;
 
 fn interiors_overlap(a: &Aabb, b: &Aabb) -> bool {
     let lo = a.min.max(b.min);
@@ -486,24 +493,36 @@ pub fn overlaps(ctx: &Ctx, args: Overlaps) -> CmdResult {
             if !interiors_overlap(ab, bb) {
                 continue;
             }
+            if args.ignore_same_group && a.group().is_some() && a.group() == b.group() {
+                continue;
+            }
+            let mut depth = (ab.max.min(bb.max) - ab.min.max(bb.min)).min_element();
             let approx = match (a, b) {
                 (Object::Brush(x), Object::Brush(y)) => {
                     let Ok(Some(common)) = brush_intersect(&x.brush, &y.brush) else {
                         continue;
                     };
-                    let volume = brush_geometry(&common).map_or(0.0, |g| g.volume());
-                    if volume <= OVERLAP_EPS {
+                    let Ok(geometry) = brush_geometry(&common) else {
                         continue;
+                    };
+                    if geometry.volume() <= OVERLAP_EPS {
+                        continue;
+                    }
+                    if let Some(extent) = Aabb::from_points(geometry.vertices) {
+                        depth = extent.size().min_element();
                     }
                     false
                 }
                 _ => true,
             };
+            if args.ignore_touching && depth <= TOUCH_DEPTH {
+                continue;
+            }
             if pairs.len() == MAX_PAIRS {
                 truncated = true;
                 break 'outer;
             }
-            pairs.push(json!({ "a": a.id(), "b": b.id(), "approx": approx }));
+            pairs.push(json!({ "a": a.id(), "b": b.id(), "approx": approx, "depth": depth }));
         }
     }
     let warnings = if truncated {

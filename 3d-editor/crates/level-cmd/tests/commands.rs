@@ -373,3 +373,61 @@ fn scene_summary() {
     assert_eq!(res["layers"][0]["objects"], 2);
     assert_eq!(res["bounds"]["max"], json!([8.0, 8.0, 8.0]));
 }
+
+#[test]
+fn create_wedge_rises_toward_each_direction() {
+    for (dir, probe_high, probe_low) in [
+        ("+x", [95.0, 50.0], [5.0, 50.0]),
+        ("-x", [5.0, 50.0], [95.0, 50.0]),
+        ("+y", [50.0, 95.0], [50.0, 5.0]),
+        ("-y", [50.0, 5.0], [50.0, 95.0]),
+    ] {
+        let mut s = session();
+        let r = exec(
+            &mut s,
+            "brush.create_wedge",
+            json!({ "min": [0, 0, 0], "max": [100, 100, 40], "direction": dir }),
+        );
+        ok(&r);
+        let id = id_of(&r);
+        assert_eq!(bounds(&mut s, &id), ([0.0; 3], [100.0, 100.0, 40.0]));
+        assert_eq!(
+            full(&mut s, &id)["brush"]["faces"]
+                .as_array()
+                .unwrap()
+                .len(),
+            5
+        );
+        let top = |s: &mut level_cmd::Session, p: [f64; 2]| {
+            let hit = exec(
+                s,
+                "scene.raycast",
+                json!({ "origin": [p[0], p[1], 100], "dir": [0, 0, -1] }),
+            );
+            100.0 - hit["result"]["hit"]["distance"].as_f64().unwrap()
+        };
+        assert!((top(&mut s, probe_high) - 38.0).abs() < 1e-6, "{dir}");
+        assert!((top(&mut s, probe_low) - 2.0).abs() < 1e-6, "{dir}");
+        assert_eq!(
+            exec(&mut s, "check.validate", json!({}))["result"]["errors"],
+            0
+        );
+    }
+}
+
+#[test]
+fn create_wedge_rejects_bad_boxes() {
+    let mut s = session();
+    let v = exec(
+        &mut s,
+        "brush.create_wedge",
+        json!({ "min": [0, 0, 0], "max": [100, 0, 40], "direction": "+x" }),
+    );
+    assert_eq!(err_code(&v), "InvalidArgument");
+    let v = exec(
+        &mut s,
+        "brush.create_wedge",
+        json!({ "min": [0, 0, 0], "max": [10, 10, 10], "direction": "up" }),
+    );
+    assert_eq!(err_code(&v), "InvalidArgument");
+}

@@ -15,6 +15,7 @@ struct OpenTxn {
     label: String,
     client: String,
     start: Savepoint,
+    start_revision: u64,
 }
 
 pub struct Session {
@@ -132,7 +133,10 @@ impl Session {
         }
     }
 
-    fn run(&mut self, request: Request, client: &str) -> Result<Success, CommandError> {
+    fn run(&mut self, mut request: Request, client: &str) -> Result<Success, CommandError> {
+        if let Some(info) = OpInfo::find(&request.op) {
+            request.op = info.name.to_string();
+        }
         if let Some(expected) = request.expect_revision
             && expected != self.revision
         {
@@ -175,7 +179,11 @@ impl Session {
             return Ok(self.success(outcome.result, changes, outcome.warnings));
         }
 
-        if self.open.is_none() {
+        if self.open.is_some() {
+            if !entries.is_empty() {
+                self.revision += 1;
+            }
+        } else {
             self.journal.clear();
             if !entries.is_empty() {
                 self.revision += 1;
@@ -311,6 +319,12 @@ impl Session {
                     });
                 }
                 create_parent_dirs(&target)?;
+                if self.path.is_none()
+                    && self.doc.name == "untitled"
+                    && let Some(name) = stem_name(&target)
+                {
+                    self.doc.name = name;
+                }
                 level_fmt::save_file(&target, &self.doc).map_err(file_error)?;
                 self.saved_revision = self.revision;
                 self.path = Some(target.clone());
@@ -364,6 +378,7 @@ impl Session {
                     label: label.unwrap_or_else(|| "transaction".into()),
                     client: client.to_string(),
                     start: savepoint(&self.doc, &self.journal),
+                    start_revision: self.revision,
                 });
                 Ok(self.success(json!({}), Changes::default(), vec![]))
             }
@@ -374,7 +389,6 @@ impl Session {
                 self.journal.clear();
                 let changes = changes_of(&entries, false);
                 if !entries.is_empty() {
-                    self.revision += 1;
                     self.redo.clear();
                     self.undo.push(HistoryEntry {
                         label: txn.label,
@@ -389,6 +403,13 @@ impl Session {
                 let NoArgs {} = parse_args(args)?;
                 let txn = self.open.take().ok_or(CommandError::NoTransaction)?;
                 rollback(&mut self.doc, &mut self.journal, txn.start);
+                if self.revision != txn.start_revision {
+                    let was_clean = self.saved_revision == txn.start_revision;
+                    self.revision += 1;
+                    if was_clean {
+                        self.saved_revision = self.revision;
+                    }
+                }
                 Ok(self.success(json!({}), Changes::default(), vec![]))
             }
             "history.undo" | "history.redo" => {
