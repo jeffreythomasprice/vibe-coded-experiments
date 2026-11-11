@@ -1,8 +1,10 @@
 mod app;
+mod clip;
 mod cuboid;
 mod drag;
 mod drill;
 mod editor;
+mod elements;
 mod error;
 mod gfx;
 mod gizmo;

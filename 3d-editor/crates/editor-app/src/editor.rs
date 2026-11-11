@@ -2,13 +2,13 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
 use editor_cmd::args::{
-    Axis, AxisArg, BrushVertexAt, CreateBox, Delete, Factors, Flip, Isolate, NoArgs, Pivot, Rename,
-    Rotate, Save, Scale, SelectIds, SelectKind, SetClassname, SetHidden, SetLayer, SetLocked,
-    SetMaterial, SetProperties, SetTransform, Translate, TranslateVertices,
+    Axis, AxisArg, BrushVertexAt, Clip, CreateBox, Delete, Factors, Flip, Isolate, Keep, NoArgs,
+    Pivot, Rename, Rotate, Save, Scale, SelectIds, SelectKind, SetClassname, SetHidden, SetLayer,
+    SetLocked, SetMaterial, SetProperties, SetTransform, Translate, TranslateVertices,
 };
 use editor_cmd::results::{
-    Created, Deleted, FacesChanged, IdCount, IdOnly, Moved, Saved, Stepped, Transformed, Updated,
-    VerticesMoved,
+    Created, CreatedMapped, Deleted, FacesChanged, IdCount, IdOnly, Moved, Saved, Stepped,
+    Transformed, Updated, VerticesMoved,
 };
 use editor_cmd::{Request, Success};
 use editor_core::{ElementRef, GroupId, ObjectId, ObjectKind, Part, Properties};
@@ -24,6 +24,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
+use crate::clip::{self, ClipState, Preview};
 use crate::drag::DragOp;
 use crate::drill;
 use crate::error::AppError;
@@ -126,6 +127,10 @@ struct Keys {
     lock: bool,
     unlock_all: bool,
     escape: bool,
+    backspace: bool,
+    enter: bool,
+    reverse: bool,
+    tab: bool,
 }
 
 impl Keys {
@@ -149,6 +154,10 @@ impl Keys {
             lock: cmd && !shift && i.key_pressed(Key::L),
             unlock_all: i.modifiers.alt && !cmd && i.key_pressed(Key::L),
             escape: i.key_pressed(Key::Escape),
+            backspace: i.key_pressed(Key::Backspace),
+            enter: !cmd && !shift && i.key_pressed(Key::Enter),
+            reverse: !cmd && shift && i.key_pressed(Key::Enter),
+            tab: !cmd && !shift && i.key_pressed(Key::Tab),
             grid_finer: i.key_pressed(Key::OpenBracket),
             grid_coarser: i.key_pressed(Key::CloseBracket),
             rotate_ccw: plain(Key::Period),
@@ -165,6 +174,9 @@ impl Keys {
                 (Key::Num4, Tool::Rotate),
                 (Key::Num5, Tool::Scale),
                 (Key::Num6, Tool::Vertex),
+                (Key::Num7, Tool::Clip),
+                (Key::Num8, Tool::Edge),
+                (Key::Num9, Tool::Face),
             ]
             .into_iter()
             .find_map(|(key, tool)| plain(key).then_some(tool)),
@@ -187,6 +199,9 @@ pub struct Editor {
     hover: Option<ObjectId>,
     open_group: Option<GroupId>,
     vertex_picks: Vec<BrushVertexAt>,
+    clip: ClipState,
+    clip_preview: Preview,
+    clip_key: Option<ClipKey>,
     active: Option<PaneId>,
     prepared: Option<(PrepKey, PreparedScene)>,
     actions: Vec<Action>,
@@ -223,6 +238,8 @@ impl Timings {
     }
 }
 
+type ClipKey = (u64, [u64; 9], Vec<ObjectId>);
+
 type PrepKey = (u64, Vec<ObjectId>, Option<ObjectId>, Option<GroupId>);
 
 impl Editor {
@@ -249,6 +266,9 @@ impl Editor {
             hover: None,
             open_group: None,
             vertex_picks: Vec::new(),
+            clip: ClipState::default(),
+            clip_preview: Preview::default(),
+            clip_key: None,
             active: None,
             prepared: None,
             actions: Vec::new(),
@@ -378,7 +398,7 @@ impl Editor {
         let pivot = Pivot::Point(self.drag_pivot);
         let key = Some(key.as_str());
         match step {
-            DragOp::Translate(delta) if self.tool == Tool::Vertex => {
+            DragOp::Translate(delta) if self.tool.element_kind().is_some() => {
                 let args = TranslateVertices {
                     vertices: Vec::new(),
                     brush_vertices: self.vertex_picks.clone(),
@@ -391,6 +411,16 @@ impl Editor {
                     for pick in &mut self.vertex_picks {
                         pick.at = snap_vec(pick.at + delta);
                     }
+                    let mut seen: Vec<BrushVertexAt> = Vec::new();
+                    for pick in std::mem::take(&mut self.vertex_picks) {
+                        if !seen
+                            .iter()
+                            .any(|s| s.brush == pick.brush && s.at == pick.at)
+                        {
+                            seen.push(pick);
+                        }
+                    }
+                    self.vertex_picks = seen;
                 }
                 moved
             }
@@ -443,6 +473,12 @@ impl Editor {
                 self.select("select.add", vec![id]);
             }
             Action::VertexBegin(picks) => self.vertex_picks = picks,
+            Action::ClipAdd { point, dir } => self.clip.add(point, dir),
+            Action::ClipSet { index, point } => {
+                if let Some(p) = self.clip.points.get_mut(index) {
+                    *p = point;
+                }
+            }
             Action::OpenGroupAt(id) => {
                 if let ObjectId::Group(g) = self.pick_target(id) {
                     self.open_group = Some(g);
@@ -521,6 +557,54 @@ impl Editor {
                 }
             }
         }
+    }
+
+    fn clip_apply(&mut self) {
+        let Some(plane) = self.clip.plane() else {
+            self.status = "clip: place two points first".into();
+            return;
+        };
+        let ids = clip::brush_ids(&self.remote.doc, &self.remote.selection);
+        if ids.is_empty() {
+            self.status = "clip: select a brush first".into();
+            return;
+        }
+        let args = Clip {
+            ids,
+            plane,
+            keep: self.clip.keep,
+            material: String::new(),
+        };
+        if let Some(done) = self.call::<_, CreatedMapped>("brush.clip", &args, None) {
+            self.clip.clear();
+            if self.clip.keep == Keep::Both && !done.ids.is_empty() {
+                self.select("select.add", done.ids);
+            }
+        }
+    }
+
+    fn refresh_clip_preview(&mut self) {
+        let plane = (self.tool == Tool::Clip)
+            .then(|| self.clip.plane())
+            .flatten();
+        let key = plane.map(|p| {
+            let bits = p.map(|v| v.to_array().map(f64::to_bits));
+            let flat: Vec<u64> = bits.into_iter().flatten().collect();
+            (
+                self.remote.revision,
+                flat.try_into().expect("nine coordinates"),
+                self.remote.selection.iter().copied().collect(),
+            )
+        });
+        if key == self.clip_key {
+            return;
+        }
+        self.clip_preview = match plane {
+            Some(p) => clip::preview(&self.remote.doc, &self.remote.selection, p),
+            None => Preview::default(),
+        };
+        self.clip_key = key;
+        self.repaint = true;
     }
 
     fn set_hidden_selection(&mut self, hidden: bool) {
@@ -701,8 +785,24 @@ impl Editor {
         if keys.redo {
             self.redo();
         }
-        if keys.delete {
+        if self.tool == Tool::Clip && keys.backspace && !self.clip.points.is_empty() {
+            self.clip.pop();
+        } else if keys.delete {
             self.delete_selection();
+        }
+        if self.tool == Tool::Clip {
+            if keys.enter {
+                self.clip_apply();
+            }
+            if keys.reverse {
+                self.clip.reverse();
+            }
+            if keys.tab {
+                self.clip.cycle_keep();
+            }
+            if keys.escape {
+                self.clip.clear();
+            }
         }
         if keys.space {
             self.toggle_maximize();
@@ -796,6 +896,7 @@ impl Editor {
         }
         self.refresh_prepared();
         self.keys(&ctx);
+        self.refresh_clip_preview();
         self.menu(ui);
         self.toolbar(ui);
         self.status_bar(ui);
@@ -827,6 +928,9 @@ impl Editor {
                 doc: &self.remote.doc,
                 open_group: self.open_group,
                 depth_hint: sel_bounds.or(self.last_box),
+                picks: &self.vertex_picks,
+                clip: &self.clip,
+                clip_preview: &self.clip_preview,
                 pending: self.pending_box,
                 pending_next: &mut pending_next,
                 actions: &mut actions,
@@ -1051,13 +1155,34 @@ impl Editor {
                     (Tool::Rotate, "4"),
                     (Tool::Scale, "5"),
                     (Tool::Vertex, "6"),
+                    (Tool::Clip, "7"),
+                    (Tool::Edge, "8"),
+                    (Tool::Face, "9"),
                 ] {
                     ui.selectable_value(&mut self.tool, tool, format!("{}  {key}", tool.name()));
                 }
                 ui.separator();
-                for stub in ["Clip", "Extrude"] {
-                    ui.add_enabled(false, egui::Button::new(stub))
-                        .on_disabled_hover_text("Not in the spike");
+                ui.add_enabled(false, egui::Button::new("Extrude"))
+                    .on_disabled_hover_text("Not in the spike");
+                if self.tool == Tool::Clip {
+                    ui.separator();
+                    for (keep, name) in [
+                        (Keep::Front, "Front"),
+                        (Keep::Back, "Back"),
+                        (Keep::Both, "Both"),
+                    ] {
+                        ui.selectable_value(&mut self.clip.keep, keep, name);
+                    }
+                    if ui
+                        .add_enabled(self.clip.plane().is_some(), egui::Button::new("Apply"))
+                        .on_hover_text("Enter")
+                        .clicked()
+                    {
+                        self.clip_apply();
+                    }
+                    if ui.button("Clear").on_hover_text("Esc").clicked() {
+                        self.clip.clear();
+                    }
                 }
                 ui.separator();
                 ui.label("Grid");
@@ -1286,10 +1411,14 @@ impl Editor {
                             "Double-click",
                             "open the group under the cursor to edit its members",
                         ),
-                        ("1 2 3 4 5 6", "Select, Move, Box, Rotate, Scale, Vertex"),
+                        ("1 … 9", "Select, Move, Box, Rotate, Scale, Vertex, Clip, Edge, Face"),
                         (
-                            "Vertex tool",
-                            "2D views: LMB drag a corner handle of the selected brushes",
+                            "Vertex, Edge, Face tools",
+                            "LMB drag a handle of the selected brushes (a corner, an edge midpoint, a face centre); in the perspective view it moves on the axis plane facing the camera",
+                        ),
+                        (
+                            "Clip tool",
+                            "click two points (2D: a line through the view; 3D: on a face) or three, drag a point to move it; Enter applies, Tab front / back / both, Shift+Enter swaps sides, Backspace removes a point, Esc clears",
                         ),
                         (", / .", "rotate the selection 90° in the active view"),
                         ("Alt+X / Y / Z", "flip the selection"),

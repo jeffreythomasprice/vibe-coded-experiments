@@ -433,3 +433,100 @@ fn create_wedge_rejects_bad_boxes() {
     );
     assert_eq!(err_code(&v), "InvalidArgument");
 }
+
+#[test]
+fn union_merges_into_the_first_brush() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [16, 16, 16]);
+    let b = make_box(&mut s, [16, 0, 0], [32, 16, 16]);
+    let r = exec(&mut s, "csg.union", json!({ "ids": [a, b] }));
+    ok(&r);
+    assert_eq!(r["result"]["map"][&a], json!([a]));
+    assert_eq!(r["result"]["map"][&b], json!([a]));
+    assert_eq!(r["changes"]["deleted"], json!([b]));
+    let c = exec(&mut s, "check.validate", json!({}));
+    assert_eq!(c["result"]["errors"], 0);
+    let g = exec(&mut s, "scene.get", json!({ "ids": [a] }));
+    ok(&g);
+}
+
+#[test]
+fn union_mesh_output_replaces_brushes_with_one_mesh() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [16, 16, 16]);
+    let b = make_box(&mut s, [8, 8, 8], [24, 24, 24]);
+    let r = exec(
+        &mut s,
+        "csg.union",
+        json!({ "ids": [a, b], "output": "mesh" }),
+    );
+    ok(&r);
+    let created = ids_of(&r);
+    assert_eq!(created.len(), 1);
+    assert!(created[0].starts_with('m'));
+    let c = exec(&mut s, "check.validate", json!({}));
+    assert_eq!(c["result"]["errors"], 0);
+}
+
+#[test]
+fn intersect_keeps_the_shared_volume() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [16, 16, 16]);
+    let b = make_box(&mut s, [8, 8, 8], [24, 24, 24]);
+    let r = exec(&mut s, "csg.intersect", json!({ "ids": [a, b] }));
+    ok(&r);
+    assert_eq!(r["changes"]["deleted"], json!([b]));
+    let c = exec(&mut s, "check.validate", json!({}));
+    assert_eq!(c["result"]["errors"], 0);
+}
+
+#[test]
+fn intersect_of_disjoint_brushes_is_an_error_and_changes_nothing() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [16, 16, 16]);
+    let b = make_box(&mut s, [100, 0, 0], [116, 16, 16]);
+    let before = s.revision();
+    let r = exec(&mut s, "csg.intersect", json!({ "ids": [a, b] }));
+    assert_eq!(err_code(&r), "InvalidGeometry");
+    assert_eq!(s.revision(), before);
+}
+
+#[test]
+fn union_and_intersect_argument_errors() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [16, 16, 16]);
+    for op in ["csg.union", "csg.intersect"] {
+        let r = exec(&mut s, op, json!({ "ids": [a] }));
+        assert_eq!(err_code(&r), "InvalidArgument");
+        let r = exec(&mut s, op, json!({ "ids": [a, a] }));
+        assert_eq!(err_code(&r), "InvalidArgument");
+        let r = exec(&mut s, op, json!({ "ids": [a, "b999"] }));
+        assert_eq!(err_code(&r), "NotFound");
+    }
+}
+
+#[test]
+fn hollow_box_becomes_six_walls() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [64, 64, 64]);
+    let r = exec(&mut s, "csg.hollow", json!({ "ids": [a], "thickness": 8 }));
+    ok(&r);
+    assert_eq!(r["result"]["map"][&a].as_array().unwrap().len(), 6);
+    assert_eq!(r["changes"]["deleted"], json!([a]));
+    let c = exec(&mut s, "check.validate", json!({}));
+    assert_eq!(c["result"]["errors"], 0);
+}
+
+#[test]
+fn hollow_errors() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [16, 16, 16]);
+    let r = exec(&mut s, "csg.hollow", json!({ "ids": [a], "thickness": 8 }));
+    assert_eq!(err_code(&r), "InvalidGeometry");
+    for t in [json!(0), json!(-1)] {
+        let r = exec(&mut s, "csg.hollow", json!({ "ids": [a], "thickness": t }));
+        assert_eq!(err_code(&r), "InvalidArgument");
+    }
+    let r = exec(&mut s, "csg.hollow", json!({ "ids": [], "thickness": 2 }));
+    assert_eq!(err_code(&r), "InvalidArgument");
+}

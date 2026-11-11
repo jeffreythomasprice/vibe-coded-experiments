@@ -1,12 +1,16 @@
 use editor_core::{Brush, BrushId, BrushObject, Mesh, MeshId, MeshObject, Object, ObjectId};
-use editor_geom::mesh::{CsgError, subtract as mesh_subtract};
-use editor_geom::{brush_subtract, brush_to_mesh};
+use editor_geom::mesh::{
+    CsgError, intersect as mesh_intersect, subtract as mesh_subtract, union as mesh_union,
+};
+use editor_geom::{
+    BrushError, brush_inset, brush_intersect, brush_merge, brush_subtract, brush_to_mesh,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
 use super::brush::geometry_error;
 use super::results;
-use super::util::{Parents, brush_or_mesh};
+use super::util::{Parents, brush_of, brush_or_mesh};
 use super::{CmdResult, Outcome};
 use crate::ctx::Ctx;
 use crate::error::CommandError;
@@ -156,7 +160,15 @@ pub(super) fn subtract_brushes(
     if fragments.len() == 1 && fragments[0] == t.brush {
         return Ok(vec![t.id.into()]);
     }
+    Ok(replace_with_fragments(ctx, t, fragments))
+}
 
+/// Zero fragments delete the brush, one keeps its id, several replace it with new brushes in the same parents.
+fn replace_with_fragments(
+    ctx: &mut Ctx,
+    t: &BrushObject,
+    mut fragments: Vec<Brush>,
+) -> Vec<ObjectId> {
     let parents = Parents::of_brush(t);
     let mut ids: Vec<ObjectId> = Vec::new();
     match fragments.len() {
@@ -185,7 +197,7 @@ pub(super) fn subtract_brushes(
             }
         }
     }
-    Ok(ids)
+    ids
 }
 
 fn subtract_mesh(
@@ -233,4 +245,228 @@ fn subtract_mesh(
         }
         _ => unreachable!(),
     }
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Union {
+    /// At least two brushes or meshes. The first keeps its id; the others are deleted.
+    ids: Vec<ObjectId>,
+    output: Option<Output>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Intersect {
+    /// At least two brushes or meshes. The first keeps its id; the others are deleted.
+    ids: Vec<ObjectId>,
+    output: Option<Output>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Hollow {
+    ids: Vec<ObjectId>,
+    /// Wall thickness, measured inward from every face.
+    thickness: f64,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Combine {
+    Union,
+    Intersect,
+}
+
+fn check_distinct(field: &str, ids: &[ObjectId]) -> Result<(), CommandError> {
+    for (i, id) in ids.iter().enumerate() {
+        if ids[..i].contains(id) {
+            return Err(CommandError::invalid_arg(
+                field,
+                format!("{id} is listed twice"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub fn union(ctx: &mut Ctx, args: Union) -> CmdResult<results::CreatedMapped> {
+    combine(ctx, &args.ids, args.output, Combine::Union)
+}
+
+pub fn intersect(ctx: &mut Ctx, args: Intersect) -> CmdResult<results::CreatedMapped> {
+    combine(ctx, &args.ids, args.output, Combine::Intersect)
+}
+
+fn combine(
+    ctx: &mut Ctx,
+    ids: &[ObjectId],
+    output: Option<Output>,
+    kind: Combine,
+) -> CmdResult<results::CreatedMapped> {
+    if ids.len() < 2 {
+        return Err(CommandError::invalid_arg(
+            "ids",
+            "give at least two brushes or meshes",
+        ));
+    }
+    check_distinct("ids", ids)?;
+    let operands: Vec<Object> = ids
+        .iter()
+        .map(|&id| brush_or_mesh(ctx.doc(), id))
+        .collect::<Result<_, _>>()?;
+    let any_mesh = operands.iter().any(|o| matches!(o, Object::Mesh(_)));
+    if any_mesh && output == Some(Output::Brush) {
+        return Err(
+            CommandError::invalid_arg("output", "a mesh operand forces mesh output")
+                .with_hint("omit output or use \"mesh\""),
+        );
+    }
+    let first = &operands[0];
+    let first_id = first.id();
+    let empty = || {
+        CommandError::invalid_geometry(
+            first_id,
+            "the objects do not overlap",
+            "move them so they share volume, or use csg.union",
+        )
+    };
+
+    if any_mesh || output == Some(Output::Mesh) {
+        let mut acc = as_mesh(first)?;
+        for other in &operands[1..] {
+            let other_mesh = as_mesh(other)?;
+            acc = match kind {
+                Combine::Union => mesh_union(&acc, &other_mesh),
+                Combine::Intersect => mesh_intersect(&acc, &other_mesh),
+            }
+            .map_err(|e| csg_error(e, first_id, other.id()))?;
+        }
+        if acc.faces.is_empty() {
+            return Err(empty());
+        }
+        let result: ObjectId = match first {
+            Object::Mesh(m) => {
+                ctx.insert(Object::Mesh(MeshObject {
+                    mesh: acc,
+                    ..m.clone()
+                }));
+                m.id.into()
+            }
+            Object::Brush(b) => {
+                ctx.remove(b.id.into());
+                let parents = Parents::of_brush(b);
+                let id = MeshId(ctx.alloc_id());
+                ctx.insert(Object::Mesh(MeshObject {
+                    flags: parents.flags,
+                    id,
+                    layer: parents.layer,
+                    group: parents.group,
+                    entity: parents.entity,
+                    mesh: acc,
+                    extra: parents.extra,
+                }));
+                id.into()
+            }
+            _ => unreachable!(),
+        };
+        return Ok(finish_combine(ctx, ids, result));
+    }
+
+    let brushes: Vec<&BrushObject> = operands
+        .iter()
+        .map(|o| match o {
+            Object::Brush(b) => b,
+            _ => unreachable!("brush mode has only brush operands"),
+        })
+        .collect();
+    let merged = match kind {
+        Combine::Union => {
+            let all: Vec<Brush> = brushes.iter().map(|b| b.brush.clone()).collect();
+            brush_merge(&all).map_err(|e| geometry_error(first_id, e))?
+        }
+        Combine::Intersect => {
+            let mut acc = brushes[0].brush.clone();
+            for other in &brushes[1..] {
+                acc = brush_intersect(&acc, &other.brush)
+                    .map_err(|e| geometry_error(first_id, e))?
+                    .ok_or_else(empty)?;
+            }
+            acc
+        }
+    };
+    ctx.insert(Object::Brush(BrushObject {
+        brush: merged,
+        ..brushes[0].clone()
+    }));
+    Ok(finish_combine(ctx, ids, first_id))
+}
+
+fn finish_combine(
+    ctx: &mut Ctx,
+    ids: &[ObjectId],
+    result: ObjectId,
+) -> Outcome<results::CreatedMapped> {
+    for id in &ids[1..] {
+        ctx.remove(*id);
+    }
+    let created = if result == ids[0] {
+        Vec::new()
+    } else {
+        vec![result]
+    };
+    Outcome::created_mapped(
+        created,
+        Vec::new(),
+        ids.iter().map(|&id| (id, vec![result])).collect(),
+    )
+}
+
+pub fn hollow(ctx: &mut Ctx, args: Hollow) -> CmdResult<results::CreatedMapped> {
+    if args.ids.is_empty() {
+        return Err(CommandError::invalid_arg("ids", "ids must not be empty"));
+    }
+    if !args.thickness.is_finite() || args.thickness <= 0.0 {
+        return Err(CommandError::invalid_arg(
+            "thickness",
+            "thickness must be a positive number",
+        ));
+    }
+    check_distinct("ids", &args.ids)?;
+    let targets: Vec<BrushObject> = args
+        .ids
+        .iter()
+        .map(|&id| brush_of(ctx.doc(), id).cloned())
+        .collect::<Result<_, _>>()?;
+
+    let too_thick = |id: ObjectId| {
+        CommandError::invalid_geometry(
+            id,
+            "the thickness leaves no room for a cavity",
+            "thickness must be less than half the brush's smallest size",
+        )
+    };
+    let mut walls = Vec::new();
+    for t in &targets {
+        let inner = match brush_inset(&t.brush, args.thickness) {
+            Ok(inner) => inner,
+            Err(BrushError::Empty | BrushError::Unbounded) => return Err(too_thick(t.id.into())),
+            Err(e) => return Err(geometry_error(t.id, e)),
+        };
+        let fragments = brush_subtract(&t.brush, &inner).map_err(|e| geometry_error(t.id, e))?;
+        walls.push(fragments);
+    }
+
+    let mut created = Vec::new();
+    let mut map = Vec::new();
+    for (t, fragments) in targets.iter().zip(walls) {
+        let result = replace_with_fragments(ctx, t, fragments);
+        created.extend(
+            result
+                .iter()
+                .copied()
+                .filter(|id| *id != ObjectId::from(t.id)),
+        );
+        map.push((t.id.into(), result));
+    }
+    Ok(Outcome::created_mapped(created, Vec::new(), map))
 }

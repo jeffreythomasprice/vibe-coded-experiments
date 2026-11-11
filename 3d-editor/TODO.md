@@ -1,5 +1,19 @@
 in flight:
 
+Currently we have solid color faces with no material or textures. I want to enable per-face editing and textured materials.
+
+Our save format should support the following ways to reference a texture:
+- absolute path to image file
+- relative path to image file, relative to the level file
+- base64 embedding in the level file
+
+If there are any obvious material properties other than image that we should support, e.g. lighting properties, we should implement that now too.
+
+We need UI, cli, and MCP support for this. In the UI we need widgets not only for selecting image, but also for easily aligning images onto faces such as:
+- offset, scale, rotation
+- selecting multiple faces and manipulating them at once
+
+
 todo:
 
 just keep chewing through plan.md
@@ -11,20 +25,20 @@ Run an mcp test. Make sure to output screenshots to a directory and give me the 
 Propose next steps based on these results and plan.md. Include a handoff prompt I can give to a new agent that will get started.
 
 
-materials, textures
+My todo list has:
+- [ ] Entity definitions schema (our own format, with optional FGD import), an entity browser, and drag-and-drop.
+- [ ] Entity link lines (target references) in the viewport.
 
+I'd like to generally make an entity system that works. Some use cases I have in mind that I want to support in a future game or simulation based on this:
+- entities that have keyframe animation, like doors or elevators
+- entities that trigger other events in game logic, like buttons; e.g. to trigger those doors or elevators, or to do some other scripting event
+- entities that represent invisible zones, e.g. to track player movement in a region
 
 
 C. Tier 1: brush editor
 
 Still to do:
-- [ ] csg.union, csg.intersect and csg.hollow. They are specced in tier0-commands.md:88 but not in the ops table.
-- [ ] Clip tool UI: keep-front, keep-back and split; snaps to faces in 3D and to the grid in 2D.
-- [ ] Vertex/edge/face tools in the GUI, plus vertex fusing and face chopping so brushes never go concave.
-- [ ] Entity definitions schema (our own format, with optional FGD import), an entity browser, and drag-and-drop.
-- [ ] Entity link lines (target references) in the viewport.
 - [ ] Layer hide/lock and omit-from-export, group open/close with lock, and hide/isolate/lock/show-all. All undoable. I found no visibility or lock state in the model.
-- [ ] Material browser, and a face attribute editor (offset, scale, rotation) in the GUI.
 - [ ] Clipboard: copy/paste in place or at cursor.
 - [ ] Autosave and backups.
 

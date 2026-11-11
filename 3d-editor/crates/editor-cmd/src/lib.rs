@@ -22,7 +22,7 @@ pub use error::{CommandError, ErrorCode, ErrorResponse};
 pub mod args {
     pub use crate::commands::NoArgs;
     pub use crate::commands::brush::Axis;
-    pub use crate::commands::brush::CreateBox;
+    pub use crate::commands::brush::{Clip, CreateBox, Keep};
     pub use crate::commands::entity::{SetClassname, SetProperties, SetTransform};
     pub use crate::commands::face::{BrushVertexAt, SetMaterial, TranslateVertices};
     pub use crate::commands::object::{Delete, Rename, SetLayer};

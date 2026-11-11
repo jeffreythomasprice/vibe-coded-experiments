@@ -6,8 +6,8 @@ use common::*;
 use editor_core::{Brush, FaceAttrs, FaceId};
 use editor_geom::shapes::{cuboid, prism};
 use editor_geom::{
-    BrushError, brush_geometry, brush_intersect, brush_subtract, clip_brush, mesh_to_brush,
-    normalize,
+    BrushError, brush_geometry, brush_inset, brush_intersect, brush_merge, brush_subtract,
+    clip_brush, mesh_to_brush, normalize,
 };
 use glam::DVec3;
 use proptest::prelude::*;
@@ -266,4 +266,48 @@ fn format_doc_room_is_valid() {
         ],
     };
     assert!((brush_volume(&room) - 256.0 * 256.0 * 16.0).abs() < 1e-6);
+}
+
+fn volume_of(b: &Brush) -> f64 {
+    brush_geometry(b).unwrap().volume()
+}
+
+#[test]
+fn merging_adjacent_boxes_gives_their_union_box() {
+    let a = cuboid(DVec3::ZERO, DVec3::splat(10.0));
+    let b = cuboid(DVec3::new(10.0, 0.0, 0.0), DVec3::new(20.0, 10.0, 10.0));
+    let m = brush_merge(&[a, b]).unwrap();
+    assert_eq!(m.faces.len(), 6);
+    assert!((volume_of(&m) - 2000.0).abs() < 1e-6);
+}
+
+#[test]
+fn merging_diagonal_boxes_fills_the_hull() {
+    let a = cuboid(DVec3::ZERO, DVec3::splat(10.0));
+    let b = cuboid(DVec3::splat(20.0), DVec3::splat(30.0));
+    let m = brush_merge(&[a, b]).unwrap();
+    assert!(volume_of(&m) > 2000.0 + 1.0);
+    assert!(brush_geometry(&m).is_ok());
+}
+
+#[test]
+fn merge_keeps_face_attributes_on_shared_planes() {
+    let mut a = cuboid(DVec3::ZERO, DVec3::splat(10.0));
+    for f in &mut a.faces {
+        f.attrs.material = "brick".into();
+    }
+    let b = cuboid(DVec3::new(10.0, 0.0, 0.0), DVec3::new(20.0, 10.0, 10.0));
+    let m = brush_merge(&[a, b]).unwrap();
+    assert!(m.faces.iter().any(|f| f.attrs.material == "brick"));
+}
+
+#[test]
+fn inset_shrinks_every_side() {
+    let inner = brush_inset(&unit_cube(), 2.0).unwrap();
+    assert!((volume_of(&inner) - 216.0).abs() < 1e-6);
+}
+
+#[test]
+fn inset_past_the_middle_is_empty() {
+    assert_eq!(brush_inset(&unit_cube(), 6.0), Err(BrushError::Empty));
 }

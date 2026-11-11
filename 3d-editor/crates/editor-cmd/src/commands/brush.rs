@@ -171,7 +171,7 @@ pub(super) fn dominant_material(brush: &Brush) -> String {
         .map_or_else(String::new, |(m, _)| m.to_string())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Keep {
     Front,
@@ -179,15 +179,15 @@ pub enum Keep {
     Both,
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Clip {
-    ids: Vec<ObjectId>,
+    pub ids: Vec<ObjectId>,
     #[schemars(with = "[[f64; 3]; 3]")]
-    plane: [DVec3; 3],
-    keep: Keep,
+    pub plane: [DVec3; 3],
+    pub keep: Keep,
     #[serde(default)]
-    material: String,
+    pub material: String,
 }
 
 pub fn clip(ctx: &mut Ctx, args: Clip) -> CmdResult<results::CreatedMapped> {

@@ -23,7 +23,7 @@ Error: `{ "ok": false, "code", "message", "target"?, "field"?, "hint", "index"? 
 
 Mutating commands report what they created as `result.ids` (in creation order) and `result.id` (the first one, when any). Batch references read these. Objects a command only modified or deleted appear in `changes`, not in `result.ids`.
 
-Ops that replace or edit existing objects (`brush.clip`, `csg.subtract`, `brush.to_mesh`, `mesh.to_brush`) also return `result.map`: `{input_id: [resulting ids]}`. An id that maps to itself was edited in place, an empty list means it was deleted. Ops that only edit in place (`transform.*`, `face.*`, `entity.*`) return counts, and `changes.modified` is authoritative.
+Ops that replace or edit existing objects (`brush.clip`, `csg.*`, `brush.to_mesh`, `mesh.to_brush`) also return `result.map`: `{input_id: [resulting ids]}`. An id that maps to itself was edited in place, an empty list means it was deleted. Ops that only edit in place (`transform.*`, `face.*`, `entity.*`) return counts, and `changes.modified` is authoritative.
 
 Argument errors (`InvalidArgument`) carry the full path to the offending value in `field` (`faces[0]`) and, when it can be derived from the op's schema, a `hint` naming the expected shape with an example (`expected {verts: [integer], material?: string}, e.g. {"verts":[0]}`). The ops table also accepts underscored names (`brush_create_box`) wherever an op name is expected.
 
@@ -91,10 +91,14 @@ Faces are element references, see the [model](tier0-model.md#element-references)
 
 Both translations snap to the grid, then validate. Meshes: errors fail with `InvalidGeometry` and nothing changes; warnings (such as a face that is no longer planar) are returned as warnings. Brushes stay convex: the result is rebuilt as the convex hull of the moved corners (`editor_geom::move_brush_vertices`). Corners that land on each other fuse, and a face the move makes non-planar splits into several planes. A face keeps its id when its plane or its corner set is unchanged; a split-off face gets a new id and the attributes of the old face it shares most corners with. A move that would leave a corner inside the brush or on an edge fails with `InvalidGeometry` and a hint to use `brush.to_mesh`; a position with no corner is `InvalidArgument`.
 
-### `csg.*` (T1, specified now)
-`subtract {targets, cutters, output?}`, `union`, `intersect`, `hollow {ids, thickness}`.
+### `csg.*` (T1)
+`subtract {targets, cutters, output?}`, `union {ids, output?}`, `intersect {ids, output?}`, `hollow {ids, thickness}`.
 
 `subtract` leaves cutters alone unless `consume_cutters` is true, which deletes them in the same step (this raises the required safety to destructive). It returns `result.map` (target -> resulting ids). With brush output, an untouched target stays as is; a target left as one fragment keeps its ID; several fragments replace the target with new brushes (same layer, group and entity); nothing left deletes it. Mesh output (or any mesh operand) turns a brush target into a new mesh and edits a mesh target in place; an empty result deletes the target with a warning. `CsgError::InvalidResult` becomes `InvalidGeometry` with a hint to nudge a cutter.
+
+`union` and `intersect` take two or more distinct brushes or meshes. The first keeps its id and takes the result; the others are deleted. `result.map` maps every input to the result. A mesh output from a brush first operand creates a new mesh in its layer, group and entity. Brush `union` is a convex merge: the convex hull of all the inputs' corners, which can fill space between inputs that do not form a convex shape together (`output: "mesh"` gives the exact union). A hull face on an input face's plane keeps that face's attributes; any other face takes the attributes of the input face with the closest normal. Brush `intersect` keeps the convex volume the brushes share. Inputs that do not overlap fail with `InvalidGeometry` and nothing changes. Mesh operands force mesh output, as for `subtract`.
+
+`hollow` replaces each brush with wall brushes of `thickness`, measured inward from every face: the brush minus the same brush with every face moved inward. A box becomes six walls, in new brushes with the original's layer, group and entity. A mesh id is `WrongKind`; a thickness that is not positive and finite is `InvalidArgument`; a thickness with no room for a cavity is `InvalidGeometry`. `result.map` maps each brush to its walls.
 
 ### `room.*`, `stairs.*` (T2 shape tools, built on the T0 primitives)
 Coarse ops that expand to ordinary brushes. Each is one `Document` op: one undo step, dry-runnable, batchable, mutate safety. `layer`, `group` and `name` follow `entity.create`: a `group` fixes the layer, and `name` wraps the new brushes in a new group (nested in `group` when both are given), returned as `result.group`. Brushes stay plain world brushes, so `entity.create_brush_entity`, `object.duplicate` and `transform.*` work on them (`"$hall.ids"` in a batch).

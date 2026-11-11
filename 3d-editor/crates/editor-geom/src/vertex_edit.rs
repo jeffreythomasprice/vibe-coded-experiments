@@ -149,7 +149,7 @@ pub fn move_brush_vertices(
 }
 
 /// Three corners spanning the largest triangle, in the clockwise-from-outside order faces store.
-fn plane_points(hull: &Hull, corners: &[usize]) -> [DVec3; 3] {
+pub(crate) fn plane_points(hull: &Hull, corners: &[usize]) -> [DVec3; 3] {
     let at = |i: usize| hull.points[corners[i]];
     let mut best = (0, 1, 2);
     let mut best_area = -1.0;

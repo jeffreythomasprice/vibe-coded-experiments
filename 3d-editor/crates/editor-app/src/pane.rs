@@ -1,9 +1,7 @@
 use std::collections::BTreeSet;
 
-use editor_cmd::args::BrushVertexAt;
-use editor_core::{
-    BrushId, Camera, Document, GroupId, ObjectId, ObjectKind, OrthoView, Projection,
-};
+use editor_cmd::args::{BrushVertexAt, Keep};
+use editor_core::{Camera, Document, GroupId, ObjectId, ObjectKind, OrthoView, Projection};
 use editor_geom::Aabb;
 use editor_geom::camera::{View, viewport_camera};
 use editor_render::{PickMap, PreparedScene, Renderer};
@@ -12,8 +10,10 @@ use egui::{
 };
 use glam::{DVec2, DVec3};
 
+use crate::clip::{ClipState, Preview};
 use crate::cuboid::{self, BoxPlane};
 use crate::drag::{DragOp, wrap_degrees};
+use crate::elements::{self, ElementHandle, Kind};
 use crate::gfx::Target;
 use crate::gizmo::{Gizmo, GizmoDrag, Handle, Mode};
 use crate::nav;
@@ -56,6 +56,9 @@ pub enum Tool {
     Scale,
     Box,
     Vertex,
+    Edge,
+    Face,
+    Clip,
 }
 
 impl Tool {
@@ -67,6 +70,18 @@ impl Tool {
             Tool::Scale => "Scale",
             Tool::Box => "Box",
             Tool::Vertex => "Vertex",
+            Tool::Edge => "Edge",
+            Tool::Face => "Face",
+            Tool::Clip => "Clip",
+        }
+    }
+
+    pub fn element_kind(self) -> Option<Kind> {
+        match self {
+            Tool::Vertex => Some(Kind::Vertex),
+            Tool::Edge => Some(Kind::Edge),
+            Tool::Face => Some(Kind::Face),
+            _ => None,
         }
     }
 
@@ -75,7 +90,7 @@ impl Tool {
             Tool::Move => Some(Mode::Move),
             Tool::Rotate => Some(Mode::Rotate),
             Tool::Scale => Some(Mode::Scale),
-            Tool::Select | Tool::Box | Tool::Vertex => None,
+            Tool::Select | Tool::Box | Tool::Vertex | Tool::Edge | Tool::Face | Tool::Clip => None,
         }
     }
 }
@@ -105,6 +120,14 @@ pub enum Action {
         min: DVec3,
         max: DVec3,
     },
+    ClipAdd {
+        point: DVec3,
+        dir: DVec3,
+    },
+    ClipSet {
+        index: usize,
+        point: DVec3,
+    },
 }
 
 pub struct PaneEnv<'a> {
@@ -118,6 +141,9 @@ pub struct PaneEnv<'a> {
     pub doc: &'a Document,
     pub open_group: Option<GroupId>,
     pub depth_hint: Option<Aabb>,
+    pub picks: &'a [BrushVertexAt],
+    pub clip: &'a ClipState,
+    pub clip_preview: &'a Preview,
     pub pending: Option<Aabb>,
     pub pending_next: &'a mut Option<Aabb>,
     pub actions: &'a mut Vec<Action>,
@@ -162,6 +188,12 @@ enum Interaction {
         now: DVec3,
     },
     Paint(BTreeSet<ObjectId>),
+    ClipDrag(usize),
+    Element {
+        plane: BoxPlane,
+        start: DVec3,
+        total: DVec3,
+    },
     Cancelled,
 }
 
@@ -191,6 +223,29 @@ pub fn snap(v: f64, grid: f64) -> f64 {
     } else {
         v
     }
+}
+
+/// Snaps the two in-face axes of a point on a face to the grid and keeps it on the face's plane.
+fn snap_to_face(point: DVec3, normal: DVec3, grid: f64) -> DVec3 {
+    let abs = normal.abs();
+    let axis = if abs.x >= abs.y && abs.x >= abs.z {
+        0
+    } else if abs.y >= abs.z {
+        1
+    } else {
+        2
+    };
+    if abs[axis] < 1e-6 {
+        return point;
+    }
+    let mut p = point;
+    let mut off = 0.0;
+    for i in (0..3).filter(|&i| i != axis) {
+        p[i] = snap(point[i], grid);
+        off += normal[i] * (p[i] - point[i]);
+    }
+    p[axis] = point[axis] - off / normal[axis];
+    p
 }
 
 fn camera_bits(c: &Camera) -> [u64; 6] {
@@ -415,6 +470,7 @@ impl Pane {
         );
 
         if resp.double_clicked_by(PointerButton::Primary)
+            && env.tool != Tool::Clip
             && !mods.alt
             && !mods.command
             && self.gizmo_hover.is_none()
@@ -426,7 +482,11 @@ impl Pane {
             }
         }
 
-        if resp.clicked_by(PointerButton::Primary) && !mods.alt && self.gizmo_hover.is_none() {
+        if resp.clicked_by(PointerButton::Primary)
+            && env.tool != Tool::Clip
+            && !mods.alt
+            && self.gizmo_hover.is_none()
+        {
             if mods.command {
                 if let Some(p) = resp.interact_pointer_pos() {
                     let l = local_px(p);
@@ -457,6 +517,10 @@ impl Pane {
             self.box_persp(env, &resp, &view, escape, pointer.map(&local_px));
         }
 
+        if !is_ortho && env.tool.element_kind().is_some() && !mods.alt {
+            self.element_persp(env, &resp, &view, escape, pointer.map(&local_px));
+        }
+
         if is_ortho && !mods.alt {
             self.tools(
                 env,
@@ -468,6 +532,10 @@ impl Pane {
                 mods.shift,
                 pointer.map(&local_px),
             );
+        }
+
+        if env.tool == Tool::Clip && !mods.alt && !navigating {
+            self.clip_tool(env, &resp, &view, is_ortho, pointer.map(&local_px));
         }
 
         self.camera = Some(camera.clone());
@@ -810,7 +878,7 @@ impl Pane {
             Self::ortho_world(view, p).map(|w| DVec2::new(snap(w.x, env.grid), snap(w.y, env.grid)))
         };
         match env.tool {
-            Tool::Select => {}
+            Tool::Select | Tool::Clip => {}
             Tool::Rotate => self.rotate_tool(env, resp, view, escape, shift, local),
             Tool::Scale => self.scale_tool(env, resp, view, escape, local),
             Tool::Box => {
@@ -840,13 +908,13 @@ impl Pane {
                     }
                 }
             }
-            Tool::Vertex => {
+            Tool::Vertex | Tool::Edge | Tool::Face => {
                 if resp.drag_started_by(PointerButton::Primary)
                     && let Some(origin) = resp.ctx.input(|i| i.pointer.press_origin())
                 {
                     let l = (origin - resp.rect.min) * ppp;
-                    let picks =
-                        Self::vertices_near(env, view, DVec2::new(f64::from(l.x), f64::from(l.y)));
+                    let at = DVec2::new(f64::from(l.x), f64::from(l.y));
+                    let picks = elements::merged_corners(&Self::handles_near(env, view, at));
                     if !picks.is_empty() {
                         env.actions.push(Action::VertexBegin(picks));
                         env.actions.push(Action::DragBegin { pivot: None });
@@ -883,6 +951,100 @@ impl Pane {
         }
     }
 
+    fn clip_tool(
+        &mut self,
+        env: &mut PaneEnv,
+        resp: &egui::Response,
+        view: &View,
+        is_ortho: bool,
+        local: Option<Pos2>,
+    ) {
+        let ppp = resp.ctx.pixels_per_point();
+        let to_px = |p: Pos2| {
+            let l = (p - resp.rect.min) * ppp;
+            DVec2::new(f64::from(l.x), f64::from(l.y))
+        };
+        if resp.drag_started_by(PointerButton::Primary)
+            && let Some(origin) = resp.ctx.input(|i| i.pointer.press_origin())
+        {
+            let at = to_px(origin);
+            let grabbed = env.clip.points.iter().position(|p| {
+                view.project(*p)
+                    .is_some_and(|q| (q.px - at).length() <= HANDLE_PICK_PX)
+            });
+            if let Some(index) = grabbed {
+                self.interaction = Interaction::ClipDrag(index);
+            }
+        }
+        if let Interaction::ClipDrag(index) = self.interaction {
+            if let Some(l) = local
+                && let Some(&current) = env.clip.points.get(index)
+                && let Some((point, _)) =
+                    Self::clip_point(env, view, is_ortho, to_px(l), Some(current))
+                && point != current
+            {
+                env.actions.push(Action::ClipSet { index, point });
+            }
+            if resp.drag_stopped_by(PointerButton::Primary) {
+                self.interaction = Interaction::Idle;
+            }
+        } else if resp.clicked_by(PointerButton::Primary)
+            && let Some(p) = resp.interact_pointer_pos()
+            && let Some((point, dir)) = Self::clip_point(env, view, is_ortho, to_px(p), None)
+        {
+            env.actions.push(Action::ClipAdd { point, dir });
+        }
+    }
+
+    /// The grid-snapped point under `px` and the direction the clip plane should contain when this is its second point.
+    /// In 2D that is the view direction; in 3D the plane runs through the face hit, so it is that face's normal.
+    /// `existing` is a point being dragged: it stays at its depth instead of picking a new face.
+    fn clip_point(
+        env: &PaneEnv,
+        view: &View,
+        is_ortho: bool,
+        px: DVec2,
+        existing: Option<DVec3>,
+    ) -> Option<(DVec3, DVec3)> {
+        let grid = env.grid;
+        if is_ortho {
+            let w = Self::ortho_world(view, pos2(px.x as f32, px.y as f32))?;
+            let depth = existing
+                .or_else(|| env.sel_bounds.map(|b| b.center()))
+                .map_or(0.0, |p| p.dot(view.forward));
+            let point =
+                view.right * snap(w.x, grid) + view.up * snap(w.y, grid) + view.forward * depth;
+            return Some((point, view.forward));
+        }
+        let ray = view.ray(px);
+        if let Some(current) = existing {
+            let f = view.forward.abs();
+            let axis = if f.x >= f.y && f.x >= f.z {
+                0
+            } else if f.y >= f.z {
+                1
+            } else {
+                2
+            };
+            let plane = BoxPlane {
+                axis,
+                offset: current[axis],
+                sign: 1.0,
+            };
+            let mut p = plane.point_at(ray)?;
+            for i in (0..3).filter(|&i| i != axis) {
+                p[i] = snap(p[i], grid);
+            }
+            return Some((p, DVec3::ZERO));
+        }
+        let kinds = BTreeSet::from([ObjectKind::Brush]);
+        let hidden = env.doc.hidden_ids();
+        let hit = editor_cmd::ray_hits(env.doc, ray.0, ray.1, &kinds, &hidden, None)
+            .into_iter()
+            .next()?;
+        Some((snap_to_face(hit.point, hit.normal, grid), hit.normal))
+    }
+
     fn drive_move(
         &mut self,
         env: &mut PaneEnv,
@@ -915,30 +1077,200 @@ impl Pane {
         }
     }
 
-    /// The corners of the selected brushes, in world space.
-    fn vertex_handles(env: &PaneEnv) -> Vec<(BrushId, DVec3)> {
-        let mut out = Vec::new();
-        for id in env.doc.with_members(env.selection) {
-            if let ObjectId::Brush(b) = id
-                && let Some(brush) = env.doc.brushes.get(&b)
-                && let Ok(geo) = editor_geom::brush_geometry(&brush.brush)
-            {
-                out.extend(geo.vertices.into_iter().map(|v| (b, v)));
-            }
-        }
-        out
-    }
-
-    /// Every corner that projects within a few pixels of `at`, so an edge seen end-on moves as a whole.
-    fn vertices_near(env: &PaneEnv, view: &View, at: DVec2) -> Vec<BrushVertexAt> {
-        Self::vertex_handles(env)
+    /// The handles of the active element tool that project within a few pixels of `at`,
+    /// so stacked ones (an edge seen end-on, two faces edge-on) move together.
+    fn handles_near(env: &PaneEnv, view: &View, at: DVec2) -> Vec<ElementHandle> {
+        let Some(kind) = env.tool.element_kind() else {
+            return Vec::new();
+        };
+        elements::handles(env.doc, env.selection, kind)
             .into_iter()
-            .filter(|(_, v)| {
-                view.project(*v)
+            .filter(|h| {
+                view.project(h.pos)
                     .is_some_and(|p| (p.px - at).length() <= HANDLE_PICK_PX)
             })
-            .map(|(brush, at)| BrushVertexAt { brush, at })
             .collect()
+    }
+
+    /// Drags the vertex, edge or face handle under the press along the axis plane that faces the camera most.
+    fn element_persp(
+        &mut self,
+        env: &mut PaneEnv,
+        resp: &egui::Response,
+        view: &View,
+        escape: bool,
+        local: Option<Pos2>,
+    ) {
+        let grid = env.grid;
+        let ray_of = |p: Pos2| view.ray(DVec2::new(f64::from(p.x), f64::from(p.y)));
+        if resp.drag_started_by(PointerButton::Primary)
+            && let Some(origin) = resp.ctx.input(|i| i.pointer.press_origin())
+        {
+            let ppp = resp.ctx.pixels_per_point();
+            let l = (origin - resp.rect.min) * ppp;
+            let ray = ray_of(pos2(l.x, l.y));
+            let mut near =
+                Self::handles_near(env, view, DVec2::new(f64::from(l.x), f64::from(l.y)));
+            if near.is_empty() && env.tool == Tool::Face {
+                near.extend(Self::face_under(env, ray));
+            }
+            let anchor = near
+                .iter()
+                .map(|h| h.pos)
+                .min_by(|a, b| (*a - ray.0).length().total_cmp(&(*b - ray.0).length()));
+            if let Some(anchor) = anchor {
+                let f = view.forward.abs();
+                let axis = if f.x >= f.y && f.x >= f.z {
+                    0
+                } else if f.y >= f.z {
+                    1
+                } else {
+                    2
+                };
+                let plane = BoxPlane {
+                    axis,
+                    offset: anchor[axis],
+                    sign: 1.0,
+                };
+                if let Some(start) = plane.point_at(ray) {
+                    env.actions
+                        .push(Action::VertexBegin(elements::merged_corners(&near)));
+                    env.actions.push(Action::DragBegin { pivot: None });
+                    self.interaction = Interaction::Element {
+                        plane,
+                        start,
+                        total: DVec3::ZERO,
+                    };
+                }
+            }
+        }
+        if let Interaction::Element {
+            plane,
+            start,
+            total,
+        } = &mut self.interaction
+        {
+            if escape {
+                env.actions.push(Action::DragEnd { commit: false });
+                self.interaction = Interaction::Cancelled;
+                return;
+            }
+            if let Some(hit) = local.and_then(|l| plane.point_at(ray_of(l))) {
+                let mut delta = hit - *start;
+                for i in 0..3 {
+                    delta[i] = if i == plane.axis {
+                        0.0
+                    } else {
+                        snap(delta[i], grid)
+                    };
+                }
+                if delta != *total {
+                    *total = delta;
+                    env.actions.push(Action::DragTo(DragOp::Translate(delta)));
+                }
+            }
+            if resp.drag_stopped_by(PointerButton::Primary) {
+                env.actions.push(Action::DragEnd { commit: true });
+                self.interaction = Interaction::Idle;
+            }
+        }
+        if matches!(self.interaction, Interaction::Cancelled) && !resp.dragged() {
+            self.interaction = Interaction::Idle;
+        }
+    }
+
+    /// The face of a selected brush under the ray, as a handle.
+    fn face_under(env: &PaneEnv, ray: (DVec3, DVec3)) -> Option<ElementHandle> {
+        let kinds = BTreeSet::from([ObjectKind::Brush]);
+        let hidden = env.doc.hidden_ids();
+        let hit = editor_cmd::ray_hits(env.doc, ray.0, ray.1, &kinds, &hidden, None)
+            .into_iter()
+            .next()?;
+        let ObjectId::Brush(brush) = hit.id else {
+            return None;
+        };
+        if !env.doc.with_members(env.selection).contains(&hit.id) {
+            return None;
+        }
+        let editor_core::Part::Face(face) = hit.face?.parse::<editor_core::ElementRef>().ok()?.part
+        else {
+            return None;
+        };
+        elements::face_handle(env.doc, brush, face)
+    }
+
+    fn clip_overlay(
+        painter: &egui::Painter,
+        rect: Rect,
+        view: &View,
+        env: &PaneEnv,
+        ppp: f32,
+        accent: Color32,
+        is_ortho: bool,
+    ) {
+        let to_screen = |p: DVec3| {
+            view.project(p)
+                .map(|q| rect.min + vec2(q.px.x as f32, q.px.y as f32) / ppp)
+        };
+        let dim = Color32::from_white_alpha(60);
+        let other = Color32::from_rgb(0xe0, 0x9a, 0x3c);
+        let (front, back) = match env.clip.keep {
+            Keep::Front => (accent, dim),
+            Keep::Back => (dim, accent),
+            Keep::Both => (accent, other),
+        };
+        for (segments, color) in [
+            (&env.clip_preview.back, back),
+            (&env.clip_preview.front, front),
+        ] {
+            for &(a, b) in segments {
+                if let (Some(a), Some(b)) = (to_screen(a), to_screen(b)) {
+                    painter.line_segment([a, b], Stroke::new(1.5, color));
+                }
+            }
+        }
+        let points = &env.clip.points;
+        if let [a, b, ..] = points.as_slice()
+            && let (Some(pa), Some(pb)) = (to_screen(*a), to_screen(*b))
+        {
+            let stroke = Stroke::new(1.0, Color32::WHITE);
+            if is_ortho && (pb - pa).length() > 0.5 {
+                let d = (pb - pa).normalized();
+                painter.line_segment([pa - d * 5000.0, pa + d * 5000.0], stroke);
+            } else {
+                painter.line_segment([pa, pb], stroke);
+            }
+            if let [_, _, c] = points.as_slice()
+                && let Some(pc) = to_screen(*c)
+            {
+                painter.line_segment([pb, pc], stroke);
+                painter.line_segment([pc, pa], stroke);
+            }
+        }
+        for (i, p) in points.iter().enumerate() {
+            let Some(at) = to_screen(*p) else { continue };
+            painter.circle_filled(at, 5.0, accent);
+            painter.circle_stroke(at, 5.0, Stroke::new(1.0, Color32::BLACK));
+            painter.text(
+                at + vec2(8.0, -8.0),
+                Align2::LEFT_BOTTOM,
+                format!("{}", i + 1),
+                FontId::proportional(12.0),
+                Color32::WHITE,
+            );
+        }
+        let hint = match points.len() {
+            0 => "click to place the first clip point",
+            1 => "click the second point",
+            _ => "Enter apply · Tab keep · Backspace point · Esc clear",
+        };
+        painter.text(
+            rect.center_bottom() + vec2(0.0, -6.0),
+            Align2::CENTER_BOTTOM,
+            hint,
+            FontId::proportional(12.0),
+            Color32::from_white_alpha(200),
+        );
     }
 
     fn box_corners(
@@ -1001,25 +1333,79 @@ impl Pane {
                 Color32::from_white_alpha(150),
             );
         }
-        if env.tool == Tool::Vertex && nav::ortho_view(camera).is_some() {
+        if let Some(kind) = env.tool.element_kind() {
             let near = resp
                 .hover_pos()
                 .map(|p| (p - rect.min) * ppp)
                 .map(|l| DVec2::new(f64::from(l.x), f64::from(l.y)));
-            for (_, v) in Self::vertex_handles(env) {
-                let Some(p) = view.project(v) else { continue };
-                let hot = matches!(self.interaction, Interaction::Move { .. })
-                    || near.is_some_and(|n| (p.px - n).length() <= HANDLE_PICK_PX);
+            let dragging = matches!(
+                self.interaction,
+                Interaction::Move { .. } | Interaction::Element { .. }
+            );
+            for h in elements::handles(env.doc, env.selection, kind) {
+                let Some(p) = view.project(h.pos) else {
+                    continue;
+                };
+                let hot = if dragging {
+                    h.corners.iter().all(|c| {
+                        env.picks
+                            .iter()
+                            .any(|k| k.brush == c.brush && (k.at - c.at).length() <= 1e-3)
+                    })
+                } else {
+                    near.is_some_and(|n| (p.px - n).length() <= HANDLE_PICK_PX)
+                };
+                let color = if hot { accent } else { Color32::WHITE };
+                if hot {
+                    for (a, b) in &h.outline {
+                        if let (Some(a), Some(b)) = (view.project(*a), view.project(*b)) {
+                            let to = |q: DVec2| rect.min + vec2(q.x as f32, q.y as f32) / ppp;
+                            painter.line_segment([to(a.px), to(b.px)], Stroke::new(2.5, accent));
+                        }
+                    }
+                }
                 let at = rect.min + vec2(p.px.x as f32, p.px.y as f32) / ppp;
-                let square = Rect::from_center_size(at, vec2(7.0, 7.0));
-                painter.rect_filled(square, 1.0, if hot { accent } else { Color32::WHITE });
-                painter.rect_stroke(
-                    square,
-                    1.0,
-                    Stroke::new(1.0, Color32::BLACK),
-                    StrokeKind::Inside,
-                );
+                match kind {
+                    Kind::Vertex => {
+                        let square = Rect::from_center_size(at, vec2(7.0, 7.0));
+                        painter.rect_filled(square, 1.0, color);
+                        painter.rect_stroke(
+                            square,
+                            1.0,
+                            Stroke::new(1.0, Color32::BLACK),
+                            StrokeKind::Inside,
+                        );
+                    }
+                    Kind::Edge => {
+                        let r = 4.5;
+                        painter.add(egui::Shape::convex_polygon(
+                            vec![
+                                at + vec2(0.0, -r),
+                                at + vec2(r, 0.0),
+                                at + vec2(0.0, r),
+                                at + vec2(-r, 0.0),
+                            ],
+                            color,
+                            Stroke::new(1.0, Color32::BLACK),
+                        ));
+                    }
+                    Kind::Face => {
+                        painter.circle_filled(at, 4.5, color);
+                        painter.circle_stroke(at, 4.5, Stroke::new(1.0, Color32::BLACK));
+                    }
+                }
             }
+        }
+        if env.tool == Tool::Clip {
+            Self::clip_overlay(
+                painter,
+                rect,
+                view,
+                env,
+                ppp,
+                accent,
+                nav::ortho_view(camera).is_some(),
+            );
         }
         if let Some(b) = env.pending
             && !matches!(self.interaction, Interaction::Box { .. })
@@ -1111,5 +1497,25 @@ impl Pane {
             Stroke::NONE
         };
         painter.rect_stroke(rect.shrink(0.5), 0.0, stroke, StrokeKind::Inside);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn snapping_on_a_slanted_face_stays_on_the_plane() {
+        let normal = DVec3::new(1.0, 0.0, 1.0).normalize();
+        let point = DVec3::new(3.3, 5.1, 7.2);
+        let p = snap_to_face(point, normal, 1.0);
+        assert!(normal.dot(p - point).abs() < 1e-9);
+        assert_eq!(p.y, 5.0);
+    }
+
+    #[test]
+    fn snapping_on_an_axis_face_snaps_both_other_axes() {
+        let p = snap_to_face(DVec3::new(3.4, 5.6, 8.0), DVec3::Z, 2.0);
+        assert_eq!(p, DVec3::new(4.0, 6.0, 8.0));
     }
 }

@@ -123,6 +123,29 @@ fn every_document_and_session_op_returns_its_declared_result() {
         "csg.subtract",
         json!({ "targets": [a], "cutters": [cutter] }),
     );
+    let u1 = r.id(
+        "brush.create_box",
+        json!({ "min": [2000, 0, 0], "max": [2016, 16, 16] }),
+    );
+    let u2 = r.id(
+        "brush.create_box",
+        json!({ "min": [2008, 0, 0], "max": [2024, 16, 16] }),
+    );
+    r.call("csg.intersect", json!({ "ids": [u1, u2] }));
+    let h1 = r.id(
+        "brush.create_box",
+        json!({ "min": [3000, 0, 0], "max": [3032, 32, 32] }),
+    );
+    r.call("csg.hollow", json!({ "ids": [h1], "thickness": 4 }));
+    let w1 = r.id(
+        "brush.create_box",
+        json!({ "min": [4000, 0, 0], "max": [4016, 16, 16] }),
+    );
+    let w2 = r.id(
+        "brush.create_box",
+        json!({ "min": [4016, 0, 0], "max": [4032, 16, 16] }),
+    );
+    r.call("csg.union", json!({ "ids": [w1, w2] }));
     r.call(
         "room.create",
         json!({ "min": [1000, 0, 0], "max": [1128, 128, 96], "wall": 8, "name": "hall" }),

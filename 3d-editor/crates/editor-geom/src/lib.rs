@@ -16,7 +16,7 @@ pub mod volume;
 pub mod winding;
 
 pub use aabb::Aabb;
-pub use brush_csg::{brush_intersect, brush_subtract};
+pub use brush_csg::{brush_inset, brush_intersect, brush_merge, brush_subtract};
 pub use clip::{ClipResult, clip_brush};
 pub use convert::{MeshToBrushError, brush_to_mesh, mesh_to_brush};
 pub use plane::{GeomError, Side, plane_from_points};

@@ -30,7 +30,7 @@ Cargo workspace; all crates live in `crates/`.
 
 ## Architecture
 
-A TrenchBroom-style brush scene editor driven equally by a human (GUI) and an AI agent (MCP/CLI), all as clients of one headless `editor-server` that owns the documents. `editor-core`, `editor-geom`, `editor-fmt`, `editor-cmd` (the full Tier 0 catalog, selection, file state, undo with merging and a change feed in the session, and the schemars-backed op registry), `editor-render` (offscreen readback, or into a caller's texture), `editor-proto`, `editor-host`, `editor-server`, `editor-cli` and `editor-mcp` are implemented; `editor-app` is a spike-quality egui shell (four docked viewports on a shared wgpu device, navigation, picking, Select/Move/Box tools that emit commands, a live replica of the server's session); see `docs/gui.md` and `docs/server.md`.
+A TrenchBroom-style brush scene editor driven equally by a human (GUI) and an AI agent (MCP/CLI), all as clients of one headless `editor-server` that owns the documents. `editor-core`, `editor-geom`, `editor-fmt`, `editor-cmd` (the full Tier 0 catalog, selection, file state, undo with merging and a change feed in the session, and the schemars-backed op registry), `editor-render` (offscreen readback, or into a caller's texture), `editor-proto`, `editor-host`, `editor-server`, `editor-cli` and `editor-mcp` are implemented; `editor-app` is a spike-quality egui shell (four docked viewports on a shared wgpu device, navigation, picking, Select/Move/Box/Vertex/Edge/Face/Clip tools that emit commands, a live replica of the server's session); see `docs/gui.md` and `docs/server.md`.
 
 ## Docs
 

@@ -110,10 +110,10 @@ Detailed specs: [tier0-model.md](tier0-model.md) (object kinds, IDs), [tier0-com
 
 ### Tier 1 — A real brush editor
 
-- **Clip tool:** keep-front / keep-back / split; snaps to faces in 3D, to the grid in 2D.
+- **Clip tool:** keep-front / keep-back / split; snaps to faces in 3D, to the grid in 2D. Built in the GUI (key `7`): a local preview from `clip_brush`, applied as one `brush.clip`; see `docs/gui.md`.
 - **Vertex, edge and face tools:** move components; vertex fusing; face chopping so brushes never go concave.
-  - Built as commands: `vertex.translate` and `face.translate` work on brushes by rebuilding the convex hull of the moved corners (`editor_geom::move_brush_vertices`). The GUI has a vertex tool for the 2D views; edge and face drag tools, and moving vertices in the perspective view, are still open.
-- **CSG:** convex merge, subtract, hollow, intersect.
+  - Built as commands: `vertex.translate` and `face.translate` work on brushes by rebuilding the convex hull of the moved corners (`editor_geom::move_brush_vertices`). The GUI has vertex, edge and face tools (keys 6, 8, 9) that drag corners, edge midpoints and face centres in every view, sent as `vertex.translate`; see `docs/gui.md`. UV lock during these edits is still open.
+- **CSG:** `csg.subtract`, `csg.union` (convex merge for brushes), `csg.intersect` and `csg.hollow` are built; see `docs/tier0-commands.md`.
 - **Entities:** point entities and brush entities; entity definitions (our own schema file, or optional FGD import) driving classnames, property types and defaults; entity browser with drag-and-drop.
 - **Entity links:** visualize `target`-style references as lines in the viewport.
 - **Groups** (nestable, open/close with lock semantics) and **layers** (hide, lock, omit from export).
