@@ -39,6 +39,9 @@ pub fn summary(ctx: &Ctx, _: NoArgs) -> CmdResult<results::Summary> {
             id: l.id.into(),
             name: l.name.clone(),
             objects: doc.children(l.id.into()).len(),
+            hidden: l.flags.hidden,
+            locked: l.flags.locked,
+            omit_from_export: l.omit_from_export,
         })
         .collect();
 
@@ -59,6 +62,8 @@ pub fn summary(ctx: &Ctx, _: NoArgs) -> CmdResult<results::Summary> {
             .map(|(k, n)| (k.to_string(), n))
             .collect(),
         selection: ctx.selection().len(),
+        hidden: doc.hidden_ids().len(),
+        locked: doc.locked_ids().len(),
     }))
 }
 
@@ -83,6 +88,14 @@ fn describe(object: &Object, detail: Detail) -> Value {
     let mut out = match detail {
         Detail::Summary => {
             let mut v = json!({ "id": object.id(), "kind": object.id().kind() });
+            if let Some(f) = object.flags() {
+                if f.hidden {
+                    v["hidden"] = json!(true);
+                }
+                if f.locked {
+                    v["locked"] = json!(true);
+                }
+            }
             if let Some(l) = object.layer() {
                 v["layer"] = json!(l);
             }
@@ -174,6 +187,10 @@ pub struct List {
     within: Option<BoxArg>,
     /// Only objects whose bounds touch this box.
     intersects: Option<BoxArg>,
+    /// Only objects that are (true) or are not (false) hidden, directly or through a container.
+    hidden: Option<bool>,
+    /// Only objects that are (true) or are not (false) locked, directly or through a container.
+    locked: Option<bool>,
     /// Keys to keep from each summary (`id` is always kept).
     fields: Option<Vec<String>>,
     /// Default 100, at most 1000.
@@ -210,8 +227,20 @@ pub fn list(ctx: &Ctx, args: List) -> CmdResult<results::ObjectPage> {
     let within = args.within.map(|b| b.aabb("within")).transpose()?;
     let intersects = args.intersects.map(|b| b.aabb("intersects")).transpose()?;
     let doc = ctx.doc();
+    let hidden = args.hidden.map(|_| doc.hidden_ids());
+    let locked = args.locked.map(|_| doc.locked_ids());
 
     let matches = |object: &Object| -> bool {
+        if let (Some(want), Some(set)) = (args.hidden, &hidden)
+            && set.contains(&object.id()) != want
+        {
+            return false;
+        }
+        if let (Some(want), Some(set)) = (args.locked, &locked)
+            && set.contains(&object.id()) != want
+        {
+            return false;
+        }
         if args.kind.is_some_and(|k| object.id().kind() != k) {
             return false;
         }
@@ -405,6 +434,9 @@ pub struct Raycast {
     kinds: Option<Vec<ObjectKind>>,
     #[serde(default)]
     ignore: Vec<ObjectId>,
+    /// Also hit hidden objects (default false).
+    #[serde(default)]
+    include_hidden: bool,
 }
 
 pub fn raycast(ctx: &Ctx, args: Raycast) -> CmdResult<results::Raycast> {
@@ -422,7 +454,10 @@ pub fn raycast(ctx: &Ctx, args: Raycast) -> CmdResult<results::Raycast> {
         ));
     }
     let kinds = check_kinds(&args.kinds)?;
-    let ignore: BTreeSet<ObjectId> = args.ignore.iter().copied().collect();
+    let mut ignore: BTreeSet<ObjectId> = args.ignore.iter().copied().collect();
+    if !args.include_hidden {
+        ignore.extend(ctx.doc().hidden_ids());
+    }
     let hit = ray_hits(ctx.doc(), args.origin, dir, &kinds, &ignore, args.max_dist)
         .into_iter()
         .next();
@@ -447,6 +482,9 @@ pub struct QueryBox {
     #[serde(default)]
     mode: QueryMode,
     kinds: Option<Vec<ObjectKind>>,
+    /// Also return hidden objects (default false).
+    #[serde(default)]
+    include_hidden: bool,
 }
 
 pub fn query_box(ctx: &Ctx, args: QueryBox) -> CmdResult<results::IdCount> {
@@ -456,11 +494,16 @@ pub fn query_box(ctx: &Ctx, args: QueryBox) -> CmdResult<results::IdCount> {
     }
     .aabb("min")?;
     let kinds = check_kinds(&args.kinds)?;
+    let hidden = if args.include_hidden {
+        BTreeSet::new()
+    } else {
+        ctx.doc().hidden_ids()
+    };
     let ids: Vec<ObjectId> = ctx
         .doc()
         .all_ids()
         .into_iter()
-        .filter(|id| kinds.contains(&id.kind()))
+        .filter(|id| kinds.contains(&id.kind()) && !hidden.contains(id))
         .filter(|&id| {
             ctx.doc()
                 .get(id)

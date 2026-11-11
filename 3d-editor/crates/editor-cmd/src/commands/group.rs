@@ -59,6 +59,7 @@ pub fn create(ctx: &mut Ctx, args: Create) -> CmdResult<results::Created> {
 
     let id = GroupId(ctx.alloc_id());
     ctx.insert(Object::Group(Group {
+        flags: Default::default(),
         id,
         name,
         layer,

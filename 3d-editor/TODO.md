@@ -17,15 +17,6 @@ materials, textures
 
 C. Tier 1: brush editor
 
-Already built early:
-- brush.clip.
-- csg.subtract.
-- Entities and brush entities.
-- Groups and layers (create/delete only).
-- Duplicate/array.
-- face.set_material and face.set_uv.
-- Vertex and face translate.
-
 Still to do:
 - [ ] csg.union, csg.intersect and csg.hollow. They are specced in tier0-commands.md:88 but not in the ops table.
 - [ ] Clip tool UI: keep-front, keep-back and split; snaps to faces in 3D and to the grid in 2D.

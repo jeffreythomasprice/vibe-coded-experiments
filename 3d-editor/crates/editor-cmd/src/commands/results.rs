@@ -201,6 +201,9 @@ pub struct LayerRow {
     pub id: ObjectId,
     pub name: String,
     pub objects: usize,
+    pub hidden: bool,
+    pub locked: bool,
+    pub omit_from_export: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -212,6 +215,10 @@ pub struct Summary {
     pub layers: Vec<LayerRow>,
     pub classnames: BTreeMap<String, usize>,
     pub selection: usize,
+    /// Objects hidden, directly or through their layer, group or entity.
+    pub hidden: usize,
+    /// Objects locked, directly or through their layer, group or entity.
+    pub locked: usize,
 }
 
 /// A description of one object: a JSON object that always has `id` and `kind`; the other keys depend on the requested detail.

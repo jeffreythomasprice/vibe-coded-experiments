@@ -204,7 +204,14 @@ impl CommandError {
             ),
             Self::InvalidArgument { field, hint, .. } => (None, field.clone(), hint.clone()),
             Self::InvalidGeometry { target, hint, .. } => (target.clone(), None, hint.clone()),
-            Self::Locked { target } => (Some(target.clone()), None, None),
+            Self::Locked { target } => (
+                Some(target.clone()),
+                None,
+                Some(
+                    "unlock it (or the group, entity or layer holding it) with object.set_locked"
+                        .to_string(),
+                ),
+            ),
             Self::RevisionMismatch { .. } => (
                 None,
                 Some("expect_revision".to_string()),

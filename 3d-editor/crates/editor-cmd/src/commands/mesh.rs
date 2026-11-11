@@ -77,6 +77,7 @@ pub fn create(ctx: &mut Ctx, args: Create) -> CmdResult<results::Created> {
     let id = MeshId(ctx.alloc_id());
     let warnings = mesh_problems(id.into(), &mesh)?;
     ctx.insert(Object::Mesh(MeshObject {
+        flags: Default::default(),
         id,
         layer,
         group: None,
@@ -190,6 +191,7 @@ pub fn mesh_to_brush_cmd(ctx: &mut Ctx, args: Convert) -> CmdResult<results::Cre
         let new_id = BrushId(ctx.alloc_id());
         ctx.remove(source.id.into());
         ctx.insert(Object::Brush(BrushObject {
+            flags: source.flags,
             id: new_id,
             layer: source.layer,
             group: source.group,
@@ -217,6 +219,7 @@ pub fn brush_to_mesh_cmd(ctx: &mut Ctx, args: Convert) -> CmdResult<results::Cre
         let new_id = MeshId(ctx.alloc_id());
         ctx.remove(source.id.into());
         ctx.insert(Object::Mesh(MeshObject {
+            flags: source.flags,
             id: new_id,
             layer: source.layer,
             group: source.group,

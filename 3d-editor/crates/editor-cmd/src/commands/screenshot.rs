@@ -59,6 +59,9 @@ pub struct ScreenshotArgs {
     /// Objects, groups, brush entities or layers to leave out of the image. The document is not changed.
     #[serde(default)]
     pub hide: Vec<ObjectId>,
+    /// Draw objects that are hidden in the document too (default false).
+    #[serde(default)]
+    pub show_hidden: bool,
     /// Draw nothing above this world z, for plan and section views.
     pub clip_above: Option<f64>,
     /// With the `labels` overlay, only label these objects (groups, brush entities and layers expand to their contents).

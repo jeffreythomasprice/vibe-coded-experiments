@@ -2,17 +2,19 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
 use editor_cmd::args::{
-    Axis, AxisArg, CreateBox, Delete, Factors, Flip, NoArgs, Pivot, Rename, Rotate, Save, Scale,
-    SelectIds, SelectKind, SetClassname, SetLayer, SetMaterial, SetProperties, SetTransform,
-    Translate,
+    Axis, AxisArg, BrushVertexAt, CreateBox, Delete, Factors, Flip, Isolate, NoArgs, Pivot, Rename,
+    Rotate, Save, Scale, SelectIds, SelectKind, SetClassname, SetHidden, SetLayer, SetLocked,
+    SetMaterial, SetProperties, SetTransform, Translate, TranslateVertices,
 };
 use editor_cmd::results::{
     Created, Deleted, FacesChanged, IdCount, IdOnly, Moved, Saved, Stepped, Transformed, Updated,
+    VerticesMoved,
 };
 use editor_cmd::{Request, Success};
-use editor_core::{ElementRef, ObjectId, ObjectKind, Part, Properties};
+use editor_core::{ElementRef, GroupId, ObjectId, ObjectKind, Part, Properties};
 use editor_geom::Aabb;
 use editor_geom::camera::{frame_camera, ortho_axes};
+use editor_geom::tolerance::snap_vec;
 use editor_proto::WakeFn;
 use editor_render::{PreparedScene, Renderer, ViewportOptions};
 use egui::{Context, Key, Ui};
@@ -118,6 +120,12 @@ struct Keys {
     rotate_cw: bool,
     flip: Option<Axis>,
     tool: Option<Tool>,
+    hide: bool,
+    isolate: bool,
+    show_all: bool,
+    lock: bool,
+    unlock_all: bool,
+    escape: bool,
 }
 
 impl Keys {
@@ -135,6 +143,12 @@ impl Keys {
             select_all: cmd && !shift && i.key_pressed(Key::A),
             select_invert: cmd && !shift && i.key_pressed(Key::I),
             select_none: cmd && shift && i.key_pressed(Key::A),
+            hide: cmd && !shift && i.key_pressed(Key::H),
+            isolate: cmd && shift && i.key_pressed(Key::H),
+            show_all: i.modifiers.alt && !cmd && i.key_pressed(Key::H),
+            lock: cmd && !shift && i.key_pressed(Key::L),
+            unlock_all: i.modifiers.alt && !cmd && i.key_pressed(Key::L),
+            escape: i.key_pressed(Key::Escape),
             grid_finer: i.key_pressed(Key::OpenBracket),
             grid_coarser: i.key_pressed(Key::CloseBracket),
             rotate_ccw: plain(Key::Period),
@@ -150,6 +164,7 @@ impl Keys {
                 (Key::Num3, Tool::Box),
                 (Key::Num4, Tool::Rotate),
                 (Key::Num5, Tool::Scale),
+                (Key::Num6, Tool::Vertex),
             ]
             .into_iter()
             .find_map(|(key, tool)| plain(key).then_some(tool)),
@@ -170,6 +185,8 @@ pub struct Editor {
     show_axes: bool,
     show_help: bool,
     hover: Option<ObjectId>,
+    open_group: Option<GroupId>,
+    vertex_picks: Vec<BrushVertexAt>,
     active: Option<PaneId>,
     prepared: Option<(PrepKey, PreparedScene)>,
     actions: Vec<Action>,
@@ -206,7 +223,7 @@ impl Timings {
     }
 }
 
-type PrepKey = (u64, Vec<ObjectId>, Option<ObjectId>);
+type PrepKey = (u64, Vec<ObjectId>, Option<ObjectId>, Option<GroupId>);
 
 impl Editor {
     pub fn new(
@@ -230,6 +247,8 @@ impl Editor {
             show_axes: true,
             show_help: false,
             hover: None,
+            open_group: None,
+            vertex_picks: Vec::new(),
             active: None,
             prepared: None,
             actions: Vec::new(),
@@ -359,6 +378,22 @@ impl Editor {
         let pivot = Pivot::Point(self.drag_pivot);
         let key = Some(key.as_str());
         match step {
+            DragOp::Translate(delta) if self.tool == Tool::Vertex => {
+                let args = TranslateVertices {
+                    vertices: Vec::new(),
+                    brush_vertices: self.vertex_picks.clone(),
+                    delta,
+                };
+                let moved = self
+                    .call::<_, VerticesMoved>("vertex.translate", &args, key)
+                    .is_some();
+                if moved {
+                    for pick in &mut self.vertex_picks {
+                        pick.at = snap_vec(pick.at + delta);
+                    }
+                }
+                moved
+            }
             DragOp::Translate(delta) => self
                 .call::<_, Transformed>("transform.translate", &Translate { ids, delta }, key)
                 .is_some(),
@@ -391,6 +426,7 @@ impl Editor {
     fn apply(&mut self, action: Action) {
         match action {
             Action::Select { id, additive } => {
+                let id = id.map(|id| self.pick_target(id));
                 let selected = id.is_some_and(|id| self.remote.selection.contains(&id));
                 match (id, additive, selected) {
                     (Some(id), false, _) => self.select("select.set", vec![id]),
@@ -402,7 +438,17 @@ impl Editor {
                     (None, true, _) => {}
                 }
             }
-            Action::Paint(id) => self.select("select.add", vec![id]),
+            Action::Paint(id) => {
+                let id = self.pick_target(id);
+                self.select("select.add", vec![id]);
+            }
+            Action::VertexBegin(picks) => self.vertex_picks = picks,
+            Action::OpenGroupAt(id) => {
+                if let ObjectId::Group(g) = self.pick_target(id) {
+                    self.open_group = Some(g);
+                    self.select("select.set", vec![id]);
+                }
+            }
             Action::Drill {
                 origin,
                 dir,
@@ -410,17 +456,16 @@ impl Editor {
             } => {
                 let kinds =
                     BTreeSet::from([ObjectKind::Brush, ObjectKind::Mesh, ObjectKind::Entity]);
-                let hits: Vec<ObjectId> = editor_cmd::ray_hits(
-                    &self.remote.doc,
-                    origin,
-                    dir,
-                    &kinds,
-                    &BTreeSet::new(),
-                    None,
-                )
-                .into_iter()
-                .map(|h| h.id)
-                .collect();
+                let doc = &self.remote.doc;
+                let mut ignore = doc.hidden_ids();
+                ignore.extend(doc.locked_ids());
+                let mut hits: Vec<ObjectId> = Vec::new();
+                for hit in editor_cmd::ray_hits(doc, origin, dir, &kinds, &ignore, None) {
+                    let target = doc.pick_target(hit.id, self.open_group);
+                    if doc.pickable(hit.id, self.open_group) && !hits.contains(&target) {
+                        hits.push(target);
+                    }
+                }
                 match (drill::next_hit(&hits, &self.remote.selection), additive) {
                     (Some(id), false) => self.select("select.set", vec![id]),
                     (Some(id), true) => self.select("select.add", vec![id]),
@@ -476,6 +521,29 @@ impl Editor {
                 }
             }
         }
+    }
+
+    fn set_hidden_selection(&mut self, hidden: bool) {
+        let ids = self.selection_ids();
+        if !ids.is_empty() {
+            self.call::<_, Updated>("object.set_hidden", &SetHidden { ids, hidden }, None);
+        }
+    }
+
+    fn lock_selection(&mut self) {
+        let ids = self.selection_ids();
+        if ids.is_empty() {
+            return;
+        }
+        let doc = &self.remote.doc;
+        let locked = !ids
+            .iter()
+            .all(|&id| doc.own_flags(id).is_some_and(|f| f.locked));
+        self.call::<_, Updated>("object.set_locked", &SetLocked { ids, locked }, None);
+    }
+
+    fn pick_target(&self, id: ObjectId) -> ObjectId {
+        self.remote.doc.pick_target(id, self.open_group)
     }
 
     fn delete_selection(&mut self) {
@@ -606,6 +674,7 @@ impl Editor {
             self.remote.revision,
             self.remote.selection.iter().copied().collect(),
             self.hover,
+            self.open_group,
         )
     }
 
@@ -614,12 +683,9 @@ impl Editor {
         if self.prepared.as_ref().is_some_and(|(k, _)| *k == key) {
             return;
         }
-        let scene = PreparedScene::new(
-            &self.remote.doc,
-            &self.remote.selection,
-            self.hover,
-            &HashSet::new(),
-        );
+        let hidden: HashSet<ObjectId> = self.remote.doc.hidden_ids().into_iter().collect();
+        let tinted = self.remote.doc.with_members(&self.remote.selection);
+        let scene = PreparedScene::new(&self.remote.doc, &tinted, self.hover, &hidden);
         self.prepared = Some((key, scene));
         self.repaint = true;
     }
@@ -655,6 +721,27 @@ impl Editor {
         }
         if keys.select_none {
             self.call::<_, IdCount>("select.clear", &NoArgs::default(), None);
+        }
+        if keys.hide {
+            self.set_hidden_selection(true);
+        }
+        if keys.isolate {
+            let ids = self.selection_ids();
+            if !ids.is_empty() {
+                self.call::<_, Updated>("object.isolate", &Isolate { ids }, None);
+            }
+        }
+        if keys.show_all {
+            self.call::<_, Updated>("object.show_all", &NoArgs::default(), None);
+        }
+        if keys.lock {
+            self.lock_selection();
+        }
+        if keys.unlock_all {
+            self.call::<_, Updated>("object.unlock_all", &NoArgs::default(), None);
+        }
+        if keys.escape && !self.dragging {
+            self.open_group = None;
         }
         if keys.rotate_ccw {
             self.rotate_selection(90.0);
@@ -698,6 +785,12 @@ impl Editor {
             Ok(false) => {}
             Err(e) => self.status = e.to_string(),
         }
+        if self
+            .open_group
+            .is_some_and(|g| !self.remote.doc.groups.contains_key(&g))
+        {
+            self.open_group = None;
+        }
         if self.remote.closed {
             self.status = "disconnected from editor-server".into();
         }
@@ -732,6 +825,7 @@ impl Editor {
                 selection: &selection,
                 sel_bounds,
                 doc: &self.remote.doc,
+                open_group: self.open_group,
                 depth_hint: sel_bounds.or(self.last_box),
                 pending: self.pending_box,
                 pending_next: &mut pending_next,
@@ -956,11 +1050,12 @@ impl Editor {
                     (Tool::Box, "3"),
                     (Tool::Rotate, "4"),
                     (Tool::Scale, "5"),
+                    (Tool::Vertex, "6"),
                 ] {
                     ui.selectable_value(&mut self.tool, tool, format!("{}  {key}", tool.name()));
                 }
                 ui.separator();
-                for stub in ["Clip", "Vertex", "Extrude"] {
+                for stub in ["Clip", "Extrude"] {
                     ui.add_enabled(false, egui::Button::new(stub))
                         .on_disabled_hover_text("Not in the spike");
                 }
@@ -997,6 +1092,10 @@ impl Editor {
                     .and_then(|p| p.cursor.map(|c| format!("{:.1}, {:.1}", c.x, c.y)));
                 ui.monospace(cursor.unwrap_or_else(|| "—".into()));
                 ui.separator();
+                if let Some(g) = self.open_group {
+                    ui.label(format!("editing {g} (Esc closes)"));
+                    ui.separator();
+                }
                 ui.label(match self.hover {
                     Some(id) => format!("hover {id}"),
                     None => "hover —".into(),
@@ -1087,6 +1186,20 @@ impl Editor {
             Event::SetLayer { ids, layer } => {
                 self.call::<_, Moved>("object.set_layer", &SetLayer { ids, layer }, None);
             }
+            Event::SetHidden { id, hidden } => {
+                let args = SetHidden {
+                    ids: vec![id],
+                    hidden,
+                };
+                self.call::<_, Updated>("object.set_hidden", &args, None);
+            }
+            Event::SetLocked { id, locked } => {
+                let args = SetLocked {
+                    ids: vec![id],
+                    locked,
+                };
+                self.call::<_, Updated>("object.set_locked", &args, None);
+            }
             Event::SetClassname { id, classname } => {
                 let args = SetClassname {
                     ids: vec![id],
@@ -1163,7 +1276,21 @@ impl Editor {
                         ),
                         ("Shift + LMB drag", "paint-select (Select tool)"),
                         ("Ctrl+A / Ctrl+I", "select all / invert"),
-                        ("1 2 3 4 5", "Select, Move, Box, Rotate, Scale"),
+                        ("Ctrl+H / Alt+H", "hide the selection / show all"),
+                        ("Ctrl+Shift+H", "isolate the selection"),
+                        (
+                            "Ctrl+L / Alt+L",
+                            "lock or unlock the selection / unlock all",
+                        ),
+                        (
+                            "Double-click",
+                            "open the group under the cursor to edit its members",
+                        ),
+                        ("1 2 3 4 5 6", "Select, Move, Box, Rotate, Scale, Vertex"),
+                        (
+                            "Vertex tool",
+                            "2D views: LMB drag a corner handle of the selected brushes",
+                        ),
                         (", / .", "rotate the selection 90° in the active view"),
                         ("Alt+X / Y / Z", "flip the selection"),
                         ("[ ]", "grid size"),
@@ -1172,7 +1299,7 @@ impl Editor {
                         ("Space", "maximize the pane under the cursor"),
                         ("Del", "delete selection"),
                         ("Ctrl+Z / Ctrl+Shift+Z", "undo / redo"),
-                        ("Esc", "cancel a drag"),
+                        ("Esc", "cancel a drag, or close the open group"),
                     ] {
                         if v.is_empty() {
                             ui.strong(k);

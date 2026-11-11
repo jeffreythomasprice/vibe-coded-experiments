@@ -19,6 +19,9 @@ Run it with `cargo run -p editor-app [scene.toml]`; it connects to `editor-serve
 - The gizmo (`gizmo.rs`) is math and drawing only: it hit-tests in screen space and turns pointer rays into a `DragOp`. A drag keeps its own copy of the gizmo, because a move changes the selection bounds the live gizmo is built from.
 - Picking by ray (drill-through, the box tool's drawing plane) runs `editor_cmd::ray_hits` on the local replica, so it needs no round trip.
 - `panels.rs` draws the outliner, inspector and material list from the replica and returns `Event`s; the editor turns them into ops. `tree.rs` builds the outliner tree: an object sits under its entity, else its group, else its layer.
+- Hidden objects are left out of the prepared scene (`Document::hidden_ids`), so they are neither drawn nor in the pick map. Each outliner row has `H` and `L` toggles for the object's own flags, and a row is dimmed when hidden (itself or through a container) and italic when locked. A click on a locked object (or one outside the open group) selects nothing: `Pane::hit` filters with `Document::pickable`.
+- A click selects the outermost group around the object under the cursor (`Document::pick_target`), and the tint covers the group's members. Double-clicking opens that group: clicks then select its members (or subgroups) and everything outside it is not pickable, until Esc. The open group is local to the GUI (not in the document or the session) and shows in the status bar.
+- The Vertex tool (2D views only) draws a handle at each corner of the selected brushes. Grabbing one picks every corner that projects within 9 px of the press, and the drag reuses the Move tool's `DragOp::Translate` steps, sent as `vertex.translate` with `brush_vertices` and the drag's `merge_key`. The picked positions follow the corners after each step, and Esc sends the inverse. Brush corners have no ids, which is why positions are used. There is no face-drag tool yet; `face.translate` is command-only.
 - `theme.rs` holds the style: our own dark and light palettes, and stock egui dark for comparison (View > Theme).
 
 ## Controls
@@ -37,11 +40,15 @@ Run it with `cargo run -p editor-app [scene.toml]`; it connects to `editor-serve
 | 2D views | Move tool, LMB drag | move the selection, snapped to the grid |
 | 2D views | Rotate tool, LMB drag | rotate the selection about its centre, in 15° steps (Shift: free) |
 | 2D views | Scale tool, LMB drag | scale from the opposite corner, so the new size is a whole number of grid steps |
+| 2D views | Vertex tool, LMB drag a handle | move the corners of the selected brushes that project onto the handle (so an edge seen end-on moves whole), snapped to the grid; one undo step per drag. A move that would make the brush concave is refused with the server's message in the status bar |
 | Any view | LMB click | select (Shift adds or removes) |
 | Any view | Ctrl + LMB click | select the next object along the ray, wrapping (Shift adds) |
+| Any view | LMB double-click | open the group under the cursor to edit its members |
 | Any view | Shift + LMB drag, Select tool | paint-select |
 | Anywhere | Ctrl+A, Ctrl+I, Ctrl+Shift+A | select all, invert, none |
-| Anywhere | 1 2 3 4 5 | Select, Move, Box, Rotate, Scale |
+| Anywhere | 1 2 3 4 5 6 | Select, Move, Box, Rotate, Scale, Vertex |
+| Anywhere | Ctrl+H, Alt+H, Ctrl+Shift+H | hide the selection, show all, isolate the selection |
+| Anywhere | Ctrl+L, Alt+L | lock the selection (unlock it if all of it is locked), unlock all |
 | Anywhere | `,` `.` | rotate the selection 90° in the active 2D view (about Z in the perspective view) |
 | Anywhere | Alt+X, Alt+Y, Alt+Z | flip the selection about its centre |
 | Anywhere | `\` | snap on or off |
@@ -51,6 +58,7 @@ Run it with `cargo run -p editor-app [scene.toml]`; it connects to `editor-serve
 | Anywhere | Del | delete the selection |
 | Anywhere | Ctrl+Z, Ctrl+Shift+Z | undo, redo |
 | During a drag | Esc | cancel it (moves the objects back) |
+| With a group open | Esc | close it |
 
 Shortcuts are ignored while a text field has focus.
 

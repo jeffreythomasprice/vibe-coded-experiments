@@ -45,6 +45,15 @@ document → layers → (nested groups) → objects.
 - Ownership is a parent pointer on the child (`layer`, `group`, `entity`), never a child list.
 - Groups carry no transform in Tier 0 (geometry is world-space, as in TrenchBroom). Linked groups add a transform in Tier 2.
 
+### Hidden and locked
+
+Brushes, meshes, entities, groups and layers (not cameras) carry two flags, `hidden` and `locked`, saved in the scene file and undoable like any other edit. A flag applies to everything the object contains, so an object is *effectively* hidden or locked when it or any container is: its brush entity, its group chain, or its layer (`Document::effective_flags`, `hidden_ids`, `locked_ids`).
+
+- Hidden objects are not drawn, picked or raycast, and cannot be selected.
+- Locked objects refuse edits, deletion and additions: see [locks](tier0-commands.md#locks).
+- A layer also has `omit_from_export`, stored and round-tripped; nothing exports yet.
+- Group open/close (what a click selects) is GUI state, not document state: see [gui.md](gui.md).
+
 ## Brush (convex)
 
 Planes are the source of truth; vertices and edges are derived by `editor-geom`.
@@ -52,6 +61,7 @@ Planes are the source of truth; vertices and edges are derived by `editor-geom`.
 - At least 4 faces.
 - Each face: a plane given by 3 points (clockwise seen from outside, the Quake convention: normal = (c − a) × (b − a); grid-aligned planes stay exact), a material, and UV attributes (offset, scale, rotation; projection axis chosen from the normal).
 - Valid means: bounded, non-empty, no zero-area faces. Redundant planes are dropped on normalization.
+- Vertices have no ids, because every edit to the planes can reorder them. Commands that move them (`vertex.translate`) address a corner by its position.
 
 ## Mesh (polygon mesh, possibly concave)
 

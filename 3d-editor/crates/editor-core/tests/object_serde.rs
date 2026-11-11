@@ -24,6 +24,7 @@ fn brush_roundtrips() {
         attrs: FaceAttrs::with_material("wall"),
     };
     roundtrip(Object::Brush(BrushObject {
+        flags: Default::default(),
         id: BrushId(2),
         layer: layer(),
         group: Some(GroupId(3)),
@@ -38,6 +39,7 @@ fn brush_roundtrips() {
 #[test]
 fn mesh_roundtrips() {
     roundtrip(Object::Mesh(MeshObject {
+        flags: Default::default(),
         id: MeshId(4),
         layer: layer(),
         group: None,
@@ -79,6 +81,7 @@ fn entity_roundtrips() {
     properties.insert("target".into(), PropertyValue::String("door".into()));
     for origin in [Some(DVec3::new(8.0, 16.0, 24.0)), None] {
         roundtrip(Object::Entity(Entity {
+            flags: Default::default(),
             id: EntityId(5),
             classname: "light".into(),
             layer: layer(),
@@ -94,6 +97,7 @@ fn entity_roundtrips() {
 #[test]
 fn group_layer_camera_roundtrip() {
     roundtrip(Object::Group(Group {
+        flags: Default::default(),
         id: GroupId(3),
         name: "hall".into(),
         layer: layer(),
@@ -101,6 +105,8 @@ fn group_layer_camera_roundtrip() {
         extra: Extra::new(),
     }));
     roundtrip(Object::Layer(Layer {
+        flags: Default::default(),
+        omit_from_export: false,
         id: layer(),
         name: "main".into(),
         extra: extra(),

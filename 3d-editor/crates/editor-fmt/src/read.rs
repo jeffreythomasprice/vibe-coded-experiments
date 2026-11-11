@@ -2,8 +2,8 @@ use std::str::FromStr;
 
 use editor_core::{
     Brush, BrushFace, BrushId, BrushObject, Camera, CameraId, DVec2, DVec3, Document, Entity,
-    EntityId, Extra, FaceAttrs, FaceId, Group, GroupId, HierarchyError, Layer, LayerId, Mesh,
-    MeshFace, MeshId, MeshObject, MeshVertex, ObjectId, OrthoView, Projection, Properties,
+    EntityId, Extra, FaceAttrs, FaceId, Flags, Group, GroupId, HierarchyError, Layer, LayerId,
+    Mesh, MeshFace, MeshId, MeshObject, MeshVertex, ObjectId, OrthoView, Projection, Properties,
     PropertyValue, VertexId,
 };
 use editor_geom::brush_geometry;
@@ -69,6 +69,17 @@ fn opt<T>(
             .map(Some)
             .ok_or_else(|| parse_err(ctx, format!("`{key}` must be {what}"))),
     }
+}
+
+fn as_bool(v: &Value) -> Option<bool> {
+    v.as_bool()
+}
+
+fn flags(t: &mut Table, ctx: &str) -> Result<Flags> {
+    Ok(Flags {
+        hidden: opt(t, "hidden", ctx, "a boolean", as_bool)?.unwrap_or(false),
+        locked: opt(t, "locked", ctx, "a boolean", as_bool)?.unwrap_or(false),
+    })
 }
 
 fn req<T>(
@@ -287,6 +298,9 @@ pub fn read(text: &str) -> Result<Document> {
         let ctx = id.to_string();
         let name = req(&mut t, "name", &ctx, "a string", as_string)?;
         let layer = Layer {
+            flags: flags(&mut t, &ctx)?,
+            omit_from_export: opt(&mut t, "omit_from_export", &ctx, "a boolean", as_bool)?
+                .unwrap_or(false),
             id,
             name,
             extra: rest(t),
@@ -298,6 +312,7 @@ pub fn read(text: &str) -> Result<Document> {
         let id: GroupId = req(&mut t, "id", "group", "a group id", as_id)?;
         let ctx = id.to_string();
         let group = Group {
+            flags: flags(&mut t, &ctx)?,
             id,
             name: req(&mut t, "name", &ctx, "a string", as_string)?,
             layer: req(&mut t, "layer", &ctx, "a layer id", as_id)?,
@@ -366,6 +381,7 @@ pub fn read(text: &str) -> Result<Document> {
             Some(_) => return Err(parse_err(&ctx, "`properties` must be a table")),
         };
         let entity = Entity {
+            flags: flags(&mut t, &ctx)?,
             id,
             classname,
             layer,
@@ -386,6 +402,7 @@ pub fn read(text: &str) -> Result<Document> {
         let entity = opt(&mut t, "entity", &ctx, "an entity id", as_id)?;
         let brush = parse_brush_faces(&mut t, &ctx)?;
         let object = BrushObject {
+            flags: flags(&mut t, &ctx)?,
             id,
             layer,
             group,
@@ -404,6 +421,7 @@ pub fn read(text: &str) -> Result<Document> {
         let entity = opt(&mut t, "entity", &ctx, "an entity id", as_id)?;
         let mesh = parse_mesh(&mut t, &ctx)?;
         let object = MeshObject {
+            flags: flags(&mut t, &ctx)?,
             id,
             layer,
             group,

@@ -389,7 +389,8 @@ impl Session {
 
     fn prune_selection(&mut self) {
         let doc = &self.doc;
-        self.selection.retain(|id| doc.contains(*id));
+        self.selection
+            .retain(|id| doc.contains(*id) && !doc.effective_hidden(*id));
     }
 
     fn selection_result(&self) -> results::IdCount {
@@ -401,7 +402,7 @@ impl Session {
         }
     }
 
-    fn check_selectable(&self, ids: &[ObjectId]) -> Result<(), CommandError> {
+    fn check_selectable(&self, ids: &[ObjectId], adding: bool) -> Result<(), CommandError> {
         for &id in ids {
             if !self.doc.contains(id) {
                 return Err(CommandError::not_found(id));
@@ -409,15 +410,22 @@ impl Session {
             if !selectable(id) {
                 return Err(CommandError::wrong_kind(id, "brush, mesh, entity or group"));
             }
+            if adding && self.doc.effective_hidden(id) {
+                return Err(CommandError::invalid_arg("ids", format!("{id} is hidden"))
+                    .with_hint("show it first with object.set_hidden or object.show_all"));
+            }
         }
         Ok(())
     }
 
     fn selectable_ids(&self, kind: Option<editor_core::ObjectKind>) -> BTreeSet<ObjectId> {
+        let hidden = self.doc.hidden_ids();
+        let locked = self.doc.locked_ids();
         self.doc
             .all_ids()
             .into_iter()
             .filter(|&id| selectable(id) && kind.is_none_or(|k| id.kind() == k))
+            .filter(|id| !hidden.contains(id) && !locked.contains(id))
             .collect()
     }
 
@@ -456,7 +464,7 @@ impl Session {
             }
             "select.set" | "select.add" | "select.remove" => {
                 let SelectIds { ids } = parse_args(args)?;
-                self.check_selectable(&ids)?;
+                self.check_selectable(&ids, op != "select.remove")?;
                 match op {
                     "select.set" => self.selection = ids.into_iter().collect(),
                     "select.add" => self.selection.extend(ids),

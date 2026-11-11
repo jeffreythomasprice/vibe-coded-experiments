@@ -160,6 +160,15 @@ fn every_document_and_session_op_returns_its_declared_result() {
     );
     let layer = r.id("layer.create", json!({ "name": "extra" }));
     r.call("object.set_layer", json!({ "ids": [t], "layer": layer }));
+    r.call(
+        "layer.set_omit_from_export",
+        json!({ "id": layer, "omit": true }),
+    );
+    r.call("object.set_hidden", json!({ "ids": [t], "hidden": true }));
+    r.call("object.isolate", json!({ "ids": [t] }));
+    r.call("object.show_all", json!({}));
+    r.call("object.set_locked", json!({ "ids": [t], "locked": true }));
+    r.call("object.unlock_all", json!({}));
     let g = r.id("group.create", json!({ "objects": dup, "name": "pair" }));
     r.call("object.rename", json!({ "id": g, "name": "pair2" }));
     let m = r.id(

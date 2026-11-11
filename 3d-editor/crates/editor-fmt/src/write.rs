@@ -1,7 +1,8 @@
 use std::fmt::Write;
 
 use editor_core::{
-    DVec2, DVec3, Document, Extra, FaceAttrs, OrthoView, Projection, Properties, PropertyValue,
+    DVec2, DVec3, Document, Extra, FaceAttrs, Flags, OrthoView, Projection, Properties,
+    PropertyValue,
 };
 
 use crate::{FORMAT, VERSION};
@@ -28,6 +29,10 @@ pub fn write(doc: &Document) -> String {
         out.push_str("\n[[layer]]\n");
         let _ = writeln!(out, "id = \"{}\"", l.id);
         let _ = writeln!(out, "name = {}", quote(&l.name));
+        write_flags(&mut out, l.flags);
+        if l.omit_from_export {
+            out.push_str("omit_from_export = true\n");
+        }
         write_extra(&mut out, &l.extra);
     }
 
@@ -39,6 +44,7 @@ pub fn write(doc: &Document) -> String {
         if let Some(p) = g.parent {
             let _ = writeln!(out, "group = \"{p}\"");
         }
+        write_flags(&mut out, g.flags);
         write_extra(&mut out, &g.extra);
     }
 
@@ -78,6 +84,7 @@ pub fn write(doc: &Document) -> String {
         if let Some(g) = e.group {
             let _ = writeln!(out, "group = \"{g}\"");
         }
+        write_flags(&mut out, e.flags);
         if let Some(o) = e.origin {
             let _ = writeln!(out, "origin = {}", vec3(o));
         }
@@ -100,6 +107,7 @@ pub fn write(doc: &Document) -> String {
         if let Some(e) = b.entity {
             let _ = writeln!(out, "entity = \"{e}\"");
         }
+        write_flags(&mut out, b.flags);
         out.push_str("faces = [\n");
         for f in &b.brush.faces {
             let _ = writeln!(
@@ -126,6 +134,7 @@ pub fn write(doc: &Document) -> String {
         if let Some(e) = m.entity {
             let _ = writeln!(out, "entity = \"{e}\"");
         }
+        write_flags(&mut out, m.flags);
         out.push_str("vertices = [\n");
         for v in &m.mesh.vertices {
             let _ = writeln!(out, "  {{ id = {}, p = {} }},", v.id.0, vec3(v.pos));
@@ -146,6 +155,15 @@ pub fn write(doc: &Document) -> String {
     }
 
     out
+}
+
+fn write_flags(out: &mut String, flags: Flags) {
+    if flags.hidden {
+        out.push_str("hidden = true\n");
+    }
+    if flags.locked {
+        out.push_str("locked = true\n");
+    }
 }
 
 fn attrs(a: &FaceAttrs) -> String {

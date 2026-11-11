@@ -230,15 +230,110 @@ fn mesh_vertex_and_face_translate() {
         )),
         "InvalidArgument"
     );
-    let b = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
     assert_eq!(
         err_code(&exec(
             &mut s,
             "vertex.translate",
-            json!({ "vertices": [&b], "delta": [1, 0, 0] })
+            json!({ "delta": [1, 0, 0] })
         )),
         "InvalidArgument"
     );
+}
+
+#[test]
+fn brush_corner_moves_by_position() {
+    let mut s = session();
+    let b = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
+    let r = exec(
+        &mut s,
+        "vertex.translate",
+        json!({ "brush_vertices": [{ "brush": &b, "at": [8, 8, 8] }], "delta": [0, 0, 4] }),
+    );
+    assert_eq!(ok(&r)["result"]["vertices"], 1);
+    assert_eq!(bounds(&mut s, &b).1[2], 12.0);
+    assert_eq!(
+        full(&mut s, &b)["brush"]["faces"].as_array().unwrap().len(),
+        7
+    );
+    ok(&exec(&mut s, "check.validate", json!({})));
+
+    exec(&mut s, "history.undo", json!({}));
+    assert_eq!(bounds(&mut s, &b).1[2], 8.0);
+    assert_eq!(
+        full(&mut s, &b)["brush"]["faces"].as_array().unwrap().len(),
+        6
+    );
+}
+
+#[test]
+fn brush_vertex_errors() {
+    let mut s = session();
+    let b = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
+    let r = exec(
+        &mut s,
+        "vertex.translate",
+        json!({ "brush_vertices": [{ "brush": &b, "at": [8, 8, 8] }], "delta": [-4, -4, -4] }),
+    );
+    assert_eq!(err_code(&r), "InvalidGeometry");
+    let r = exec(
+        &mut s,
+        "vertex.translate",
+        json!({ "brush_vertices": [{ "brush": &b, "at": [3, 3, 3] }], "delta": [1, 0, 0] }),
+    );
+    assert_eq!(err_code(&r), "InvalidArgument");
+    let r = exec(
+        &mut s,
+        "vertex.translate",
+        json!({ "vertices": [format!("{b}/v1")], "delta": [1, 0, 0] }),
+    );
+    assert_eq!(err_code(&r), "InvalidArgument");
+    assert_eq!(bounds(&mut s, &b).1, [8.0, 8.0, 8.0]);
+}
+
+#[test]
+fn bare_brush_vertex_ref_moves_every_corner() {
+    let mut s = session();
+    let b = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
+    let r = exec(
+        &mut s,
+        "vertex.translate",
+        json!({ "vertices": [&b], "delta": [2, 0, 0] }),
+    );
+    assert_eq!(ok(&r)["result"]["vertices"], 8);
+    assert_eq!(bounds(&mut s, &b).0[0], 2.0);
+}
+
+#[test]
+fn brush_face_translate_stretches_the_brush() {
+    let mut s = session();
+    let b = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
+    let faces = full(&mut s, &b)["brush"]["faces"].clone();
+    let top = faces
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["plane"][0][2] == 8.0 && f["plane"][1][2] == 8.0 && f["plane"][2][2] == 8.0)
+        .unwrap()["id"]
+        .as_u64()
+        .unwrap();
+    let r = exec(
+        &mut s,
+        "face.translate",
+        json!({ "faces": [format!("{b}/f{top}")], "delta": [0, 0, 4] }),
+    );
+    assert_eq!(ok(&r)["result"]["vertices"], 4);
+    assert_eq!(bounds(&mut s, &b).1[2], 12.0);
+    assert_eq!(
+        full(&mut s, &b)["brush"]["faces"].as_array().unwrap().len(),
+        6
+    );
+
+    let r = exec(
+        &mut s,
+        "face.translate",
+        json!({ "faces": [format!("{b}/f99")], "delta": [0, 0, 1] }),
+    );
+    assert_eq!(err_code(&r), "NotFound");
 }
 
 #[test]

@@ -267,6 +267,7 @@ fn doc_with_entity() -> (Session, EntityId, BrushId, LayerId) {
     doc.entities.insert(
         eid,
         Entity {
+            flags: Default::default(),
             id: eid,
             classname: "func_door".into(),
             layer,
@@ -281,6 +282,7 @@ fn doc_with_entity() -> (Session, EntityId, BrushId, LayerId) {
     doc.brushes.insert(
         bid,
         BrushObject {
+            flags: Default::default(),
             id: bid,
             layer,
             group: None,

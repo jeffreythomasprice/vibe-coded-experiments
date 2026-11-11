@@ -27,6 +27,7 @@ pub(super) fn set_material(brush: &mut Brush, material: &str) {
 fn add_brush(ctx: &mut Ctx, brush: Brush, layer: LayerId) -> ObjectId {
     let id = BrushId(ctx.alloc_id());
     ctx.insert(Object::Brush(BrushObject {
+        flags: Default::default(),
         id,
         layer,
         group: None,
@@ -254,6 +255,7 @@ pub fn clip(ctx: &mut Ctx, args: Clip) -> CmdResult<results::CreatedMapped> {
                     let parents = Parents::of_brush(&original);
                     let new_id = BrushId(ctx.alloc_id());
                     ctx.insert(Object::Brush(BrushObject {
+                        flags: parents.flags,
                         id: new_id,
                         layer: parents.layer,
                         group: parents.group,

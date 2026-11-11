@@ -37,6 +37,14 @@ impl<'a> Ctx<'a> {
         self.doc
     }
 
+    pub fn journal_len(&self) -> usize {
+        self.journal.len()
+    }
+
+    pub fn journal_since(&self, start: usize) -> &[(ObjectId, Option<Object>)] {
+        &self.journal[start..]
+    }
+
     pub fn alloc_id(&mut self) -> u64 {
         self.doc.alloc_id()
     }

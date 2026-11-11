@@ -16,6 +16,14 @@ pub enum Event {
         additive: bool,
     },
     Frame(ObjectId),
+    SetHidden {
+        id: ObjectId,
+        hidden: bool,
+    },
+    SetLocked {
+        id: ObjectId,
+        locked: bool,
+    },
     Rename {
         id: ObjectId,
         name: String,
@@ -238,8 +246,17 @@ impl Panels {
         let children = self.tree(doc, revision).children(id).to_vec();
         let selected = selection.contains(&id);
         let text = label(doc, id);
+        let own = doc.own_flags(id).unwrap_or_default();
+        let effective = doc.effective_flags(id);
         let mut row = |ui: &mut Ui| {
-            let response = ui.selectable_label(selected, text.clone());
+            let mut name = egui::RichText::new(text.clone());
+            if effective.hidden {
+                name = name.weak();
+            }
+            if effective.locked {
+                name = name.italics();
+            }
+            let response = ui.selectable_label(selected, name);
             if reveal == Some(id) {
                 response.scroll_to_me(Some(Align::Center));
             }
@@ -252,6 +269,22 @@ impl Panels {
             }
             if response.double_clicked() {
                 events.push(Event::Frame(id));
+            }
+            let mut hidden = own.hidden;
+            if ui
+                .toggle_value(&mut hidden, egui::RichText::new("H").small().monospace())
+                .on_hover_text("hidden")
+                .changed()
+            {
+                events.push(Event::SetHidden { id, hidden });
+            }
+            let mut locked = own.locked;
+            if ui
+                .toggle_value(&mut locked, egui::RichText::new("L").small().monospace())
+                .on_hover_text("locked")
+                .changed()
+            {
+                events.push(Event::SetLocked { id, locked });
             }
         };
         if children.is_empty() {

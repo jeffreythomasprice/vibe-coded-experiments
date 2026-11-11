@@ -112,11 +112,12 @@ Detailed specs: [tier0-model.md](tier0-model.md) (object kinds, IDs), [tier0-com
 
 - **Clip tool:** keep-front / keep-back / split; snaps to faces in 3D, to the grid in 2D.
 - **Vertex, edge and face tools:** move components; vertex fusing; face chopping so brushes never go concave.
+  - Built as commands: `vertex.translate` and `face.translate` work on brushes by rebuilding the convex hull of the moved corners (`editor_geom::move_brush_vertices`). The GUI has a vertex tool for the 2D views; edge and face drag tools, and moving vertices in the perspective view, are still open.
 - **CSG:** convex merge, subtract, hollow, intersect.
 - **Entities:** point entities and brush entities; entity definitions (our own schema file, or optional FGD import) driving classnames, property types and defaults; entity browser with drag-and-drop.
 - **Entity links:** visualize `target`-style references as lines in the viewport.
 - **Groups** (nestable, open/close with lock semantics) and **layers** (hide, lock, omit from export).
-- **Hide / isolate / lock / show all** (all undoable).
+- **Hide / isolate / lock / show all** (all undoable). Built: `object.set_hidden`, `set_locked`, `isolate`, `show_all`, `unlock_all`, saved in the scene file; locks are enforced for every op in one place. Group open/close is GUI-only state.
 - **Materials:** material browser, per-face material assignment, face attribute editor (offset, scale, rotation).
   - For now a material is a name, a string on each face. The viewport colours faces with `editor_render::material_rgb8`, and the GUI lists the names in use and assigns one to the selected brushes and meshes with `face.set_material`.
   - Texture images, UVs on screen and a materials directory wait for per-project config.

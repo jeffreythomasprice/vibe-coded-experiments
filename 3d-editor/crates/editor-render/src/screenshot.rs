@@ -268,7 +268,10 @@ pub fn screenshot_with_selection(
         tint.insert(id, HIGHLIGHT_COLOR);
     }
 
-    let hidden = expand(doc, &args.hide)?;
+    let mut hidden = expand(doc, &args.hide)?;
+    if !args.show_hidden {
+        hidden.extend(doc.hidden_ids());
+    }
     let label_filter = expand(doc, &args.label_ids)?;
     if let Some(bad) = args
         .label_kinds

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    BrushId, BrushObject, Camera, CameraId, Entity, EntityId, Extra, Group, GroupId, Layer,
+    BrushId, BrushObject, Camera, CameraId, Entity, EntityId, Extra, Flags, Group, GroupId, Layer,
     LayerId, MeshId, MeshObject, Object, ObjectId, Properties,
 };
 
@@ -58,6 +58,8 @@ impl Document {
         doc.layers.insert(
             id,
             Layer {
+                flags: Default::default(),
+                omit_from_export: false,
                 id,
                 name: "main".into(),
                 extra: Extra::new(),
@@ -147,6 +149,143 @@ impl Document {
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    fn links(&self, id: ObjectId) -> Option<(Option<EntityId>, Option<GroupId>, Option<LayerId>)> {
+        Some(match id {
+            ObjectId::Brush(i) => {
+                let o = self.brushes.get(&i)?;
+                (o.entity, o.group, Some(o.layer))
+            }
+            ObjectId::Mesh(i) => {
+                let o = self.meshes.get(&i)?;
+                (o.entity, o.group, Some(o.layer))
+            }
+            ObjectId::Entity(i) => {
+                let o = self.entities.get(&i)?;
+                (None, o.group, Some(o.layer))
+            }
+            ObjectId::Group(i) => {
+                let o = self.groups.get(&i)?;
+                (None, o.parent, Some(o.layer))
+            }
+            ObjectId::Layer(_) | ObjectId::Camera(_) => (None, None, None),
+        })
+    }
+
+    /// The hidden and locked flags of `id` alone; cameras have none.
+    pub fn own_flags(&self, id: ObjectId) -> Option<Flags> {
+        match id {
+            ObjectId::Brush(i) => self.brushes.get(&i).map(|o| o.flags),
+            ObjectId::Mesh(i) => self.meshes.get(&i).map(|o| o.flags),
+            ObjectId::Entity(i) => self.entities.get(&i).map(|o| o.flags),
+            ObjectId::Group(i) => self.groups.get(&i).map(|o| o.flags),
+            ObjectId::Layer(i) => self.layers.get(&i).map(|o| o.flags),
+            ObjectId::Camera(_) => None,
+        }
+    }
+
+    /// What contains `id`: its brush entity, its group chain and its layer.
+    pub fn ancestors(&self, id: ObjectId) -> Vec<ObjectId> {
+        let mut out = Vec::new();
+        let Some((entity, mut group, mut layer)) = self.links(id) else {
+            return out;
+        };
+        if let Some(e) = entity {
+            out.push(e.into());
+            if let Some((_, g, l)) = self.links(e.into()) {
+                group = group.or(g);
+                layer = layer.or(l);
+            }
+        }
+        let mut guard = self.groups.len() + 1;
+        while let Some(g) = group {
+            if guard == 0 {
+                break;
+            }
+            guard -= 1;
+            out.push(g.into());
+            let (_, parent, l) = self.links(g.into()).unwrap_or((None, None, None));
+            layer = layer.or(l);
+            group = parent;
+        }
+        out.extend(layer.map(ObjectId::from));
+        out
+    }
+
+    /// Hidden or locked because the object or something containing it is.
+    pub fn effective_flags(&self, id: ObjectId) -> Flags {
+        std::iter::once(id)
+            .chain(self.ancestors(id))
+            .filter_map(|i| self.own_flags(i))
+            .fold(Flags::default(), |acc, f| Flags {
+                hidden: acc.hidden || f.hidden,
+                locked: acc.locked || f.locked,
+            })
+    }
+
+    /// Whether a click can land on `id`: it is not locked, and lies inside the open group if one is open.
+    pub fn pickable(&self, id: ObjectId, open: Option<GroupId>) -> bool {
+        if self.effective_locked(id) {
+            return false;
+        }
+        open.is_none_or(|g| self.ancestors(id).contains(&g.into()))
+    }
+
+    /// What a click on `id` selects: the outermost group around it that is not open, else `id` itself.
+    pub fn pick_target(&self, id: ObjectId, open: Option<GroupId>) -> ObjectId {
+        let opened: Vec<ObjectId> = open
+            .into_iter()
+            .flat_map(|g| std::iter::once(ObjectId::from(g)).chain(self.ancestors(g.into())))
+            .collect();
+        self.ancestors(id)
+            .into_iter()
+            .rev()
+            .find(|a| matches!(a, ObjectId::Group(_)) && !opened.contains(a))
+            .unwrap_or(id)
+    }
+
+    /// `ids` and everything below them: group members and brush entity members.
+    pub fn with_members(
+        &self,
+        ids: &std::collections::BTreeSet<ObjectId>,
+    ) -> std::collections::BTreeSet<ObjectId> {
+        fn walk(doc: &Document, id: ObjectId, out: &mut std::collections::BTreeSet<ObjectId>) {
+            if out.insert(id) && matches!(id, ObjectId::Group(_) | ObjectId::Entity(_)) {
+                for child in doc.children(id) {
+                    walk(doc, child, out);
+                }
+            }
+        }
+        let mut out = std::collections::BTreeSet::new();
+        for &id in ids {
+            walk(self, id, &mut out);
+        }
+        out
+    }
+
+    /// Every object that is hidden, directly or through what contains it.
+    pub fn hidden_ids(&self) -> std::collections::BTreeSet<ObjectId> {
+        self.all_ids()
+            .into_iter()
+            .filter(|&id| self.effective_hidden(id))
+            .collect()
+    }
+
+    /// Every object that is locked, directly or through what contains it.
+    pub fn locked_ids(&self) -> std::collections::BTreeSet<ObjectId> {
+        self.all_ids()
+            .into_iter()
+            .filter(|&id| self.effective_locked(id))
+            .collect()
+    }
+
+    pub fn effective_hidden(&self, id: ObjectId) -> bool {
+        self.effective_flags(id).hidden
+    }
+
+    pub fn effective_locked(&self, id: ObjectId) -> bool {
+        self.effective_flags(id).locked
     }
 
     /// Direct children: objects whose parent pointer names `id`.

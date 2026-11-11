@@ -19,8 +19,8 @@ pub use id::{
 };
 pub use mesh::{Mesh, MeshFace, MeshVertex};
 pub use object::{
-    BrushObject, Camera, Entity, Group, Layer, MeshObject, Object, ObjectId, ObjectKind, OrthoView,
-    Projection,
+    BrushObject, Camera, Entity, Flags, Group, Layer, MeshObject, Object, ObjectId, ObjectKind,
+    OrthoView, Projection,
 };
 pub use plane::Plane;
 pub use property::{Extra, Properties, PropertyValue};

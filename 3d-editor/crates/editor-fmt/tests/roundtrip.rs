@@ -162,3 +162,34 @@ fn rejects_mesh_with_missing_vertex() {
         LoadError::InvalidGeometry { .. }
     ));
 }
+
+#[test]
+fn hidden_and_locked_flags_round_trip() {
+    let text = "format = \"scene\"\nversion = 1\n[meta]\nname = \"t\"\nnext_id = 10\n[[layer]]\nid = \"l1\"\nname = \"main\"\nhidden = true\nomit_from_export = true\n\n[[group]]\nid = \"g2\"\nname = \"g\"\nlayer = \"l1\"\nlocked = true\n\n[[entity]]\nid = \"e3\"\nclassname = \"x\"\nlayer = \"l1\"\ngroup = \"g2\"\nhidden = true\nlocked = true\n";
+    let d = read(text).unwrap();
+    let layer = d.layers.values().next().unwrap();
+    assert!(layer.flags.hidden && !layer.flags.locked && layer.omit_from_export);
+    assert!(d.groups.values().next().unwrap().flags.locked);
+    let e = d.entities.values().next().unwrap();
+    assert!(e.flags.hidden && e.flags.locked);
+    assert!(e.extra.is_empty());
+
+    let out = write(&d);
+    assert!(out.contains("hidden = true"));
+    assert_eq!(read(&out).unwrap(), d);
+}
+
+#[test]
+fn unflagged_objects_write_no_flag_keys() {
+    let out = write(&read(FIXTURE).unwrap());
+    assert!(
+        !out.contains("hidden") && !out.contains("locked") && !out.contains("omit_from_export")
+    );
+}
+
+#[test]
+fn flags_must_be_booleans() {
+    let text =
+        doc("[[entity]]\nid = \"e2\"\nclassname = \"x\"\nlayer = \"l1\"\nhidden = \"yes\"\n");
+    assert!(matches!(read(&text), Err(LoadError::Parse { .. })));
+}

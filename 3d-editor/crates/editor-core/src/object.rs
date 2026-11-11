@@ -145,9 +145,26 @@ from_id!(Group, GroupId);
 from_id!(Layer, LayerId);
 from_id!(Camera, CameraId);
 
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+/// Hidden objects are not drawn, picked or raycast; locked ones refuse edits. Both apply to everything an object contains.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
+pub struct Flags {
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub hidden: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub locked: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct BrushObject {
     pub id: BrushId,
+    #[serde(flatten)]
+    pub flags: Flags,
     pub layer: LayerId,
     pub group: Option<GroupId>,
     pub entity: Option<EntityId>,
@@ -159,6 +176,8 @@ pub struct BrushObject {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct MeshObject {
     pub id: MeshId,
+    #[serde(flatten)]
+    pub flags: Flags,
     pub layer: LayerId,
     pub group: Option<GroupId>,
     pub entity: Option<EntityId>,
@@ -170,6 +189,8 @@ pub struct MeshObject {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Entity {
     pub id: EntityId,
+    #[serde(flatten)]
+    pub flags: Flags,
     pub classname: String,
     pub layer: LayerId,
     pub group: Option<GroupId>,
@@ -185,6 +206,8 @@ pub struct Entity {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Group {
     pub id: GroupId,
+    #[serde(flatten)]
+    pub flags: Flags,
     pub name: String,
     pub layer: LayerId,
     pub parent: Option<GroupId>,
@@ -195,7 +218,11 @@ pub struct Group {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Layer {
     pub id: LayerId,
+    #[serde(flatten)]
+    pub flags: Flags,
     pub name: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub omit_from_export: bool,
     #[schemars(schema_with = "crate::property::extra_schema")]
     pub extra: Extra,
 }
@@ -269,6 +296,29 @@ impl Object {
             Object::Group(o) => o.parent,
             Object::Layer(_) | Object::Camera(_) => None,
         }
+    }
+
+    pub fn flags(&self) -> Option<Flags> {
+        match self {
+            Object::Brush(o) => Some(o.flags),
+            Object::Mesh(o) => Some(o.flags),
+            Object::Entity(o) => Some(o.flags),
+            Object::Group(o) => Some(o.flags),
+            Object::Layer(o) => Some(o.flags),
+            Object::Camera(_) => None,
+        }
+    }
+
+    pub fn with_flags(mut self, flags: Flags) -> Self {
+        match &mut self {
+            Object::Brush(o) => o.flags = flags,
+            Object::Mesh(o) => o.flags = flags,
+            Object::Entity(o) => o.flags = flags,
+            Object::Group(o) => o.flags = flags,
+            Object::Layer(o) => o.flags = flags,
+            Object::Camera(_) => {}
+        }
+        self
     }
 
     pub fn entity(&self) -> Option<EntityId> {

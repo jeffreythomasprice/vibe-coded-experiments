@@ -104,6 +104,7 @@ pub fn create(ctx: &mut Ctx, args: Create) -> CmdResult<results::Created> {
     };
     let id = EntityId(ctx.alloc_id());
     ctx.insert(Object::Entity(Entity {
+        flags: Default::default(),
         id,
         classname: args.classname,
         layer,
@@ -163,6 +164,7 @@ pub fn create_brush_entity(ctx: &mut Ctx, args: CreateBrushEntity) -> CmdResult<
 
     let id = EntityId(ctx.alloc_id());
     ctx.insert(Object::Entity(Entity {
+        flags: Default::default(),
         id,
         classname: args.classname,
         layer,

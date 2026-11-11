@@ -110,6 +110,7 @@ fn build(specs: &[Spec]) -> Document {
             doc.groups.insert(
                 id,
                 Group {
+                    flags: Default::default(),
                     id,
                     name: s.classname.clone(),
                     layer,
@@ -139,6 +140,7 @@ fn build(specs: &[Spec]) -> Document {
         doc.entities.insert(
             eid,
             Entity {
+                flags: Default::default(),
                 id: eid,
                 classname: s.classname.clone(),
                 layer,
@@ -163,6 +165,7 @@ fn build(specs: &[Spec]) -> Document {
         doc.brushes.insert(
             bid,
             BrushObject {
+                flags: Default::default(),
                 id: bid,
                 layer,
                 group,

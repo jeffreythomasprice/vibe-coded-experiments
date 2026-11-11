@@ -173,6 +173,7 @@ pub(super) fn subtract_brushes(
             for brush in fragments {
                 let id = BrushId(ctx.alloc_id());
                 ctx.insert(Object::Brush(BrushObject {
+                    flags: parents.flags,
                     id,
                     layer: parents.layer,
                     group: parents.group,
@@ -220,6 +221,7 @@ fn subtract_mesh(
             let parents = Parents::of_brush(b);
             let id = MeshId(ctx.alloc_id());
             ctx.insert(Object::Mesh(MeshObject {
+                flags: parents.flags,
                 id,
                 layer: parents.layer,
                 group: parents.group,

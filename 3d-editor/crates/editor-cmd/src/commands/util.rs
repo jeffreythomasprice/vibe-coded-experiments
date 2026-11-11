@@ -62,6 +62,7 @@ pub struct Parents {
     pub group: Option<GroupId>,
     pub entity: Option<EntityId>,
     pub extra: Extra,
+    pub flags: editor_core::Flags,
 }
 
 impl Parents {
@@ -71,6 +72,7 @@ impl Parents {
             group: b.group,
             entity: b.entity,
             extra: b.extra.clone(),
+            flags: b.flags,
         }
     }
 }

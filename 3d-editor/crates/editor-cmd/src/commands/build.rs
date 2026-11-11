@@ -54,6 +54,7 @@ fn place(
     }
     let id = GroupId(ctx.alloc_id());
     ctx.insert(Object::Group(Group {
+        flags: Default::default(),
         id,
         name,
         layer,
@@ -80,6 +81,7 @@ fn add_box(
     let brush = normalize(&brush).map_err(|e| geometry_error(what, e))?;
     let id = BrushId(ctx.alloc_id());
     ctx.insert(Object::Brush(BrushObject {
+        flags: Default::default(),
         id,
         layer: at.layer,
         group: at.group,

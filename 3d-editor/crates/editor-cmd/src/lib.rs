@@ -24,11 +24,12 @@ pub mod args {
     pub use crate::commands::brush::Axis;
     pub use crate::commands::brush::CreateBox;
     pub use crate::commands::entity::{SetClassname, SetProperties, SetTransform};
-    pub use crate::commands::face::SetMaterial;
+    pub use crate::commands::face::{BrushVertexAt, SetMaterial, TranslateVertices};
     pub use crate::commands::object::{Delete, Rename, SetLayer};
     pub use crate::commands::session_args::{Attach, Save, SelectIds, SelectKind};
     pub use crate::commands::transform::{
         AxisArg, Factors, Flip, Pivot, PivotName, Rotate, Scale, Translate,
     };
+    pub use crate::commands::visibility::{Isolate, SetHidden, SetLocked};
 }
 pub use session::{Actor, Feed, FileState, HistoryState, Session, TxnInfo};

@@ -36,6 +36,8 @@ pub fn create(ctx: &mut Ctx, args: Create) -> CmdResult<results::Created> {
     check_layer_name(ctx, &args.name, None)?;
     let id = LayerId(ctx.alloc_id());
     ctx.insert(Object::Layer(Layer {
+        flags: Default::default(),
+        omit_from_export: false,
         id,
         name: args.name,
         extra: Extra::new(),
@@ -95,4 +97,23 @@ pub fn delete(ctx: &mut Ctx, args: Delete) -> CmdResult<results::LayerDeleted> {
     }
     ctx.remove(args.id.into());
     Ok(Outcome::new(results::LayerDeleted { deleted: 1, moved }))
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SetOmitFromExport {
+    id: LayerId,
+    omit: bool,
+}
+
+pub fn set_omit_from_export(ctx: &mut Ctx, args: SetOmitFromExport) -> CmdResult<results::IdOnly> {
+    let mut layer = ctx
+        .doc()
+        .layers
+        .get(&args.id)
+        .cloned()
+        .ok_or_else(|| CommandError::not_found(args.id))?;
+    layer.omit_from_export = args.omit;
+    ctx.insert(Object::Layer(layer));
+    Ok(Outcome::new(results::IdOnly { id: args.id.into() }))
 }

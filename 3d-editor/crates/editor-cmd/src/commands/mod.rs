@@ -7,6 +7,7 @@ pub(crate) mod face;
 mod group;
 mod hints;
 mod layer;
+mod locks;
 mod mesh;
 pub(crate) mod object;
 pub mod results;
@@ -16,6 +17,7 @@ pub(crate) mod session_args;
 pub(crate) mod transform;
 pub mod util;
 pub mod view;
+pub mod visibility;
 
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -152,8 +154,7 @@ macro_rules! ops {
             $( OpInfo { name: $vname, safety: Safety::$vsafety, exec: Exec::Server, summary: $vsummary, args_schema: schema_of::<$vargs>, result_schema: schema_of::<$vres>, response_schema: schema_of::<Success<$vres>> }, )*
         ];
 
-        pub fn dispatch(ctx: &mut Ctx, op: &str, args: Value) -> CmdResult {
-            let op = OpInfo::find(op).map_or(op, |o| o.name);
+        fn dispatch_op(ctx: &mut Ctx, op: &str, args: Value) -> CmdResult {
             match op {
                 $( $name => $handler(ctx, parse_op_args(op, args)?).and_then(Outcome::erase), )*
                 _ => Err(unavailable(op)),
@@ -175,8 +176,8 @@ ops! {
         "mesh.delete_faces" Mutate mesh::DeleteFaces => results::FacesRemoved = mesh::delete_faces, "Remove faces from meshes; vertices no face uses are dropped.";
         "face.set_material" Mutate face::SetMaterial => results::FacesChanged = face::set_material, "Set the material of faces (b12/f3), or of every face of an object (b12).";
         "face.set_uv" Mutate face::SetUv => results::FacesChanged = face::set_uv, "Set face UV offset, scale and rotation; omitted fields are kept.";
-        "face.translate" Mutate face::TranslateFaces => results::VerticesMoved = face::translate_faces, "Move the vertices of mesh faces by a delta.";
-        "vertex.translate" Mutate face::TranslateVertices => results::VerticesMoved = face::translate_vertices, "Move mesh vertices (m3/v10) by a delta.";
+        "face.translate" Mutate face::TranslateFaces => results::VerticesMoved = face::translate_faces, "Move the vertices of mesh or brush faces by a delta. A brush stays convex: vertices that meet fuse and a face that stops being planar splits.";
+        "vertex.translate" Mutate face::TranslateVertices => results::VerticesMoved = face::translate_vertices, "Move mesh vertices (m3/v10), or brush corners given by world position in brush_vertices, by a delta. A brush stays convex; a corner that would end up inside it is InvalidGeometry.";
         "room.create" Mutate build::RoomCreate => results::RoomCreated = build::room_create, "Create a hollow room: floor, ceiling and four wall brushes around the interior min..max. result.roles maps floor, ceiling, wall_north/south/east/west to ids.";
         "room.cut_opening" Mutate build::CutOpening => results::CreatedMapped = build::cut_opening, "Cut a box-shaped opening (doorway, window, corridor mouth) through every brush it crosses. The cutter never enters the document; result.map lists target -> resulting ids.";
         "stairs.create" Mutate build::StairsCreate => results::StairsCreated = build::stairs_create, "Create stairs as non-overlapping step brushes, each solid from the floor up. result.ids run bottom to top; result.top is the landing point.";
@@ -189,6 +190,11 @@ ops! {
         "object.duplicate" Mutate object::Duplicate => results::Duplicated = object::duplicate, "Deep-copy objects (with group and entity contents), optionally offset. result.map lists old -> new ids.";
         "object.array" Mutate object::Array => results::Arrayed = object::array, "Make count extra deep copies at multiples of an offset, optionally with a mirrored copy of the whole row, as one step. result.map lists old -> new ids.";
         "object.rename" Mutate object::Rename => results::IdOnly = object::rename, "Rename a group, layer or camera.";
+        "object.set_hidden" Mutate visibility::SetHidden => results::Updated = visibility::set_hidden, "Hide or show objects with everything they contain. Hidden objects are not drawn, picked or raycast, and drop out of the selection.";
+        "object.set_locked" Mutate visibility::SetLocked => results::Updated = visibility::set_locked, "Lock or unlock objects with everything they contain. An op that would edit, delete or add to a locked object fails with Locked.";
+        "object.isolate" Mutate visibility::Isolate => results::Updated = visibility::isolate, "Hide everything except these objects, what they contain and what contains them.";
+        "object.show_all" Mutate NoArgs => results::Updated = visibility::show_all, "Show every hidden object.";
+        "object.unlock_all" Mutate NoArgs => results::Updated = visibility::unlock_all, "Unlock every locked object.";
         "object.set_layer" Mutate object::SetLayer => results::Moved = object::set_layer, "Move objects, with their contents, to another layer.";
         "entity.create" Mutate entity::Create => results::Created = entity::create, "Create a point entity with classname, origin, angles and properties.";
         "entity.create_brush_entity" Mutate entity::CreateBrushEntity => results::Created = entity::create_brush_entity, "Make a brush entity that owns the given brushes and meshes.";
@@ -197,16 +203,17 @@ ops! {
         "entity.set_classname" Mutate entity::SetClassname => results::Updated = entity::set_classname, "Change the classname of entities.";
         "entity.set_transform" Mutate entity::SetTransform => results::IdOnly = entity::set_transform, "Set a point entity's origin and/or angles (pitch, yaw, roll) absolutely.";
         "layer.create" Mutate layer::Create => results::Created = layer::create, "Create a layer.";
+        "layer.set_omit_from_export" Mutate layer::SetOmitFromExport => results::IdOnly = layer::set_omit_from_export, "Mark a layer to be left out of exports; nothing exports yet, so this is only stored.";
         "layer.delete" Destructive layer::Delete => results::LayerDeleted = layer::delete, "Delete a layer, moving its contents to move_to if it has any.";
         "group.create" Mutate group::Create => results::Created = group::create, "Group objects that share a layer and parent group.";
         "group.ungroup" Mutate group::Ungroup => results::Ungrouped = group::ungroup, "Dissolve groups; their contents go to the group's parent.";
         "group.move" Mutate group::Move => results::Moved = group::move_objects, "Move objects into a group, or out of any group when group is null.";
-        "scene.summary" Read NoArgs => results::Summary = scene::summary, "Compact overview: counts by kind, bounds, layers, entity classnames and selection size.";
+        "scene.summary" Read NoArgs => results::Summary = scene::summary, "Compact overview: counts by kind, bounds, layers (with their hidden, locked and omit_from_export flags), entity classnames, selection size and how many objects are hidden or locked.";
         "scene.list" Read scene::List => results::ObjectPage = scene::list, "Filter and page through objects by kind, layer, group, entity, classname, name or region.";
         "scene.get" Read scene::Get => results::Objects = scene::get, "Details of objects by id, at summary, full or geometry level.";
         "scene.bounds" Read scene::Bounds => results::BoundsResult = scene::bounds, "Axis-aligned bounds of objects, each and combined.";
-        "scene.raycast" Read scene::Raycast => results::Raycast = scene::raycast, "First brush, mesh or point entity hit by a ray: id, face, point, normal, distance.";
-        "scene.query_box" Read scene::QueryBox => results::IdCount = scene::query_box, "Objects whose bounds intersect or lie inside a box.";
+        "scene.raycast" Read scene::Raycast => results::Raycast = scene::raycast, "First brush, mesh or point entity hit by a ray: id, face, point, normal, distance. Hidden objects are skipped unless include_hidden.";
+        "scene.query_box" Read scene::QueryBox => results::IdCount = scene::query_box, "Objects whose bounds intersect or lie inside a box. Hidden objects are skipped unless include_hidden.";
         "scene.overlaps" Read scene::Overlaps => results::Overlaps = scene::overlaps, "Pairs of overlapping brushes and meshes (exact for brush pairs, bounds-only otherwise).";
         "check.validate" Read check::Validate => results::Validation = check::validate_cmd, "Run the issue checker and return structured issues.";
         "view.camera.list" Read NoArgs => results::CameraList = view::list, "List document cameras and the session viewport cameras.";
@@ -229,7 +236,7 @@ ops! {
         "select.add" Mutate session_args::SelectIds => results::IdCount, "Add objects to the selection.";
         "select.remove" Mutate session_args::SelectIds => results::IdCount, "Remove objects from the selection.";
         "select.clear" Mutate NoArgs => results::IdCount, "Clear the selection.";
-        "select.all" Mutate session_args::SelectKind => results::IdCount, "Select every selectable object, optionally of one kind.";
+        "select.all" Mutate session_args::SelectKind => results::IdCount, "Select every selectable object, optionally of one kind. Hidden and locked objects are skipped.";
         "select.invert" Mutate session_args::SelectKind => results::IdCount, "Select what is not selected (optionally within one kind) and deselect the rest.";
         "file.info" Read NoArgs => results::FileInfoResult, "Path (null until the document has a file), name, dirty flag and revision of the open document.";
         "file.save" Mutate session_args::Save => results::Saved, "Write the document to its file, or to `path` (which becomes the document path; creates parent dirs). Fails with FileExists for another existing file unless overwrite is true.";
@@ -244,6 +251,17 @@ ops! {
         "session.attach" Read session_args::Attach => results::SessionAttached, "Attach this connection to a session by `id` or file `path` (loading it if no session has it; `create` makes a missing file). With neither, attach to the focused session.";
         "session.info" Read NoArgs => results::SessionRow, "The session this connection is attached to, with the connected clients.";
     }
+}
+
+/// Runs a document op and refuses it with `Locked` if it edited something locked. A batch checks each item, so it can unlock, edit and relock.
+pub fn dispatch(ctx: &mut Ctx, op: &str, args: Value) -> CmdResult {
+    let op = OpInfo::find(op).map_or(op, |o| o.name);
+    let start = ctx.journal_len();
+    let outcome = dispatch_op(ctx, op, args)?;
+    if op != "batch" {
+        locks::enforce(ctx, start)?;
+    }
+    Ok(outcome)
 }
 
 #[derive(Debug, Clone, PartialEq)]

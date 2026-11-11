@@ -59,12 +59,12 @@ Which document a connection is working on; see [server.md](server.md#sessions). 
 - `session.info` → the row of this connection's session.
 
 ### `scene.*` (T0, read)
-- `summary` → `{name, counts, bounds, layers, classnames, selection}` (`selection` is the selection size).
-- `list {kind?, layer?, group?, entity?, classname?, name?, within?, intersects?, fields?, limit?, cursor?}` → `{objects, next_cursor}`. Filters combine with AND. `layer`, `group` and `entity` match the direct parent pointer. `name` is an exact group, layer or camera name. `within` / `intersects` are `{min, max}` boxes tested against object bounds (objects without bounds never match). `fields` keeps only those keys of each summary (`id` always stays). Objects come in id-number order; `limit` defaults to 100 (max 1000); pass the previous `next_cursor` as `cursor`. `next_cursor` is null on the last page.
+- `summary` → `{name, counts, bounds, layers, classnames, selection, hidden, locked}`. `selection` is the selection size; `hidden` and `locked` count objects hidden or locked directly or through a container; each layer row also has `hidden`, `locked` and `omit_from_export`.
+- `list {kind?, layer?, group?, entity?, classname?, name?, within?, intersects?, hidden?, locked?, fields?, limit?, cursor?}` → `{objects, next_cursor}`. Filters combine with AND. `hidden` and `locked` match effective state, so `{locked: true}` lists everything under a locked layer too. A summary has `hidden` / `locked` keys only for objects that carry the flag themselves. `layer`, `group` and `entity` match the direct parent pointer. `name` is an exact group, layer or camera name. `within` / `intersects` are `{min, max}` boxes tested against object bounds (objects without bounds never match). `fields` keeps only those keys of each summary (`id` always stays). Objects come in id-number order; `limit` defaults to 100 (max 1000); pass the previous `next_cursor` as `cursor`. `next_cursor` is null on the last page.
 - `get {ids, detail: summary|full|geometry}`
 - `bounds {ids}` → `{bounds: [{id, bounds|null}], combined}`. A group, brush entity or layer covers all its members (nested groups and brush entity members included, cameras excluded); an empty one is null. `scene.get` and the list filters still use an object's own geometry only.
-- `raycast {origin, dir, max_dist?, kinds?, ignore?}` → `{hit: {id, face, point, normal, distance} | null}`. `kinds` is any of `brush`, `mesh`, `entity` (default all). Brushes are exact, meshes are tested triangle by triangle, point entities use their 16-unit box (`face` is null). `distance` is along the normalized `dir`. An origin inside a solid hits the face it leaves through.
-- `query_box {min, max, mode: intersects|contains, kinds?}` → `{ids, count}`, by object bounds.
+- `raycast {origin, dir, max_dist?, kinds?, ignore?, include_hidden?}` → `{hit: {id, face, point, normal, distance} | null}`. `kinds` is any of `brush`, `mesh`, `entity` (default all). Brushes are exact, meshes are tested triangle by triangle, point entities use their 16-unit box (`face` is null). `distance` is along the normalized `dir`. An origin inside a solid hits the face it leaves through. Hidden objects are skipped unless `include_hidden`.
+- `query_box {min, max, mode: intersects|contains, kinds?, include_hidden?}` → `{ids, count}`, by object bounds; hidden objects are skipped unless `include_hidden`.
 - `overlaps {ids?, ignore_touching?, ignore_same_group?}` → `{pairs: [{a, b, approx, depth}], count}` for brushes and meshes (all of them when `ids` is omitted). Touching faces, and pieces meeting along an edge or corner, never count: only positive-volume intersections are pairs. Brush pairs are exact (`approx: false`); a pair involving a mesh is tested by bounds only (`approx: true`). `depth` is the thinnest extent of the intersection (of the intersection's bounds for a mesh pair). `ignore_touching` drops pairs with `depth` of 1 unit or less: pieces butted together with a small error, which the always-exact test cannot tell from a real overlap. `ignore_same_group` drops pairs whose two objects sit directly in the same group (pieces of one pillar, one room); objects in different groups, including a group and its subgroup, still count. Both default to false. At most 500 pairs are listed, with a warning when truncated.
 
 ### `brush.*`
@@ -74,7 +74,7 @@ Which document a connection is working on; see [server.md](server.md#sessions). 
 - `create_from_planes {faces: [{plane, material?}], layer?}` (T0). `plane` is three points as for `clip`. Redundant planes are dropped with a warning; an unbounded or empty result is `InvalidGeometry`.
 - `clip {ids, plane, keep: front|back|both, material?}` (T0). The new cut face takes `material`, defaulting to the brush's most common material. `plane` is three points; "front" is the side the normal (c − a) × (b − a) points into. `front` / `back` edit the brush in place (error if that side is empty). `both` keeps the back piece under the original ID and creates the front piece with the same parents. A plane that misses a brush leaves it unchanged and adds a warning.
 - `to_mesh {ids}` (T0). Replaces each brush with a mesh: new id, same layer, group, entity and `extra`; the brush id is deleted. Created ids are in `result.ids`.
-- `move_faces`, `move_vertices` with convexity handling (T1)
+- Moving faces and vertices with convexity handling: `face.translate` and `vertex.translate`, below.
 
 ### `mesh.*`
 - `create {vertices, faces: [{verts, material?}], layer?}` (T0). `verts` are zero-based indices into `vertices`, counter-clockwise from outside. Vertices get ids `v1..`, faces `f1..`, vertices snap to the geometry grid. Validation errors fail with `InvalidGeometry`; warnings (open mesh, non-planar face) are returned as warnings.
@@ -86,10 +86,10 @@ Which document a connection is working on; see [server.md](server.md#sessions). 
 Faces are element references, see the [model](tier0-model.md#element-references): `b12/f3`, or a bare `b12` for every face.
 - `face.set_material {faces, material}` (T0) → `{faces: n}`.
 - `face.set_uv {faces, offset?, scale?, rotation?}` (T0). Partial update; give at least one. `offset` and `scale` are `[u, v]`, `scale` must be non-zero.
-- `face.translate {faces, delta}` (mesh T0, brush T1): moves every vertex of the faces. Brushes give `InvalidArgument` with a hint to use `brush.to_mesh`.
-- `vertex.translate {vertices, delta}` (mesh T0, brush T1): `m3/v10` references, or a bare mesh id for all vertices.
+- `face.translate {faces, delta}`: moves every vertex of the faces, on meshes and brushes.
+- `vertex.translate {vertices?, brush_vertices?, delta}`: `vertices` are `m3/v10` references, or a bare mesh or brush id for all of its vertices; give at least one of the two lists. Brush corners have no ids, so `brush_vertices` names them by position: `[{brush: "b12", at: [x, y, z]}]`, matched to the nearest corner within 0.001 (read the positions with `scene.get` at `geometry` detail). `b12/v3` on a brush is `InvalidArgument`.
 
-Both translations snap to the grid, then validate the mesh: errors fail with `InvalidGeometry` and nothing changes; warnings (such as a face that is no longer planar) are returned as warnings.
+Both translations snap to the grid, then validate. Meshes: errors fail with `InvalidGeometry` and nothing changes; warnings (such as a face that is no longer planar) are returned as warnings. Brushes stay convex: the result is rebuilt as the convex hull of the moved corners (`editor_geom::move_brush_vertices`). Corners that land on each other fuse, and a face the move makes non-planar splits into several planes. A face keeps its id when its plane or its corner set is unchanged; a split-off face gets a new id and the attributes of the old face it shares most corners with. A move that would leave a corner inside the brush or on an edge fails with `InvalidGeometry` and a hint to use `brush.to_mesh`; a position with no corner is `InvalidArgument`.
 
 ### `csg.*` (T1, specified now)
 `subtract {targets, cutters, output?}`, `union`, `intersect`, `hollow {ids, thickness}`.
@@ -135,7 +135,14 @@ All take `ids` and return `{transformed: n}`. They apply to brushes, meshes and 
 - `group.create {objects, name?}`: the objects share a layer and parent group and are not brush entity members (group the entity instead).
 - `group.ungroup {ids}`: members go to the group's parent.
 - `group.move {objects, group?}`: `group` null or absent removes the objects from their group. The target must be on the same layer, and a group cannot move into its own subtree.
-- Hide, lock, isolate (T1).
+- `layer.set_omit_from_export {id, omit}`: stored only; nothing exports yet.
+
+### Hide and lock
+All are `object.*`, mutate safety, undoable, and take effect for everything an object contains (see the [model](tier0-model.md#hidden-and-locked)). Brushes, meshes, entities, groups and layers are flaggable; a camera is `WrongKind`.
+- `object.set_hidden {ids, hidden}` and `object.set_locked {ids, locked}` → `{updated}`, the number of objects whose flag changed.
+- `object.isolate {ids}` → `{updated}`: hides everything except `ids`, what they contain and what contains them, flagging the highest container that leaves those shown (so a whole other layer is one flag, and show-all clears it in one step).
+- `object.show_all` and `object.unlock_all` → `{updated}`.
+- Hiding drops objects from the selection; `select.set` / `add` on a hidden object is `InvalidArgument`, and `select.all` / `invert` skip hidden and locked objects.
 
 ### `select.*` (T0)
 Selection is shared session state: not saved, not undoable, no revision bump, never part of a batch. Selectable kinds are brushes, meshes, entities and groups. Every op returns `{ids, count}` (id-number order); the selection is pruned when objects disappear (delete, undo, `file.open`).
@@ -158,8 +165,8 @@ Errors report the failing index.
 ### `view.*` (T0)
 Camera and view conventions are in the [model doc](tier0-model.md#camera). A camera reference is an id (`c5`), a camera name, or a session camera `viewport.persp|top|front|side`.
 
-- `view.screenshot {camera?, width?, height?, mode?, overlays?, highlight?, hide?, clip_above?, label_ids?, label_kinds?, min_label_pixels?, max_labels?, colors?, material_colors?, path?}` (read, client-side; `path` makes it need mutate access). `camera` is a reference or an inline object with the `view.camera.create` fields (default `viewport.persp`). `width` and `height` default to 1024 x 768, max 4096. `mode` is `shaded` (default; lit, dark feature edges), `flat` (unlit colour, no edges) or `wireframe`. `overlays` is any of `grid`, `axes`, `labels`, `bounds`, `selection` (tints the session selection; `highlight` wins when both name an object). `highlight` is object ids: tinted, with bright edges drawn through occluders.
-  - `hide` is object ids, groups, brush entities or layers to leave out, and `clip_above` is a world z above which nothing is drawn (a section or plan view). Neither changes the document. There is no `hide_ceilings`: a ceiling is just a brush, and nothing in brush geometry reliably says which ones are ceilings (a slab above a room, a lintel, a bridge). A section view is already one argument, `clip_above` at the wall-top z (a z just under the ceiling's lower face); `room.create` also returns the ceiling id as `roles.ceiling` for `hide`.
+- `view.screenshot {camera?, width?, height?, mode?, overlays?, highlight?, hide?, show_hidden?, clip_above?, label_ids?, label_kinds?, min_label_pixels?, max_labels?, colors?, material_colors?, path?}` (read, client-side; `path` makes it need mutate access). `camera` is a reference or an inline object with the `view.camera.create` fields (default `viewport.persp`). `width` and `height` default to 1024 x 768, max 4096. `mode` is `shaded` (default; lit, dark feature edges), `flat` (unlit colour, no edges) or `wireframe`. `overlays` is any of `grid`, `axes`, `labels`, `bounds`, `selection` (tints the session selection; `highlight` wins when both name an object). `highlight` is object ids: tinted, with bright edges drawn through occluders.
+  - Objects hidden in the document are left out too, unless `show_hidden` is true. `hide` is object ids, groups, brush entities or layers to leave out, and `clip_above` is a world z above which nothing is drawn (a section or plan view). Neither changes the document. There is no `hide_ceilings`: a ceiling is just a brush, and nothing in brush geometry reliably says which ones are ceilings (a slab above a room, a lintel, a bridge). A section view is already one argument, `clip_above` at the wall-top z (a z just under the ceiling's lower face); `room.create` also returns the ceiling id as `roles.ceiling` for `hide`.
   - Sky versus ceiling: the clear colour is the single flat `legend.background` hex (`#292b30`). No surface is ever drawn in exactly that colour, so a pixel of that colour is empty space. Considered, not built: a gradient or distinctly tinted clear colour as a sky cue, because it needs a background pass in the renderer and makes every image differ for little gain over the legend entry.
   - `colors` is `material` (default, a stable hue per material), `orientation` (legend names `faces up (floors)`, `faces down (ceilings)`, `vertical (walls)`; a flat ceiling seen from above is the "faces up" colour of its top, so use this mode to tell ceilings from open sky) or `layer`. `material_colors` maps material names to `"#rrggbb"` and applies in every mode. Point entities have markers by classname: `light*` is a yellow octahedron, `info_player*` a green tall box, anything else a box coloured by classname.
   - `path` also writes the PNG there (parent directories are created, the write is atomic). The image is still returned inline over MCP.
@@ -187,7 +194,7 @@ Returns issues `{code, severity, ids, elements?, message, hint}`. `ids` are obje
 - **Dry run:** returns the would-be changeset without committing.
 - **Undo storage:** each history entry stores before/after snapshots of every object it touched, so undo and redo work the same for every command. Undo never rewinds the ID counter.
 - **File mode:** `editor-cli` loads the file, runs the command in a fresh session and saves, so revision and undo history do not carry from one invocation to the next. A long-lived editor session keeps them.
-- **Locks:** locked-object behaviour arrives with locking in T1.
+- <a id="locks"></a>**Locks:** one check covers every op, in `editor_cmd::dispatch` (`commands/locks.rs`), not in the handlers: after an op, anything it edited or deleted that was effectively locked before, or any object it created or moved into a locked layer, group or entity, fails the op with `Locked` (target = the object) and the op is rolled back. Changing only `hidden` / `locked` is always allowed, so an object can be unlocked. A `batch` checks each item, so it can unlock, edit and relock; a failing item still rolls back the whole batch. Duplicating a locked object is allowed (the copy is locked). Undo and redo ignore locks.
 
 ## CLI mapping
 

@@ -12,6 +12,8 @@ Extension `.scene.toml`. A single file in Tier 0.
 4. `[editor]` — grid size and other editor metadata
 5. Arrays of tables in fixed order, each sorted by numeric ID: `[[layer]]`, `[[group]]`, `[[camera]]`, `[[entity]]`, `[[brush]]`, `[[mesh]]`
 
+Layers, groups, entities, brushes and meshes take optional `hidden = true` and `locked = true` (written only when true; they apply to everything the object contains), and a layer also `omit_from_export = true`. A file without them loads unchanged, so these did not bump `version`.
+
 Children point at parents (`layer`, `group`, `entity`); records never list children. A nested group names its parent group with `group`, like any other object. Each record is independent, so a later split into `scene.toml` plus `layers/<name>.toml` is a pure re-partition.
 
 ## Brushes and meshes
