@@ -1,5 +1,5 @@
 use editor_cmd::{Request, Response};
-use editor_core::{Object, ObjectId};
+use editor_core::{ElementRef, Object, ObjectId};
 use schemars::{JsonSchema, Schema, schema_for};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -98,6 +98,8 @@ pub struct SnapshotEvent {
     pub revision: u64,
     pub document_toml: String,
     pub selection: Vec<ObjectId>,
+    #[serde(default)]
+    pub face_selection: Vec<ElementRef>,
     pub file: FileInfo,
     pub history: HistoryInfo,
 }
@@ -111,6 +113,8 @@ pub struct ChangedEvent {
     pub deleted: Vec<ObjectId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selection: Option<Vec<ObjectId>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub face_selection: Option<Vec<ElementRef>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<FileInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

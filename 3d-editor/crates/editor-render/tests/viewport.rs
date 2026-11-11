@@ -27,7 +27,19 @@ fn session_with_box() -> (Session, ObjectId) {
 }
 
 fn prepared(s: &Session) -> PreparedScene {
-    PreparedScene::new(s.document(), &BTreeSet::new(), None, &HashSet::new())
+    let textures = Box::leak(Box::default());
+    let faces = Box::leak(Box::default());
+    PreparedScene::new(
+        s.document(),
+        &BTreeSet::new(),
+        None,
+        &HashSet::new(),
+        &editor_render::SceneEnv {
+            scene_dir: None,
+            textures,
+            faces,
+        },
+    )
 }
 
 fn top_view(p: &PreparedScene) -> editor_geom::camera::View {

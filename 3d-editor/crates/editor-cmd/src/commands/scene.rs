@@ -54,6 +54,7 @@ pub fn summary(ctx: &Ctx, _: NoArgs) -> CmdResult<results::Summary> {
             group: doc.groups.len(),
             layer: doc.layers.len(),
             camera: doc.cameras.len(),
+            material: doc.materials.len(),
         },
         bounds: bounds.map(bounds_box),
         layers,
@@ -110,6 +111,7 @@ fn describe(object: &Object, detail: Detail) -> Value {
                 Object::Group(g) => v["name"] = json!(g.name),
                 Object::Layer(l) => v["name"] = json!(l.name),
                 Object::Camera(c) => v["name"] = json!(c.name),
+                Object::Material(m) => v["name"] = json!(m.name),
                 Object::Brush(b) => v["faces"] = json!(b.brush.faces.len()),
                 Object::Mesh(m) => {
                     v["vertices"] = json!(m.mesh.vertices.len());
@@ -212,6 +214,7 @@ fn name_of(object: &Object) -> Option<&str> {
         Object::Group(g) => Some(&g.name),
         Object::Layer(l) => Some(&l.name),
         Object::Camera(c) => Some(&c.name),
+        Object::Material(m) => Some(&m.name),
         _ => None,
     }
 }

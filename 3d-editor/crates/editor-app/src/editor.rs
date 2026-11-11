@@ -3,20 +3,21 @@ use std::path::Path;
 
 use editor_cmd::args::{
     Axis, AxisArg, BrushVertexAt, Clip, CreateBox, Delete, Factors, Flip, Isolate, Keep, NoArgs,
-    Pivot, Rename, Rotate, Save, Scale, SelectIds, SelectKind, SetClassname, SetHidden, SetLayer,
-    SetLocked, SetMaterial, SetProperties, SetTransform, Translate, TranslateVertices,
+    Pivot, Rename, Rotate, Save, Scale, SelectFaces, SelectIds, SelectKind, SetClassname,
+    SetHidden, SetLayer, SetLocked, SetMaterial, SetProperties, SetTransform, SetUv, TransferMode,
+    TransferUv, Translate, TranslateVertices, UvMode,
 };
 use editor_cmd::results::{
-    Created, CreatedMapped, Deleted, FacesChanged, IdCount, IdOnly, Moved, Saved, Stepped,
-    Transformed, Updated, VerticesMoved,
+    Created, CreatedMapped, Deleted, FaceSelection, FacesChanged, IdCount, IdOnly, Moved, Saved,
+    Stepped, Transformed, Updated, VerticesMoved,
 };
 use editor_cmd::{Request, Success};
-use editor_core::{ElementRef, GroupId, ObjectId, ObjectKind, Part, Properties};
+use editor_core::{ElementRef, FaceId, GroupId, ObjectId, ObjectKind, Part, Properties};
 use editor_geom::Aabb;
 use editor_geom::camera::{frame_camera, ortho_axes};
 use editor_geom::tolerance::snap_vec;
 use editor_proto::WakeFn;
-use editor_render::{PreparedScene, Renderer, ViewportOptions};
+use editor_render::{PreparedScene, Renderer, SceneEnv, ViewportOptions};
 use egui::{Context, Key, Ui};
 use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 use glam::DVec3;
@@ -30,9 +31,10 @@ use crate::drill;
 use crate::error::AppError;
 use crate::gfx::Gfx;
 use crate::nav;
-use crate::pane::{Action, Pane, PaneEnv, PaneId, Tool};
+use crate::pane::{Action, Pane, PaneEnv, PaneId, SurfaceClick, Tool};
 use crate::panels::{Event, Panels};
 use crate::remote::Remote;
+use crate::surface::{self, SurfaceUi};
 use crate::theme::{self, Theme};
 
 const GRIDS: [f64; 12] = [
@@ -131,6 +133,9 @@ struct Keys {
     enter: bool,
     reverse: bool,
     tab: bool,
+    arrow: Option<(f64, f64)>,
+    page: f64,
+    shift: bool,
 }
 
 impl Keys {
@@ -158,6 +163,22 @@ impl Keys {
             enter: !cmd && !shift && i.key_pressed(Key::Enter),
             reverse: !cmd && shift && i.key_pressed(Key::Enter),
             tab: !cmd && !shift && i.key_pressed(Key::Tab),
+            arrow: [
+                (Key::ArrowLeft, (1.0, 0.0)),
+                (Key::ArrowRight, (-1.0, 0.0)),
+                (Key::ArrowUp, (0.0, 1.0)),
+                (Key::ArrowDown, (0.0, -1.0)),
+            ]
+            .into_iter()
+            .find_map(|(key, step)| (!cmd && i.key_pressed(key)).then_some(step)),
+            page: if i.key_pressed(Key::PageUp) {
+                15.0
+            } else if i.key_pressed(Key::PageDown) {
+                -15.0
+            } else {
+                0.0
+            },
+            shift,
             grid_finer: i.key_pressed(Key::OpenBracket),
             grid_coarser: i.key_pressed(Key::CloseBracket),
             rotate_ccw: plain(Key::Period),
@@ -177,6 +198,7 @@ impl Keys {
                 (Key::Num7, Tool::Clip),
                 (Key::Num8, Tool::Edge),
                 (Key::Num9, Tool::Face),
+                (Key::Num0, Tool::Surface),
             ]
             .into_iter()
             .find_map(|(key, tool)| plain(key).then_some(tool)),
@@ -192,6 +214,9 @@ pub struct Editor {
     tool: Tool,
     grid: f64,
     snap: bool,
+    texture_lock: bool,
+    texture_generation: u64,
+    surface: SurfaceUi,
     pub theme: Theme,
     show_grid: bool,
     show_axes: bool,
@@ -240,7 +265,14 @@ impl Timings {
 
 type ClipKey = (u64, [u64; 9], Vec<ObjectId>);
 
-type PrepKey = (u64, Vec<ObjectId>, Option<ObjectId>, Option<GroupId>);
+type PrepKey = (
+    u64,
+    Vec<ObjectId>,
+    Option<ObjectId>,
+    Option<GroupId>,
+    Vec<(ObjectId, FaceId)>,
+    u64,
+);
 
 impl Editor {
     pub fn new(
@@ -257,6 +289,9 @@ impl Editor {
             saved_dock: None,
             panes: PaneId::ALL.iter().map(|&id| (id, Pane::new(id))).collect(),
             tool: Tool::Select,
+            texture_lock: true,
+            texture_generation: 0,
+            surface: SurfaceUi::default(),
             grid,
             snap: true,
             theme: Theme::Dark,
@@ -367,6 +402,7 @@ impl Editor {
             axis: AxisArg::Vector(self.active_view_axis()),
             degrees,
             pivot: Pivot::default(),
+            texture_lock: Some(self.texture_lock),
         };
         self.call::<_, Transformed>("transform.rotate", &args, None);
     }
@@ -380,12 +416,31 @@ impl Editor {
             ids,
             axis: AxisArg::Named(axis),
             pivot: Pivot::default(),
+            texture_lock: Some(self.texture_lock),
         };
         self.call::<_, Transformed>("transform.flip", &args, None);
     }
 
     fn select(&mut self, op: &str, ids: Vec<ObjectId>) {
+        self.clear_faces();
         self.call::<_, IdCount>(op, &SelectIds { ids }, None);
+    }
+
+    fn clear_faces(&mut self) {
+        if !self.remote.face_selection.is_empty() {
+            self.call::<_, FaceSelection>("select.faces.clear", &NoArgs::default(), None);
+        }
+    }
+
+    fn face_refs(&self) -> Vec<ElementRef> {
+        self.remote
+            .face_selection
+            .iter()
+            .map(|&(object, face)| ElementRef {
+                object,
+                part: Part::Face(face),
+            })
+            .collect()
     }
 
     fn select_kind(&mut self, op: &str) {
@@ -403,6 +458,7 @@ impl Editor {
                     vertices: Vec::new(),
                     brush_vertices: self.vertex_picks.clone(),
                     delta,
+                    texture_lock: Some(self.texture_lock),
                 };
                 let moved = self
                     .call::<_, VerticesMoved>("vertex.translate", &args, key)
@@ -425,7 +481,15 @@ impl Editor {
                 moved
             }
             DragOp::Translate(delta) => self
-                .call::<_, Transformed>("transform.translate", &Translate { ids, delta }, key)
+                .call::<_, Transformed>(
+                    "transform.translate",
+                    &Translate {
+                        ids,
+                        delta,
+                        texture_lock: Some(self.texture_lock),
+                    },
+                    key,
+                )
                 .is_some(),
             DragOp::Rotate { axis, degrees } => self
                 .call::<_, Transformed>(
@@ -435,6 +499,7 @@ impl Editor {
                         axis: AxisArg::Vector(axis),
                         degrees,
                         pivot,
+                        texture_lock: Some(self.texture_lock),
                     },
                     key,
                 )
@@ -446,10 +511,80 @@ impl Editor {
                         ids,
                         factors: Factors::PerAxis(factors),
                         pivot,
+                        texture_lock: Some(self.texture_lock),
                     },
                     key,
                 )
                 .is_some(),
+        }
+    }
+
+    fn surface_click(
+        &mut self,
+        face: Option<(ObjectId, FaceId)>,
+        additive: bool,
+        mode: SurfaceClick,
+    ) {
+        let Some((object, id)) = face else {
+            if !additive {
+                self.clear_faces();
+            }
+            return;
+        };
+        let target = ElementRef {
+            object,
+            part: Part::Face(id),
+        };
+        match mode {
+            SurfaceClick::Select => {
+                if !self.remote.selection.is_empty() {
+                    self.call::<_, IdCount>("select.clear", &NoArgs::default(), None);
+                }
+                let op = match (additive, self.remote.face_selection.contains(&(object, id))) {
+                    (false, _) => "select.faces.set",
+                    (true, true) => "select.faces.remove",
+                    (true, false) => "select.faces.add",
+                };
+                self.call::<_, FaceSelection>(
+                    op,
+                    &SelectFaces {
+                        faces: vec![target],
+                    },
+                    None,
+                );
+            }
+            SurfaceClick::Apply => match self.surface.selected_material().map(String::from) {
+                Some(material) => {
+                    let args = SetMaterial {
+                        faces: vec![target],
+                        material,
+                    };
+                    self.call::<_, FacesChanged>("face.set_material", &args, None);
+                }
+                None => self.status = "pick a material in the inspector first".into(),
+            },
+            SurfaceClick::Wrap => {
+                let from = self
+                    .remote
+                    .face_selection
+                    .iter()
+                    .find(|f| **f != (object, id))
+                    .map(|&(object, face)| ElementRef {
+                        object,
+                        part: Part::Face(face),
+                    });
+                match from {
+                    Some(from) => {
+                        let args = TransferUv {
+                            from,
+                            to: vec![target],
+                            mode: Some(TransferMode::Wrap),
+                        };
+                        self.call::<_, FacesChanged>("face.transfer_uv", &args, None);
+                    }
+                    None => self.status = "select a face to wrap from first".into(),
+                }
+            }
         }
     }
 
@@ -463,11 +598,17 @@ impl Editor {
                     (Some(id), true, true) => self.select("select.remove", vec![id]),
                     (Some(id), true, false) => self.select("select.add", vec![id]),
                     (None, false, _) => {
+                        self.clear_faces();
                         self.call::<_, IdCount>("select.clear", &NoArgs::default(), None);
                     }
                     (None, true, _) => {}
                 }
             }
+            Action::SurfaceClick {
+                face,
+                additive,
+                mode,
+            } => self.surface_click(face, additive, mode),
             Action::Paint(id) => {
                 let id = self.pick_target(id);
                 self.select("select.add", vec![id]);
@@ -759,17 +900,30 @@ impl Editor {
             self.remote.selection.iter().copied().collect(),
             self.hover,
             self.open_group,
+            self.remote.face_selection.iter().copied().collect(),
+            self.texture_generation,
         )
     }
 
-    fn refresh_prepared(&mut self) {
+    fn refresh_prepared(&mut self, renderer: &Renderer) {
         let key = self.prep_key();
         if self.prepared.as_ref().is_some_and(|(k, _)| *k == key) {
             return;
         }
         let hidden: HashSet<ObjectId> = self.remote.doc.hidden_ids().into_iter().collect();
         let tinted = self.remote.doc.with_members(&self.remote.selection);
-        let scene = PreparedScene::new(&self.remote.doc, &tinted, self.hover, &hidden);
+        let scene_dir = self
+            .remote
+            .file
+            .path
+            .as_deref()
+            .and_then(|p| Path::new(p).parent());
+        let env = SceneEnv {
+            scene_dir,
+            textures: renderer.textures(),
+            faces: &self.remote.face_selection,
+        };
+        let scene = PreparedScene::new(&self.remote.doc, &tinted, self.hover, &hidden, &env);
         self.prepared = Some((key, scene));
         self.repaint = true;
     }
@@ -784,6 +938,30 @@ impl Editor {
         }
         if keys.redo {
             self.redo();
+        }
+        if self.tool == Tool::Surface && !self.remote.face_selection.is_empty() {
+            let faces = self.face_refs();
+            let step = if keys.shift { 1.0 } else { self.grid };
+            if let Some((dx, dy)) = keys.arrow {
+                let args = SetUv {
+                    faces: faces.clone(),
+                    offset: Some(glam::DVec2::new(dx * step, dy * step)),
+                    scale: None,
+                    rotation: None,
+                    mode: Some(UvMode::Relative),
+                };
+                self.call::<_, FacesChanged>("face.set_uv", &args, None);
+            }
+            if keys.page != 0.0 {
+                let args = SetUv {
+                    faces,
+                    offset: None,
+                    scale: None,
+                    rotation: Some(keys.page),
+                    mode: Some(UvMode::Relative),
+                };
+                self.call::<_, FacesChanged>("face.set_uv", &args, None);
+            }
         }
         if self.tool == Tool::Clip && keys.backspace && !self.clip.points.is_empty() {
             self.clip.pop();
@@ -894,14 +1072,14 @@ impl Editor {
         if self.remote.closed {
             self.status = "disconnected from editor-server".into();
         }
-        self.refresh_prepared();
+        self.refresh_prepared(renderer);
         self.keys(&ctx);
         self.refresh_clip_preview();
         self.menu(ui);
         self.toolbar(ui);
         self.status_bar(ui);
         self.outliner(ui);
-        self.inspector(ui);
+        self.inspector(ui, renderer);
         self.help(&ctx);
 
         let selection = self.remote.selection.clone();
@@ -976,7 +1154,7 @@ impl Editor {
         for action in actions {
             self.apply(action);
         }
-        self.refresh_prepared();
+        self.refresh_prepared(&gfx.renderer);
         let Some((_, prepared)) = self.prepared.as_ref() else {
             return;
         };
@@ -1158,6 +1336,7 @@ impl Editor {
                     (Tool::Clip, "7"),
                     (Tool::Edge, "8"),
                     (Tool::Face, "9"),
+                    (Tool::Surface, "0"),
                 ] {
                     ui.selectable_value(&mut self.tool, tool, format!("{}  {key}", tool.name()));
                 }
@@ -1196,6 +1375,8 @@ impl Editor {
                     });
                 ui.toggle_value(&mut self.snap, "Snap")
                     .on_hover_text("Snap to the grid (\\)");
+                ui.toggle_value(&mut self.texture_lock, "Tex lock")
+                    .on_hover_text("Keep textures attached to the geometry when it moves");
             });
         });
     }
@@ -1274,23 +1455,109 @@ impl Editor {
         }
     }
 
-    fn inspector(&mut self, ui: &mut Ui) {
+    fn inspector(&mut self, ui: &mut Ui, renderer: &Renderer) {
         let mut events = Vec::new();
+        let mut surface_events = Vec::new();
+        let scene_dir = self
+            .remote
+            .file
+            .path
+            .as_deref()
+            .and_then(|p| Path::new(p).parent());
         egui::Panel::right("inspector")
-            .default_size(250.0)
-            .size_range(200.0..=420.0)
+            .default_size(270.0)
+            .size_range(220.0..=460.0)
             .show(ui, |ui| {
                 ui.heading("Inspector");
                 ui.separator();
-                events = self.panels.inspector(
-                    ui,
-                    &self.remote.doc,
-                    self.remote.revision,
-                    &self.remote.selection,
-                );
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    if self.remote.face_selection.is_empty() {
+                        events =
+                            self.panels
+                                .inspector(ui, &self.remote.doc, &self.remote.selection);
+                    } else {
+                        self.surface.faces(
+                            ui,
+                            &self.remote.doc,
+                            &self.remote.face_selection,
+                            &mut surface_events,
+                        );
+                    }
+                    ui.add_space(8.0);
+                    self.surface.materials(
+                        ui,
+                        &self.remote.doc,
+                        renderer.textures(),
+                        scene_dir,
+                        &mut surface_events,
+                    );
+                });
             });
         for event in events {
             self.panel_event(event);
+        }
+        for event in surface_events {
+            self.surface_event(event);
+        }
+    }
+
+    fn surface_event(&mut self, event: surface::Event) {
+        match event {
+            surface::Event::SetUv { args, merge } => {
+                self.call::<_, FacesChanged>("face.set_uv", &args, merge.as_deref());
+            }
+            surface::Event::Align(args) => {
+                self.call::<_, FacesChanged>("face.align_uv", &args, None);
+            }
+            surface::Event::WrapFromFirst => {
+                let mut faces = self.face_refs().into_iter();
+                if let Some(from) = faces.next() {
+                    let args = TransferUv {
+                        from,
+                        to: faces.collect(),
+                        mode: Some(TransferMode::Wrap),
+                    };
+                    self.call::<_, FacesChanged>("face.transfer_uv", &args, None);
+                }
+            }
+            surface::Event::Assign(material) => {
+                let faces = if self.remote.face_selection.is_empty() {
+                    self.remote
+                        .selection
+                        .iter()
+                        .filter(|id| matches!(id, ObjectId::Brush(_) | ObjectId::Mesh(_)))
+                        .map(|&object| ElementRef {
+                            object,
+                            part: Part::All,
+                        })
+                        .collect()
+                } else {
+                    self.face_refs()
+                };
+                if !faces.is_empty() {
+                    let args = SetMaterial { faces, material };
+                    self.call::<_, FacesChanged>("face.set_material", &args, None);
+                }
+            }
+            surface::Event::CreateMaterial(args) => {
+                self.call::<_, Created>("material.create", &args, None);
+            }
+            surface::Event::SetMaterial(args) => {
+                self.call::<_, IdOnly>("material.set", &args, None);
+                self.texture_generation += 1;
+            }
+            surface::Event::RenameMaterial(args) => {
+                self.call::<_, FacesChanged>("material.rename", &args, None);
+            }
+            surface::Event::DeleteMaterial(args) => {
+                self.call::<_, Deleted>("material.delete", &args, None);
+            }
+            surface::Event::EmbedMaterial(material) => {
+                let args = editor_cmd::args::Embed {
+                    materials: vec![material],
+                };
+                self.call::<_, Updated>("material.embed", &args, None);
+            }
         }
     }
 
@@ -1361,17 +1628,6 @@ impl Editor {
                     remove: vec![key],
                 };
                 self.call::<_, Updated>("entity.set_properties", &args, None);
-            }
-            Event::SetMaterial { ids, material } => {
-                let faces = ids
-                    .into_iter()
-                    .map(|object| ElementRef {
-                        object,
-                        part: Part::All,
-                    })
-                    .collect();
-                let args = SetMaterial { faces, material };
-                self.call::<_, FacesChanged>("face.set_material", &args, None);
             }
         }
     }

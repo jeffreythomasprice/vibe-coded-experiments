@@ -106,16 +106,21 @@ fn check_bounds(object: &Object) -> Result<(), CommandError> {
 }
 
 /// The object with `m` applied. Groups, layers and cameras have no geometry and come back unchanged.
-pub fn transform_object(object: &Object, m: &DAffine3) -> Result<Object, CommandError> {
+pub fn transform_object(
+    object: &Object,
+    m: &DAffine3,
+    texture_lock: bool,
+) -> Result<Object, CommandError> {
     let out = match object {
         Object::Brush(b) => {
             let mut b = b.clone();
-            b.brush = transform_brush(&b.brush, m).map_err(|e| geometry_error(b.id, e))?;
+            b.brush =
+                transform_brush(&b.brush, m, texture_lock).map_err(|e| geometry_error(b.id, e))?;
             Object::Brush(b)
         }
         Object::Mesh(mesh) => {
             let mut mesh = mesh.clone();
-            mesh.mesh = transform_mesh(&mesh.mesh, m);
+            mesh.mesh = transform_mesh(&mesh.mesh, m, texture_lock);
             Object::Mesh(mesh)
         }
         Object::Entity(e) => {
@@ -185,10 +190,16 @@ pub(super) fn about(pivot: DVec3, linear: DMat3) -> DAffine3 {
         * DAffine3::from_translation(-pivot)
 }
 
-fn apply(ctx: &mut Ctx, leaves: &[Object], m: &DAffine3) -> CmdResult<results::Transformed> {
+fn apply(
+    ctx: &mut Ctx,
+    leaves: &[Object],
+    m: &DAffine3,
+    texture_lock: Option<bool>,
+) -> CmdResult<results::Transformed> {
+    let lock = texture_lock.unwrap_or(true);
     let moved = leaves
         .iter()
-        .map(|o| transform_object(o, m))
+        .map(|o| transform_object(o, m, lock))
         .collect::<Result<Vec<_>, _>>()?;
     let count = moved.len();
     for object in moved {
@@ -203,12 +214,20 @@ pub struct Translate {
     pub ids: Vec<ObjectId>,
     #[schemars(with = "[f64; 3]")]
     pub delta: DVec3,
+    /// Keep face textures attached to the geometry (default true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub texture_lock: Option<bool>,
 }
 
 pub fn translate(ctx: &mut Ctx, args: Translate) -> CmdResult<results::Transformed> {
     check_finite("delta", args.delta)?;
     let leaves = gather(ctx, &args.ids)?;
-    apply(ctx, &leaves, &DAffine3::from_translation(args.delta))
+    apply(
+        ctx,
+        &leaves,
+        &DAffine3::from_translation(args.delta),
+        args.texture_lock,
+    )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -219,6 +238,9 @@ pub struct Rotate {
     pub degrees: f64,
     #[serde(default)]
     pub pivot: Pivot,
+    /// Keep face textures attached to the geometry (default true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub texture_lock: Option<bool>,
 }
 
 pub fn rotate(ctx: &mut Ctx, args: Rotate) -> CmdResult<results::Transformed> {
@@ -232,7 +254,7 @@ pub fn rotate(ctx: &mut Ctx, args: Rotate) -> CmdResult<results::Transformed> {
     let leaves = gather(ctx, &args.ids)?;
     let pivot = pivot_point(args.pivot, &leaves)?;
     let linear = DMat3::from_axis_angle(axis, args.degrees.to_radians());
-    apply(ctx, &leaves, &about(pivot, linear))
+    apply(ctx, &leaves, &about(pivot, linear), args.texture_lock)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -242,6 +264,9 @@ pub struct Scale {
     pub factors: Factors,
     #[serde(default)]
     pub pivot: Pivot,
+    /// Keep face textures attached to the geometry (default true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub texture_lock: Option<bool>,
 }
 
 pub fn scale(ctx: &mut Ctx, args: Scale) -> CmdResult<results::Transformed> {
@@ -257,7 +282,12 @@ pub fn scale(ctx: &mut Ctx, args: Scale) -> CmdResult<results::Transformed> {
     }
     let leaves = gather(ctx, &args.ids)?;
     let pivot = pivot_point(args.pivot, &leaves)?;
-    apply(ctx, &leaves, &about(pivot, DMat3::from_diagonal(factors)))
+    apply(
+        ctx,
+        &leaves,
+        &about(pivot, DMat3::from_diagonal(factors)),
+        args.texture_lock,
+    )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -267,11 +297,19 @@ pub struct Flip {
     pub axis: AxisArg,
     #[serde(default)]
     pub pivot: Pivot,
+    /// Keep face textures attached to the geometry (default true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub texture_lock: Option<bool>,
 }
 
 pub fn flip(ctx: &mut Ctx, args: Flip) -> CmdResult<results::Transformed> {
     let n = args.axis.unit("axis")?;
     let leaves = gather(ctx, &args.ids)?;
     let pivot = pivot_point(args.pivot, &leaves)?;
-    apply(ctx, &leaves, &about(pivot, reflection(n)))
+    apply(
+        ctx,
+        &leaves,
+        &about(pivot, reflection(n)),
+        args.texture_lock,
+    )
 }

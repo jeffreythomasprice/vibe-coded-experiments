@@ -1,10 +1,11 @@
 use std::str::FromStr;
 
+use base64::Engine;
 use editor_core::{
     Brush, BrushFace, BrushId, BrushObject, Camera, CameraId, DVec2, DVec3, Document, Entity,
     EntityId, Extra, FaceAttrs, FaceId, Flags, Group, GroupId, HierarchyError, Layer, LayerId,
-    Mesh, MeshFace, MeshId, MeshObject, MeshVertex, ObjectId, OrthoView, Projection, Properties,
-    PropertyValue, VertexId,
+    Material, MaterialId, Mesh, MeshFace, MeshId, MeshObject, MeshVertex, ObjectId, OrthoView,
+    Projection, Properties, PropertyValue, TextureSource, UvAxes, VertexId,
 };
 use editor_geom::brush_geometry;
 use editor_geom::mesh::{Severity, validate};
@@ -75,6 +76,53 @@ fn as_bool(v: &Value) -> Option<bool> {
     v.as_bool()
 }
 
+fn as_f32s<const N: usize>(v: &Value) -> Option<[f32; N]> {
+    let Value::Array(a) = v else { return None };
+    if a.len() != N {
+        return None;
+    }
+    let mut out = [0.0; N];
+    for (slot, x) in out.iter_mut().zip(a) {
+        *slot = as_f64(x)? as f32;
+    }
+    Some(out)
+}
+
+fn as_f32(v: &Value) -> Option<f32> {
+    as_f64(v).map(|x| x as f32)
+}
+
+fn texture(t: &mut Table, ctx: &str) -> Result<Option<TextureSource>> {
+    let Some(v) = t.remove("texture") else {
+        return Ok(None);
+    };
+    let Value::Table(mut tt) = v else {
+        return Err(parse_err(ctx, "`texture` must be an inline table"));
+    };
+    let path = opt(&mut tt, "path", ctx, "a string", as_string)?;
+    let source = match path {
+        Some(path) => TextureSource::Path { path },
+        None => {
+            let format = req(
+                &mut tt,
+                "format",
+                ctx,
+                "\"png\", \"jpeg\", \"tga\" or \"bmp\"",
+                |v| editor_core::ImageFormat::from_extension(v.as_str()?),
+            )?;
+            let data = req(&mut tt, "base64", ctx, "a base64 string", |v| {
+                base64::engine::general_purpose::STANDARD
+                    .decode(v.as_str()?)
+                    .ok()
+                    .map(editor_core::Base64Bytes)
+            })?;
+            TextureSource::Embedded { format, data }
+        }
+    };
+    no_leftovers(&tt, ctx)?;
+    Ok(Some(source))
+}
+
 fn flags(t: &mut Table, ctx: &str) -> Result<Flags> {
     Ok(Flags {
         hidden: opt(t, "hidden", ctx, "a boolean", as_bool)?.unwrap_or(false),
@@ -143,7 +191,15 @@ fn properties(t: Table, ctx: &str) -> Result<Properties> {
 
 fn face_attrs(t: &mut Table, ctx: &str) -> Result<FaceAttrs> {
     let defaults = FaceAttrs::default();
+    let u_axis = opt(t, "u_axis", ctx, "an [x, y, z] vector", as_vec3)?;
+    let v_axis = opt(t, "v_axis", ctx, "an [x, y, z] vector", as_vec3)?;
+    let axes = match (u_axis, v_axis) {
+        (Some(u), Some(v)) => Some(UvAxes { u, v }),
+        (None, None) => None,
+        _ => return Err(parse_err(ctx, "`u_axis` and `v_axis` go together")),
+    };
     Ok(FaceAttrs {
+        axes,
         material: opt(t, "material", ctx, "a string", as_string)?.unwrap_or_default(),
         offset: opt(t, "offset", ctx, "a [x, y] pair", as_vec2)?.unwrap_or(defaults.offset),
         scale: opt(t, "scale", ctx, "a [x, y] pair", as_vec2)?.unwrap_or(defaults.scale),
@@ -292,6 +348,54 @@ pub fn read(text: &str) -> Result<Document> {
         doc.editor.grid = grid;
     }
     doc.editor.extra = rest(editor);
+
+    for mut t in records(&mut root, "material")? {
+        let id: MaterialId = req(&mut t, "id", "material", "a material id", as_id)?;
+        let ctx = id.to_string();
+        let name = req(&mut t, "name", &ctx, "a string", as_string)?;
+        let mut m = Material::new(id, name);
+        m.texture = texture(&mut t, &ctx)?;
+        if let Some(c) = opt(&mut t, "color", &ctx, "an [r, g, b, a] array", as_f32s::<4>)? {
+            m.color = c;
+        }
+        if let Some(c) = opt(&mut t, "emissive", &ctx, "an [r, g, b] array", as_f32s::<3>)? {
+            m.emissive = c;
+        }
+        if let Some(x) = opt(&mut t, "emissive_strength", &ctx, "a number", as_f32)? {
+            m.emissive_strength = x;
+        }
+        if let Some(x) = opt(&mut t, "roughness", &ctx, "a number", as_f32)? {
+            m.roughness = x;
+        }
+        if let Some(x) = opt(&mut t, "metallic", &ctx, "a number", as_f32)? {
+            m.metallic = x;
+        }
+        if let Some(f) = opt(
+            &mut t,
+            "filter",
+            &ctx,
+            "\"linear\" or \"nearest\"",
+            |v| match v.as_str()? {
+                "linear" => Some(editor_core::Filter::Linear),
+                "nearest" => Some(editor_core::Filter::Nearest),
+                _ => None,
+            },
+        )? {
+            m.filter = f;
+        }
+        m.double_sided = opt(&mut t, "double_sided", &ctx, "a boolean", as_bool)?.unwrap_or(false);
+        m.unlit = opt(&mut t, "unlit", &ctx, "a boolean", as_bool)?.unwrap_or(false);
+        m.nodraw = opt(&mut t, "nodraw", &ctx, "a boolean", as_bool)?.unwrap_or(false);
+        m.extra = rest(t);
+        if let Some(first) = doc.materials.values().find(|o| o.name == m.name) {
+            return Err(LoadError::DuplicateMaterialName {
+                name: m.name,
+                first: first.id.into(),
+                second: id.into(),
+            });
+        }
+        insert_checked(&mut doc, editor_core::Object::Material(m))?;
+    }
 
     for mut t in records(&mut root, "layer")? {
         let id: LayerId = req(&mut t, "id", "layer", "a layer id", as_id)?;

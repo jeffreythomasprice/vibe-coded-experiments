@@ -19,7 +19,7 @@ fn has_vertex(brush: &editor_core::Brush, p: DVec3) -> bool {
 #[test]
 fn raising_a_corner_splits_the_top_face() {
     let corner = DVec3::splat(64.0);
-    let out = move_brush_vertices(&cube(), &[corner], DVec3::new(0.0, 0.0, 32.0)).unwrap();
+    let out = move_brush_vertices(&cube(), &[corner], DVec3::new(0.0, 0.0, 32.0), false).unwrap();
     let geo = brush_geometry(&out).unwrap();
     assert_eq!(geo.vertices.len(), 8);
     assert_eq!(out.faces.len(), 7);
@@ -34,8 +34,13 @@ fn raising_a_corner_splits_the_top_face() {
 
 #[test]
 fn lowering_a_corner_keeps_the_top_as_a_triangle() {
-    let out =
-        move_brush_vertices(&cube(), &[DVec3::splat(64.0)], DVec3::new(0.0, 0.0, -32.0)).unwrap();
+    let out = move_brush_vertices(
+        &cube(),
+        &[DVec3::splat(64.0)],
+        DVec3::new(0.0, 0.0, -32.0),
+        false,
+    )
+    .unwrap();
     assert_eq!(out.faces.len(), 7);
     let ids: std::collections::BTreeSet<_> = out.faces.iter().map(|f| f.id.0).collect();
     for kept in 1..=6 {
@@ -51,6 +56,7 @@ fn fusing_two_vertices_drops_one() {
         &cube(),
         &[DVec3::new(0.0, 0.0, 64.0)],
         DVec3::new(64.0, 0.0, 0.0),
+        false,
     )
     .unwrap();
     assert_eq!(brush_geometry(&out).unwrap().vertices.len(), 7);
@@ -60,13 +66,13 @@ fn fusing_two_vertices_drops_one() {
 
 #[test]
 fn pushing_a_corner_inward_is_rejected() {
-    let r = move_brush_vertices(&cube(), &[DVec3::splat(64.0)], DVec3::splat(-32.0));
+    let r = move_brush_vertices(&cube(), &[DVec3::splat(64.0)], DVec3::splat(-32.0), false);
     assert!(matches!(r, Err(VertexEditError::WouldBeConcave(_))));
 }
 
 #[test]
 fn unknown_vertex_is_reported() {
-    let r = move_brush_vertices(&cube(), &[DVec3::new(1.0, 2.0, 3.0)], DVec3::X);
+    let r = move_brush_vertices(&cube(), &[DVec3::new(1.0, 2.0, 3.0)], DVec3::X, false);
     assert_eq!(
         r,
         Err(VertexEditError::VertexNotFound(DVec3::new(1.0, 2.0, 3.0)))
@@ -79,7 +85,7 @@ fn moving_a_whole_face_keeps_every_face_id() {
         .iter()
         .map(|&(x, y)| DVec3::new(x, y, 64.0))
         .collect();
-    let out = move_brush_vertices(&cube(), &top, DVec3::new(0.0, 0.0, 16.0)).unwrap();
+    let out = move_brush_vertices(&cube(), &top, DVec3::new(0.0, 0.0, 16.0), false).unwrap();
     assert_eq!(out.faces.len(), 6);
     let ids: Vec<_> = out.faces.iter().map(|f| f.id).collect();
     let want: Vec<_> = cube().faces.iter().map(|f| f.id).collect();
@@ -93,7 +99,7 @@ fn shearing_a_face_keeps_the_brush_valid() {
         .iter()
         .map(|&(x, y)| DVec3::new(x, y, 64.0))
         .collect();
-    let out = move_brush_vertices(&cube(), &top, DVec3::new(32.0, 0.0, 0.0)).unwrap();
+    let out = move_brush_vertices(&cube(), &top, DVec3::new(32.0, 0.0, 0.0), false).unwrap();
     assert_eq!(out.faces.len(), 6);
     assert!(has_vertex(&out, DVec3::new(96.0, 64.0, 64.0)));
 }
@@ -126,7 +132,7 @@ mod random {
                 .map(|&i| geo.vertices[i % geo.vertices.len()])
                 .collect();
             let delta = DVec3::new(d[0] as f64, d[1] as f64, d[2] as f64);
-            match move_brush_vertices(&brush, &picked, delta) {
+            match move_brush_vertices(&brush, &picked, delta, false) {
                 Ok(out) => {
                     let derived = brush_geometry(&out).expect("result is a valid brush");
                     prop_assert!(derived.volume() > 0.0);

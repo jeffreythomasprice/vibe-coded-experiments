@@ -94,6 +94,13 @@ pub struct IdCount {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct FaceSelection {
+    pub faces: Vec<ElementRef>,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct IdOnly {
     pub id: ObjectId,
 }
@@ -193,6 +200,7 @@ pub struct Counts {
     pub group: usize,
     pub layer: usize,
     pub camera: usize,
+    pub material: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -486,4 +494,103 @@ pub struct ScreenshotResult {
     /// Where the PNG was written, when `path` was given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TextureKind {
+    Path,
+    Embedded,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TextureInfo {
+    pub kind: TextureKind,
+    /// The path as stored in the scene (path textures only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// The absolute file the path currently points at (path textures only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved: Option<String>,
+    pub format: Option<editor_core::ImageFormat>,
+    /// Size of the stored image file in bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bytes: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+    /// Why the image cannot be used (missing file, unreadable data); absent when it loads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MaterialInfo {
+    pub id: editor_core::MaterialId,
+    pub name: String,
+    pub texture: Option<TextureInfo>,
+    pub color: [f32; 4],
+    pub emissive: [f32; 3],
+    pub emissive_strength: f32,
+    pub roughness: f32,
+    pub metallic: f32,
+    pub filter: editor_core::Filter,
+    pub double_sided: bool,
+    pub unlit: bool,
+    pub nodraw: bool,
+    /// How many brush and mesh faces use this material.
+    pub faces: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MaterialList {
+    pub materials: Vec<MaterialInfo>,
+    /// Material names that faces use but the document does not define.
+    pub undefined: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CornerUv {
+    #[schemars(with = "[f64; 3]")]
+    pub position: DVec3,
+    /// In texels.
+    #[schemars(with = "[f64; 2]")]
+    pub texel: glam::DVec2,
+    /// Texels divided by the image size: 0..1 spans one repeat of the image.
+    #[schemars(with = "[f64; 2]")]
+    pub uv: glam::DVec2,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FaceUv {
+    pub face: ElementRef,
+    pub material: String,
+    pub defined: bool,
+    /// Image size in texels; 64x64 when the material has no image.
+    #[schemars(with = "[f64; 2]")]
+    pub size: glam::DVec2,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub texture_error: Option<String>,
+    pub attrs: editor_core::FaceAttrs,
+    #[schemars(with = "[f64; 3]")]
+    pub normal: DVec3,
+    /// The axes in use after rotation: explicit axes, or the ones derived from the normal.
+    pub axes: editor_core::UvAxes,
+    pub corners: Vec<CornerUv>,
+    #[schemars(with = "Option<[f64; 2]>")]
+    pub texel_min: Option<glam::DVec2>,
+    #[schemars(with = "Option<[f64; 2]>")]
+    pub texel_max: Option<glam::DVec2>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FaceUvList {
+    pub faces: Vec<FaceUv>,
 }

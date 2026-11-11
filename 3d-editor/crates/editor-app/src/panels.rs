@@ -1,9 +1,8 @@
 use std::collections::BTreeSet;
 
 use editor_core::{Document, LayerId, Object, ObjectId, ObjectKind, Properties, PropertyValue};
-use editor_render::material_rgb8;
 use egui::collapsing_header::CollapsingState;
-use egui::{Align, Color32, ComboBox, DragValue, Sense, Ui, vec2};
+use egui::{Align, ComboBox, DragValue, Ui};
 use glam::DVec3;
 
 use crate::tree::Tree;
@@ -52,22 +51,16 @@ pub enum Event {
         id: ObjectId,
         key: String,
     },
-    SetMaterial {
-        ids: Vec<ObjectId>,
-        material: String,
-    },
 }
 
 #[derive(Default)]
 pub struct Panels {
     tree: Option<(u64, Tree)>,
-    materials: Option<(u64, Vec<String>)>,
     seen_selection: BTreeSet<ObjectId>,
     reveal: Option<ObjectId>,
     clicked_here: bool,
     drag_serial: u64,
     drag_key: String,
-    new_material: String,
     new_key: String,
     new_value: String,
 }
@@ -88,7 +81,7 @@ fn label(doc: &Document, id: ObjectId) -> String {
             .map_or_else(|| id.to_string(), |x| format!("{}  {id}", x.classname)),
         ObjectId::Brush(_) => format!("brush  {id}"),
         ObjectId::Mesh(_) => format!("mesh  {id}"),
-        ObjectId::Camera(_) => id.to_string(),
+        ObjectId::Camera(_) | ObjectId::Material(_) => id.to_string(),
     }
 }
 
@@ -143,6 +136,7 @@ fn kind_name(kind: ObjectKind) -> &'static str {
         ObjectKind::Group => "group",
         ObjectKind::Layer => "layer",
         ObjectKind::Camera => "camera",
+        ObjectKind::Material => "material",
     }
 }
 
@@ -162,17 +156,6 @@ fn face_materials(object: &Object) -> Vec<&str> {
             .collect(),
         _ => Vec::new(),
     }
-}
-
-fn document_materials(doc: &Document) -> Vec<String> {
-    let mut names = BTreeSet::new();
-    for b in doc.brushes.values() {
-        names.extend(b.brush.faces.iter().map(|f| f.attrs.material.clone()));
-    }
-    for m in doc.meshes.values() {
-        names.extend(m.mesh.faces.iter().map(|f| f.attrs.material.clone()));
-    }
-    names.into_iter().collect()
 }
 
 impl Panels {
@@ -312,22 +295,17 @@ impl Panels {
         &mut self,
         ui: &mut Ui,
         doc: &Document,
-        revision: u64,
         selection: &BTreeSet<ObjectId>,
     ) -> Vec<Event> {
         let mut events = Vec::new();
         let ids: Vec<ObjectId> = selection.iter().copied().collect();
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            match ids.as_slice() {
-                [] => {
-                    ui.weak("Nothing selected");
-                }
-                [id] => self.single(ui, doc, *id, &mut events),
-                many => Self::several(ui, doc, many, &mut events),
+        match ids.as_slice() {
+            [] => {
+                ui.weak("Nothing selected");
             }
-            ui.add_space(8.0);
-            self.materials(ui, doc, revision, &ids, &mut events);
-        });
+            [id] => self.single(ui, doc, *id, &mut events),
+            many => Self::several(ui, doc, many, &mut events),
+        }
         events
     }
 
@@ -359,7 +337,12 @@ impl Panels {
         let layers: BTreeSet<Option<LayerId>> = ids
             .iter()
             .filter_map(|&id| doc.get(id))
-            .filter(|o| !matches!(o, Object::Layer(_) | Object::Camera(_)))
+            .filter(|o| {
+                !matches!(
+                    o,
+                    Object::Layer(_) | Object::Camera(_) | Object::Material(_)
+                )
+            })
             .map(|o| o.layer())
             .collect();
         let current = match layers.iter().collect::<Vec<_>>().as_slice() {
@@ -559,81 +542,6 @@ impl Panels {
             ui.weak(format!("{n} {}", kind_name(kind)));
         }
         Self::layer_combo(ui, doc, ids, events);
-    }
-
-    fn materials(
-        &mut self,
-        ui: &mut Ui,
-        doc: &Document,
-        revision: u64,
-        ids: &[ObjectId],
-        events: &mut Vec<Event>,
-    ) {
-        if self
-            .materials
-            .as_ref()
-            .is_none_or(|(rev, _)| *rev != revision)
-        {
-            self.materials = Some((revision, document_materials(doc)));
-        }
-        let names = self
-            .materials
-            .as_ref()
-            .map(|(_, n)| n.clone())
-            .unwrap_or_default();
-        let targets: Vec<ObjectId> = ids
-            .iter()
-            .copied()
-            .filter(|id| matches!(id, ObjectId::Brush(_) | ObjectId::Mesh(_)))
-            .collect();
-        let used: BTreeSet<String> = targets
-            .iter()
-            .filter_map(|&id| doc.get(id))
-            .flat_map(|o| {
-                face_materials(&o)
-                    .into_iter()
-                    .map(String::from)
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-        egui::CollapsingHeader::new("Materials")
-            .default_open(true)
-            .show(ui, |ui| {
-                if targets.is_empty() {
-                    ui.weak("Select brushes or meshes to assign a material");
-                }
-                for name in &names {
-                    ui.horizontal(|ui| {
-                        let [r, g, b] = material_rgb8(name);
-                        let (rect, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
-                        ui.painter()
-                            .rect_filled(rect, 2.0, Color32::from_rgb(r, g, b));
-                        let shown = if name.is_empty() { "(none)" } else { name };
-                        let response = ui.selectable_label(used.contains(name), shown);
-                        if response.clicked() && !targets.is_empty() {
-                            events.push(Event::SetMaterial {
-                                ids: targets.clone(),
-                                material: name.clone(),
-                            });
-                        }
-                    });
-                }
-                ui.horizontal(|ui| {
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.new_material)
-                            .desired_width(110.0)
-                            .hint_text("new material"),
-                    );
-                    let ready = !targets.is_empty() && !self.new_material.trim().is_empty();
-                    if ui.add_enabled(ready, egui::Button::new("Apply")).clicked() {
-                        events.push(Event::SetMaterial {
-                            ids: targets.clone(),
-                            material: self.new_material.trim().to_string(),
-                        });
-                        self.new_material.clear();
-                    }
-                });
-            });
     }
 }
 

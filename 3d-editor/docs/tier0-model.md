@@ -20,6 +20,7 @@ One document-wide counter, never reused, serialized with a kind prefix:
 | `g` | group |
 | `l` | layer |
 | `c` | camera |
+| `t` | material |
 
 Sub-elements have object-local numeric IDs, addressed with a path:
 
@@ -41,7 +42,7 @@ A face or vertex is addressed from an object with a path, parsed by `editor_core
 
 document → layers → (nested groups) → objects.
 
-- Every object except layers and cameras belongs to exactly one layer, including objects inside groups and brush entities.
+- Every object except layers, cameras and materials belongs to exactly one layer, including objects inside groups and brush entities.
 - Ownership is a parent pointer on the child (`layer`, `group`, `entity`), never a child list.
 - Groups carry no transform in Tier 0 (geometry is world-space, as in TrenchBroom). Linked groups add a transform in Tier 2.
 
@@ -59,7 +60,7 @@ Brushes, meshes, entities, groups and layers (not cameras) carry two flags, `hid
 Planes are the source of truth; vertices and edges are derived by `editor-geom`.
 
 - At least 4 faces.
-- Each face: a plane given by 3 points (clockwise seen from outside, the Quake convention: normal = (c − a) × (b − a); grid-aligned planes stay exact), a material, and UV attributes (offset, scale, rotation; projection axis chosen from the normal).
+- Each face: a plane given by 3 points (clockwise seen from outside, the Quake convention: normal = (c − a) × (b − a); grid-aligned planes stay exact), a material name, and UV attributes (offset, scale, rotation, optional explicit axes; see [materials.md](materials.md)).
 - Valid means: bounded, non-empty, no zero-area faces. Redundant planes are dropped on normalization.
 - Vertices have no ids, because every edit to the planes can reorder them. Commands that move them (`vertex.translate`) address a corner by its position.
 
@@ -99,7 +100,9 @@ Measured on random slanted brushes (cuboids cut by up to 4 random integer planes
 
 ## Material
 
-A name/path string on each face (e.g. `"base/concrete_01"`). Tier 0 renders a flat colour hashed from the name: FNV-1a 64 of the UTF-8 bytes, hue = hash mod 360, saturation 0.5, lightness 0.45 to 0.65 from bits 16 to 23. The empty name is grey. Point entities draw as 16-unit boxes coloured the same way from the classname.
+A material is a document object (`t42`, never selected or hidden) with a unique name, an optional image (absolute path, path relative to the scene file, or embedded base64) and properties: tint colour with alpha, emissive, roughness, metallic, filter, double-sided, unlit, nodraw. Faces refer to it **by name**; a name no material defines still draws, as a flat colour hashed from the name (FNV-1a 64 of the UTF-8 bytes, hue = hash mod 360, saturation 0.5, lightness 0.45 to 0.65 from bits 16 to 23; the empty name is grey). Point entities draw as 16-unit boxes coloured the same way from the classname.
+
+Each face also has UV attributes that place the image on it, and texture lock keeps them attached when geometry moves. The material system, its units, formulas and ops are described in [materials.md](materials.md).
 
 ## Camera
 
@@ -112,7 +115,7 @@ Named cameras saved in the document: position, yaw/pitch, fov — or orthographi
 
 ## Selection
 
-One shared editor selection. It is session state: not saved, not in undo history. An agent can read what the human selected and change it to point things out. Brushes, meshes, entities and groups can be selected (layers and cameras cannot). The session prunes the selection whenever objects disappear: after a delete, an undo or redo, or loading another file.
+One shared editor selection. It is session state: not saved, not in undo history. An agent can read what the human selected and change it to point things out. Brushes, meshes, entities and groups can be selected (layers, cameras and materials cannot). Faces have their own shared selection (`select.faces.*`), separate from this one, with the same lifetime. The session prunes the selection whenever objects disappear: after a delete, an undo or redo, or loading another file.
 
 ## Transform conventions
 

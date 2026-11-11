@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::{
     BrushId, BrushObject, Camera, CameraId, Entity, EntityId, Extra, Flags, Group, GroupId, Layer,
-    LayerId, MeshId, MeshObject, Object, ObjectId, Properties,
+    LayerId, Material, MaterialId, MeshId, MeshObject, Object, ObjectId, Properties,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -30,6 +30,7 @@ pub struct Document {
     pub layers: BTreeMap<LayerId, Layer>,
     pub groups: BTreeMap<GroupId, Group>,
     pub cameras: BTreeMap<CameraId, Camera>,
+    pub materials: BTreeMap<MaterialId, Material>,
     pub entities: BTreeMap<EntityId, Entity>,
     pub brushes: BTreeMap<BrushId, BrushObject>,
     pub meshes: BTreeMap<MeshId, MeshObject>,
@@ -46,6 +47,7 @@ impl Document {
             layers: BTreeMap::new(),
             groups: BTreeMap::new(),
             cameras: BTreeMap::new(),
+            materials: BTreeMap::new(),
             entities: BTreeMap::new(),
             brushes: BTreeMap::new(),
             meshes: BTreeMap::new(),
@@ -66,6 +68,10 @@ impl Document {
             },
         );
         doc
+    }
+
+    pub fn material_by_name(&self, name: &str) -> Option<&Material> {
+        self.materials.values().find(|m| m.name == name)
     }
 
     pub fn alloc_id(&mut self) -> u64 {
@@ -90,6 +96,7 @@ impl Document {
             ObjectId::Group(i) => self.groups.get(&i).cloned().map(Object::Group),
             ObjectId::Layer(i) => self.layers.get(&i).cloned().map(Object::Layer),
             ObjectId::Camera(i) => self.cameras.get(&i).cloned().map(Object::Camera),
+            ObjectId::Material(i) => self.materials.get(&i).cloned().map(Object::Material),
         }
     }
 
@@ -101,6 +108,7 @@ impl Document {
             ObjectId::Group(i) => self.groups.contains_key(&i),
             ObjectId::Layer(i) => self.layers.contains_key(&i),
             ObjectId::Camera(i) => self.cameras.contains_key(&i),
+            ObjectId::Material(i) => self.materials.contains_key(&i),
         }
     }
 
@@ -112,6 +120,7 @@ impl Document {
             Object::Group(o) => self.groups.insert(o.id, o).map(Object::Group),
             Object::Layer(o) => self.layers.insert(o.id, o).map(Object::Layer),
             Object::Camera(o) => self.cameras.insert(o.id, o).map(Object::Camera),
+            Object::Material(o) => self.materials.insert(o.id, o).map(Object::Material),
         }
     }
 
@@ -123,6 +132,7 @@ impl Document {
             ObjectId::Group(i) => self.groups.remove(&i).map(Object::Group),
             ObjectId::Layer(i) => self.layers.remove(&i).map(Object::Layer),
             ObjectId::Camera(i) => self.cameras.remove(&i).map(Object::Camera),
+            ObjectId::Material(i) => self.materials.remove(&i).map(Object::Material),
         }
     }
 
@@ -131,6 +141,7 @@ impl Document {
         ids.extend(self.layers.keys().map(|&i| ObjectId::from(i)));
         ids.extend(self.groups.keys().map(|&i| ObjectId::from(i)));
         ids.extend(self.cameras.keys().map(|&i| ObjectId::from(i)));
+        ids.extend(self.materials.keys().map(|&i| ObjectId::from(i)));
         ids.extend(self.entities.keys().map(|&i| ObjectId::from(i)));
         ids.extend(self.brushes.keys().map(|&i| ObjectId::from(i)));
         ids.extend(self.meshes.keys().map(|&i| ObjectId::from(i)));
@@ -142,6 +153,7 @@ impl Document {
         self.layers.len()
             + self.groups.len()
             + self.cameras.len()
+            + self.materials.len()
             + self.entities.len()
             + self.brushes.len()
             + self.meshes.len()
@@ -169,7 +181,7 @@ impl Document {
                 let o = self.groups.get(&i)?;
                 (None, o.parent, Some(o.layer))
             }
-            ObjectId::Layer(_) | ObjectId::Camera(_) => (None, None, None),
+            ObjectId::Layer(_) | ObjectId::Camera(_) | ObjectId::Material(_) => (None, None, None),
         })
     }
 
@@ -181,7 +193,7 @@ impl Document {
             ObjectId::Entity(i) => self.entities.get(&i).map(|o| o.flags),
             ObjectId::Group(i) => self.groups.get(&i).map(|o| o.flags),
             ObjectId::Layer(i) => self.layers.get(&i).map(|o| o.flags),
-            ObjectId::Camera(_) => None,
+            ObjectId::Camera(_) | ObjectId::Material(_) => None,
         }
     }
 

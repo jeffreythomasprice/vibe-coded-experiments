@@ -112,15 +112,13 @@ Detailed specs: [tier0-model.md](tier0-model.md) (object kinds, IDs), [tier0-com
 
 - **Clip tool:** keep-front / keep-back / split; snaps to faces in 3D, to the grid in 2D. Built in the GUI (key `7`): a local preview from `clip_brush`, applied as one `brush.clip`; see `docs/gui.md`.
 - **Vertex, edge and face tools:** move components; vertex fusing; face chopping so brushes never go concave.
-  - Built as commands: `vertex.translate` and `face.translate` work on brushes by rebuilding the convex hull of the moved corners (`editor_geom::move_brush_vertices`). The GUI has vertex, edge and face tools (keys 6, 8, 9) that drag corners, edge midpoints and face centres in every view, sent as `vertex.translate`; see `docs/gui.md`. UV lock during these edits is still open.
+  - Built as commands: `vertex.translate` and `face.translate` work on brushes by rebuilding the convex hull of the moved corners (`editor_geom::move_brush_vertices`). The GUI has vertex, edge and face tools (keys 6, 8, 9) that drag corners, edge midpoints and face centres in every view, sent as `vertex.translate`; see `docs/gui.md`. Texture lock keeps face UVs on the geometry through these edits and through transforms; see `docs/materials.md`.
 - **CSG:** `csg.subtract`, `csg.union` (convex merge for brushes), `csg.intersect` and `csg.hollow` are built; see `docs/tier0-commands.md`.
 - **Entities:** point entities and brush entities; entity definitions (our own schema file, or optional FGD import) driving classnames, property types and defaults; entity browser with drag-and-drop.
 - **Entity links:** visualize `target`-style references as lines in the viewport.
 - **Groups** (nestable, open/close with lock semantics) and **layers** (hide, lock, omit from export).
 - **Hide / isolate / lock / show all** (all undoable). Built: `object.set_hidden`, `set_locked`, `isolate`, `show_all`, `unlock_all`, saved in the scene file; locks are enforced for every op in one place. Group open/close is GUI-only state.
-- **Materials:** material browser, per-face material assignment, face attribute editor (offset, scale, rotation).
-  - For now a material is a name, a string on each face. The viewport colours faces with `editor_render::material_rgb8`, and the GUI lists the names in use and assigns one to the selected brushes and meshes with `face.set_material`.
-  - Texture images, UVs on screen and a materials directory wait for per-project config.
+- **Materials:** material browser, per-face material assignment, face attribute editor (offset, scale, rotation). Built: materials are document objects with an image (absolute, relative to the scene file, or embedded) and tint, emissive, roughness, metallic, filter and flags; faces have UVs with optional explicit axes, texture lock, `face.align_uv` / `face.transfer_uv` / `face.get_uv`, a shared face selection, textured rendering and a Surface tool plus inspector panels in the GUI. See `docs/materials.md`. A materials directory and search paths still wait for per-project config.
 - **Clipboard:** copy/paste (in place or at cursor), duplicate.
 - **Save/load robustness:** autosave and backups.
 
@@ -128,7 +126,7 @@ Detailed specs: [tier0-model.md](tier0-model.md) (object kinds, IDs), [tier0-com
 
 - **Shape tools:** stairs, arch, cylinder, cone, spheroids; complex-shape tool (convex hull from clicked points).
 - **Extrude** (drag a face along its normal, with split mode) and **sweep** (arc / straight / S-bend path).
-- **UV editor:** drag offset/scale/rotate, auto-fit, align/justify, UV lock during vertex/face edits, auto-alignment on new faces.
+- **UV editor:** drag offset/scale/rotate in the viewport, a UV-space view, auto-alignment on new faces and re-fitting through clip and CSG. (Fit, justify, flip, wrap and texture lock for transforms and vertex/face edits are built.)
 - **Linked groups:** duplicates that stay in sync, with per-property protection.
 - **Command repetition** (macro-like "do that again", e.g. stairs by duplicate-move-rotate).
 - **Issue browser:** live list of problems with quick fixes and click-to-select.

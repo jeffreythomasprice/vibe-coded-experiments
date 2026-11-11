@@ -24,6 +24,8 @@ cameras (viewport.persp, viewport.top, viewport.front, viewport.side) with the `
 to object ids; adjust; history_commit (or history_rollback). Errors are structured: read `code`, `hint` and \
 `field`. Use dry_run on a mutation to preview it. Changes only reach disk with file_save.
 
+Materials and textures: a face names a material (face_set_material); material_create defines it, with an image given as a file (store relative to the scene file, absolute, or embed) or as base64 bytes, plus color, emissive, roughness, metallic and flags. Save the scene before using relative paths (file_save). Align textures with face_align_uv (fit, justify, flip, reset; as_group continues one image across several faces), face_set_uv (offset in texels, scale in world units per texel, rotation in degrees; mode relative nudges), face_transfer_uv (copy or wrap an image onto neighbouring faces). Check the result numerically with face_get_uv (corner texels and uvs) and visually with view_screenshot (draws the images; textures false for flat colours). Transforms and vertex moves keep textures attached to the geometry unless texture_lock is false. select_faces_set/get share the face selection with the GUI.
+
 In `batch`, items are {op, args, as?}; op names may be dotted or underscored. Reference earlier results as \"$name\" (the item's `as`), \"$N\", \"$name.ids[k]\" or \"$name/v2\" (a vertex or face of a created mesh).
 
 Tools you cannot see are not enabled: mutating tools need the server started with --allow-mutate and \

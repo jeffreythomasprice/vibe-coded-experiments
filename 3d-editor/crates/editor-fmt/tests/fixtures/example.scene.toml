@@ -1,5 +1,5 @@
 format = "scene"
-version = 1
+version = 2
 
 [meta]
 name = "example"
@@ -10,6 +10,23 @@ sky = "sky/overcast"
 
 [editor]
 grid = 16
+
+[[material]]
+id = "t18"
+name = "base/trim"
+texture = { path = "textures/trim.png" }
+color = [1, 0.5, 0.25, 1]
+roughness = 0.5
+filter = "nearest"
+double_sided = true
+
+[[material]]
+id = "t19"
+name = "base/dot"
+texture = { format = "png", base64 = "iVBORw0KGgo=" }
+emissive = [0.25, 0, 0]
+emissive_strength = 2
+unlit = true
 
 [[layer]]
 id = "l1"
@@ -78,5 +95,5 @@ vertices = [
   { id = 4, p = [0, 32, 0] },
 ]
 faces = [
-  { id = 1, verts = [1, 2, 3, 4], material = "base/trim" },
+  { id = 1, verts = [1, 2, 3, 4], material = "base/trim", u_axis = [1, 0, 0], v_axis = [0, 1, 0] },
 ]

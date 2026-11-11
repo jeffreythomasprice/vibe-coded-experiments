@@ -9,7 +9,7 @@ pub use read::read;
 pub use write::write;
 
 pub const FORMAT: &str = "scene";
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 fn migrate(_root: &mut toml::Table, from: u32) {
     debug_assert!(from <= VERSION);

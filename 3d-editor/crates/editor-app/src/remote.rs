@@ -4,7 +4,7 @@ use std::path::Path;
 use editor_cmd::args::Attach;
 use editor_cmd::results::SessionAttached;
 use editor_cmd::{CommandError, ErrorResponse, Request, Response, Success};
-use editor_core::{Document, ObjectId};
+use editor_core::{Document, FaceId, ObjectId};
 use editor_proto::{
     Client, ClientError, Config, ConfigError, FileInfo, HistoryInfo, ServerEvent, WakeFn,
 };
@@ -26,6 +26,7 @@ pub struct Remote {
     client: Client,
     pub doc: Document,
     pub selection: BTreeSet<ObjectId>,
+    pub face_selection: BTreeSet<(ObjectId, FaceId)>,
     pub revision: u64,
     pub file: FileInfo,
     pub history: HistoryInfo,
@@ -50,6 +51,7 @@ impl Remote {
             client,
             doc: Document::new("untitled"),
             selection: BTreeSet::new(),
+            face_selection: BTreeSet::new(),
             revision: 0,
             file: FileInfo {
                 path: None,
@@ -115,6 +117,7 @@ impl Remote {
                 ServerEvent::Snapshot(s) => {
                     self.doc = editor_fmt::read(&s.document_toml)?;
                     self.selection = s.selection.into_iter().collect();
+                    self.face_selection = face_set(s.face_selection);
                     self.revision = s.revision;
                     self.file = s.file;
                     self.history = s.history;
@@ -129,6 +132,9 @@ impl Remote {
                     }
                     if let Some(selection) = c.selection {
                         self.selection = selection.into_iter().collect();
+                    }
+                    if let Some(faces) = c.face_selection {
+                        self.face_selection = face_set(faces);
                     }
                     if let Some(file) = c.file {
                         self.file = file;
@@ -152,4 +158,13 @@ impl Remote {
             .filter(|t| t.conn != self.client.conn())
             .map(|t| (t.holder.as_str(), t.label.as_str()))
     }
+}
+
+fn face_set(refs: Vec<editor_core::ElementRef>) -> BTreeSet<(ObjectId, FaceId)> {
+    refs.into_iter()
+        .filter_map(|r| match r.part {
+            editor_core::Part::Face(f) => Some((r.object, f)),
+            _ => None,
+        })
+        .collect()
 }

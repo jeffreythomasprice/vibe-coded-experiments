@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
 
 use editor_core::{Document, Object, ObjectId};
 
@@ -14,6 +15,7 @@ pub struct Ctx<'a> {
     doc: &'a mut Document,
     journal: &'a mut Journal,
     selection: &'a BTreeSet<ObjectId>,
+    scene_dir: Option<PathBuf>,
 }
 
 impl<'a> Ctx<'a> {
@@ -26,7 +28,18 @@ impl<'a> Ctx<'a> {
             doc,
             journal,
             selection,
+            scene_dir: None,
         }
+    }
+
+    pub fn with_scene_dir(mut self, dir: Option<PathBuf>) -> Self {
+        self.scene_dir = dir;
+        self
+    }
+
+    /// The directory of the scene file; `None` until the scene is saved.
+    pub fn scene_dir(&self) -> Option<&Path> {
+        self.scene_dir.as_deref()
     }
 
     pub fn selection(&self) -> &BTreeSet<ObjectId> {

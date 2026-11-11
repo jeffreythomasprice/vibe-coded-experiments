@@ -47,14 +47,14 @@ Client to server:
 
 Server to client:
 - `{"type":"reply","id":N,"response":{...},"png_base64"?}`. `response` is the typed [envelope](tier0-commands.md#envelope) (`Success` or `ErrorResponse`); the shape of a success `result` is the op's `result_schema`. The hello reply carries `HelloResult {conn, protocol}`.
-- `{"type":"snapshot","session","revision","document_toml","selection","file":{path,name,dirty},"history":{can_undo,can_redo,transaction:{holder,conn,label}|null}}`: the whole document in the [scene format](scene-format.md). Sent on attach, and again when `file.open` / `file.new` replace the document.
-- `{"type":"changed","session","revision","upsert":[Object],"deleted":[id],"selection"?,"file"?,"history"?}`: the objects whose content changed (full JSON, as in `scene.get`), the ids that are gone, and whichever of selection, file state and history state changed. It covers every cause alike: a commit, an edit inside an open transaction, a rollback, undo, redo.
+- `{"type":"snapshot","session","revision","document_toml","selection","face_selection","file":{path,name,dirty},"history":{can_undo,can_redo,transaction:{holder,conn,label}|null}}`: the whole document in the [scene format](scene-format.md). Sent on attach, and again when `file.open` / `file.new` replace the document.
+- `{"type":"changed","session","revision","upsert":[Object],"deleted":[id],"selection"?,"face_selection"?,"file"?,"history"?}`: the objects whose content changed (full JSON, as in `scene.get`), the ids that are gone, and whichever of selection, file state and history state changed. It covers every cause alike: a commit, an edit inside an open transaction, a rollback, undo, redo.
 
 Events go to every connection attached to the session, the sender included. A client holding a replica applies snapshots by replacement and `changed` by insert and remove; `revision` is the session revision after the change.
 
 ## Sessions
 
-A session is a document, its file path, selection, undo history and revision. The hub keys them `s1`, `s2`...
+A session is a document, its file path, selection and face selection, undo history and revision. The hub keys them `s1`, `s2`...
 
 - A connection starts with no session; every op other than `session.*` fails until it attaches.
 - `session.attach {id | path, create?}`: by `path` it joins the session that has that file open (paths are canonicalized), else loads the file; `create` writes a new scene there when it is missing (a missing file without `create` is an `Io` error). With neither argument it joins the **focused** session, creating an in-memory `untitled` one if there is none. The result is the session row plus `created: true` when this call made the session. Attaching again switches sessions; the connection's open transaction in the old one is rolled back.

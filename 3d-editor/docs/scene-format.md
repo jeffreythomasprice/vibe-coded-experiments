@@ -6,11 +6,11 @@ Plain-text, git-diffable, versioned. See [model](tier0-model.md) for what the re
 
 Extension `.scene.toml`. A single file in Tier 0.
 
-1. `format = "scene"`, `version = 1`
+1. `format = "scene"`, `version = 2`
 2. `[meta]` — `name`, `next_id`
 3. `[world]` — world properties
 4. `[editor]` — grid size and other editor metadata
-5. Arrays of tables in fixed order, each sorted by numeric ID: `[[layer]]`, `[[group]]`, `[[camera]]`, `[[entity]]`, `[[brush]]`, `[[mesh]]`
+5. Arrays of tables in fixed order, each sorted by numeric ID: `[[material]]`, `[[layer]]`, `[[group]]`, `[[camera]]`, `[[entity]]`, `[[brush]]`, `[[mesh]]`
 
 Layers, groups, entities, brushes and meshes take optional `hidden = true` and `locked = true` (written only when true; they apply to everything the object contains), and a layer also `omit_from_export = true`. A file without them loads unchanged, so these did not bump `version`.
 
@@ -45,7 +45,27 @@ faces = [
 
 Plane points use the Quake/TrenchBroom convention: clockwise seen from outside, normal = (c − a) × (b − a), so the first example point set `[[0,0,64],[0,64,64],[64,0,64]]` is a top face.
 
-Face keys: `id`, `plane` (brush) or `verts` (mesh), `material`, then optional `offset`, `scale`, `rotation`. Unknown keys inside a face or vertex table are a load error (only whole records keep unknown keys).
+Face keys: `id`, `plane` (brush) or `verts` (mesh), `material`, then optional `offset`, `scale`, `rotation`, `u_axis`, `v_axis`. The axes come as a pair; one without the other is a load error. Unknown keys inside a face or vertex table are a load error (only whole records keep unknown keys).
+
+## Materials
+
+```toml
+[[material]]
+id = "t7"
+name = "base/brick"
+texture = { path = "../tex/brick.png" }        # or an absolute path, or { format = "png", base64 = "iVBOR…" }
+color = [1, 0.9, 0.8, 1]
+emissive = [0.25, 0, 0]
+emissive_strength = 2
+roughness = 0.5
+metallic = 0.25
+filter = "nearest"
+double_sided = true
+unlit = true
+nodraw = true
+```
+
+Keys, in this order: `id`, `name`, `texture`, `color`, `emissive`, `emissive_strength`, `roughness`, `metallic`, `filter`, `double_sided`, `unlit`, `nodraw`; defaults are omitted (`color = [1,1,1,1]`, no emission, `roughness = 1`, `metallic = 0`, `filter = "linear"`, flags false). A relative `texture.path` is relative to the directory of the scene file; embedded `base64` is the image file's bytes (formats `png`, `jpeg`, `tga`, `bmp`). A face refers to a material by `name`; a name no `[[material]]` defines still loads. Names are unique (`DuplicateMaterialName`). Unknown keys in a material record are kept, like other records. See [materials.md](materials.md).
 
 ## Cameras and properties
 
@@ -71,9 +91,11 @@ Face keys: `id`, `plane` (brush) or `verts` (mesh), `material`, then optional `o
 
 Load as `toml::Table`, apply migrations v(N)→v(N+1), then deserialize into typed structs. Always write the latest version. Refuse files newer than supported.
 
+- **Version 2** added `[[material]]` records and face `u_axis`/`v_axis`. Version 1 files load unchanged (the migration is a no-op); they are written as version 2 on the next save, and older readers refuse them with `UnsupportedVersion`.
+
 ## Loader errors
 
-A specific enum with the offending record ID: `Parse`, `UnsupportedVersion`, `DuplicateId` (also for a repeated face or vertex ID, reported as `b8/f3`), `DanglingReference`, `GroupCycle`, `InvalidGeometry` (a brush that is not bounded or has degenerate planes; a mesh with error-level issues; mesh warnings do not fail a load). Loading never rewrites geometry.
+A specific enum with the offending record ID: `Parse`, `UnsupportedVersion`, `DuplicateId` (also for a repeated face or vertex ID, reported as `b8/f3`), `DuplicateMaterialName`, `DanglingReference`, `GroupCycle`, `InvalidGeometry` (a brush that is not bounded or has degenerate planes; a mesh with error-level issues; mesh warnings do not fail a load). Loading never rewrites geometry.
 
 ## Worked example
 
@@ -81,7 +103,7 @@ A small room, a door brush entity, a light, a player start, a donut-style mesh a
 
 ```toml
 format = "scene"
-version = 1
+version = 2
 
 [meta]
 name = "example"

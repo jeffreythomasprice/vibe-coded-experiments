@@ -190,6 +190,61 @@ pub fn validate_doc(ctx: &Ctx) -> Vec<Issue> {
         }
     }
 
+    for m in doc.materials.values() {
+        if let Some(source) = &m.texture
+            && let Err(e) = crate::texture::source_size(source, ctx.scene_dir())
+        {
+            issues.push(Issue {
+                code: "texture_unreadable",
+                severity: "error",
+                ids: vec![m.id.into()],
+                elements: vec![],
+                message: format!("{} ({:?}): {e}", m.id, m.name),
+                hint: "fix the path with material.set, or re-create the image file",
+            });
+        }
+    }
+    let mut undefined: std::collections::BTreeMap<&str, Vec<ObjectId>> = Default::default();
+    for (id, material) in doc
+        .brushes
+        .values()
+        .flat_map(|b| {
+            b.brush
+                .faces
+                .iter()
+                .map(move |f| (ObjectId::from(b.id), f.attrs.material.as_str()))
+        })
+        .chain(doc.meshes.values().flat_map(|m| {
+            m.mesh
+                .faces
+                .iter()
+                .map(move |f| (ObjectId::from(m.id), f.attrs.material.as_str()))
+        }))
+    {
+        if !material.is_empty() && doc.material_by_name(material).is_none() {
+            let ids = undefined.entry(material).or_default();
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+    }
+    for (name, ids) in undefined {
+        issues.push(Issue {
+            code: "undefined_material",
+            severity: "warning",
+            message: format!(
+                "material {name:?} is used by {} but not defined",
+                ids.iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            ids,
+            elements: vec![],
+            hint: "define it with material.create, or change the faces with face.set_material",
+        });
+    }
+
     let targetnames: BTreeSet<&str> = doc
         .entities
         .values()

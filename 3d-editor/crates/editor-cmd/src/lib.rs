@@ -6,6 +6,7 @@ mod envelope;
 mod error;
 mod history;
 mod session;
+pub mod texture;
 
 pub use bounds::{bounds_json, extent, object_bounds, scene_bounds};
 pub use commands::results;
@@ -24,9 +25,15 @@ pub mod args {
     pub use crate::commands::brush::Axis;
     pub use crate::commands::brush::{Clip, CreateBox, Keep};
     pub use crate::commands::entity::{SetClassname, SetProperties, SetTransform};
-    pub use crate::commands::face::{BrushVertexAt, SetMaterial, TranslateVertices};
+    pub use crate::commands::face::{BrushVertexAt, SetMaterial, SetUv, TranslateVertices, UvMode};
+    pub use crate::commands::material::{
+        Create, Delete as DeleteMaterial, Embed, Rename as RenameMaterial, Set, Store, TextureInput,
+    };
     pub use crate::commands::object::{Delete, Rename, SetLayer};
-    pub use crate::commands::session_args::{Attach, Save, SelectIds, SelectKind};
+    pub use crate::commands::session_args::{Attach, Save, SelectFaces, SelectIds, SelectKind};
+    pub use crate::commands::surface::{
+        AlignAction, AlignUv, Anchor, FitAxes, ResetTo, TransferMode, TransferUv, UvAxis,
+    };
     pub use crate::commands::transform::{
         AxisArg, Factors, Flip, Pivot, PivotName, Rotate, Scale, Translate,
     };

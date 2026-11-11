@@ -276,3 +276,43 @@ fn file_save_derives_name_from_path() {
     assert_eq!(s.document().name, "hall");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn face_selection_is_separate_from_object_selection_and_pruned() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
+    let b = make_box(&mut s, [16, 0, 0], [24, 8, 8]);
+    ok(&exec(&mut s, "select.set", json!({ "ids": [b] })));
+    let r = exec(
+        &mut s,
+        "select.faces.set",
+        json!({ "faces": [format!("{a}/f1"), format!("{a}/f2")] }),
+    );
+    assert_eq!(ok(&r)["result"]["count"], 2);
+    assert_eq!(exec(&mut s, "select.get", json!({}))["result"]["count"], 1);
+    let r = exec(&mut s, "select.faces.add", json!({ "faces": [b] }));
+    assert_eq!(ok(&r)["result"]["count"], 8);
+    let r = exec(&mut s, "select.faces.remove", json!({ "faces": [b] }));
+    assert_eq!(ok(&r)["result"]["count"], 2);
+    assert_eq!(
+        err_code(&exec(
+            &mut s,
+            "select.faces.set",
+            json!({ "faces": [format!("{a}/f99")] })
+        )),
+        "NotFound"
+    );
+    assert_eq!(
+        err_code(&exec(
+            &mut s,
+            "select.faces.set",
+            json!({ "faces": [format!("{a}/v1")] })
+        )),
+        "InvalidArgument"
+    );
+    ok(&exec(&mut s, "object.delete", json!({ "ids": [a] })));
+    assert_eq!(
+        exec(&mut s, "select.faces.get", json!({}))["result"]["count"],
+        0
+    );
+}

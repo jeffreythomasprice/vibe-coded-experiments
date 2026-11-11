@@ -42,6 +42,7 @@ fn typed_args_are_accepted_by_the_ops() {
         &Translate {
             ids,
             delta: DVec3::new(16.0, 0.0, 0.0),
+            texture_lock: None,
         },
     ));
 }

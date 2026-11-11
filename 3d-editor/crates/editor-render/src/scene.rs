@@ -1,27 +1,36 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::path::Path;
+use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
 use editor_cmd::ColorMode;
-use editor_core::{Document, ObjectId};
+use editor_core::{Document, FaceAttrs, FaceId, ObjectId};
 use editor_geom::mesh::triangulate;
 use editor_geom::winding::newell;
 use editor_geom::{Aabb, brush_geometry};
 use glam::DVec3;
 
 use crate::color::{material_rgb8, to_f32};
+use crate::texture::{RenderMaterial, TextureCache};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct Vertex {
     pub pos: [f32; 3],
     pub color: [f32; 4],
+    pub uv: [f32; 2],
 }
 
 impl Vertex {
     pub fn new(p: DVec3, color: [f32; 3]) -> Self {
+        Self::textured(p, color, [0.0, 0.0])
+    }
+
+    pub fn textured(p: DVec3, color: [f32; 3], uv: [f32; 2]) -> Self {
         Self {
             pos: [p.x as f32, p.y as f32, p.z as f32],
             color: [color[0], color[1], color[2], 1.0],
+            uv,
         }
     }
 }
@@ -44,16 +53,51 @@ pub struct Drawn {
     pub bounds: Aabb,
 }
 
+/// Triangles drawn with one material; `None` is the plain flat-coloured kind.
+pub struct FaceBatch {
+    pub material: Option<Arc<RenderMaterial>>,
+    pub verts: Vec<Vertex>,
+}
+
 #[derive(Default)]
 pub struct Scene {
-    pub tris: Vec<Vertex>,
+    pub faces: Vec<FaceBatch>,
     pub edges: Vec<Vertex>,
     pub highlight_edges: Vec<Vertex>,
     pub drawn: Vec<Drawn>,
     pub id_tris: Vec<Vertex>,
     pub legend_faces: BTreeMap<String, [u8; 3]>,
     pub legend_entities: BTreeMap<String, ([u8; 3], &'static str)>,
+    pub legend_textures: BTreeSet<String>,
     pub warnings: Vec<String>,
+}
+
+impl Scene {
+    fn batch(&mut self, material: &Option<Arc<RenderMaterial>>) -> &mut Vec<Vertex> {
+        let at = self
+            .faces
+            .iter()
+            .position(|b| match (&b.material, material) {
+                (None, None) => true,
+                (Some(a), Some(b)) => a.id == b.id,
+                _ => false,
+            });
+        let at = at.unwrap_or_else(|| {
+            self.faces.push(FaceBatch {
+                material: material.clone(),
+                verts: Vec::new(),
+            });
+            self.faces.len() - 1
+        });
+        &mut self.faces[at].verts
+    }
+}
+
+/// Where material images come from; without it faces keep their flat colours.
+#[derive(Clone, Copy)]
+pub struct TextureInputs<'a> {
+    pub cache: &'a TextureCache,
+    pub scene_dir: Option<&'a Path>,
 }
 
 pub struct SceneOptions<'a> {
@@ -65,6 +109,8 @@ pub struct SceneOptions<'a> {
     pub colors: ColorMode,
     pub overrides: &'a HashMap<String, [u8; 3]>,
     pub want_ids: bool,
+    pub textures: Option<TextureInputs<'a>>,
+    pub face_tint: &'a BTreeSet<(ObjectId, FaceId)>,
 }
 
 pub fn id_color(code: u32) -> [f32; 3] {
@@ -108,6 +154,7 @@ fn face_color(
 const LIGHT: DVec3 = DVec3::new(0.35, -0.5, 0.8);
 pub const HIGHLIGHT_COLOR: [f32; 3] = [1.0, 0.85, 0.2];
 pub const SELECTION_COLOR: [f32; 3] = [0.2, 0.85, 1.0];
+pub const FACE_SELECTION_COLOR: [f32; 3] = [1.0, 0.45, 0.1];
 const DARK_EDGE_SCALE: f32 = 0.25;
 const ENTITY_HALF: f64 = 8.0;
 
@@ -117,6 +164,9 @@ struct Poly {
     tris: Vec<[usize; 3]>,
     normal: DVec3,
     rgb: [u8; 3],
+    material: Option<Arc<RenderMaterial>>,
+    uvs: Vec<[f32; 2]>,
+    face_selected: bool,
 }
 
 fn shade(rgb: [f32; 3], normal: DVec3, shading: Shading) -> [f32; 3] {
@@ -144,16 +194,39 @@ fn emit(scene: &mut Scene, polys: &[Poly], tint: Option<[f32; 3]>, opts: &SceneO
                 }
             }
         }
-        let mut base = to_f32(poly.rgb);
+        let mut base = match &poly.material {
+            Some(_) => [1.0; 3],
+            None => to_f32(poly.rgb),
+        };
         if let Some(tint) = tint {
             base = mix(base, tint, 0.5);
         }
+        if poly.face_selected {
+            base = mix(base, FACE_SELECTION_COLOR, 0.55);
+        }
         if opts.draw_faces {
-            let color = shade(base, poly.normal, opts.shading);
+            let shading = match &poly.material {
+                Some(m) if m.unlit => Shading::Flat,
+                _ => opts.shading,
+            };
+            let color = shade(base, poly.normal, shading);
+            let out = scene.batch(&poly.material);
             for t in &poly.tris {
                 for &i in t {
-                    scene.tris.push(Vertex::new(poly.pts[i], color));
+                    let uv = poly.uvs.get(i).copied().unwrap_or([0.0, 0.0]);
+                    out.push(Vertex::textured(poly.pts[i], color, uv));
                 }
+            }
+        }
+        if poly.face_selected {
+            let n = poly.pts.len();
+            for i in 0..n {
+                scene
+                    .highlight_edges
+                    .push(Vertex::new(poly.pts[i], FACE_SELECTION_COLOR));
+                scene
+                    .highlight_edges
+                    .push(Vertex::new(poly.pts[(i + 1) % n], FACE_SELECTION_COLOR));
             }
         }
     }
@@ -216,12 +289,97 @@ fn box_polys(bounds: &Aabb, rgb: [u8; 3]) -> Vec<Poly> {
             tris: vec![[0, 1, 2], [0, 2, 3]],
             normal: *normal,
             rgb,
+            material: None,
+            uvs: Vec::new(),
+            face_selected: false,
+        })
+        .collect()
+}
+
+/// How one face is drawn: with a material's image and properties, or as a flat colour.
+struct FaceLook {
+    rgb: [u8; 3],
+    material: Option<Arc<RenderMaterial>>,
+}
+
+struct Looks<'a> {
+    doc: &'a Document,
+    opts: &'a SceneOptions<'a>,
+    materials: HashMap<String, Option<Arc<RenderMaterial>>>,
+}
+
+impl Looks<'_> {
+    fn material(&mut self, name: &str, scene: &mut Scene) -> Option<Arc<RenderMaterial>> {
+        if name.is_empty() {
+            return None;
+        }
+        if let Some(hit) = self.materials.get(name) {
+            return hit.clone();
+        }
+        let found = self.build(name, scene);
+        self.materials.insert(name.to_string(), found.clone());
+        found
+    }
+
+    fn build(&self, name: &str, scene: &mut Scene) -> Option<Arc<RenderMaterial>> {
+        let inputs = self.opts.textures?;
+        if self.opts.colors != ColorMode::Material || self.opts.overrides.contains_key(name) {
+            return None;
+        }
+        let material = self.doc.material_by_name(name)?;
+        let mut problem = None;
+        let built = inputs
+            .cache
+            .material(material, inputs.scene_dir, &mut problem);
+        scene.warnings.extend(problem);
+        Some(Arc::new(built))
+    }
+
+    fn look(&mut self, scene: &mut Scene, name: &str, normal: DVec3, layer: &str) -> FaceLook {
+        match self.material(name, scene) {
+            Some(m) => {
+                let rgb = if m.texture.is_some() {
+                    scene.legend_textures.insert(name.to_string());
+                    material_rgb8(name)
+                } else {
+                    let rgb = [0, 1, 2].map(|i| (m.tint[i] * 255.0).round() as u8);
+                    scene.legend_faces.insert(name.to_string(), rgb);
+                    rgb
+                };
+                FaceLook {
+                    rgb,
+                    material: Some(m),
+                }
+            }
+            None => FaceLook {
+                rgb: face_color(self.opts, &mut scene.legend_faces, name, normal, layer),
+                material: None,
+            },
+        }
+    }
+}
+
+fn face_uvs(look: &FaceLook, attrs: &FaceAttrs, normal: DVec3, pts: &[DVec3]) -> Vec<[f32; 2]> {
+    let Some(m) = &look.material else {
+        return Vec::new();
+    };
+    let (w, h) = m.size();
+    let map = editor_geom::uv::texel_map(attrs, normal);
+    pts.iter()
+        .map(|&p| {
+            let t = map.texel(p);
+            [(t.x / w) as f32, (t.y / h) as f32]
         })
         .collect()
 }
 
 pub fn build_scene(doc: &Document, opts: &SceneOptions) -> Scene {
     let mut scene = Scene::default();
+    let mut looks = Looks {
+        doc,
+        opts,
+        materials: HashMap::new(),
+    };
 
     for brush in doc.brushes.values() {
         let id = ObjectId::from(brush.id);
@@ -236,32 +394,29 @@ pub fn build_scene(doc: &Document, opts: &SceneOptions) -> Scene {
                 continue;
             }
         };
-        let polys: Vec<Poly> = geo
-            .faces
-            .iter()
-            .map(|f| {
-                let material = brush
-                    .brush
-                    .faces
-                    .iter()
-                    .find(|b| b.id == f.face)
-                    .map_or("", |b| b.attrs.material.as_str());
-                let n = f.loop_.len();
-                Poly {
-                    pts: geo.face_positions(f),
-                    keys: f.loop_.clone(),
-                    tris: (1..n.saturating_sub(1)).map(|i| [0, i, i + 1]).collect(),
-                    normal: f.plane.normal,
-                    rgb: face_color(
-                        opts,
-                        &mut scene.legend_faces,
-                        material,
-                        f.plane.normal,
-                        layer,
-                    ),
-                }
-            })
-            .collect();
+        let mut polys: Vec<Poly> = Vec::new();
+        for f in &geo.faces {
+            let attrs = brush
+                .brush
+                .faces
+                .iter()
+                .find(|b| b.id == f.face)
+                .map(|b| b.attrs.clone())
+                .unwrap_or_default();
+            let n = f.loop_.len();
+            let pts = geo.face_positions(f);
+            let look = looks.look(&mut scene, &attrs.material, f.plane.normal, layer);
+            polys.push(Poly {
+                uvs: face_uvs(&look, &attrs, f.plane.normal, &pts),
+                pts,
+                keys: f.loop_.clone(),
+                tris: (1..n.saturating_sub(1)).map(|i| [0, i, i + 1]).collect(),
+                normal: f.plane.normal,
+                rgb: look.rgb,
+                material: look.material,
+                face_selected: opts.face_tint.contains(&(id, f.face)),
+            });
+        }
         if let Some(bounds) = Aabb::from_points(geo.vertices.iter().copied()) {
             scene.drawn.push(Drawn { id, bounds });
         }
@@ -294,19 +449,16 @@ pub fn build_scene(doc: &Document, opts: &SceneOptions) -> Scene {
             };
             let pts: Vec<DVec3> = keys.iter().map(|&k| mesh.mesh.vertices[k].pos).collect();
             let normal = newell(&pts).try_normalize().unwrap_or(DVec3::Z);
-            let rgb = face_color(
-                opts,
-                &mut scene.legend_faces,
-                &face.attrs.material,
-                normal,
-                layer,
-            );
+            let look = looks.look(&mut scene, &face.attrs.material, normal, layer);
             polys.push(Poly {
+                uvs: face_uvs(&look, &face.attrs, normal, &pts),
                 tris: triangulate(&pts),
                 pts,
                 keys,
                 normal,
-                rgb,
+                rgb: look.rgb,
+                material: look.material,
+                face_selected: opts.face_tint.contains(&(id, face.id)),
             });
         }
         if let Some(bounds) = Aabb::from_points(mesh.mesh.vertices.iter().map(|v| v.pos)) {
@@ -363,6 +515,9 @@ fn entity_marker(classname: &str, origin: DVec3) -> (Vec<Poly>, Aabb, [u8; 3], &
                 tris: vec![[0, 1, 2]],
                 normal,
                 rgb: LIGHT_RGB,
+                material: None,
+                uvs: Vec::new(),
+                face_selected: false,
             });
         }
         let bounds = Aabb {

@@ -16,6 +16,12 @@ pub enum LoadError {
     },
     #[error("group {id} is its own ancestor")]
     GroupCycle { id: GroupId },
+    #[error("material name {name:?} is used by both {first} and {second}")]
+    DuplicateMaterialName {
+        name: String,
+        first: ObjectId,
+        second: ObjectId,
+    },
     #[error("{id} has invalid geometry: {reason}")]
     InvalidGeometry { id: ObjectId, reason: String },
 }

@@ -23,10 +23,12 @@ pub enum VertexEditError {
 /// Moves the brush's vertices nearest to `picks` by `delta` and rebuilds the brush as the convex hull of the result.
 /// Vertices that land on each other fuse, and a face the move makes non-planar splits into several planes.
 /// A face keeps its id when its plane or its corners are unchanged.
+/// With `texture_lock` each face's texture follows its corners.
 pub fn move_brush_vertices(
     brush: &Brush,
     picks: &[DVec3],
     delta: DVec3,
+    texture_lock: bool,
 ) -> Result<Brush, VertexEditError> {
     let geo = brush_geometry(brush)?;
     let mut moving = vec![false; geo.vertices.len()];
@@ -113,18 +115,22 @@ pub fn move_brush_vertices(
         })
         .collect();
     let mut next_id = brush.next_face_id().0;
+    let mut parent: BTreeMap<FaceId, FaceId> = BTreeMap::new();
     for (h, face) in hull.faces.iter().enumerate() {
         if assigned[h].is_some() {
             continue;
         }
-        let donor = originals
+        let donor_face = originals
             .iter()
             .map(|(id, _, set)| (*id, set.intersection(&hull_sets[h]).count()))
             .filter(|(_, shared)| *shared > 0)
             .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
             .and_then(|(id, _)| brush.faces.iter().find(|f| f.id == id))
-            .or(brush.faces.first())
-            .map_or_else(FaceAttrs::default, |f| f.attrs.clone());
+            .or(brush.faces.first());
+        let donor = donor_face.map_or_else(FaceAttrs::default, |f| f.attrs.clone());
+        if let Some(d) = donor_face {
+            parent.insert(FaceId(next_id), d.id);
+        }
         faces.push(BrushFace {
             id: FaceId(next_id),
             points: plane_points(&hull, &face.corners),
@@ -133,7 +139,10 @@ pub fn move_brush_vertices(
         next_id += 1;
     }
 
-    let out = normalize(&Brush { faces })?;
+    let mut out = normalize(&Brush { faces })?;
+    if texture_lock {
+        relock(&mut out, brush, &geo, &after, &parent);
+    }
     let derived = brush_geometry(&out)?;
     for (i, p) in hull.points.iter().enumerate() {
         if hull.is_corner(i)
@@ -166,4 +175,35 @@ pub(crate) fn plane_points(hull: &Hull, corners: &[usize]) -> [DVec3; 3] {
     }
     let (i, j, k) = best;
     [at(i), at(k), at(j)]
+}
+
+fn relock(
+    out: &mut Brush,
+    before: &Brush,
+    geo: &crate::polytope::BrushGeometry,
+    after: &[DVec3],
+    parent: &BTreeMap<FaceId, FaceId>,
+) {
+    for face in &mut out.faces {
+        let source = parent.get(&face.id).copied().unwrap_or(face.id);
+        let (Some(old), Some(old_geo)) = (
+            before.faces.iter().find(|f| f.id == source),
+            geo.faces.iter().find(|f| f.face == source),
+        ) else {
+            continue;
+        };
+        let Ok(plane) = crate::plane::plane_from_points(face.points) else {
+            continue;
+        };
+        let pairs: Vec<(DVec3, DVec3)> = old_geo
+            .loop_
+            .iter()
+            .map(|&i| (geo.vertices[i], after[i]))
+            .collect();
+        if let Some(attrs) =
+            crate::uv::lock_corners(&old.attrs, old_geo.plane.normal, &plane, &pairs)
+        {
+            face.attrs = attrs;
+        }
+    }
 }

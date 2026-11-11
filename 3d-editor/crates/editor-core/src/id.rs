@@ -82,6 +82,7 @@ global_id!(EntityId, 'e');
 global_id!(GroupId, 'g');
 global_id!(LayerId, 'l');
 global_id!(CameraId, 'c');
+global_id!(MaterialId, 't');
 
 #[derive(
     Debug,

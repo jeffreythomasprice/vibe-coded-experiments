@@ -30,7 +30,7 @@ Cargo workspace; all crates live in `crates/`.
 
 ## Architecture
 
-A TrenchBroom-style brush scene editor driven equally by a human (GUI) and an AI agent (MCP/CLI), all as clients of one headless `editor-server` that owns the documents. `editor-core`, `editor-geom`, `editor-fmt`, `editor-cmd` (the full Tier 0 catalog, selection, file state, undo with merging and a change feed in the session, and the schemars-backed op registry), `editor-render` (offscreen readback, or into a caller's texture), `editor-proto`, `editor-host`, `editor-server`, `editor-cli` and `editor-mcp` are implemented; `editor-app` is a spike-quality egui shell (four docked viewports on a shared wgpu device, navigation, picking, Select/Move/Box/Vertex/Edge/Face/Clip tools that emit commands, a live replica of the server's session); see `docs/gui.md` and `docs/server.md`.
+A TrenchBroom-style brush scene editor driven equally by a human (GUI) and an AI agent (MCP/CLI), all as clients of one headless `editor-server` that owns the documents. `editor-core`, `editor-geom` (including UV maths and texture lock), `editor-fmt`, `editor-cmd` (the full Tier 0 catalog, materials and UV ops, selection and face selection, file state, undo with merging and a change feed in the session, and the schemars-backed op registry), `editor-render` (offscreen readback, or into a caller's texture; draws material images), `editor-proto`, `editor-host`, `editor-server`, `editor-cli` and `editor-mcp` are implemented; `editor-app` is a spike-quality egui shell (four docked viewports on a shared wgpu device, navigation, picking, Select/Move/Box/Vertex/Edge/Face/Clip/Surface tools that emit commands, face and material inspectors, a live replica of the server's session); see `docs/gui.md` and `docs/server.md`.
 
 ## Docs
 
@@ -42,6 +42,7 @@ Design lives in `docs/`. Read the relevant doc before starting a feature, and up
 - `docs/server.md` — the headless server: crates, shared config, lifecycle, wire protocol, sessions, events, concurrency.
 - `docs/tier0-mcp.md` — the MCP shim: flags, tool generation, gating.
 - `docs/scene-format.md` — TOML scene format: structure, canonical writer rules, versioning.
+- `docs/materials.md` — materials, textures (absolute, relative, embedded), UV model, texture lock, alignment ops, face selection, rendering.
 - `docs/gui.md` — the `editor-app` shell: architecture (replica of the server session), controls, and the egui/dock/input findings.
 
 The central rule: the document model and command layer know nothing about UI or GPU. Dependency direction:

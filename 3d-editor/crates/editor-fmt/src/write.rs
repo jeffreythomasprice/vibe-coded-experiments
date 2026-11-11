@@ -1,8 +1,10 @@
 use std::fmt::Write;
 
+use base64::Engine;
+
 use editor_core::{
-    DVec2, DVec3, Document, Extra, FaceAttrs, Flags, OrthoView, Projection, Properties,
-    PropertyValue,
+    DVec2, DVec3, Document, Extra, FaceAttrs, Filter, Flags, Material, OrthoView, Projection,
+    Properties, PropertyValue, TextureSource,
 };
 
 use crate::{FORMAT, VERSION};
@@ -24,6 +26,10 @@ pub fn write(doc: &Document) -> String {
     out.push_str("\n[editor]\n");
     let _ = writeln!(out, "grid = {}", num(doc.editor.grid));
     write_extra(&mut out, &doc.editor.extra);
+
+    for m in doc.materials.values() {
+        write_material(&mut out, m);
+    }
 
     for l in doc.layers.values() {
         out.push_str("\n[[layer]]\n");
@@ -157,6 +163,67 @@ pub fn write(doc: &Document) -> String {
     out
 }
 
+fn write_material(out: &mut String, m: &Material) {
+    let defaults = Material::new(m.id, "");
+    out.push_str("\n[[material]]\n");
+    let _ = writeln!(out, "id = \"{}\"", m.id);
+    let _ = writeln!(out, "name = {}", quote(&m.name));
+    match &m.texture {
+        None => {}
+        Some(TextureSource::Path { path }) => {
+            let _ = writeln!(out, "texture = {{ path = {} }}", quote(path));
+        }
+        Some(TextureSource::Embedded { format, data }) => {
+            let text = base64::engine::general_purpose::STANDARD.encode(&data.0);
+            let _ = writeln!(
+                out,
+                "texture = {{ format = \"{format}\", base64 = \"{text}\" }}"
+            );
+        }
+    }
+    if m.color != defaults.color {
+        let _ = writeln!(out, "color = {}", floats(&m.color));
+    }
+    if m.emissive != defaults.emissive {
+        let _ = writeln!(out, "emissive = {}", floats(&m.emissive));
+    }
+    if m.emissive_strength != defaults.emissive_strength {
+        let _ = writeln!(out, "emissive_strength = {}", num32(m.emissive_strength));
+    }
+    if m.roughness != defaults.roughness {
+        let _ = writeln!(out, "roughness = {}", num32(m.roughness));
+    }
+    if m.metallic != defaults.metallic {
+        let _ = writeln!(out, "metallic = {}", num32(m.metallic));
+    }
+    if m.filter == Filter::Nearest {
+        out.push_str("filter = \"nearest\"\n");
+    }
+    for (name, on) in [
+        ("double_sided", m.double_sided),
+        ("unlit", m.unlit),
+        ("nodraw", m.nodraw),
+    ] {
+        if on {
+            let _ = writeln!(out, "{name} = true");
+        }
+    }
+    write_extra(out, &m.extra);
+}
+
+fn floats(v: &[f32]) -> String {
+    let items: Vec<String> = v.iter().map(|x| num32(*x)).collect();
+    format!("[{}]", items.join(", "))
+}
+
+fn num32(x: f32) -> String {
+    if x.fract() == 0.0 && x.abs() < 16_777_216.0 {
+        (x as i64).to_string()
+    } else {
+        format!("{x:?}")
+    }
+}
+
 fn write_flags(out: &mut String, flags: Flags) {
     if flags.hidden {
         out.push_str("hidden = true\n");
@@ -176,6 +243,9 @@ fn attrs(a: &FaceAttrs) -> String {
     }
     if a.rotation != 0.0 {
         let _ = write!(s, ", rotation = {}", num(a.rotation));
+    }
+    if let Some(axes) = a.axes {
+        let _ = write!(s, ", u_axis = {}, v_axis = {}", vec3(axes.u), vec3(axes.v));
     }
     s
 }

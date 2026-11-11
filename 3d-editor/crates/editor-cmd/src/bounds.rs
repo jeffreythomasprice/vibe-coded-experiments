@@ -12,7 +12,7 @@ pub fn object_bounds(object: &Object) -> Option<Aabb> {
         Object::Mesh(m) => Aabb::from_points(m.mesh.vertices.iter().map(|v| v.pos)),
         Object::Entity(e) => e.origin.and_then(|o| Aabb::from_points([o])),
         Object::Camera(c) => Aabb::from_points([c.position]),
-        Object::Group(_) | Object::Layer(_) => None,
+        Object::Group(_) | Object::Layer(_) | Object::Material(_) => None,
     }
 }
 
@@ -29,7 +29,7 @@ pub fn extent(doc: &Document, id: ObjectId) -> Option<Aabb> {
     }
     members
         .into_iter()
-        .filter(|m| *m == id || !matches!(m, ObjectId::Camera(_)))
+        .filter(|m| *m == id || !matches!(m, ObjectId::Camera(_) | ObjectId::Material(_)))
         .filter_map(|m| doc.get(m))
         .filter_map(|o| object_bounds(&o))
         .reduce(Aabb::merge)
@@ -39,7 +39,7 @@ pub fn extent(doc: &Document, id: ObjectId) -> Option<Aabb> {
 pub fn scene_bounds(doc: &Document) -> Option<Aabb> {
     doc.all_ids()
         .into_iter()
-        .filter(|id| !matches!(id, ObjectId::Camera(_)))
+        .filter(|id| !matches!(id, ObjectId::Camera(_) | ObjectId::Material(_)))
         .filter_map(|id| doc.get(id))
         .filter_map(|o| object_bounds(&o))
         .reduce(Aabb::merge)

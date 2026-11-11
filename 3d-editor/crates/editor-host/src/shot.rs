@@ -25,10 +25,15 @@ pub(crate) fn screenshot(
         .and_then(serde_json::Value::as_str)
         .map(std::path::PathBuf::from);
     let renderer = renderer.as_ref().expect("created above");
-    let shot = editor_render::screenshot_with_selection(
+    let scene_dir = session.path().and_then(|p| p.parent());
+    let shot = editor_render::screenshot_with_context(
         renderer,
         session.document(),
-        session.selection(),
+        &editor_render::ShotContext {
+            selection: session.selection(),
+            faces: session.face_selection(),
+            scene_dir,
+        },
         request.args,
     )?;
     let mut result = shot.result();

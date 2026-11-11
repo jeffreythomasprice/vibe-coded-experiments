@@ -25,8 +25,8 @@ proptest! {
         let axis = DVec3::new(axis.0, axis.1, axis.2).normalize();
         let there = DAffine3::from_mat3(DMat3::from_axis_angle(axis, degrees.to_radians()));
         let back = there.inverse();
-        let rotated = transform_brush(&brush, &there).unwrap();
-        let restored = transform_brush(&rotated, &back).unwrap();
+        let rotated = transform_brush(&brush, &there, false).unwrap();
+        let restored = transform_brush(&rotated, &back, false).unwrap();
         let (a, b) = extent(&brush);
         let (c, d) = extent(&restored);
         prop_assert!((a - c).length() < 1e-3 && (b - d).length() < 1e-3, "{a:?} {b:?} vs {c:?} {d:?}");
@@ -40,7 +40,7 @@ proptest! {
         let brush = cuboid(DVec3::ZERO, DVec3::new(size.0 as f64, size.1 as f64, size.2 as f64));
         let mut scale = DVec3::ONE;
         scale[axis] = -1.0;
-        let mirrored = transform_brush(&brush, &DAffine3::from_scale(scale)).unwrap();
+        let mirrored = transform_brush(&brush, &DAffine3::from_scale(scale), false).unwrap();
         let (v0, v1) = (brush_geometry(&brush).unwrap().volume(), brush_geometry(&mirrored).unwrap().volume());
         prop_assert!((v0 - v1).abs() < 1e-6);
     }

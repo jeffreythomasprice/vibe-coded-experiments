@@ -48,7 +48,7 @@ ab_glyph = "0.2"
 epaint_default_fonts = "0.36"
 bytemuck = { version = "1", features = ["derive"] }
 pollster = "1"
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tga", "bmp"] }
 rfd = "0.18"
 
 clap = { version = "4", features = ["derive"] }

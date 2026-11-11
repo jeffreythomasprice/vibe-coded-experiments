@@ -73,3 +73,18 @@ pub fn layer_id(s: &mut Session) -> String {
 pub fn full(s: &mut Session, id: &str) -> Value {
     exec(s, "scene.get", json!({ "ids": [id], "detail": "full" }))["result"]["objects"][0].clone()
 }
+
+/// Writes a PNG whose pixel at (x, y) is `color(x, y)`.
+pub fn write_png(
+    path: &std::path::Path,
+    width: u32,
+    height: u32,
+    color: impl Fn(u32, u32) -> [u8; 4],
+) {
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let mut img = image::RgbaImage::new(width, height);
+    for (x, y, p) in img.enumerate_pixels_mut() {
+        *p = image::Rgba(color(x, y));
+    }
+    img.save(path).unwrap();
+}

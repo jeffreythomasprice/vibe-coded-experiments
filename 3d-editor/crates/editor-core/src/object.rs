@@ -5,8 +5,8 @@ use glam::DVec3;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
-    Brush, BrushId, CameraId, EntityId, Extra, GroupId, IdParseError, LayerId, Mesh, MeshId,
-    Properties,
+    Brush, BrushId, CameraId, EntityId, Extra, GroupId, IdParseError, LayerId, Material,
+    MaterialId, Mesh, MeshId, Properties,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -17,6 +17,7 @@ pub enum ObjectId {
     Group(GroupId),
     Layer(LayerId),
     Camera(CameraId),
+    Material(MaterialId),
 }
 
 #[derive(
@@ -40,6 +41,7 @@ pub enum ObjectKind {
     Group,
     Layer,
     Camera,
+    Material,
 }
 
 impl ObjectId {
@@ -51,6 +53,7 @@ impl ObjectId {
             ObjectId::Group(i) => i.0,
             ObjectId::Layer(i) => i.0,
             ObjectId::Camera(i) => i.0,
+            ObjectId::Material(i) => i.0,
         }
     }
 
@@ -62,6 +65,7 @@ impl ObjectId {
             ObjectId::Group(_) => ObjectKind::Group,
             ObjectId::Layer(_) => ObjectKind::Layer,
             ObjectId::Camera(_) => ObjectKind::Camera,
+            ObjectId::Material(_) => ObjectKind::Material,
         }
     }
 }
@@ -75,6 +79,7 @@ impl fmt::Display for ObjectId {
             ObjectId::Group(i) => i.fmt(f),
             ObjectId::Layer(i) => i.fmt(f),
             ObjectId::Camera(i) => i.fmt(f),
+            ObjectId::Material(i) => i.fmt(f),
         }
     }
 }
@@ -91,6 +96,7 @@ impl FromStr for ObjectId {
             Some('g') => s.parse().map(ObjectId::Group),
             Some('l') => s.parse().map(ObjectId::Layer),
             Some('c') => s.parse().map(ObjectId::Camera),
+            Some('t') => s.parse().map(ObjectId::Material),
             Some(_) => Err(IdParseError::UnknownPrefix),
         }
     }
@@ -108,8 +114,8 @@ impl schemars::JsonSchema for ObjectId {
     fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
         schemars::json_schema!({
             "type": "string",
-            "pattern": "^[bmegilc][0-9]+$",
-            "description": "Object id: b brush, m mesh, e entity, g group, l layer, c camera",
+            "pattern": "^[bmegilct][0-9]+$",
+            "description": "Object id: b brush, m mesh, e entity, g group, l layer, c camera, t material",
             "examples": ["b12"],
         })
     }
@@ -144,6 +150,7 @@ from_id!(Entity, EntityId);
 from_id!(Group, GroupId);
 from_id!(Layer, LayerId);
 from_id!(Camera, CameraId);
+from_id!(Material, MaterialId);
 
 fn is_false(b: &bool) -> bool {
     !*b
@@ -264,6 +271,7 @@ pub enum Object {
     Group(Group),
     Layer(Layer),
     Camera(Camera),
+    Material(Material),
 }
 
 impl Object {
@@ -275,6 +283,7 @@ impl Object {
             Object::Group(o) => o.id.into(),
             Object::Layer(o) => o.id.into(),
             Object::Camera(o) => o.id.into(),
+            Object::Material(o) => o.id.into(),
         }
     }
 
@@ -284,7 +293,7 @@ impl Object {
             Object::Mesh(o) => Some(o.layer),
             Object::Entity(o) => Some(o.layer),
             Object::Group(o) => Some(o.layer),
-            Object::Layer(_) | Object::Camera(_) => None,
+            Object::Layer(_) | Object::Camera(_) | Object::Material(_) => None,
         }
     }
 
@@ -294,7 +303,7 @@ impl Object {
             Object::Mesh(o) => o.group,
             Object::Entity(o) => o.group,
             Object::Group(o) => o.parent,
-            Object::Layer(_) | Object::Camera(_) => None,
+            Object::Layer(_) | Object::Camera(_) | Object::Material(_) => None,
         }
     }
 
@@ -305,7 +314,7 @@ impl Object {
             Object::Entity(o) => Some(o.flags),
             Object::Group(o) => Some(o.flags),
             Object::Layer(o) => Some(o.flags),
-            Object::Camera(_) => None,
+            Object::Camera(_) | Object::Material(_) => None,
         }
     }
 
@@ -316,7 +325,7 @@ impl Object {
             Object::Entity(o) => o.flags = flags,
             Object::Group(o) => o.flags = flags,
             Object::Layer(o) => o.flags = flags,
-            Object::Camera(_) => {}
+            Object::Camera(_) | Object::Material(_) => {}
         }
         self
     }

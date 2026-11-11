@@ -11,6 +11,7 @@ pub mod ray;
 pub mod shapes;
 pub mod tolerance;
 pub mod transform;
+pub mod uv;
 pub mod vertex_edit;
 pub mod volume;
 pub mod winding;

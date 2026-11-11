@@ -7,7 +7,7 @@ use editor_cmd::{
     CameraArg, ColorMode, CommandError, Mode, Overlay, ScreenshotArgs, build_camera, camera_json,
     parse_args, resolve_camera, scene_bounds,
 };
-use editor_core::{CameraId, Document, ObjectId, ObjectKind};
+use editor_core::{CameraId, Document, FaceId, ObjectId, ObjectKind};
 use editor_geom::camera::{MAX_IMAGE_DIM, REFERENCE_HEIGHT, REFERENCE_WIDTH, View};
 use serde_json::{Value, json};
 
@@ -17,7 +17,8 @@ use crate::gpu::{DrawLists, DrawParams, Renderer};
 use crate::label::{Text, draw_labels, text_size};
 use crate::overlay::{axes_lines, bounds_lines, grid_lines};
 use crate::scene::{
-    EdgeStyle, HIGHLIGHT_COLOR, SELECTION_COLOR, SceneOptions, Shading, build_scene, decode_id,
+    EdgeStyle, HIGHLIGHT_COLOR, SELECTION_COLOR, SceneOptions, Shading, TextureInputs, build_scene,
+    decode_id,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -234,12 +235,39 @@ pub fn screenshot(renderer: &Renderer, doc: &Document, args: Value) -> Result<Sh
     screenshot_with_selection(renderer, doc, &BTreeSet::new(), args)
 }
 
+/// Editor state a screenshot reflects besides the document.
+pub struct ShotContext<'a> {
+    pub selection: &'a BTreeSet<ObjectId>,
+    pub faces: &'a BTreeSet<(ObjectId, FaceId)>,
+    /// Directory of the scene file, for relative texture paths.
+    pub scene_dir: Option<&'a std::path::Path>,
+}
+
 pub fn screenshot_with_selection(
     renderer: &Renderer,
     doc: &Document,
     selection: &BTreeSet<ObjectId>,
     args: Value,
 ) -> Result<Shot, CommandError> {
+    screenshot_with_context(
+        renderer,
+        doc,
+        &ShotContext {
+            selection,
+            faces: &BTreeSet::new(),
+            scene_dir: None,
+        },
+        args,
+    )
+}
+
+pub fn screenshot_with_context(
+    renderer: &Renderer,
+    doc: &Document,
+    context: &ShotContext,
+    args: Value,
+) -> Result<Shot, CommandError> {
+    let selection = context.selection;
     let args: ScreenshotArgs = parse_args(args)?;
     let width = dimension("width", args.width, REFERENCE_WIDTH)?;
     let height = dimension("height", args.height, REFERENCE_HEIGHT)?;
@@ -259,6 +287,11 @@ pub fn screenshot_with_selection(
         }
     }
     let mut tint: HashMap<ObjectId, [f32; 3]> = HashMap::new();
+    let face_tint: BTreeSet<(ObjectId, FaceId)> = if args.overlays.contains(&Overlay::Selection) {
+        context.faces.clone()
+    } else {
+        BTreeSet::new()
+    };
     if args.overlays.contains(&Overlay::Selection) {
         for &id in selection.iter().filter(|&&id| doc.contains(id)) {
             tint.insert(id, SELECTION_COLOR);
@@ -321,6 +354,11 @@ pub fn screenshot_with_selection(
             colors: args.colors,
             overrides: &overrides,
             want_ids: want_labels,
+            textures: args.textures.unwrap_or(true).then_some(TextureInputs {
+                cache: renderer.textures(),
+                scene_dir: context.scene_dir,
+            }),
+            face_tint: &face_tint,
         },
     );
 
@@ -347,7 +385,7 @@ pub fn screenshot_with_selection(
             clip_z,
         },
         &DrawLists {
-            tris: &scene.tris,
+            faces: &scene.faces,
             lines: &lines,
             on_top: &scene.highlight_edges,
         },
@@ -394,6 +432,7 @@ pub fn screenshot_with_selection(
             "name": if name.is_empty() { "(no material)" } else { name.as_str() },
             "color": hex(*rgb),
         })).collect::<Vec<_>>(),
+        "textures": scene.legend_textures,
         "entities": scene.legend_entities.iter().map(|(class, (rgb, marker))| json!({
             "classname": class, "color": hex(*rgb), "marker": marker,
         })).collect::<Vec<_>>(),

@@ -1,7 +1,8 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::path::Path;
 
 use editor_cmd::{ColorMode, scene_bounds};
-use editor_core::{Camera, Document, ObjectId};
+use editor_core::{Camera, Document, FaceId, ObjectId};
 use editor_geom::Aabb;
 use editor_geom::camera::View;
 
@@ -10,9 +11,17 @@ use crate::error::RenderError;
 use crate::gpu::{DrawLists, DrawParams, Renderer};
 use crate::overlay::{axes_lines, grid_lines};
 use crate::scene::{
-    EdgeStyle, HIGHLIGHT_COLOR, SELECTION_COLOR, Scene, SceneOptions, Shading, build_scene,
-    decode_id,
+    EdgeStyle, HIGHLIGHT_COLOR, SELECTION_COLOR, Scene, SceneOptions, Shading, TextureInputs,
+    build_scene, decode_id,
 };
+use crate::texture::TextureCache;
+
+/// What a scene needs besides the document: where relative texture paths start, the shared image cache and the selected faces.
+pub struct SceneEnv<'a> {
+    pub scene_dir: Option<&'a Path>,
+    pub textures: &'a TextureCache,
+    pub faces: &'a BTreeSet<(ObjectId, FaceId)>,
+}
 
 /// The document's geometry turned into draw lists once, shared by every viewport drawn from it.
 pub struct PreparedScene {
@@ -27,6 +36,7 @@ impl PreparedScene {
         selection: &BTreeSet<ObjectId>,
         hover: Option<ObjectId>,
         hidden: &HashSet<ObjectId>,
+        env: &SceneEnv,
     ) -> Self {
         let mut tint: HashMap<ObjectId, [f32; 3]> = HashMap::new();
         for &id in selection.iter().filter(|&&id| doc.contains(id)) {
@@ -46,6 +56,11 @@ impl PreparedScene {
                 colors: ColorMode::Material,
                 overrides: &HashMap::new(),
                 want_ids: true,
+                textures: Some(TextureInputs {
+                    cache: env.textures,
+                    scene_dir: env.scene_dir,
+                }),
+                face_tint: env.faces,
             },
         );
         let bounds = scene_bounds(doc);
@@ -124,7 +139,7 @@ impl Renderer {
         self.draw_to_view(
             &prepared.params(view, width, height, [r, g, b]),
             &DrawLists {
-                tris: &prepared.scene.tris,
+                faces: &prepared.scene.faces,
                 lines: &lines,
                 on_top: &prepared.scene.highlight_edges,
             },

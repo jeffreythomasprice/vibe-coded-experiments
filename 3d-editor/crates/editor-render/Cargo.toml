@@ -21,3 +21,4 @@ thiserror.workspace = true
 
 [dev-dependencies]
 editor-fmt.workspace = true
+base64.workspace = true

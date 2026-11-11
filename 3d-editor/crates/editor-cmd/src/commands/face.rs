@@ -4,6 +4,7 @@ use editor_core::{
     BrushId, BrushObject, ElementRef, FaceAttrs, FaceId, Object, ObjectId, Part, VertexId,
 };
 use editor_geom::tolerance::{WELD_EPS, snap_vec};
+use editor_geom::uv;
 use editor_geom::{VertexEditError, brush_geometry, move_brush_vertices};
 use glam::{DVec2, DVec3};
 use schemars::JsonSchema;
@@ -103,19 +104,44 @@ pub struct SetMaterial {
 
 pub fn set_material(ctx: &mut Ctx, args: SetMaterial) -> CmdResult<results::FacesChanged> {
     let material = args.material;
+    let undefined = !material.is_empty() && ctx.doc().material_by_name(&material).is_none();
     let count = update_attrs(ctx, &args.faces, |a| a.material = material.clone())?;
-    Ok(Outcome::new(results::FacesChanged { faces: count }))
+    let mut out = Outcome::new(results::FacesChanged { faces: count });
+    if undefined {
+        out.warnings.push(format!(
+            "material {material:?} is not defined; faces draw a flat colour until material.create adds it"
+        ));
+    }
+    Ok(out)
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum UvMode {
+    /// The given values replace the current ones.
+    #[default]
+    Absolute,
+    /// `offset` is added, `scale` multiplies and `rotation` is added: for nudging.
+    Relative,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SetUv {
-    faces: Vec<ElementRef>,
+    pub faces: Vec<ElementRef>,
+    /// In texels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<[f64; 2]>")]
-    offset: Option<DVec2>,
+    pub offset: Option<DVec2>,
+    /// World units per texel; negative mirrors.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<[f64; 2]>")]
-    scale: Option<DVec2>,
-    rotation: Option<f64>,
+    pub scale: Option<DVec2>,
+    /// Degrees, positive turns the image counter-clockwise seen from outside.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotation: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<UvMode>,
 }
 
 pub fn set_uv(ctx: &mut Ctx, args: SetUv) -> CmdResult<results::FacesChanged> {
@@ -146,15 +172,16 @@ pub fn set_uv(ctx: &mut Ctx, args: SetUv) -> CmdResult<results::FacesChanged> {
             "rotation must be finite",
         ));
     }
+    let relative = args.mode == Some(UvMode::Relative);
     let count = update_attrs(ctx, &args.faces, |a| {
         if let Some(o) = args.offset {
-            a.offset = o;
+            a.offset = if relative { a.offset + o } else { o };
         }
         if let Some(s) = args.scale {
-            a.scale = s;
+            a.scale = if relative { a.scale * s } else { s };
         }
         if let Some(r) = args.rotation {
-            a.rotation = r;
+            a.rotation = if relative { a.rotation + r } else { r };
         }
     })?;
     Ok(Outcome::new(results::FacesChanged { faces: count }))
@@ -187,12 +214,13 @@ fn move_brushes(
     ctx: &mut Ctx,
     picks: BrushPicks,
     delta: DVec3,
+    lock: bool,
 ) -> CmdResult<results::VerticesMoved> {
     let mut updated = Vec::new();
     let mut moved = 0;
     for (id, positions) in picks {
         let object = brush_of(ctx.doc(), id.into())?;
-        let brush = move_brush_vertices(&object.brush, &positions, delta)
+        let brush = move_brush_vertices(&object.brush, &positions, delta, lock)
             .map_err(|e| vertex_error(id, e))?;
         moved += positions.len();
         updated.push(BrushObject {
@@ -210,11 +238,13 @@ fn move_vertices(
     ctx: &mut Ctx,
     picks: BTreeMap<ObjectId, BTreeSet<VertexId>>,
     delta: DVec3,
+    lock: bool,
 ) -> CmdResult<results::VerticesMoved> {
     let mut warnings = Vec::new();
     let mut updated = Vec::new();
     let mut moved = 0;
     for (id, verts) in picks {
+        let original = mesh_of(ctx.doc(), id)?.mesh.clone();
         let mut mesh = mesh_of(ctx.doc(), id)?.clone();
         for v in &mut mesh.mesh.vertices {
             if verts.contains(&v.id) {
@@ -225,6 +255,9 @@ fn move_vertices(
             }
         }
         warnings.extend(mesh_problems(id, &mesh.mesh)?);
+        if lock {
+            uv::lock_mesh_faces(&original, &mut mesh.mesh);
+        }
         updated.push(mesh);
     }
     for mesh in updated {
@@ -241,9 +274,10 @@ fn apply_moves(
     meshes: BTreeMap<ObjectId, BTreeSet<VertexId>>,
     brushes: BrushPicks,
     delta: DVec3,
+    lock: bool,
 ) -> CmdResult<results::VerticesMoved> {
-    let mut out = move_vertices(ctx, meshes, delta)?;
-    let brushes = move_brushes(ctx, brushes, delta)?;
+    let mut out = move_vertices(ctx, meshes, delta, lock)?;
+    let brushes = move_brushes(ctx, brushes, delta, lock)?;
     out.result.vertices += brushes.result.vertices;
     out.warnings.extend(brushes.warnings);
     Ok(out)
@@ -255,6 +289,9 @@ pub struct TranslateFaces {
     faces: Vec<ElementRef>,
     #[schemars(with = "[f64; 3]")]
     delta: DVec3,
+    /// Keep face textures attached to the geometry (default true).
+    #[serde(default)]
+    texture_lock: Option<bool>,
 }
 
 pub fn translate_faces(ctx: &mut Ctx, args: TranslateFaces) -> CmdResult<results::VerticesMoved> {
@@ -294,7 +331,13 @@ pub fn translate_faces(ctx: &mut Ctx, args: TranslateFaces) -> CmdResult<results
             return Err(missing_face(id, missing));
         }
     }
-    apply_moves(ctx, mesh_picks, brush_picks, args.delta)
+    apply_moves(
+        ctx,
+        mesh_picks,
+        brush_picks,
+        args.delta,
+        args.texture_lock.unwrap_or(true),
+    )
 }
 
 /// A brush corner, named by where it is now.
@@ -317,6 +360,9 @@ pub struct TranslateVertices {
     pub brush_vertices: Vec<BrushVertexAt>,
     #[schemars(with = "[f64; 3]")]
     pub delta: DVec3,
+    /// Keep face textures attached to the geometry (default true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub texture_lock: Option<bool>,
 }
 
 pub fn translate_vertices(
@@ -377,5 +423,11 @@ pub fn translate_vertices(
         brush_of(ctx.doc(), pick.brush.into())?;
         push_unique(brush_picks.entry(pick.brush).or_default(), pick.at);
     }
-    apply_moves(ctx, mesh_picks, brush_picks, args.delta)
+    apply_moves(
+        ctx,
+        mesh_picks,
+        brush_picks,
+        args.delta,
+        args.texture_lock.unwrap_or(true),
+    )
 }

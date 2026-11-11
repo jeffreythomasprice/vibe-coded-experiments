@@ -79,6 +79,8 @@ pub struct ScreenshotArgs {
     /// Colour overrides by material name, as "#rrggbb"; they apply in every colour mode.
     #[serde(default)]
     pub material_colors: BTreeMap<String, String>,
+    /// Draw material images (default true). false draws every face as a flat colour.
+    pub textures: Option<bool>,
     /// Also write the PNG to this path (needs mutate access).
     pub path: Option<String>,
 }

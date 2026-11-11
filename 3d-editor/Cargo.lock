@@ -841,10 +841,12 @@ dependencies = [
 name = "editor-cmd"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "editor-core",
  "editor-fmt",
  "editor-geom",
  "glam",
+ "image",
  "jsonschema",
  "proptest",
  "schemars",
@@ -858,6 +860,7 @@ dependencies = [
 name = "editor-core"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "glam",
  "schemars",
  "serde",
@@ -870,6 +873,7 @@ dependencies = [
 name = "editor-fmt"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "editor-core",
  "editor-geom",
  "glam",
@@ -939,6 +943,7 @@ name = "editor-render"
 version = "0.1.0"
 dependencies = [
  "ab_glyph",
+ "base64",
  "bytemuck",
  "editor-cmd",
  "editor-core",
@@ -1675,6 +1680,8 @@ dependencies = [
  "num-traits",
  "png",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]

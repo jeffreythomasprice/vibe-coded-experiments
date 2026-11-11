@@ -1,10 +1,12 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use editor_core::{Document, ObjectId};
+use editor_core::{Document, ElementRef, FaceId, Object, ObjectId, Part};
 use serde_json::Value;
 
-use crate::commands::session_args::{Begin, List, New, Open, Save, SelectIds, SelectKind};
+use crate::commands::session_args::{
+    Begin, List, New, Open, Save, SelectFaces, SelectIds, SelectKind,
+};
 use crate::commands::{self, Exec, NoArgs, OpInfo, parse_args, results};
 use crate::ctx::{Ctx, Journal, Savepoint, rollback, savepoint};
 use crate::envelope::{Changes, Request, Response, Success};
@@ -65,6 +67,7 @@ pub struct Feed {
     pub ids: BTreeSet<ObjectId>,
     pub replaced: bool,
     pub selection: bool,
+    pub face_selection: bool,
     pub file: bool,
     pub history: bool,
 }
@@ -83,6 +86,7 @@ pub struct Session {
     undo: Vec<HistoryEntry>,
     redo: Vec<HistoryEntry>,
     selection: BTreeSet<ObjectId>,
+    face_selection: BTreeSet<(ObjectId, FaceId)>,
     path: Option<PathBuf>,
     saved_revision: u64,
     feed: Feed,
@@ -132,6 +136,7 @@ impl Session {
             undo: Vec::new(),
             redo: Vec::new(),
             selection: BTreeSet::new(),
+            face_selection: BTreeSet::new(),
             path: None,
             saved_revision: 0,
             feed: Feed::default(),
@@ -150,6 +155,10 @@ impl Session {
 
     pub fn selection(&self) -> &BTreeSet<ObjectId> {
         &self.selection
+    }
+
+    pub fn face_selection(&self) -> &BTreeSet<(ObjectId, FaceId)> {
+        &self.face_selection
     }
 
     pub fn is_dirty(&self) -> bool {
@@ -205,10 +214,12 @@ impl Session {
 
     pub fn execute_as(&mut self, request: Request, actor: &Actor) -> Response {
         let selection = self.selection.clone();
+        let face_selection = self.face_selection.clone();
         let file = self.file_state();
         let history = self.history_state();
         let result = self.run(request, actor);
         self.feed.selection |= self.selection != selection;
+        self.feed.face_selection |= self.face_selection != face_selection;
         self.feed.file |= self.file_state() != file;
         self.feed.history |= self.history_state() != history;
         match result {
@@ -321,7 +332,13 @@ impl Session {
 
         let sp = savepoint(&self.doc, &self.journal);
         let outcome = {
-            let mut ctx = Ctx::new(&mut self.doc, &mut self.journal, &self.selection);
+            let scene_dir = self
+                .path
+                .as_deref()
+                .and_then(|p| p.parent())
+                .map(PathBuf::from);
+            let mut ctx = Ctx::new(&mut self.doc, &mut self.journal, &self.selection)
+                .with_scene_dir(scene_dir);
             commands::dispatch(&mut ctx, &request.op, request.args)
         };
         let outcome = match outcome {
@@ -387,10 +404,129 @@ impl Session {
         });
     }
 
+    fn scene_dir_of(path: &std::path::Path) -> Option<PathBuf> {
+        let dir = path.parent()?;
+        Some(std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf()))
+    }
+
+    /// Saving into another directory keeps relative texture paths pointing at the same files.
+    fn rebase_textures(&mut self, target: &std::path::Path) -> Option<(PathBuf, PathBuf)> {
+        let old_dir = Self::scene_dir_of(self.path.as_deref()?)?;
+        let new_dir = Self::scene_dir_of(target)?;
+        if old_dir == new_dir {
+            return None;
+        }
+        self.rebase_textures_between(&old_dir, &new_dir);
+        Some((old_dir, new_dir))
+    }
+
+    fn rebase_textures_between(&mut self, old_dir: &std::path::Path, new_dir: &std::path::Path) {
+        let rebase = |object: &mut Object| {
+            if let Object::Material(m) = object
+                && let Some(editor_core::TextureSource::Path { path }) = &mut m.texture
+            {
+                *path = crate::texture::rebase(path, old_dir, new_dir);
+            }
+        };
+        let ids: Vec<ObjectId> = self.doc.materials.keys().map(|&m| m.into()).collect();
+        for id in ids {
+            if let Some(mut object) = self.doc.get(id) {
+                let before = object.clone();
+                rebase(&mut object);
+                if object != before {
+                    self.doc.insert(object);
+                    self.feed.ids.insert(id);
+                }
+            }
+        }
+        for entry in self.undo.iter_mut().chain(self.redo.iter_mut()) {
+            for change in &mut entry.changes {
+                change.before.iter_mut().for_each(rebase);
+                change.after.iter_mut().for_each(rebase);
+            }
+        }
+    }
+
     fn prune_selection(&mut self) {
         let doc = &self.doc;
         self.selection
             .retain(|id| doc.contains(*id) && !doc.effective_hidden(*id));
+        self.face_selection.retain(|(id, face)| {
+            let exists = match id {
+                ObjectId::Brush(b) => doc
+                    .brushes
+                    .get(b)
+                    .is_some_and(|o| o.brush.faces.iter().any(|f| f.id == *face)),
+                ObjectId::Mesh(m) => doc
+                    .meshes
+                    .get(m)
+                    .is_some_and(|o| o.mesh.faces.iter().any(|f| f.id == *face)),
+                _ => false,
+            };
+            exists && !doc.effective_hidden(*id)
+        });
+    }
+
+    fn face_selection_result(&self) -> results::FaceSelection {
+        let faces: Vec<ElementRef> = self
+            .face_selection
+            .iter()
+            .map(|&(object, face)| ElementRef {
+                object,
+                part: Part::Face(face),
+            })
+            .collect();
+        results::FaceSelection {
+            count: faces.len(),
+            faces,
+        }
+    }
+
+    fn expand_faces(
+        &self,
+        refs: &[ElementRef],
+        adding: bool,
+    ) -> Result<BTreeSet<(ObjectId, FaceId)>, CommandError> {
+        let mut out = BTreeSet::new();
+        for r in refs {
+            let all: Vec<FaceId> = match r.object {
+                ObjectId::Brush(b) => self
+                    .doc
+                    .brushes
+                    .get(&b)
+                    .map(|o| o.brush.faces.iter().map(|f| f.id).collect()),
+                ObjectId::Mesh(m) => self
+                    .doc
+                    .meshes
+                    .get(&m)
+                    .map(|o| o.mesh.faces.iter().map(|f| f.id).collect()),
+                _ if self.doc.contains(r.object) => {
+                    return Err(CommandError::wrong_kind(r.object, "brush or mesh"));
+                }
+                _ => None,
+            }
+            .ok_or_else(|| CommandError::not_found(r.object))?;
+            if adding && self.doc.effective_hidden(r.object) {
+                return Err(
+                    CommandError::invalid_arg("faces", format!("{} is hidden", r.object))
+                        .with_hint("show it first with object.set_hidden or object.show_all"),
+                );
+            }
+            match r.part {
+                Part::All => out.extend(all.into_iter().map(|f| (r.object, f))),
+                Part::Face(f) if all.contains(&f) => {
+                    out.insert((r.object, f));
+                }
+                Part::Face(_) => return Err(CommandError::not_found(r)),
+                Part::Vertex(_) => {
+                    return Err(CommandError::invalid_arg(
+                        "faces",
+                        format!("{r} is a vertex; faces look like b12/f3"),
+                    ));
+                }
+            }
+        }
+        Ok(out)
     }
 
     fn selection_result(&self) -> results::IdCount {
@@ -437,6 +573,7 @@ impl Session {
         self.undo.clear();
         self.redo.clear();
         self.selection.clear();
+        self.face_selection.clear();
         self.revision += 1;
         self.saved_revision = self.revision;
     }
@@ -475,6 +612,25 @@ impl Session {
                     }
                 }
                 Ok(self.success(self.selection_result(), Changes::default(), vec![]))
+            }
+            "select.faces.get" => {
+                let NoArgs {} = parse_args(args)?;
+                Ok(self.success(self.face_selection_result(), Changes::default(), vec![]))
+            }
+            "select.faces.set" | "select.faces.add" | "select.faces.remove" => {
+                let SelectFaces { faces } = parse_args(args)?;
+                let picked = self.expand_faces(&faces, op != "select.faces.remove")?;
+                match op {
+                    "select.faces.set" => self.face_selection = picked,
+                    "select.faces.add" => self.face_selection.extend(picked),
+                    _ => self.face_selection.retain(|f| !picked.contains(f)),
+                }
+                Ok(self.success(self.face_selection_result(), Changes::default(), vec![]))
+            }
+            "select.faces.clear" => {
+                let NoArgs {} = parse_args(args)?;
+                self.face_selection.clear();
+                Ok(self.success(self.face_selection_result(), Changes::default(), vec![]))
             }
             "select.clear" => {
                 let NoArgs {} = parse_args(args)?;
@@ -529,7 +685,13 @@ impl Session {
                 {
                     self.doc.name = name;
                 }
-                editor_fmt::save_file(&target, &self.doc).map_err(file_error)?;
+                let rebased = self.rebase_textures(&target);
+                if let Err(e) = editor_fmt::save_file(&target, &self.doc).map_err(file_error) {
+                    if let Some((old_dir, new_dir)) = rebased {
+                        self.rebase_textures_between(&new_dir, &old_dir);
+                    }
+                    return Err(e);
+                }
                 self.saved_revision = self.revision;
                 self.path = Some(target.clone());
                 Ok(self.success(

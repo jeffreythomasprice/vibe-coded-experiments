@@ -635,3 +635,131 @@ fn nudged_labels_get_leader_lines() {
     assert_eq!(shot.labels.as_ref().unwrap().len(), 1);
     assert_eq!(yellow(&img), 0);
 }
+
+fn png_base64(width: u32, height: u32, color: impl Fn(u32, u32) -> [u8; 4]) -> String {
+    use base64::Engine;
+    let mut img = RgbaImage::new(width, height);
+    for (x, y, p) in img.enumerate_pixels_mut() {
+        *p = image::Rgba(color(x, y));
+    }
+    let mut bytes = Vec::new();
+    img.write_to(
+        &mut std::io::Cursor::new(&mut bytes),
+        image::ImageFormat::Png,
+    )
+    .unwrap();
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+fn near(a: [u8; 3], b: [u8; 3]) -> bool {
+    a.iter().zip(b).all(|(x, y)| x.abs_diff(y) <= 3)
+}
+
+fn textured_box(s: &mut Session) -> String {
+    let data = png_base64(4, 2, |x, _| {
+        if x < 2 {
+            [255, 0, 0, 255]
+        } else {
+            [0, 255, 0, 255]
+        }
+    });
+    exec(
+        s,
+        "material.create",
+        json!({ "name": "flag", "texture": { "source": "base64", "format": "png", "data": data }, "filter": "nearest" }),
+    );
+    let b = make_box(s, [0, 0, 0], [64, 64, 64], "flag");
+    exec(
+        s,
+        "face.align_uv",
+        json!({ "faces": [b], "action": { "type": "fit" } }),
+    );
+    b
+}
+
+#[test]
+fn textured_faces_show_the_image() {
+    let mut s = session();
+    textured_box(&mut s);
+    let (shot, img) = shoot(&s, flat("viewport.top"));
+    assert!(shot.warnings.is_empty(), "{:?}", shot.warnings);
+    assert!(
+        near(rgb(&img, 150, 200), [255, 0, 0]),
+        "{:?}",
+        rgb(&img, 150, 200)
+    );
+    assert!(
+        near(rgb(&img, 250, 200), [0, 255, 0]),
+        "{:?}",
+        rgb(&img, 250, 200)
+    );
+}
+
+#[test]
+fn textures_can_be_turned_off() {
+    let mut s = session();
+    textured_box(&mut s);
+    let (_, img) = shoot(
+        &s,
+        json!({ "camera": "viewport.top", "width": 400, "height": 400, "mode": "flat", "textures": false }),
+    );
+    assert_eq!(rgb(&img, 150, 200), material_rgb8("flag"));
+    assert_eq!(rgb(&img, 250, 200), material_rgb8("flag"));
+}
+
+#[test]
+fn rotated_images_follow_the_geometry() {
+    let mut s = session();
+    let b = textured_box(&mut s);
+    exec(
+        &mut s,
+        "transform.rotate",
+        json!({ "ids": [b], "axis": "z", "degrees": 180 }),
+    );
+    let (_, img) = shoot(&s, flat("viewport.top"));
+    assert!(
+        near(rgb(&img, 150, 200), [0, 255, 0]),
+        "{:?}",
+        rgb(&img, 150, 200)
+    );
+    assert!(
+        near(rgb(&img, 250, 200), [255, 0, 0]),
+        "{:?}",
+        rgb(&img, 250, 200)
+    );
+}
+
+#[test]
+fn emissive_adds_light_and_a_missing_image_shows_a_checker() {
+    let mut s = session();
+    exec(
+        &mut s,
+        "material.create",
+        json!({ "name": "glow", "color": [0, 0, 0, 1], "emissive": [1, 0, 0], "emissive_strength": 1 }),
+    );
+    make_box(&mut s, [0, 0, 0], [64, 64, 64], "glow");
+    let (_, img) = shoot(&s, flat("viewport.top"));
+    assert!(
+        near(rgb(&img, 200, 200), [255, 0, 0]),
+        "{:?}",
+        rgb(&img, 200, 200)
+    );
+
+    let dir = std::env::temp_dir().join(format!("editor-render-missing-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("gone.png");
+    RgbaImage::new(2, 2).save(&file).unwrap();
+    exec(
+        &mut s,
+        "material.create",
+        json!({ "name": "gone", "texture": { "source": "file", "path": file.display().to_string(), "store": "absolute" } }),
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+    make_box(&mut s, [128, 0, 0], [192, 64, 64], "gone");
+    let (shot, _) = shoot(&s, flat("viewport.top"));
+    assert!(
+        shot.warnings.iter().any(|w| w.contains("gone")),
+        "{:?}",
+        shot.warnings
+    );
+}

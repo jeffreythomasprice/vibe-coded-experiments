@@ -12,6 +12,7 @@ mod nav;
 mod pane;
 mod panels;
 mod remote;
+mod surface;
 mod theme;
 mod tree;
 

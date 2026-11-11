@@ -74,7 +74,7 @@ fn rejects_newer_version() {
         err,
         LoadError::UnsupportedVersion {
             found: 99,
-            supported: 1
+            supported: 2
         }
     );
 }
@@ -191,5 +191,52 @@ fn unflagged_objects_write_no_flag_keys() {
 fn flags_must_be_booleans() {
     let text =
         doc("[[entity]]\nid = \"e2\"\nclassname = \"x\"\nlayer = \"l1\"\nhidden = \"yes\"\n");
+    assert!(matches!(read(&text), Err(LoadError::Parse { .. })));
+}
+
+#[test]
+fn fixture_materials_load() {
+    let doc = read(FIXTURE).unwrap();
+    assert_eq!(doc.materials.len(), 2);
+    let trim = doc.material_by_name("base/trim").unwrap();
+    assert_eq!(
+        trim.texture,
+        Some(editor_core::TextureSource::Path {
+            path: "textures/trim.png".into()
+        })
+    );
+    assert_eq!(trim.filter, editor_core::Filter::Nearest);
+    let dot = doc.material_by_name("base/dot").unwrap();
+    assert!(matches!(
+        dot.texture,
+        Some(editor_core::TextureSource::Embedded { .. })
+    ));
+    let face = &doc.meshes.values().next().unwrap().mesh.faces[0];
+    assert!(face.attrs.axes.is_some());
+}
+
+#[test]
+fn version_one_files_still_load() {
+    let doc =
+        read("format = \"scene\"\nversion = 1\n[meta]\nname = \"old\"\nnext_id = 2\n").unwrap();
+    assert_eq!(doc.name, "old");
+    assert!(doc.materials.is_empty());
+}
+
+#[test]
+fn duplicate_material_names_are_rejected() {
+    let text =
+        doc("[[material]]\nid = \"t2\"\nname = \"a\"\n[[material]]\nid = \"t3\"\nname = \"a\"\n");
+    assert!(matches!(
+        read(&text),
+        Err(LoadError::DuplicateMaterialName { .. })
+    ));
+}
+
+#[test]
+fn lone_axis_is_rejected() {
+    let text = doc(
+        "[[brush]]\nid = \"b5\"\nlayer = \"l1\"\nfaces = [\n  { id = 1, plane = [[0,0,0],[0,1,0],[1,0,0]], u_axis = [1, 0, 0] },\n]\n",
+    );
     assert!(matches!(read(&text), Err(LoadError::Parse { .. })));
 }

@@ -161,6 +161,7 @@ fn build(specs: &[Spec]) -> Document {
             offset: DVec2::new(s.offset.0, s.offset.1),
             scale: DVec2::new(s.scale.0, s.scale.1),
             rotation: s.rotation,
+            axes: None,
         };
         doc.brushes.insert(
             bid,

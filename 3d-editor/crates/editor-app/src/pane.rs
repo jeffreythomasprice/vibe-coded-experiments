@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use editor_cmd::args::{BrushVertexAt, Keep};
-use editor_core::{Camera, Document, GroupId, ObjectId, ObjectKind, OrthoView, Projection};
+use editor_core::{Camera, Document, FaceId, GroupId, ObjectId, ObjectKind, OrthoView, Projection};
 use editor_geom::Aabb;
 use editor_geom::camera::{View, viewport_camera};
 use editor_render::{PickMap, PreparedScene, Renderer};
@@ -59,6 +59,7 @@ pub enum Tool {
     Edge,
     Face,
     Clip,
+    Surface,
 }
 
 impl Tool {
@@ -73,6 +74,7 @@ impl Tool {
             Tool::Edge => "Edge",
             Tool::Face => "Face",
             Tool::Clip => "Clip",
+            Tool::Surface => "Surface",
         }
     }
 
@@ -90,13 +92,32 @@ impl Tool {
             Tool::Move => Some(Mode::Move),
             Tool::Rotate => Some(Mode::Rotate),
             Tool::Scale => Some(Mode::Scale),
-            Tool::Select | Tool::Box | Tool::Vertex | Tool::Edge | Tool::Face | Tool::Clip => None,
+            Tool::Select
+            | Tool::Box
+            | Tool::Vertex
+            | Tool::Edge
+            | Tool::Face
+            | Tool::Clip
+            | Tool::Surface => None,
         }
     }
 }
 
+/// What a click with the Surface tool does to the face under it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SurfaceClick {
+    Select,
+    Apply,
+    Wrap,
+}
+
 #[derive(Debug, Clone)]
 pub enum Action {
+    SurfaceClick {
+        face: Option<(ObjectId, FaceId)>,
+        additive: bool,
+        mode: SurfaceClick,
+    },
     Select {
         id: Option<ObjectId>,
         additive: bool,
@@ -482,8 +503,28 @@ impl Pane {
             }
         }
 
+        if env.tool == Tool::Surface
+            && resp.clicked_by(PointerButton::Primary)
+            && !mods.alt
+            && let Some(p) = resp.interact_pointer_pos()
+        {
+            let l = local_px(p);
+            let ray = view.ray(DVec2::new(f64::from(l.x), f64::from(l.y)));
+            let mode = match (mods.command, mods.shift) {
+                (true, true) => SurfaceClick::Wrap,
+                (true, false) => SurfaceClick::Apply,
+                _ => SurfaceClick::Select,
+            };
+            env.actions.push(Action::SurfaceClick {
+                face: Self::surface_face(env, ray),
+                additive: mods.shift && !mods.command,
+                mode,
+            });
+        }
+
         if resp.clicked_by(PointerButton::Primary)
             && env.tool != Tool::Clip
+            && env.tool != Tool::Surface
             && !mods.alt
             && self.gizmo_hover.is_none()
         {
@@ -878,7 +919,7 @@ impl Pane {
             Self::ortho_world(view, p).map(|w| DVec2::new(snap(w.x, env.grid), snap(w.y, env.grid)))
         };
         match env.tool {
-            Tool::Select | Tool::Clip => {}
+            Tool::Select | Tool::Clip | Tool::Surface => {}
             Tool::Rotate => self.rotate_tool(env, resp, view, escape, shift, local),
             Tool::Scale => self.scale_tool(env, resp, view, escape, local),
             Tool::Box => {
@@ -1177,6 +1218,22 @@ impl Pane {
         if matches!(self.interaction, Interaction::Cancelled) && !resp.dragged() {
             self.interaction = Interaction::Idle;
         }
+    }
+
+    /// The first pickable brush or mesh face under the ray.
+    fn surface_face(env: &PaneEnv, ray: (DVec3, DVec3)) -> Option<(ObjectId, FaceId)> {
+        let kinds = BTreeSet::from([ObjectKind::Brush, ObjectKind::Mesh]);
+        let hidden = env.doc.hidden_ids();
+        editor_cmd::ray_hits(env.doc, ray.0, ray.1, &kinds, &hidden, None)
+            .into_iter()
+            .filter(|h| env.doc.pickable(h.id, env.open_group))
+            .find_map(|h| {
+                let r = h.face?.parse::<editor_core::ElementRef>().ok()?;
+                match r.part {
+                    editor_core::Part::Face(f) => Some((h.id, f)),
+                    _ => None,
+                }
+            })
     }
 
     /// The face of a selected brush under the ray, as a handle.

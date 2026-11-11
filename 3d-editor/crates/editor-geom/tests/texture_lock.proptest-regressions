@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 0fd2cccf2c0497eb93b85fc87060c7b547ed4b76f9b1ccc159d3d521a99d7de5 # shrinks to attrs = [FaceAttrs { material: "m", offset: DVec2(0.0, 0.0), scale: DVec2(0.25, 0.25), rotation: 0.0, axes: None }, FaceAttrs { material: "m", offset: DVec2(0.0, 0.0), scale: DVec2(0.25, 0.25), rotation: -82.4865171210076, axes: None }, FaceAttrs { material: "m", offset: DVec2(0.0, 0.0), scale: DVec2(0.25, 0.25), rotation: 0.0, axes: None }, FaceAttrs { material: "m", offset: DVec2(0.0, 0.0), scale: DVec2(0.25, 0.25), rotation: 0.0, axes: None }, FaceAttrs { material: "m", offset: DVec2(0.0, 0.0), scale: DVec2(0.25, 0.25), rotation: 0.0, axes: None }, FaceAttrs { material: "m", offset: DVec2(0.0, 0.0), scale: DVec2(0.25, 0.25), rotation: 0.0, axes: None }], scale = (1, 1, 1), flip = 2

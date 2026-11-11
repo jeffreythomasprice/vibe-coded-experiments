@@ -6,7 +6,7 @@ use editor_cmd::{
     Actor, Attach, CommandError, Exec, Feed, FileState, HistoryState, OpInfo, Request, Response,
     Session, parse_args,
 };
-use editor_core::{Document, ObjectId};
+use editor_core::{Document, ElementRef, ObjectId, Part};
 use editor_proto::{
     ChangedEvent, ClientRow, ControlAction, ControlStatus, FileInfo, HistoryInfo, PROTOCOL,
     ServerMsg, SessionRow, SnapshotEvent, StopAck, TxnWire,
@@ -55,7 +55,17 @@ const PATH_OPS: &[&str] = &[
     "view.screenshot",
 ];
 
+const TEXTURE_OPS: &[&str] = &["material.create", "material.set"];
+
 fn resolve_paths(request: &mut Request, cwd: &Path) {
+    if TEXTURE_OPS.contains(&request.op.as_str())
+        && let Some(Value::Object(texture)) = request.args.get_mut("texture")
+        && texture.get("source").and_then(Value::as_str) == Some("file")
+        && let Some(Value::String(path)) = texture.get_mut("path")
+        && Path::new(path.as_str()).is_relative()
+    {
+        *path = cwd.join(path.as_str()).display().to_string();
+    }
     if !PATH_OPS.contains(&request.op.as_str()) {
         return;
     }
@@ -141,6 +151,17 @@ fn ids_sorted(ids: &std::collections::BTreeSet<ObjectId>) -> Vec<ObjectId> {
 
 fn selection_of(session: &Session) -> Vec<ObjectId> {
     ids_sorted(session.selection())
+}
+
+fn face_selection_of(session: &Session) -> Vec<ElementRef> {
+    session
+        .face_selection()
+        .iter()
+        .map(|&(object, face)| ElementRef {
+            object,
+            part: Part::Face(face),
+        })
+        .collect()
 }
 
 /// All sessions, connections and the shared renderer. Does no I/O: callers deliver the returned messages.
@@ -259,6 +280,7 @@ impl Hub {
             revision: session.revision(),
             document_toml: editor_fmt::write(session.document()),
             selection: selection_of(session),
+            face_selection: face_selection_of(session),
             file: file_info(session.file_state()),
             history: history_info(session.history_state()),
         }
@@ -292,6 +314,7 @@ impl Hub {
                 upsert,
                 deleted,
                 selection: feed.selection.then(|| selection_of(session)),
+                face_selection: feed.face_selection.then(|| face_selection_of(session)),
                 file: feed.file.then(|| file_info(session.file_state())),
                 history: feed.history.then(|| history_info(session.history_state())),
             })

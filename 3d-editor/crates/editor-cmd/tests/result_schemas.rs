@@ -91,6 +91,55 @@ fn every_document_and_session_op_returns_its_declared_result() {
         "face.set_uv",
         json!({ "faces": [format!("{mesh}/f1")], "scale": [2, 2] }),
     );
+    let tex = dir.join("tex").join("brick.png");
+    write_png(&tex, 4, 2, |x, _| {
+        if x < 2 {
+            [255, 0, 0, 255]
+        } else {
+            [0, 255, 0, 255]
+        }
+    });
+    let brick = r.id(
+        "material.create",
+        json!({
+            "name": "brick",
+            "texture": { "source": "file", "path": tex.display().to_string(), "store": "absolute" },
+            "color": [1, 0.9, 0.8, 1],
+            "roughness": 0.5,
+        }),
+    );
+    let png_b64 = {
+        use base64::Engine;
+        base64::engine::general_purpose::STANDARD.encode(std::fs::read(&tex).unwrap())
+    };
+    let inline = r.id(
+        "material.create",
+        json!({ "name": "inline", "texture": { "source": "base64", "format": "png", "data": png_b64 } }),
+    );
+    r.call("material.list", json!({}));
+    r.call("material.get", json!({ "material": "brick" }));
+    r.call(
+        "material.set",
+        json!({ "material": brick, "metallic": 0.25, "filter": "nearest" }),
+    );
+    r.call("material.embed", json!({}));
+    r.call(
+        "material.rename",
+        json!({ "material": "inline", "name": "inline2" }),
+    );
+    r.call(
+        "face.get_uv",
+        json!({ "faces": [format!("{mesh}/f1"), format!("{a}/f1")] }),
+    );
+    r.call(
+        "face.align_uv",
+        json!({ "faces": [format!("{a}/f1")], "action": { "type": "fit", "repeat": [2, 1] } }),
+    );
+    r.call(
+        "face.transfer_uv",
+        json!({ "from": format!("{a}/f1"), "to": [format!("{a}/f2")], "mode": "wrap" }),
+    );
+    r.call("material.delete", json!({ "materials": [inline] }));
     r.call(
         "vertex.translate",
         json!({ "vertices": [format!("{mesh}/v1")], "delta": [0, 0, 0] }),
@@ -273,6 +322,11 @@ fn every_document_and_session_op_returns_its_declared_result() {
     r.call("select.invert", json!({}));
     r.call("select.all", json!({}));
     r.call("select.clear", json!({}));
+    r.call("select.faces.set", json!({ "faces": [format!("{k1}/f1")] }));
+    r.call("select.faces.add", json!({ "faces": [k2] }));
+    r.call("select.faces.get", json!({}));
+    r.call("select.faces.remove", json!({ "faces": [k2] }));
+    r.call("select.faces.clear", json!({}));
 
     r.call("history.begin", json!({ "label": "x" }));
     r.call("object.delete", json!({ "ids": [dup[0]] }));

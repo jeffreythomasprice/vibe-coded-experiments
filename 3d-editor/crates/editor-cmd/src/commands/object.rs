@@ -156,7 +156,7 @@ fn make_copy(
         let source = ctx.doc().get(old).expect("collected from the document");
         let mut copy = remap(source, map[&old], &map);
         if let Some(m) = m {
-            copy = transform_object(&copy, m)?;
+            copy = transform_object(&copy, m, true)?;
         }
         copies.push(copy);
     }

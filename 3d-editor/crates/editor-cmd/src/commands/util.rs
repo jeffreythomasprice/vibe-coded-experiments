@@ -78,7 +78,7 @@ impl Parents {
 }
 
 pub fn renumber(id: ObjectId, number: u64) -> ObjectId {
-    use editor_core::{BrushId, CameraId, MeshId};
+    use editor_core::{BrushId, CameraId, MaterialId, MeshId};
     match id {
         ObjectId::Brush(_) => BrushId(number).into(),
         ObjectId::Mesh(_) => MeshId(number).into(),
@@ -86,6 +86,7 @@ pub fn renumber(id: ObjectId, number: u64) -> ObjectId {
         ObjectId::Group(_) => GroupId(number).into(),
         ObjectId::Layer(_) => LayerId(number).into(),
         ObjectId::Camera(_) => CameraId(number).into(),
+        ObjectId::Material(_) => MaterialId(number).into(),
     }
 }
 

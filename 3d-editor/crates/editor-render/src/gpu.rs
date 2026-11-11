@@ -1,9 +1,12 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 use crate::error::RenderError;
-use crate::scene::Vertex;
+use crate::scene::{FaceBatch, Vertex};
+use crate::texture::{RenderMaterial, TextureCache, TextureData};
 
 const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -13,15 +16,22 @@ pub struct Renderer {
     device: wgpu::Device,
     queue: wgpu::Queue,
     bind_group_layout: wgpu::BindGroupLayout,
+    material_layout: wgpu::BindGroupLayout,
     faces: wgpu::RenderPipeline,
+    faces_blend: wgpu::RenderPipeline,
     lines: wgpu::RenderPipeline,
     lines_on_top: wgpu::RenderPipeline,
     id_faces: wgpu::RenderPipeline,
     adapter: String,
+    textures: TextureCache,
+    uploaded: Mutex<HashMap<u64, Arc<wgpu::TextureView>>>,
+    white: Arc<wgpu::TextureView>,
+    linear: wgpu::Sampler,
+    nearest: wgpu::Sampler,
 }
 
 pub struct DrawLists<'a> {
-    pub tris: &'a [Vertex],
+    pub faces: &'a [FaceBatch],
     pub lines: &'a [Vertex],
     pub on_top: &'a [Vertex],
 }
@@ -32,6 +42,25 @@ pub struct DrawParams {
     pub height: u32,
     pub clear: [f64; 3],
     pub clip_z: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct MaterialUniform {
+    tint: [f32; 4],
+    emissive: [f32; 4],
+}
+
+/// One thing to draw, in pass order.
+enum Item<'a> {
+    Faces {
+        material: Option<&'a RenderMaterial>,
+        data: &'a [Vertex],
+    },
+    Plain {
+        pipeline: &'a wgpu::RenderPipeline,
+        data: &'a [Vertex],
+    },
 }
 
 #[repr(C)]
@@ -90,15 +119,58 @@ impl Renderer {
                 count: None,
             }],
         });
-        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("pipeline layout"),
+        let material_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("material"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+        let flat_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("flat layout"),
             bind_group_layouts: &[Some(&bind_group_layout)],
             immediate_size: 0,
         });
-        let make = |topology, compare, write, bias: wgpu::DepthBiasState, samples: u32| {
+        let face_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("face layout"),
+            bind_group_layouts: &[Some(&bind_group_layout), Some(&material_layout)],
+            immediate_size: 0,
+        });
+        let make = |layout: &wgpu::PipelineLayout,
+                    entry: &str,
+                    blend: Option<wgpu::BlendState>,
+                    topology,
+                    compare,
+                    write,
+                    bias: wgpu::DepthBiasState,
+                    samples: u32| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: None,
-                layout: Some(&layout),
+                layout: Some(layout),
                 vertex: wgpu::VertexState {
                     module: &module,
                     entry_point: Some("vs_main"),
@@ -106,7 +178,7 @@ impl Renderer {
                     buffers: &[Some(wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vertex>() as u64,
                         step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x4],
+                        attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x4, 2 => Float32x2],
                     })],
                 },
                 primitive: wgpu::PrimitiveState {
@@ -126,9 +198,13 @@ impl Renderer {
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &module,
-                    entry_point: Some("fs_main"),
+                    entry_point: Some(entry),
                     compilation_options: Default::default(),
-                    targets: &[Some(COLOR_FORMAT.into())],
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: COLOR_FORMAT,
+                        blend,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
                 }),
                 multiview_mask: None,
                 cache: None,
@@ -139,14 +215,42 @@ impl Renderer {
             slope_scale: 1.5,
             clamp: 0.0,
         };
+        let over = wgpu::BlendState {
+            color: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::SrcAlpha,
+                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                operation: wgpu::BlendOperation::Add,
+            },
+            alpha: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                operation: wgpu::BlendOperation::Add,
+            },
+        };
         let faces = make(
+            &face_layout,
+            "fs_face",
+            None,
             wgpu::PrimitiveTopology::TriangleList,
             wgpu::CompareFunction::LessEqual,
             true,
             push_back,
             SAMPLES,
         );
+        let faces_blend = make(
+            &face_layout,
+            "fs_face_blend",
+            Some(over),
+            wgpu::PrimitiveTopology::TriangleList,
+            wgpu::CompareFunction::LessEqual,
+            false,
+            push_back,
+            SAMPLES,
+        );
         let lines = make(
+            &flat_layout,
+            "fs_main",
+            None,
             wgpu::PrimitiveTopology::LineList,
             wgpu::CompareFunction::LessEqual,
             true,
@@ -154,6 +258,9 @@ impl Renderer {
             SAMPLES,
         );
         let lines_on_top = make(
+            &flat_layout,
+            "fs_main",
+            None,
             wgpu::PrimitiveTopology::LineList,
             wgpu::CompareFunction::Always,
             false,
@@ -161,6 +268,9 @@ impl Renderer {
             SAMPLES,
         );
         let id_faces = make(
+            &flat_layout,
+            "fs_main",
+            None,
             wgpu::PrimitiveTopology::TriangleList,
             wgpu::CompareFunction::LessEqual,
             true,
@@ -168,16 +278,63 @@ impl Renderer {
             1,
         );
 
+        let sampler = |filter, aniso| {
+            device.create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("material sampler"),
+                address_mode_u: wgpu::AddressMode::Repeat,
+                address_mode_v: wgpu::AddressMode::Repeat,
+                address_mode_w: wgpu::AddressMode::Repeat,
+                mag_filter: filter,
+                min_filter: filter,
+                mipmap_filter: match filter {
+                    wgpu::FilterMode::Nearest => wgpu::MipmapFilterMode::Nearest,
+                    wgpu::FilterMode::Linear => wgpu::MipmapFilterMode::Linear,
+                },
+                anisotropy_clamp: aniso,
+                ..Default::default()
+            })
+        };
+        let linear = sampler(wgpu::FilterMode::Linear, 8);
+        let nearest = sampler(wgpu::FilterMode::Nearest, 1);
+        let white = Arc::new(upload_texture(&device, &queue, 1, 1, &[vec![255; 4]]));
+
         Self {
             device,
             queue,
             bind_group_layout,
+            material_layout,
             faces,
+            faces_blend,
             lines,
             lines_on_top,
             id_faces,
             adapter,
+            textures: TextureCache::default(),
+            uploaded: Mutex::new(HashMap::new()),
+            white,
+            linear,
+            nearest,
         }
+    }
+
+    /// Decoded material images, shared by every scene built for this renderer.
+    pub fn textures(&self) -> &TextureCache {
+        &self.textures
+    }
+
+    fn gpu_texture(&self, data: &TextureData) -> Arc<wgpu::TextureView> {
+        let mut map = self.uploaded.lock().expect("texture uploads");
+        map.entry(data.key)
+            .or_insert_with(|| {
+                Arc::new(upload_texture(
+                    &self.device,
+                    &self.queue,
+                    data.width,
+                    data.height,
+                    &mip_chain(data),
+                ))
+            })
+            .clone()
     }
 
     pub fn adapter_name(&self) -> &str {
@@ -186,18 +343,25 @@ impl Renderer {
 
     /// Renders and returns tightly packed RGBA8 rows.
     pub fn draw(&self, params: &DrawParams, lists: &DrawLists) -> Result<Vec<u8>, RenderError> {
-        self.render(params, SAMPLES, &self.batches(lists))
+        self.render(params, SAMPLES, &self.items(lists))
     }
 
     /// Single-sample, unlit triangles whose vertex colours are read back exactly (object id buffer).
     pub fn draw_ids(&self, params: &DrawParams, tris: &[Vertex]) -> Result<Vec<u8>, RenderError> {
-        self.render(params, 1, &[(&self.id_faces, tris)])
+        self.render(
+            params,
+            1,
+            &[Item::Plain {
+                pipeline: &self.id_faces,
+                data: tris,
+            }],
+        )
     }
 
     /// Renders into `target`, an `Rgba8Unorm` texture view with `RENDER_ATTACHMENT` usage of size `params.width` x `params.height`.
     pub fn draw_to_view(&self, params: &DrawParams, lists: &DrawLists, target: &wgpu::TextureView) {
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        self.record(&mut encoder, params, SAMPLES, &self.batches(lists), target);
+        self.record(&mut encoder, params, SAMPLES, &self.items(lists), target);
         self.queue.submit([encoder.finish()]);
     }
 
@@ -211,15 +375,28 @@ impl Renderer {
 
     pub const COLOR_FORMAT: wgpu::TextureFormat = COLOR_FORMAT;
 
-    fn batches<'a>(
-        &'a self,
-        lists: &DrawLists<'a>,
-    ) -> [(&'a wgpu::RenderPipeline, &'a [Vertex]); 3] {
-        [
-            (&self.faces, lists.tris),
-            (&self.lines, lists.lines),
-            (&self.lines_on_top, lists.on_top),
-        ]
+    fn items<'a>(&'a self, lists: &DrawLists<'a>) -> Vec<Item<'a>> {
+        let faces = |blended: bool| {
+            lists
+                .faces
+                .iter()
+                .filter(move |b| b.material.as_ref().is_some_and(|m| m.blended) == blended)
+                .map(|b| Item::Faces {
+                    material: b.material.as_deref(),
+                    data: &b.verts,
+                })
+        };
+        let mut items: Vec<Item> = faces(false).collect();
+        items.push(Item::Plain {
+            pipeline: &self.lines,
+            data: lists.lines,
+        });
+        items.extend(faces(true));
+        items.push(Item::Plain {
+            pipeline: &self.lines_on_top,
+            data: lists.on_top,
+        });
+        items
     }
 
     fn texture(
@@ -251,7 +428,7 @@ impl Renderer {
         encoder: &mut wgpu::CommandEncoder,
         params: &DrawParams,
         samples: u32,
-        batches: &[(&wgpu::RenderPipeline, &[Vertex])],
+        items: &[Item],
         target: &wgpu::TextureView,
     ) {
         let dims = (params.width, params.height);
@@ -292,17 +469,40 @@ impl Renderer {
                 resource: globals.as_entire_binding(),
             }],
         });
-        let buffers: Vec<_> = batches
+        struct Prepared<'a> {
+            pipeline: &'a wgpu::RenderPipeline,
+            buffer: wgpu::Buffer,
+            count: u32,
+            material: Option<wgpu::BindGroup>,
+        }
+        let prepared: Vec<Prepared> = items
             .iter()
-            .map(|(pipeline, data)| {
-                let buffer = (!data.is_empty()).then(|| {
-                    self.device.create_buffer_init(&BufferInitDescriptor {
-                        label: None,
-                        contents: bytemuck::cast_slice(data),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    })
+            .filter_map(|item| {
+                let (pipeline, data, material) = match item {
+                    Item::Plain { pipeline, data } => (*pipeline, *data, None),
+                    Item::Faces { material, data } => {
+                        let pipeline = if material.is_some_and(|m| m.blended) {
+                            &self.faces_blend
+                        } else {
+                            &self.faces
+                        };
+                        (pipeline, *data, Some(self.material_group(*material)))
+                    }
+                };
+                if data.is_empty() {
+                    return None;
+                }
+                let buffer = self.device.create_buffer_init(&BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::cast_slice(data),
+                    usage: wgpu::BufferUsages::VERTEX,
                 });
-                (*pipeline, buffer, data.len())
+                Some(Prepared {
+                    pipeline,
+                    buffer,
+                    count: data.len() as u32,
+                    material,
+                })
             })
             .collect();
 
@@ -339,20 +539,66 @@ impl Renderer {
             multiview_mask: None,
         });
         pass.set_bind_group(0, &bind_group, &[]);
-        for (pipeline, buffer, count) in &buffers {
-            if let Some(buffer) = buffer {
-                pass.set_pipeline(pipeline);
-                pass.set_vertex_buffer(0, buffer.slice(..));
-                pass.draw(0..*count as u32, 0..1);
+        for p in &prepared {
+            pass.set_pipeline(p.pipeline);
+            if let Some(group) = &p.material {
+                pass.set_bind_group(1, group, &[]);
             }
+            pass.set_vertex_buffer(0, p.buffer.slice(..));
+            pass.draw(0..p.count, 0..1);
         }
+    }
+
+    fn material_group(&self, material: Option<&RenderMaterial>) -> wgpu::BindGroup {
+        let uniform = match material {
+            Some(m) => MaterialUniform {
+                tint: m.tint,
+                emissive: [m.emissive[0], m.emissive[1], m.emissive[2], 0.0],
+            },
+            None => MaterialUniform {
+                tint: [1.0; 4],
+                emissive: [0.0; 4],
+            },
+        };
+        let buffer = self.device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("material"),
+            contents: bytemuck::bytes_of(&uniform),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        let view = match material.and_then(|m| m.texture.as_ref()) {
+            Some(data) => self.gpu_texture(data),
+            None => self.white.clone(),
+        };
+        let sampler = if material.is_some_and(|m| m.nearest) {
+            &self.nearest
+        } else {
+            &self.linear
+        };
+        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("material"),
+            layout: &self.material_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                },
+            ],
+        })
     }
 
     fn render(
         &self,
         params: &DrawParams,
         samples: u32,
-        batches: &[(&wgpu::RenderPipeline, &[Vertex])],
+        items: &[Item],
     ) -> Result<Vec<u8>, RenderError> {
         let (w, h) = (params.width, params.height);
         let resolve_tex = self.texture(
@@ -374,7 +620,7 @@ impl Renderer {
         });
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        self.record(&mut encoder, params, samples, batches, &resolve_view);
+        self.record(&mut encoder, params, samples, items, &resolve_view);
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
                 texture: &resolve_tex,
@@ -419,4 +665,67 @@ impl Renderer {
         }
         Ok(rgba)
     }
+}
+
+fn mip_chain(data: &TextureData) -> Vec<Vec<u8>> {
+    let mut levels = vec![data.rgba.clone()];
+    let (mut w, mut h) = (data.width, data.height);
+    while w > 1 || h > 1 {
+        let (nw, nh) = ((w / 2).max(1), (h / 2).max(1));
+        let prev = image::RgbaImage::from_raw(w, h, levels.last().expect("one level").clone())
+            .expect("level matches its size");
+        levels.push(
+            image::imageops::resize(&prev, nw, nh, image::imageops::FilterType::Triangle)
+                .into_raw(),
+        );
+        (w, h) = (nw, nh);
+    }
+    levels
+}
+
+fn upload_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    width: u32,
+    height: u32,
+    levels: &[Vec<u8>],
+) -> wgpu::TextureView {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("material texture"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: levels.len() as u32,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let (mut w, mut h) = (width, height);
+    for (level, bytes) in levels.iter().enumerate() {
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: level as u32,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            bytes,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(w * 4),
+                rows_per_image: Some(h),
+            },
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+        );
+        (w, h) = ((w / 2).max(1), (h / 2).max(1));
+    }
+    texture.create_view(&Default::default())
 }

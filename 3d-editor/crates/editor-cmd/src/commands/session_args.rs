@@ -1,4 +1,4 @@
-use editor_core::{ObjectId, ObjectKind};
+use editor_core::{ElementRef, ObjectId, ObjectKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -18,6 +18,13 @@ pub struct List {
 #[serde(deny_unknown_fields)]
 pub struct SelectIds {
     pub ids: Vec<ObjectId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SelectFaces {
+    /// Faces like `b12/f3`; a bare brush or mesh id means all of its faces.
+    pub faces: Vec<ElementRef>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
