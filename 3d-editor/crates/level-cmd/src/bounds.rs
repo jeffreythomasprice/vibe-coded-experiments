@@ -1,4 +1,6 @@
 use level_core::{Document, Object, ObjectId};
+
+use crate::commands::results::BoundsBox;
 use level_geom::{Aabb, brush_geometry};
 use serde_json::{Value, json};
 
@@ -43,6 +45,13 @@ pub fn scene_bounds(doc: &Document) -> Option<Aabb> {
         .reduce(Aabb::merge)
 }
 
+pub fn bounds_box(b: Aabb) -> BoundsBox {
+    BoundsBox {
+        min: b.min,
+        max: b.max,
+    }
+}
+
 pub fn bounds_json(b: Aabb) -> Value {
-    json!({ "min": b.min, "max": b.max })
+    json!(bounds_box(b))
 }

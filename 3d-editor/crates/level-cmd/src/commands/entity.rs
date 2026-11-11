@@ -3,9 +3,9 @@ use std::collections::BTreeSet;
 use glam::DVec3;
 use level_core::{Entity, EntityId, Extra, GroupId, LayerId, Object, ObjectId, Properties};
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde_json::json;
+use serde::{Deserialize, Serialize};
 
+use super::results;
 use super::util::{RESERVED_PROPERTIES, check_finite, non_empty, resolve_layer, with_entity};
 use super::{CmdResult, Outcome};
 use crate::ctx::Ctx;
@@ -78,7 +78,7 @@ pub struct Create {
     group: Option<GroupId>,
 }
 
-pub fn create(ctx: &mut Ctx, args: Create) -> CmdResult {
+pub fn create(ctx: &mut Ctx, args: Create) -> CmdResult<results::Created> {
     check_classname(&args.classname)?;
     check_finite("origin", args.origin)?;
     let angles = args.angles.unwrap_or(DVec3::ZERO);
@@ -125,7 +125,7 @@ pub struct CreateBrushEntity {
     properties: Properties,
 }
 
-pub fn create_brush_entity(ctx: &mut Ctx, args: CreateBrushEntity) -> CmdResult {
+pub fn create_brush_entity(ctx: &mut Ctx, args: CreateBrushEntity) -> CmdResult<results::Created> {
     check_classname(&args.classname)?;
     check_property_keys(args.properties.keys())?;
     non_empty("objects", &args.objects)?;
@@ -184,7 +184,7 @@ pub struct Release {
     ids: Vec<ObjectId>,
 }
 
-pub fn release_objects(ctx: &mut Ctx, args: Release) -> CmdResult {
+pub fn release_objects(ctx: &mut Ctx, args: Release) -> CmdResult<results::Released> {
     non_empty("ids", &args.ids)?;
     let mut members = BTreeSet::new();
     for &id in &args.ids {
@@ -228,22 +228,25 @@ pub fn release_objects(ctx: &mut Ctx, args: Release) -> CmdResult {
         }
     }
     Ok(Outcome {
-        result: json!({ "released": members.len(), "deleted_entities": removed }),
+        result: results::Released {
+            released: members.len(),
+            deleted_entities: removed,
+        },
         warnings,
     })
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SetProperties {
-    ids: Vec<ObjectId>,
+    pub ids: Vec<ObjectId>,
     #[serde(default)]
-    set: Properties,
+    pub set: Properties,
     #[serde(default)]
-    remove: Vec<String>,
+    pub remove: Vec<String>,
 }
 
-pub fn set_properties(ctx: &mut Ctx, args: SetProperties) -> CmdResult {
+pub fn set_properties(ctx: &mut Ctx, args: SetProperties) -> CmdResult<results::Updated> {
     non_empty("ids", &args.ids)?;
     check_property_keys(args.set.keys().chain(args.remove.iter()))?;
     let mut updated = Vec::new();
@@ -260,17 +263,19 @@ pub fn set_properties(ctx: &mut Ctx, args: SetProperties) -> CmdResult {
     for entity in updated {
         ctx.insert(Object::Entity(entity));
     }
-    Ok(Outcome::new(json!({ "updated": args.ids.len() })))
+    Ok(Outcome::new(results::Updated {
+        updated: args.ids.len(),
+    }))
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SetClassname {
-    ids: Vec<ObjectId>,
-    classname: String,
+    pub ids: Vec<ObjectId>,
+    pub classname: String,
 }
 
-pub fn set_classname(ctx: &mut Ctx, args: SetClassname) -> CmdResult {
+pub fn set_classname(ctx: &mut Ctx, args: SetClassname) -> CmdResult<results::Updated> {
     non_empty("ids", &args.ids)?;
     check_classname(&args.classname)?;
     let mut updated = Vec::new();
@@ -282,20 +287,22 @@ pub fn set_classname(ctx: &mut Ctx, args: SetClassname) -> CmdResult {
     for entity in updated {
         ctx.insert(Object::Entity(entity));
     }
-    Ok(Outcome::new(json!({ "updated": args.ids.len() })))
+    Ok(Outcome::new(results::Updated {
+        updated: args.ids.len(),
+    }))
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SetTransform {
-    id: ObjectId,
+    pub id: ObjectId,
     #[schemars(with = "Option<[f64; 3]>")]
-    origin: Option<DVec3>,
+    pub origin: Option<DVec3>,
     #[schemars(with = "Option<[f64; 3]>")]
-    angles: Option<DVec3>,
+    pub angles: Option<DVec3>,
 }
 
-pub fn set_transform(ctx: &mut Ctx, args: SetTransform) -> CmdResult {
+pub fn set_transform(ctx: &mut Ctx, args: SetTransform) -> CmdResult<results::IdOnly> {
     let mut entity = entity_of(ctx, args.id)?;
     if entity.origin.is_none() {
         return Err(CommandError::invalid_arg(
@@ -313,5 +320,5 @@ pub fn set_transform(ctx: &mut Ctx, args: SetTransform) -> CmdResult {
         entity.angles = angles;
     }
     ctx.insert(Object::Entity(entity));
-    Ok(Outcome::new(json!({ "id": args.id })))
+    Ok(Outcome::new(results::IdOnly { id: args.id }))
 }

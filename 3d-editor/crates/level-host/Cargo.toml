@@ -8,5 +8,10 @@ publish.workspace = true
 level-cmd.workspace = true
 level-core.workspace = true
 level-fmt.workspace = true
+level-proto.workspace = true
 level-render.workspace = true
+serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+jsonschema.workspace = true

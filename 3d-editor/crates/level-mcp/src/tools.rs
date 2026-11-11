@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use level_cmd::{Exec, OPS, OpInfo, Safety};
-use level_host::Policy;
+use level_proto::Policy;
 use rmcp::model::{Tool, ToolAnnotations};
 use serde_json::{Map, Value, json};
 
@@ -41,8 +41,8 @@ fn inline_refs(value: Value, defs: &Map<String, Value>, depth: usize) -> Value {
     }
 }
 
-pub fn input_schema(info: &OpInfo) -> Map<String, Value> {
-    let mut schema = match serde_json::to_value((info.args_schema)()) {
+fn inlined(schema: schemars::Schema) -> Map<String, Value> {
+    let mut schema = match serde_json::to_value(schema) {
         Ok(Value::Object(m)) => m,
         _ => Map::new(),
     };
@@ -52,9 +52,26 @@ pub fn input_schema(info: &OpInfo) -> Map<String, Value> {
     };
     schema.remove("$schema");
     schema.remove("title");
-    let Value::Object(mut schema) = inline_refs(Value::Object(schema), &defs, 0) else {
+    let Value::Object(schema) = inline_refs(Value::Object(schema), &defs, 0) else {
         unreachable!("an object stays an object")
     };
+    schema
+}
+
+/// Every reply is either the op's success envelope or the structured error.
+pub fn output_schema(info: &OpInfo) -> Map<String, Value> {
+    let error = inlined(schemars::schema_for!(level_cmd::ErrorResponse));
+    let mut schema = Map::new();
+    schema.insert("type".into(), json!("object"));
+    schema.insert(
+        "anyOf".into(),
+        json!([Value::Object(inlined((info.response_schema)())), Value::Object(error)]),
+    );
+    schema
+}
+
+pub fn input_schema(info: &OpInfo) -> Map<String, Value> {
+    let mut schema = inlined((info.args_schema)());
     schema.insert("type".into(), json!("object"));
 
     if info.safety != Safety::Read {
@@ -83,6 +100,7 @@ pub fn build_tool(info: &OpInfo) -> Tool {
         info.summary,
         Arc::new(input_schema(info)),
     );
+    tool.output_schema = Some(Arc::new(output_schema(info)));
     let annotations = ToolAnnotations::new()
         .read_only(info.safety == Safety::Read)
         .destructive(info.safety == Safety::Destructive)
@@ -125,6 +143,17 @@ mod tests {
             let schema = Value::Object(input_schema(op));
             assert_eq!(schema["type"], "object", "{}", op.name);
             assert!(!has_ref(&schema), "{}: {schema}", op.name);
+        }
+    }
+
+    #[test]
+    fn output_schemas_are_inline_objects() {
+        for op in OPS {
+            let schema = Value::Object(output_schema(op));
+            assert_eq!(schema["type"], "object", "{}", op.name);
+            assert_eq!(schema["anyOf"].as_array().map(Vec::len), Some(2), "{}", op.name);
+            assert!(!has_ref(&schema), "{}: {schema}", op.name);
+            assert!(jsonschema::validator_for(&schema).is_ok(), "{}", op.name);
         }
     }
 

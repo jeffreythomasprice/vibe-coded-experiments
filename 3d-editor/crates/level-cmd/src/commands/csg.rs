@@ -5,6 +5,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use super::brush::geometry_error;
+use super::results;
 use super::util::{Parents, brush_or_mesh};
 use super::{CmdResult, Outcome};
 use crate::ctx::Ctx;
@@ -56,7 +57,7 @@ fn as_mesh(object: &Object) -> Result<Mesh, CommandError> {
     }
 }
 
-pub fn subtract(ctx: &mut Ctx, args: Subtract) -> CmdResult {
+pub fn subtract(ctx: &mut Ctx, args: Subtract) -> CmdResult<results::CreatedMapped> {
     if args.targets.is_empty() {
         return Err(CommandError::invalid_arg(
             "targets",
@@ -117,7 +118,7 @@ pub fn subtract(ctx: &mut Ctx, args: Subtract) -> CmdResult {
             ctx.remove(*cutter);
         }
     }
-    Ok(Outcome::created(created, warnings).with_map(map))
+    Ok(Outcome::created_mapped(created, warnings, map))
 }
 
 fn subtract_brush(

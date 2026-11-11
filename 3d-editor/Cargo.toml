@@ -6,7 +6,9 @@ members = [
     "crates/level-cmd",
     "crates/level-fmt",
     "crates/level-render",
+    "crates/level-proto",
     "crates/level-host",
+    "crates/level-server",
     "crates/level-mcp",
     "crates/level-cli",
     "crates/editor-app",
@@ -23,6 +25,7 @@ level-geom = { path = "crates/level-geom" }
 level-cmd = { path = "crates/level-cmd" }
 level-fmt = { path = "crates/level-fmt" }
 level-render = { path = "crates/level-render" }
+level-proto = { path = "crates/level-proto" }
 level-host = { path = "crates/level-host" }
 
 glam = { version = "0.34", features = ["serde"] }
@@ -30,6 +33,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_path_to_error = "0.1"
 schemars = "1"
+jsonschema = { version = "0.56", default-features = false }
 toml = "1"
 thiserror = "2"
 proptest = "1"

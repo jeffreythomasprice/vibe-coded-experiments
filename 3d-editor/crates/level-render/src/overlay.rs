@@ -127,3 +127,41 @@ pub fn bounds_lines(drawn: &[Drawn]) -> Vec<Vertex> {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use level_core::Projection;
+    use level_geom::camera::viewport_camera;
+
+    use super::*;
+
+    fn top_view(zoom: f64) -> View {
+        let bounds = Aabb {
+            min: DVec3::splat(-100.0),
+            max: DVec3::splat(100.0),
+        };
+        let mut camera = viewport_camera("viewport.top", Some(&bounds), 800, 600).unwrap();
+        camera.projection = Projection::Orthographic {
+            view: level_core::OrthoView::Top,
+            zoom,
+        };
+        View::new(&camera, 800, 600, bounds.reach())
+    }
+
+    #[test]
+    fn a_fine_grid_is_coarsened_when_zoomed_out() {
+        let lines = grid_lines(&top_view(1.0), 0.125, None);
+        assert!(
+            lines.len() / 2 <= 2 * (MAX_LINES as usize + 2),
+            "{} lines",
+            lines.len() / 2
+        );
+    }
+
+    #[test]
+    fn a_fine_grid_is_kept_when_zoomed_in() {
+        let near = grid_lines(&top_view(200.0), 0.125, None);
+        let far = grid_lines(&top_view(200.0), 16.0, None);
+        assert!(near.len() > far.len(), "{} vs {}", near.len(), far.len());
+    }
+}

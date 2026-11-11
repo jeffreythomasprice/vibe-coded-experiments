@@ -10,9 +10,9 @@ use level_geom::tolerance::snap_vec;
 use level_geom::{MeshToBrushError, brush_to_mesh, mesh_to_brush};
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_json::json;
 
 use super::brush::geometry_error;
+use super::results;
 use super::util::{brush_of, check_finite, mesh_of, mesh_problems, non_empty, resolve_layer};
 use super::{CmdResult, Outcome};
 use crate::ctx::Ctx;
@@ -36,7 +36,7 @@ pub struct Create {
     layer: Option<LayerId>,
 }
 
-pub fn create(ctx: &mut Ctx, args: Create) -> CmdResult {
+pub fn create(ctx: &mut Ctx, args: Create) -> CmdResult<results::Created> {
     non_empty("faces", &args.faces)?;
     if args.vertices.len() < 3 {
         return Err(CommandError::invalid_arg(
@@ -99,7 +99,7 @@ fn is_open(mesh: &Mesh) -> bool {
         .any(|i| matches!(i, MeshIssue::OpenEdge { .. }))
 }
 
-pub fn delete_faces(ctx: &mut Ctx, args: DeleteFaces) -> CmdResult {
+pub fn delete_faces(ctx: &mut Ctx, args: DeleteFaces) -> CmdResult<results::FacesRemoved> {
     non_empty("faces", &args.faces)?;
     let mut doomed: BTreeMap<ObjectId, BTreeSet<FaceId>> = BTreeMap::new();
     for r in &args.faces {
@@ -158,7 +158,7 @@ pub fn delete_faces(ctx: &mut Ctx, args: DeleteFaces) -> CmdResult {
         ctx.insert(Object::Mesh(mesh));
     }
     Ok(Outcome {
-        result: json!({ "removed": removed }),
+        result: results::FacesRemoved { removed },
         warnings,
     })
 }
@@ -169,7 +169,7 @@ pub struct Convert {
     ids: Vec<ObjectId>,
 }
 
-pub fn mesh_to_brush_cmd(ctx: &mut Ctx, args: Convert) -> CmdResult {
+pub fn mesh_to_brush_cmd(ctx: &mut Ctx, args: Convert) -> CmdResult<results::CreatedMapped> {
     non_empty("ids", &args.ids)?;
     let mut converted = Vec::new();
     for &id in &args.ids {
@@ -200,10 +200,10 @@ pub fn mesh_to_brush_cmd(ctx: &mut Ctx, args: Convert) -> CmdResult {
         map.push((source.id.into(), vec![new_id.into()]));
         created.push(new_id.into());
     }
-    Ok(Outcome::created(created, vec![]).with_map(map))
+    Ok(Outcome::created_mapped(created, vec![], map))
 }
 
-pub fn brush_to_mesh_cmd(ctx: &mut Ctx, args: Convert) -> CmdResult {
+pub fn brush_to_mesh_cmd(ctx: &mut Ctx, args: Convert) -> CmdResult<results::CreatedMapped> {
     non_empty("ids", &args.ids)?;
     let mut converted = Vec::new();
     for &id in &args.ids {
@@ -227,5 +227,5 @@ pub fn brush_to_mesh_cmd(ctx: &mut Ctx, args: Convert) -> CmdResult {
         map.push((source.id.into(), vec![new_id.into()]));
         created.push(new_id.into());
     }
-    Ok(Outcome::created(created, vec![]).with_map(map))
+    Ok(Outcome::created_mapped(created, vec![], map))
 }

@@ -17,3 +17,4 @@ serde_path_to_error.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+jsonschema.workspace = true

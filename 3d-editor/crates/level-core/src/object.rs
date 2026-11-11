@@ -145,51 +145,58 @@ from_id!(Group, GroupId);
 from_id!(Layer, LayerId);
 from_id!(Camera, CameraId);
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct BrushObject {
     pub id: BrushId,
     pub layer: LayerId,
     pub group: Option<GroupId>,
     pub entity: Option<EntityId>,
     pub brush: Brush,
+    #[schemars(schema_with = "crate::property::extra_schema")]
     pub extra: Extra,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct MeshObject {
     pub id: MeshId,
     pub layer: LayerId,
     pub group: Option<GroupId>,
     pub entity: Option<EntityId>,
     pub mesh: Mesh,
+    #[schemars(schema_with = "crate::property::extra_schema")]
     pub extra: Extra,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Entity {
     pub id: EntityId,
     pub classname: String,
     pub layer: LayerId,
     pub group: Option<GroupId>,
+    #[schemars(with = "Option<[f64; 3]>")]
     pub origin: Option<DVec3>,
+    #[schemars(with = "[f64; 3]")]
     pub angles: DVec3,
     pub properties: Properties,
+    #[schemars(schema_with = "crate::property::extra_schema")]
     pub extra: Extra,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Group {
     pub id: GroupId,
     pub name: String,
     pub layer: LayerId,
     pub parent: Option<GroupId>,
+    #[schemars(schema_with = "crate::property::extra_schema")]
     pub extra: Extra,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Layer {
     pub id: LayerId,
     pub name: String,
+    #[schemars(schema_with = "crate::property::extra_schema")]
     pub extra: Extra,
 }
 
@@ -201,25 +208,27 @@ pub enum OrthoView {
     Side,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Projection {
     Perspective { fov: f64 },
     Orthographic { view: OrthoView, zoom: f64 },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Camera {
     pub id: CameraId,
     pub name: String,
+    #[schemars(with = "[f64; 3]")]
     pub position: DVec3,
     pub yaw: f64,
     pub pitch: f64,
     pub projection: Projection,
+    #[schemars(schema_with = "crate::property::extra_schema")]
     pub extra: Extra,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Object {
     Brush(BrushObject),

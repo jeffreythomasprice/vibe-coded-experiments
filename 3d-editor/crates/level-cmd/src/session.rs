@@ -2,20 +2,77 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use level_core::{Document, ObjectId};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::commands::session_args::{Begin, List, New, Open, Save, SelectIds, SelectKind};
-use crate::commands::{self, Exec, NoArgs, OpInfo, parse_args};
+use crate::commands::{self, Exec, NoArgs, OpInfo, parse_args, results};
 use crate::ctx::{Ctx, Journal, Savepoint, rollback, savepoint};
 use crate::envelope::{Changes, Request, Response, Success};
 use crate::error::CommandError;
-use crate::history::{HistoryEntry, apply, changes_of, collapse};
+use crate::history::{HistoryEntry, apply, changes_of, collapse, merge};
+
+/// Who is issuing a request: `conn` owns transactions and merge chains, `name` is the attribution.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Actor {
+    pub conn: u64,
+    pub name: String,
+}
+
+impl Actor {
+    pub fn new(conn: u64, name: impl Into<String>) -> Self {
+        Self {
+            conn,
+            name: name.into(),
+        }
+    }
+
+    pub fn local(name: &str) -> Self {
+        Self::new(0, name)
+    }
+}
 
 struct OpenTxn {
     label: String,
-    client: String,
+    actor: Actor,
     start: Savepoint,
     start_revision: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileState {
+    pub path: Option<String>,
+    pub name: String,
+    pub dirty: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TxnInfo {
+    pub holder: String,
+    pub conn: u64,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryState {
+    pub can_undo: bool,
+    pub can_redo: bool,
+    pub transaction: Option<TxnInfo>,
+}
+
+/// What changed since the last `take_feed`: objects to re-read from the document, and flags for session state.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Feed {
+    pub ids: BTreeSet<ObjectId>,
+    pub replaced: bool,
+    pub selection: bool,
+    pub file: bool,
+    pub history: bool,
+}
+
+impl Feed {
+    pub fn is_empty(&self) -> bool {
+        *self == Feed::default()
+    }
 }
 
 pub struct Session {
@@ -28,6 +85,7 @@ pub struct Session {
     selection: BTreeSet<ObjectId>,
     path: Option<PathBuf>,
     saved_revision: u64,
+    feed: Feed,
 }
 
 fn selectable(id: ObjectId) -> bool {
@@ -76,6 +134,7 @@ impl Session {
             selection: BTreeSet::new(),
             path: None,
             saved_revision: 0,
+            feed: Feed::default(),
         }
     }
 
@@ -109,6 +168,30 @@ impl Session {
         self.revision
     }
 
+    pub fn file_state(&self) -> FileState {
+        FileState {
+            path: self.path.as_ref().map(|p| p.display().to_string()),
+            name: self.doc.name.clone(),
+            dirty: self.is_dirty(),
+        }
+    }
+
+    pub fn history_state(&self) -> HistoryState {
+        HistoryState {
+            can_undo: !self.undo.is_empty(),
+            can_redo: !self.redo.is_empty(),
+            transaction: self.open.as_ref().map(|t| TxnInfo {
+                holder: t.actor.name.clone(),
+                conn: t.actor.conn,
+                label: t.label.clone(),
+            }),
+        }
+    }
+
+    pub fn take_feed(&mut self) -> Feed {
+        std::mem::take(&mut self.feed)
+    }
+
     pub fn execute_value(&mut self, request: Value, client: &str) -> Response {
         match Request::from_value(request) {
             Ok(r) => self.execute(r, client),
@@ -117,26 +200,100 @@ impl Session {
     }
 
     pub fn execute(&mut self, request: Request, client: &str) -> Response {
-        match self.run(request, client) {
+        self.execute_as(request, &Actor::local(client))
+    }
+
+    pub fn execute_as(&mut self, request: Request, actor: &Actor) -> Response {
+        let selection = self.selection.clone();
+        let file = self.file_state();
+        let history = self.history_state();
+        let result = self.run(request, actor);
+        self.feed.selection |= self.selection != selection;
+        self.feed.file |= self.file_state() != file;
+        self.feed.history |= self.history_state() != history;
+        match result {
             Ok(success) => Response::Success(success),
             Err(e) => Response::error(&e),
         }
     }
 
-    fn success(&self, result: Value, changes: Changes, warnings: Vec<String>) -> Success {
+    /// Rolls back the transaction `conn` has open, if any. Returns whether there was one.
+    pub fn abandon(&mut self, conn: u64) -> bool {
+        if self.open.as_ref().is_none_or(|t| t.actor.conn != conn) {
+            return false;
+        }
+        let history = self.history_state();
+        let file = self.file_state();
+        let _ = self.rollback_open();
+        self.prune_selection();
+        self.feed.history |= self.history_state() != history;
+        self.feed.file |= self.file_state() != file;
+        true
+    }
+
+    fn rollback_open(&mut self) -> Result<Changes, CommandError> {
+        let txn = self.open.take().ok_or(CommandError::NoTransaction)?;
+        let entries = collapse(&self.doc, &self.journal);
+        let changes = changes_of(&entries, true);
+        self.feed.ids.extend(entries.iter().map(|c| c.id));
+        rollback(&mut self.doc, &mut self.journal, txn.start);
+        if self.revision != txn.start_revision {
+            let was_clean = self.saved_revision == txn.start_revision;
+            self.revision += 1;
+            if was_clean {
+                self.saved_revision = self.revision;
+            }
+        }
+        Ok(changes)
+    }
+
+    fn check_not_busy(&self, op: &str, actor: &Actor) -> Result<(), CommandError> {
+        let Some(txn) = &self.open else {
+            return Ok(());
+        };
+        if txn.actor.conn == actor.conn {
+            return Ok(());
+        }
+        let Some(info) = OpInfo::find(op) else {
+            return Ok(());
+        };
+        let blocked = match info.exec {
+            Exec::Document => info.safety != crate::Safety::Read,
+            Exec::Session => {
+                (op.starts_with("history.") && op != "history.list")
+                    || (op.starts_with("file.") && op != "file.info")
+            }
+            Exec::Client | Exec::Server => false,
+        };
+        if blocked {
+            return Err(CommandError::SessionBusy {
+                holder: txn.actor.name.clone(),
+                label: txn.label.clone(),
+            });
+        }
+        Ok(())
+    }
+
+    fn success<R: serde::Serialize>(
+        &self,
+        result: R,
+        changes: Changes,
+        warnings: Vec<String>,
+    ) -> Success {
         Success {
             ok: true,
             revision: self.revision,
-            result,
+            result: serde_json::to_value(result).expect("results serialize"),
             changes,
             warnings,
         }
     }
 
-    fn run(&mut self, mut request: Request, client: &str) -> Result<Success, CommandError> {
+    fn run(&mut self, mut request: Request, actor: &Actor) -> Result<Success, CommandError> {
         if let Some(info) = OpInfo::find(&request.op) {
             request.op = info.name.to_string();
         }
+        self.check_not_busy(&request.op, actor)?;
         if let Some(expected) = request.expect_revision
             && expected != self.revision
         {
@@ -153,9 +310,13 @@ impl Session {
                     "session operations cannot be dry-run",
                 ));
             }
-            let result = self.session_op(&request.op, request.args, client);
+            let result = self.session_op(&request.op, request.args, actor);
             self.prune_selection();
             return result;
+        }
+
+        if OpInfo::find(&request.op).is_some_and(|o| o.exec == Exec::Server) {
+            return Err(commands::unavailable(&request.op));
         }
 
         let sp = savepoint(&self.doc, &self.journal);
@@ -179,6 +340,7 @@ impl Session {
             return Ok(self.success(outcome.result, changes, outcome.warnings));
         }
 
+        self.feed.ids.extend(entries.iter().map(|c| c.id));
         if self.open.is_some() {
             if !entries.is_empty() {
                 self.revision += 1;
@@ -188,16 +350,41 @@ impl Session {
             if !entries.is_empty() {
                 self.revision += 1;
                 self.redo.clear();
-                self.undo.push(HistoryEntry {
-                    label: request.op,
-                    client: client.to_string(),
-                    revision: self.revision,
-                    changes: entries,
-                });
+                self.record(request.op, request.merge_key, actor, entries);
             }
         }
         self.prune_selection();
         Ok(self.success(outcome.result, changes, outcome.warnings))
+    }
+
+    fn record(
+        &mut self,
+        label: String,
+        merge_key: Option<String>,
+        actor: &Actor,
+        entries: Vec<crate::history::Change>,
+    ) {
+        let revision = self.revision;
+        if let Some(key) = &merge_key
+            && let Some(top) = self.undo.last_mut()
+            && top.conn == actor.conn
+            && top.merge_key.as_ref() == Some(key)
+        {
+            merge(&mut top.changes, entries);
+            top.revision = revision;
+            if top.changes.is_empty() {
+                self.undo.pop();
+            }
+            return;
+        }
+        self.undo.push(HistoryEntry {
+            label,
+            client: actor.name.clone(),
+            conn: actor.conn,
+            merge_key,
+            revision,
+            changes: entries,
+        });
     }
 
     fn prune_selection(&mut self) {
@@ -205,10 +392,13 @@ impl Session {
         self.selection.retain(|id| doc.contains(*id));
     }
 
-    fn selection_result(&self) -> Value {
+    fn selection_result(&self) -> results::IdCount {
         let mut ids: Vec<ObjectId> = self.selection.iter().copied().collect();
         ids.sort_by_key(|i| i.number());
-        json!({ "ids": ids, "count": ids.len() })
+        results::IdCount {
+            count: ids.len(),
+            ids,
+        }
     }
 
     fn check_selectable(&self, ids: &[ObjectId]) -> Result<(), CommandError> {
@@ -232,6 +422,7 @@ impl Session {
     }
 
     fn fresh_document(&mut self, doc: Document, path: Option<PathBuf>) {
+        self.feed.replaced = true;
         self.doc = doc;
         self.path = path;
         self.journal.clear();
@@ -252,7 +443,12 @@ impl Session {
         Ok(())
     }
 
-    fn session_op(&mut self, op: &str, args: Value, client: &str) -> Result<Success, CommandError> {
+    fn session_op(
+        &mut self,
+        op: &str,
+        args: Value,
+        actor: &Actor,
+    ) -> Result<Success, CommandError> {
         match op {
             "select.get" => {
                 let NoArgs {} = parse_args(args)?;
@@ -291,12 +487,12 @@ impl Session {
             "file.info" => {
                 let NoArgs {} = parse_args(args)?;
                 Ok(self.success(
-                    json!({
-                        "path": self.path.as_ref().map(|p| p.display().to_string()),
-                        "name": self.doc.name,
-                        "dirty": self.is_dirty(),
-                        "revision": self.revision,
-                    }),
+                    results::FileInfoResult {
+                        path: self.path.as_ref().map(|p| p.display().to_string()),
+                        name: self.doc.name.clone(),
+                        dirty: self.is_dirty(),
+                        revision: self.revision,
+                    },
                     Changes::default(),
                     vec![],
                 ))
@@ -329,7 +525,9 @@ impl Session {
                 self.saved_revision = self.revision;
                 self.path = Some(target.clone());
                 Ok(self.success(
-                    json!({ "path": target.display().to_string() }),
+                    results::Saved {
+                        path: target.display().to_string(),
+                    },
                     Changes::default(),
                     vec![],
                 ))
@@ -353,7 +551,7 @@ impl Session {
                     .or_else(|| path.as_deref().and_then(stem_name))
                     .unwrap_or_else(|| "untitled".into());
                 self.fresh_document(Document::new(name), path);
-                Ok(self.success(json!({}), Changes::default(), vec![]))
+                Ok(self.success(results::Empty {}, Changes::default(), vec![]))
             }
             "file.open" => {
                 let Open { path, discard } = parse_args(args)?;
@@ -361,13 +559,18 @@ impl Session {
                 let path = PathBuf::from(path);
                 let doc = level_fmt::load_file(&path).map_err(file_error)?;
                 self.fresh_document(doc, Some(path));
-                Ok(self.success(json!({}), Changes::default(), vec![]))
+                Ok(self.success(results::Empty {}, Changes::default(), vec![]))
             }
-            _ => self.history_op(op, args, client),
+            _ => self.history_op(op, args, actor),
         }
     }
 
-    fn history_op(&mut self, op: &str, args: Value, client: &str) -> Result<Success, CommandError> {
+    fn history_op(
+        &mut self,
+        op: &str,
+        args: Value,
+        actor: &Actor,
+    ) -> Result<Success, CommandError> {
         match op {
             "history.begin" => {
                 let Begin { label } = parse_args(args)?;
@@ -376,11 +579,11 @@ impl Session {
                 }
                 self.open = Some(OpenTxn {
                     label: label.unwrap_or_else(|| "transaction".into()),
-                    client: client.to_string(),
+                    actor: actor.clone(),
                     start: savepoint(&self.doc, &self.journal),
                     start_revision: self.revision,
                 });
-                Ok(self.success(json!({}), Changes::default(), vec![]))
+                Ok(self.success(results::Empty {}, Changes::default(), vec![]))
             }
             "history.commit" => {
                 let NoArgs {} = parse_args(args)?;
@@ -392,25 +595,19 @@ impl Session {
                     self.redo.clear();
                     self.undo.push(HistoryEntry {
                         label: txn.label,
-                        client: txn.client,
+                        client: txn.actor.name,
+                        conn: txn.actor.conn,
+                        merge_key: None,
                         revision: self.revision,
                         changes: entries,
                     });
                 }
-                Ok(self.success(json!({}), changes, vec![]))
+                Ok(self.success(results::Empty {}, changes, vec![]))
             }
             "history.rollback" => {
                 let NoArgs {} = parse_args(args)?;
-                let txn = self.open.take().ok_or(CommandError::NoTransaction)?;
-                rollback(&mut self.doc, &mut self.journal, txn.start);
-                if self.revision != txn.start_revision {
-                    let was_clean = self.saved_revision == txn.start_revision;
-                    self.revision += 1;
-                    if was_clean {
-                        self.saved_revision = self.revision;
-                    }
-                }
-                Ok(self.success(json!({}), Changes::default(), vec![]))
+                let changes = self.rollback_open()?;
+                Ok(self.success(results::Empty {}, changes, vec![]))
             }
             "history.undo" | "history.redo" => {
                 let NoArgs {} = parse_args(args)?;
@@ -430,6 +627,7 @@ impl Session {
                     ));
                 };
                 apply(&mut self.doc, &entry.changes, undoing);
+                self.feed.ids.extend(entry.changes.iter().map(|c| c.id));
                 let changes = changes_of(&entry.changes, undoing);
                 let label = entry.label.clone();
                 if undoing {
@@ -438,34 +636,34 @@ impl Session {
                     self.undo.push(entry);
                 }
                 self.revision += 1;
-                Ok(self.success(json!({ "label": label }), changes, vec![]))
+                Ok(self.success(results::Stepped { label }, changes, vec![]))
             }
             "history.list" => {
                 let List { limit } = parse_args(args)?;
-                let entries: Vec<Value> = self
+                let entries: Vec<results::HistoryRow> = self
                     .undo
                     .iter()
                     .rev()
                     .take(limit.unwrap_or(50))
                     .map(|e| {
                         let c = changes_of(&e.changes, false);
-                        json!({
-                            "revision": e.revision,
-                            "label": e.label,
-                            "client": e.client,
-                            "created": c.created.len(),
-                            "modified": c.modified.len(),
-                            "deleted": c.deleted.len(),
-                        })
+                        results::HistoryRow {
+                            revision: e.revision,
+                            label: e.label.clone(),
+                            client: e.client.clone(),
+                            created: c.created.len(),
+                            modified: c.modified.len(),
+                            deleted: c.deleted.len(),
+                        }
                     })
                     .collect();
                 Ok(self.success(
-                    json!({
-                        "entries": entries,
-                        "can_undo": !self.undo.is_empty(),
-                        "can_redo": !self.redo.is_empty(),
-                        "open_transaction": self.open.as_ref().map(|t| t.label.clone()),
-                    }),
+                    results::HistoryList {
+                        entries,
+                        can_undo: !self.undo.is_empty(),
+                        can_redo: !self.redo.is_empty(),
+                        open_transaction: self.open.as_ref().map(|t| t.label.clone()),
+                    },
                     Changes::default(),
                     vec![],
                 ))

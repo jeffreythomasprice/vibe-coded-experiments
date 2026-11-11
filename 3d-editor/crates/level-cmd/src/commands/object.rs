@@ -3,19 +3,19 @@ use std::collections::{BTreeMap, BTreeSet};
 use glam::{DAffine3, DVec3};
 use level_core::{EntityId, GroupId, LayerId, Object, ObjectId};
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde_json::json;
+use serde::{Deserialize, Serialize};
 
+use super::results;
 use super::transform::{AxisArg, about, reflection, transform_object};
 use super::util::{check_finite, descendants, non_empty, renumber, with_layer, world_object};
 use super::{CmdResult, Outcome};
 use crate::ctx::Ctx;
 use crate::error::CommandError;
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Delete {
-    ids: Vec<ObjectId>,
+    pub ids: Vec<ObjectId>,
 }
 
 fn collect(ctx: &Ctx, id: ObjectId, out: &mut BTreeSet<ObjectId>) {
@@ -29,7 +29,7 @@ fn collect(ctx: &Ctx, id: ObjectId, out: &mut BTreeSet<ObjectId>) {
     }
 }
 
-pub fn delete(ctx: &mut Ctx, args: Delete) -> CmdResult {
+pub fn delete(ctx: &mut Ctx, args: Delete) -> CmdResult<results::Deleted> {
     if args.ids.is_empty() {
         return Err(CommandError::invalid_arg("ids", "ids must not be empty"));
     }
@@ -70,7 +70,9 @@ pub fn delete(ctx: &mut Ctx, args: Delete) -> CmdResult {
     for &id in &doomed {
         ctx.remove(id);
     }
-    Ok(Outcome::new(json!({ "deleted": doomed.len() })))
+    Ok(Outcome::new(results::Deleted {
+        deleted: doomed.len(),
+    }))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -161,7 +163,7 @@ fn make_copy(
     Ok((copies, order.iter().map(|id| map[id]).collect()))
 }
 
-pub fn duplicate(ctx: &mut Ctx, args: Duplicate) -> CmdResult {
+pub fn duplicate(ctx: &mut Ctx, args: Duplicate) -> CmdResult<results::Duplicated> {
     let offset = args.offset.unwrap_or(DVec3::ZERO);
     check_finite("offset", offset)?;
     let order = copy_order(ctx, &args.ids)?;
@@ -170,15 +172,12 @@ pub fn duplicate(ctx: &mut Ctx, args: Duplicate) -> CmdResult {
     for copy in copies {
         ctx.insert(copy);
     }
-    let mut outcome = Outcome::created(ids.clone(), vec![]);
-    outcome.result["map"] = json!(
-        order
-            .iter()
-            .zip(&ids)
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect::<BTreeMap<_, _>>()
-    );
-    Ok(outcome)
+    let map = order.iter().copied().zip(ids.iter().copied()).collect();
+    Ok(Outcome::new(results::Duplicated {
+        id: ids.first().copied(),
+        ids,
+        map,
+    }))
 }
 
 const MAX_ARRAY_COUNT: u32 = 256;
@@ -204,7 +203,7 @@ pub struct Array {
     mirror: Option<Mirror>,
 }
 
-pub fn array(ctx: &mut Ctx, args: Array) -> CmdResult {
+pub fn array(ctx: &mut Ctx, args: Array) -> CmdResult<results::Arrayed> {
     if args.count == 0 || args.count > MAX_ARRAY_COUNT {
         return Err(CommandError::invalid_arg(
             "count",
@@ -238,7 +237,7 @@ pub fn array(ctx: &mut Ctx, args: Array) -> CmdResult {
 
     let mut inserts = Vec::new();
     let mut ids = Vec::new();
-    let mut map: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut map: BTreeMap<ObjectId, Vec<ObjectId>> = BTreeMap::new();
     let mut place = |ctx: &mut Ctx, k: usize, mirrored: bool| -> Result<(), CommandError> {
         let shift = DAffine3::from_translation(args.offset * k as f64);
         let m = match (&mirror, mirrored) {
@@ -251,9 +250,7 @@ pub fn array(ctx: &mut Ctx, args: Array) -> CmdResult {
         }
         let (copies, new_ids) = make_copy(ctx, &order, Some(&m))?;
         for (old, new) in order.iter().zip(&new_ids) {
-            map.entry(old.to_string())
-                .or_default()
-                .push(new.to_string());
+            map.entry(*old).or_default().push(*new);
         }
         inserts.extend(copies);
         ids.extend(new_ids);
@@ -270,20 +267,22 @@ pub fn array(ctx: &mut Ctx, args: Array) -> CmdResult {
     for copy in inserts {
         ctx.insert(copy);
     }
-    let mut outcome = Outcome::created(ids, vec![]);
-    outcome.result["map"] = json!(map);
-    outcome.result["copy_size"] = json!(order.len());
-    Ok(outcome)
+    Ok(Outcome::new(results::Arrayed {
+        id: ids.first().copied(),
+        ids,
+        map,
+        copy_size: order.len(),
+    }))
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Rename {
-    id: ObjectId,
-    name: String,
+    pub id: ObjectId,
+    pub name: String,
 }
 
-pub fn rename(ctx: &mut Ctx, args: Rename) -> CmdResult {
+pub fn rename(ctx: &mut Ctx, args: Rename) -> CmdResult<results::IdOnly> {
     let object = ctx
         .doc()
         .get(args.id)
@@ -309,17 +308,17 @@ pub fn rename(ctx: &mut Ctx, args: Rename) -> CmdResult {
         _ => return Err(CommandError::wrong_kind(args.id, "group, layer or camera")),
     };
     ctx.insert(renamed);
-    Ok(Outcome::new(json!({ "id": args.id })))
+    Ok(Outcome::new(results::IdOnly { id: args.id }))
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SetLayer {
-    ids: Vec<ObjectId>,
-    layer: LayerId,
+    pub ids: Vec<ObjectId>,
+    pub layer: LayerId,
 }
 
-pub fn set_layer(ctx: &mut Ctx, args: SetLayer) -> CmdResult {
+pub fn set_layer(ctx: &mut Ctx, args: SetLayer) -> CmdResult<results::Moved> {
     non_empty("ids", &args.ids)?;
     if !ctx.doc().layers.contains_key(&args.layer) {
         return Err(CommandError::not_found(args.layer));
@@ -356,5 +355,5 @@ pub fn set_layer(ctx: &mut Ctx, args: SetLayer) -> CmdResult {
             count += 1;
         }
     }
-    Ok(Outcome::new(json!({ "moved": count })))
+    Ok(Outcome::new(results::Moved { moved: count }))
 }

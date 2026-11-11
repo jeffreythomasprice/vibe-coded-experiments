@@ -64,7 +64,15 @@ impl Renderer {
             ..Default::default()
         }))
         .map_err(|e| RenderError::Device(e.to_string()))?;
+        Ok(Self::from_device(
+            device,
+            queue,
+            format!("{} ({:?})", info.name, info.backend),
+        ))
+    }
 
+    /// Builds a renderer on a device the caller owns, so views can be drawn straight into its textures.
+    pub fn from_device(device: wgpu::Device, queue: wgpu::Queue, adapter: String) -> Self {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("level-render shader"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
@@ -160,7 +168,7 @@ impl Renderer {
             1,
         );
 
-        Ok(Self {
+        Self {
             device,
             queue,
             bind_group_layout,
@@ -168,8 +176,8 @@ impl Renderer {
             lines,
             lines_on_top,
             id_faces,
-            adapter: format!("{} ({:?})", info.name, info.backend),
-        })
+            adapter,
+        }
     }
 
     pub fn adapter_name(&self) -> &str {
@@ -178,15 +186,7 @@ impl Renderer {
 
     /// Renders and returns tightly packed RGBA8 rows.
     pub fn draw(&self, params: &DrawParams, lists: &DrawLists) -> Result<Vec<u8>, RenderError> {
-        self.render(
-            params,
-            SAMPLES,
-            &[
-                (&self.faces, lists.tris),
-                (&self.lines, lists.lines),
-                (&self.lines_on_top, lists.on_top),
-            ],
-        )
+        self.render(params, SAMPLES, &self.batches(lists))
     }
 
     /// Single-sample, unlit triangles whose vertex colours are read back exactly (object id buffer).
@@ -194,53 +194,86 @@ impl Renderer {
         self.render(params, 1, &[(&self.id_faces, tris)])
     }
 
-    fn render(
+    /// Renders into `target`, an `Rgba8Unorm` texture view with `RENDER_ATTACHMENT` usage of size `params.width` x `params.height`.
+    pub fn draw_to_view(&self, params: &DrawParams, lists: &DrawLists, target: &wgpu::TextureView) {
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        self.record(&mut encoder, params, SAMPLES, &self.batches(lists), target);
+        self.queue.submit([encoder.finish()]);
+    }
+
+    pub fn device(&self) -> &wgpu::Device {
+        &self.device
+    }
+
+    pub fn queue(&self) -> &wgpu::Queue {
+        &self.queue
+    }
+
+    pub const COLOR_FORMAT: wgpu::TextureFormat = COLOR_FORMAT;
+
+    fn batches<'a>(
+        &'a self,
+        lists: &DrawLists<'a>,
+    ) -> [(&'a wgpu::RenderPipeline, &'a [Vertex]); 3] {
+        [
+            (&self.faces, lists.tris),
+            (&self.lines, lists.lines),
+            (&self.lines_on_top, lists.on_top),
+        ]
+    }
+
+    fn texture(
         &self,
+        label: &str,
+        (width, height): (u32, u32),
+        samples: u32,
+        format: wgpu::TextureFormat,
+        usage: wgpu::TextureUsages,
+    ) -> wgpu::Texture {
+        self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(label),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: samples,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage,
+            view_formats: &[],
+        })
+    }
+
+    fn record(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
         params: &DrawParams,
         samples: u32,
         batches: &[(&wgpu::RenderPipeline, &[Vertex])],
-    ) -> Result<Vec<u8>, RenderError> {
-        let (w, h) = (params.width, params.height);
-        let size = wgpu::Extent3d {
-            width: w,
-            height: h,
-            depth_or_array_layers: 1,
-        };
-        let texture = |label, samples, format, usage| {
-            self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some(label),
-                size,
-                mip_level_count: 1,
-                sample_count: samples,
-                dimension: wgpu::TextureDimension::D2,
-                format,
-                usage,
-                view_formats: &[],
-            })
-        };
-        let resolve_tex = texture(
-            "resolve",
-            1,
-            COLOR_FORMAT,
-            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-        );
-        let resolve_view = resolve_tex.create_view(&Default::default());
+        target: &wgpu::TextureView,
+    ) {
+        let dims = (params.width, params.height);
         let msaa_view = (samples > 1).then(|| {
-            texture(
+            self.texture(
                 "msaa",
+                dims,
                 samples,
                 COLOR_FORMAT,
                 wgpu::TextureUsages::RENDER_ATTACHMENT,
             )
             .create_view(&Default::default())
         });
-        let depth_view = texture(
-            "depth",
-            samples,
-            DEPTH_FORMAT,
-            wgpu::TextureUsages::RENDER_ATTACHMENT,
-        )
-        .create_view(&Default::default());
+        let depth_view = self
+            .texture(
+                "depth",
+                dims,
+                samples,
+                DEPTH_FORMAT,
+                wgpu::TextureUsages::RENDER_ATTACHMENT,
+            )
+            .create_view(&Default::default());
 
         let globals = Globals {
             view_proj: params.view_proj,
@@ -273,6 +306,64 @@ impl Renderer {
             })
             .collect();
 
+        let [r, g, b] = params.clear;
+        let (view, resolve_target) = match &msaa_view {
+            Some(msaa) => (msaa, Some(target)),
+            None => (target, None),
+        };
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("scene"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                depth_slice: None,
+                resolve_target,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color { r, g, b, a: 1.0 }),
+                    store: if samples > 1 {
+                        wgpu::StoreOp::Discard
+                    } else {
+                        wgpu::StoreOp::Store
+                    },
+                },
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &depth_view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: wgpu::StoreOp::Discard,
+                }),
+                stencil_ops: None,
+            }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_bind_group(0, &bind_group, &[]);
+        for (pipeline, buffer, count) in &buffers {
+            if let Some(buffer) = buffer {
+                pass.set_pipeline(pipeline);
+                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.draw(0..*count as u32, 0..1);
+            }
+        }
+    }
+
+    fn render(
+        &self,
+        params: &DrawParams,
+        samples: u32,
+        batches: &[(&wgpu::RenderPipeline, &[Vertex])],
+    ) -> Result<Vec<u8>, RenderError> {
+        let (w, h) = (params.width, params.height);
+        let resolve_tex = self.texture(
+            "resolve",
+            (w, h),
+            1,
+            COLOR_FORMAT,
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        );
+        let resolve_view = resolve_tex.create_view(&Default::default());
+
         let row_bytes = w * 4;
         let padded = row_bytes.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
         let readback = self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -283,48 +374,7 @@ impl Renderer {
         });
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        {
-            let [r, g, b] = params.clear;
-            let (view, resolve_target) = match &msaa_view {
-                Some(msaa) => (msaa, Some(&resolve_view)),
-                None => (&resolve_view, None),
-            };
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("scene"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    depth_slice: None,
-                    resolve_target,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color { r, g, b, a: 1.0 }),
-                        store: if samples > 1 {
-                            wgpu::StoreOp::Discard
-                        } else {
-                            wgpu::StoreOp::Store
-                        },
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Discard,
-                    }),
-                    stencil_ops: None,
-                }),
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_bind_group(0, &bind_group, &[]);
-            for (pipeline, buffer, count) in &buffers {
-                if let Some(buffer) = buffer {
-                    pass.set_pipeline(pipeline);
-                    pass.set_vertex_buffer(0, buffer.slice(..));
-                    pass.draw(0..*count as u32, 0..1);
-                }
-            }
-        }
+        self.record(&mut encoder, params, samples, batches, &resolve_view);
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
                 texture: &resolve_tex,
@@ -340,7 +390,11 @@ impl Renderer {
                     rows_per_image: Some(h),
                 },
             },
-            size,
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
         );
         self.queue.submit([encoder.finish()]);
 

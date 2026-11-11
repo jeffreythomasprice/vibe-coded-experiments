@@ -1,8 +1,8 @@
 use level_core::{Extra, Layer, LayerId, Object, ObjectId};
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_json::json;
 
+use super::results;
 use super::util::with_layer;
 use super::{CmdResult, Outcome};
 use crate::ctx::Ctx;
@@ -32,7 +32,7 @@ pub struct Create {
     name: String,
 }
 
-pub fn create(ctx: &mut Ctx, args: Create) -> CmdResult {
+pub fn create(ctx: &mut Ctx, args: Create) -> CmdResult<results::Created> {
     check_layer_name(ctx, &args.name, None)?;
     let id = LayerId(ctx.alloc_id());
     ctx.insert(Object::Layer(Layer {
@@ -50,7 +50,7 @@ pub struct Delete {
     move_to: Option<LayerId>,
 }
 
-pub fn delete(ctx: &mut Ctx, args: Delete) -> CmdResult {
+pub fn delete(ctx: &mut Ctx, args: Delete) -> CmdResult<results::LayerDeleted> {
     let doc = ctx.doc();
     if !doc.layers.contains_key(&args.id) {
         return Err(CommandError::not_found(args.id));
@@ -94,5 +94,5 @@ pub fn delete(ctx: &mut Ctx, args: Delete) -> CmdResult {
         }
     }
     ctx.remove(args.id.into());
-    Ok(Outcome::new(json!({ "deleted": 1, "moved": moved })))
+    Ok(Outcome::new(results::LayerDeleted { deleted: 1, moved }))
 }

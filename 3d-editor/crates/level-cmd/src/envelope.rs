@@ -1,10 +1,11 @@
 use level_core::ObjectId;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::error::{CommandError, ErrorResponse};
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Request {
     pub op: String,
@@ -14,6 +15,8 @@ pub struct Request {
     pub dry_run: bool,
     #[serde(default)]
     pub expect_revision: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_key: Option<String>,
 }
 
 impl Request {
@@ -23,6 +26,7 @@ impl Request {
             args,
             dry_run: false,
             expect_revision: None,
+            merge_key: None,
         }
     }
 
@@ -35,7 +39,8 @@ impl Request {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Changes {
     pub created: Vec<ObjectId>,
     pub modified: Vec<ObjectId>,
@@ -48,16 +53,17 @@ impl Changes {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct Success {
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Success<R = Value> {
     pub ok: bool,
     pub revision: u64,
-    pub result: Value,
+    pub result: R,
     pub changes: Changes,
     pub warnings: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum Response {
     Success(Success),

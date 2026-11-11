@@ -4,9 +4,9 @@ use level_core::{ElementRef, ObjectId, Part, PropertyValue};
 use level_geom::mesh::{MeshIssue, Severity, validate};
 use level_geom::{BrushError, brush_geometry};
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde::Deserialize;
 
+use super::results;
 use super::{CmdResult, Outcome};
 use crate::ctx::Ctx;
 use crate::error::CommandError;
@@ -17,12 +17,11 @@ pub struct Validate {
     ids: Option<Vec<ObjectId>>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct Issue {
     pub code: &'static str,
     pub severity: &'static str,
     pub ids: Vec<ObjectId>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub elements: Vec<ElementRef>,
     pub message: String,
     pub hint: &'static str,
@@ -226,7 +225,7 @@ pub fn validate_doc(ctx: &Ctx) -> Vec<Issue> {
     issues
 }
 
-pub fn validate_cmd(ctx: &Ctx, args: Validate) -> CmdResult {
+pub fn validate_cmd(ctx: &Ctx, args: Validate) -> CmdResult<results::Validation> {
     let filter: Option<BTreeSet<ObjectId>> = match args.ids {
         None => None,
         Some(ids) => {
@@ -244,9 +243,9 @@ pub fn validate_cmd(ctx: &Ctx, args: Validate) -> CmdResult {
     }
     let errors = issues.iter().filter(|i| i.severity == "error").count();
     let warnings = issues.len() - errors;
-    Ok(Outcome::new(json!({
-        "issues": issues,
-        "errors": errors,
-        "warnings": warnings,
-    })))
+    Ok(Outcome::new(results::Validation {
+        issues: issues.into_iter().map(results::IssueView::from).collect(),
+        errors,
+        warnings,
+    }))
 }

@@ -6,10 +6,64 @@ use serde_json::{Value, json};
 
 type Client = RunningService<RoleClient, ()>;
 
-async fn connect(args: &[&str]) -> Client {
+static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+struct Env {
+    dir: std::path::PathBuf,
+    config: std::path::PathBuf,
+}
+
+fn server_binary() -> std::path::PathBuf {
+    static BUILT: std::sync::Once = std::sync::Once::new();
+    BUILT.call_once(|| {
+        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+        let status = std::process::Command::new(cargo)
+            .args(["build", "-p", "level-server"])
+            .status()
+            .unwrap();
+        assert!(status.success());
+    });
+    std::path::Path::new(env!("CARGO_BIN_EXE_level-mcp"))
+        .parent()
+        .unwrap()
+        .join("level-server")
+}
+
+impl Env {
+    fn new() -> Self {
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("level-mcp-env-{}-{n}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let config = dir.join("config.toml");
+        std::fs::write(
+            &config,
+            format!(
+                "socket = {:?}\n[server]\nidle_exit_secs = 1\nbinary = {:?}\n",
+                dir.join("s.sock").display().to_string(),
+                server_binary().display().to_string(),
+            ),
+        )
+        .unwrap();
+        Self { dir, config }
+    }
+}
+
+impl Drop for Env {
+    fn drop(&mut self) {
+        if let Ok(config) = level_proto::Config::load_from(&self.config)
+            && let Ok(c) = level_proto::Client::connect_with(&config, "cleanup", true, true, false, None)
+        {
+            let _ = c.control(level_proto::ControlAction::Stop, true);
+        }
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+async fn connect(env: &Env, args: &[&str]) -> Client {
     let transport = TokioChildProcess::new(
         tokio::process::Command::new(env!("CARGO_BIN_EXE_level-mcp")).configure(|c| {
-            c.args(args);
+            c.args(args).env("LEVEL_EDITOR_CONFIG", &env.config);
         }),
     )
     .unwrap();
@@ -46,27 +100,29 @@ async fn call(client: &Client, tool: &str, args: Value) -> (CallToolResult, Valu
 
 #[tokio::test]
 async fn tools_follow_the_permission_flags() {
-    let read = connect(&[]).await;
+    let env = Env::new();
+    let read = connect(&env, &[]).await;
     let list = names(&read).await;
     assert!(list.contains(&"scene_summary".to_string()));
     assert!(list.contains(&"view_screenshot".to_string()));
     assert!(!list.contains(&"brush_create_box".to_string()));
     read.cancel().await.unwrap();
 
-    let mutate = connect(&["--allow-mutate"]).await;
+    let mutate = connect(&env, &["--allow-mutate"]).await;
     let list = names(&mutate).await;
     assert!(list.contains(&"brush_create_box".to_string()));
     assert!(!list.contains(&"object_delete".to_string()));
     mutate.cancel().await.unwrap();
 
-    let all = connect(&["--allow-destructive"]).await;
+    let all = connect(&env, &["--allow-destructive"]).await;
     assert!(names(&all).await.contains(&"object_delete".to_string()));
     all.cancel().await.unwrap();
 }
 
 #[tokio::test]
 async fn tool_definitions_carry_schemas_and_annotations() {
-    let client = connect(&["--allow-destructive"]).await;
+    let env = Env::new();
+    let client = connect(&env, &["--allow-destructive"]).await;
     let tools = client.list_all_tools().await.unwrap();
     let create = tools.iter().find(|t| t.name == "brush_create_box").unwrap();
     assert!(
@@ -96,7 +152,8 @@ async fn tool_definitions_carry_schemas_and_annotations() {
 
 #[tokio::test]
 async fn create_then_get_round_trip() {
-    let client = connect(&["--allow-mutate"]).await;
+    let env = Env::new();
+    let client = connect(&env, &["--allow-mutate"]).await;
     let (r, v) = call(
         &client,
         "brush_create_box",
@@ -132,7 +189,8 @@ async fn create_then_get_round_trip() {
 
 #[tokio::test]
 async fn history_and_selection_persist_across_calls() {
-    let client = connect(&["--allow-destructive"]).await;
+    let env = Env::new();
+    let client = connect(&env, &["--allow-destructive"]).await;
     call(&client, "history_begin", json!({ "label": "two boxes" })).await;
     call(
         &client,
@@ -160,7 +218,8 @@ async fn history_and_selection_persist_across_calls() {
 
 #[tokio::test]
 async fn destructive_ops_are_refused_even_inside_a_batch() {
-    let client = connect(&["--allow-mutate"]).await;
+    let env = Env::new();
+    let client = connect(&env, &["--allow-mutate"]).await;
     call(
         &client,
         "brush_create_box",
@@ -184,10 +243,11 @@ async fn destructive_ops_are_refused_even_inside_a_batch() {
 
 #[tokio::test]
 async fn file_save_writes_the_document() {
+    let env = Env::new();
     let dir = std::env::temp_dir().join(format!("level-mcp-test-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("t.level.toml");
-    let client = connect(&[path.to_str().unwrap(), "--create", "--allow-mutate"]).await;
+    let client = connect(&env, &[path.to_str().unwrap(), "--create", "--allow-mutate"]).await;
     assert!(path.exists());
     call(
         &client,
@@ -208,8 +268,10 @@ async fn file_save_writes_the_document() {
 
 #[tokio::test]
 async fn missing_file_without_create_fails_to_start() {
+    let env = Env::new();
     let out = std::process::Command::new(env!("CARGO_BIN_EXE_level-mcp"))
         .arg("/nonexistent/x.level.toml")
+        .env("LEVEL_EDITOR_CONFIG", &env.config)
         .output()
         .unwrap();
     assert!(!out.status.success());
@@ -218,7 +280,8 @@ async fn missing_file_without_create_fails_to_start() {
 
 #[tokio::test]
 async fn screenshot_returns_image_content() {
-    let client = connect(&["--allow-mutate"]).await;
+    let env = Env::new();
+    let client = connect(&env, &["--allow-mutate"]).await;
     call(
         &client,
         "brush_create_box",
@@ -247,5 +310,47 @@ async fn screenshot_returns_image_content() {
         })
         .expect("image content");
     assert_eq!(image.mime_type, "image/png");
+    client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn results_conform_to_the_declared_output_schema() {
+    let env = Env::new();
+    let client = connect(&env, &["--allow-mutate"]).await;
+    let tools = client.list_all_tools().await.unwrap();
+    assert!(tools.iter().all(|t| t.output_schema.is_some()));
+
+    let validate = |tool: &str, result: &CallToolResult| {
+        let schema = tools
+            .iter()
+            .find(|t| t.name == tool)
+            .and_then(|t| t.output_schema.clone())
+            .unwrap();
+        let validator = jsonschema::validator_for(&Value::Object((*schema).clone())).unwrap();
+        let structured = result.structured_content.clone().expect("structured content");
+        let errors: Vec<String> = validator
+            .iter_errors(&structured)
+            .map(|e| e.to_string())
+            .collect();
+        assert!(errors.is_empty(), "{tool}: {errors:?}\n{structured}");
+        structured
+    };
+
+    let (result, _) = call(
+        &client,
+        "brush_create_box",
+        json!({ "min": [0, 0, 0], "max": [8, 8, 8] }),
+    )
+    .await;
+    let structured = validate("brush_create_box", &result);
+    assert_eq!(structured["ok"], true);
+    assert!(structured["result"]["ids"].is_array());
+
+    let (result, _) = call(&client, "scene_summary", json!({})).await;
+    assert_eq!(validate("scene_summary", &result)["result"]["counts"]["brush"], 1);
+
+    let (result, value) = call(&client, "scene_get", json!({ "ids": ["b999"] })).await;
+    assert_eq!(result.is_error, Some(true));
+    assert_eq!(validate("scene_get", &result), value);
     client.cancel().await.unwrap();
 }

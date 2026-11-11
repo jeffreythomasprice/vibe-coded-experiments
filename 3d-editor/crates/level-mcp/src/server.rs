@@ -1,8 +1,8 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use base64::Engine;
 use level_cmd::{CommandError, Request, Response};
-use level_host::{Host, HostReply};
+use level_proto::{Client, Policy, Reply};
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, ListToolsResult,
     PaginatedRequestParams, ServerCapabilities, ServerConfig, Tool,
@@ -16,6 +16,8 @@ use crate::tools::{find_op, visible_tools};
 const INSTRUCTIONS: &str = "\
 A brush level editor. Everything is addressed by stable ids (b brush, m mesh, e entity, g group, l layer, c camera).
 
+The document lives in a level-server that other clients (the GUI, the CLI, other agents) may share: a human may be watching your edits live. While you hold a transaction (history_begin) others cannot mutate, so keep transactions short; a SessionBusy error means someone else holds one. If expect_revision fails, someone else edited: re-read state. session_list shows the open sessions and session_attach switches this connection to another (by id or file path).
+
 Workflow: file_info first; if its path is null, bind a file with file_save {path} (or file_open an existing level) before editing. Then scene_summary to see what exists; open a transaction with history_begin (or use `batch`) \
 for multi-step edits so they undo as one step; run check_validate; then view_screenshot from a couple of \
 cameras (viewport.persp, viewport.top, viewport.front, viewport.side) with the `labels` overlay to map pixels \
@@ -28,21 +30,16 @@ Tools you cannot see are not enabled: mutating tools need the server started wit
 destructive ones with --allow-destructive.";
 
 pub struct LevelServer {
-    host: Arc<Mutex<Host>>,
+    client: Arc<Client>,
     tools: Arc<Vec<Tool>>,
 }
 
 impl LevelServer {
-    pub fn new(host: Host) -> Self {
-        let tools = Arc::new(visible_tools(host.policy()));
+    pub fn new(client: Arc<Client>, policy: Policy) -> Self {
         Self {
-            host: Arc::new(Mutex::new(host)),
-            tools,
+            client,
+            tools: Arc::new(visible_tools(policy)),
         }
-    }
-
-    pub fn host(&self) -> Arc<Mutex<Host>> {
-        self.host.clone()
     }
 }
 
@@ -71,23 +68,26 @@ fn split_envelope(
     Ok((Value::Object(args), dry_run, expect_revision))
 }
 
-fn to_result(reply: HostReply) -> CallToolResult {
-    let is_error = !reply.response.is_ok();
-    let text = serde_json::to_string(&reply.response.to_value()).expect("responses serialize");
+fn to_result(reply: Reply) -> CallToolResult {
+    let is_error = !reply.is_ok();
+    let structured = serde_json::to_value(&reply.response).expect("responses serialize");
+    let text = structured.to_string();
     let mut content = vec![ContentBlock::text(text)];
     if let Some(png) = reply.png {
         let data = base64::engine::general_purpose::STANDARD.encode(png);
         content.push(ContentBlock::image(data, "image/png"));
     }
-    if is_error {
+    let mut result = if is_error {
         CallToolResult::error(content)
     } else {
         CallToolResult::success(content)
-    }
+    };
+    result.structured_content = Some(structured);
+    result
 }
 
 fn error_result(e: &CommandError) -> CallToolResult {
-    to_result(HostReply {
+    to_result(Reply {
         response: Response::error(e),
         png: None,
     })
@@ -129,13 +129,13 @@ impl ServerHandler for LevelServer {
         envelope.dry_run = dry_run;
         envelope.expect_revision = expect_revision;
 
-        let host = self.host.clone();
-        let reply = tokio::task::spawn_blocking(move || {
-            let mut host = host.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            host.execute(envelope, "mcp")
-        })
-        .await
-        .map_err(|e| McpError::internal_error(format!("command task failed: {e}"), None))?;
-        Ok(to_result(reply).into())
+        let client = self.client.clone();
+        let reply = tokio::task::spawn_blocking(move || client.request(envelope))
+            .await
+            .map_err(|e| McpError::internal_error(format!("command task failed: {e}"), None))?;
+        match reply {
+            Ok(reply) => Ok(to_result(reply).into()),
+            Err(e) => Ok(error_result(&CommandError::from(e)).into()),
+        }
     }
 }

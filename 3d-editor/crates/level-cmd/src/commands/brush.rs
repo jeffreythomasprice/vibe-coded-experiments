@@ -2,8 +2,9 @@ use glam::DVec3;
 use level_core::{Brush, BrushId, BrushObject, Extra, FaceAttrs, LayerId, Object, ObjectId};
 use level_geom::{BrushError, clip_brush, normalize, shapes};
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
+use super::results;
 use super::util::{Parents, brush_of, check_finite, resolve_layer};
 use super::{CmdResult, Outcome};
 use crate::ctx::Ctx;
@@ -36,19 +37,19 @@ fn add_brush(ctx: &mut Ctx, brush: Brush, layer: LayerId) -> ObjectId {
     id.into()
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CreateBox {
     #[schemars(with = "[f64; 3]")]
-    min: DVec3,
+    pub min: DVec3,
     #[schemars(with = "[f64; 3]")]
-    max: DVec3,
-    layer: Option<LayerId>,
+    pub max: DVec3,
+    pub layer: Option<LayerId>,
     #[serde(default)]
-    material: String,
+    pub material: String,
 }
 
-pub fn create_box(ctx: &mut Ctx, args: CreateBox) -> CmdResult {
+pub fn create_box(ctx: &mut Ctx, args: CreateBox) -> CmdResult<results::Created> {
     check_finite("min", args.min)?;
     check_finite("max", args.max)?;
     if !args.min.cmplt(args.max).all() {
@@ -79,7 +80,7 @@ pub struct CreateWedge {
     material: String,
 }
 
-pub fn create_wedge(ctx: &mut Ctx, args: CreateWedge) -> CmdResult {
+pub fn create_wedge(ctx: &mut Ctx, args: CreateWedge) -> CmdResult<results::Created> {
     check_finite("min", args.min)?;
     check_finite("max", args.max)?;
     if !args.min.cmplt(args.max).all() {
@@ -96,7 +97,7 @@ pub fn create_wedge(ctx: &mut Ctx, args: CreateWedge) -> CmdResult {
     Ok(Outcome::created(vec![id], vec![]))
 }
 
-#[derive(Debug, Clone, Copy, Default, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Axis {
     X,
@@ -120,7 +121,7 @@ pub struct CreatePrism {
     material: String,
 }
 
-pub fn create_prism(ctx: &mut Ctx, args: CreatePrism) -> CmdResult {
+pub fn create_prism(ctx: &mut Ctx, args: CreatePrism) -> CmdResult<results::Created> {
     check_finite("center", args.center)?;
     if !(args.radius.is_finite() && args.radius > 0.0) {
         return Err(CommandError::invalid_arg(
@@ -188,7 +189,7 @@ pub struct Clip {
     material: String,
 }
 
-pub fn clip(ctx: &mut Ctx, args: Clip) -> CmdResult {
+pub fn clip(ctx: &mut Ctx, args: Clip) -> CmdResult<results::CreatedMapped> {
     if args.ids.is_empty() {
         return Err(CommandError::invalid_arg("ids", "ids must not be empty"));
     }
@@ -268,7 +269,7 @@ pub fn clip(ctx: &mut Ctx, args: Clip) -> CmdResult {
             }
         }
     }
-    Ok(Outcome::created(created, warnings).with_map(map))
+    Ok(Outcome::created_mapped(created, warnings, map))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -288,7 +289,7 @@ pub struct CreateFromPlanes {
     layer: Option<LayerId>,
 }
 
-pub fn create_from_planes(ctx: &mut Ctx, args: CreateFromPlanes) -> CmdResult {
+pub fn create_from_planes(ctx: &mut Ctx, args: CreateFromPlanes) -> CmdResult<results::Created> {
     let layer = resolve_layer(ctx.doc(), args.layer)?;
     let mut brush = Brush::default();
     for (i, f) in args.faces.iter().enumerate() {

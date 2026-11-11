@@ -5,17 +5,17 @@ use level_core::{Object, ObjectId};
 use level_geom::tolerance::WORLD_BOUND;
 use level_geom::transform::{transform_brush, transform_mesh};
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde_json::json;
+use serde::{Deserialize, Serialize};
 
 use super::brush::{Axis, geometry_error};
+use super::results;
 use super::util::{check_finite, descendants, non_empty};
 use super::{CmdResult, Outcome};
 use crate::bounds::object_bounds;
 use crate::ctx::Ctx;
 use crate::error::CommandError;
 
-#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum AxisArg {
     Named(Axis),
@@ -38,14 +38,14 @@ impl AxisArg {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum PivotName {
     Center,
     Origin,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum Pivot {
     Named(PivotName),
@@ -58,7 +58,7 @@ impl Default for Pivot {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum Factors {
     Uniform(f64),
@@ -185,7 +185,7 @@ pub(super) fn about(pivot: DVec3, linear: DMat3) -> DAffine3 {
         * DAffine3::from_translation(-pivot)
 }
 
-fn apply(ctx: &mut Ctx, leaves: &[Object], m: &DAffine3) -> CmdResult {
+fn apply(ctx: &mut Ctx, leaves: &[Object], m: &DAffine3) -> CmdResult<results::Transformed> {
     let moved = leaves
         .iter()
         .map(|o| transform_object(o, m))
@@ -194,34 +194,34 @@ fn apply(ctx: &mut Ctx, leaves: &[Object], m: &DAffine3) -> CmdResult {
     for object in moved {
         ctx.insert(object);
     }
-    Ok(Outcome::new(json!({ "transformed": count })))
+    Ok(Outcome::new(results::Transformed { transformed: count }))
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Translate {
-    ids: Vec<ObjectId>,
+    pub ids: Vec<ObjectId>,
     #[schemars(with = "[f64; 3]")]
-    delta: DVec3,
+    pub delta: DVec3,
 }
 
-pub fn translate(ctx: &mut Ctx, args: Translate) -> CmdResult {
+pub fn translate(ctx: &mut Ctx, args: Translate) -> CmdResult<results::Transformed> {
     check_finite("delta", args.delta)?;
     let leaves = gather(ctx, &args.ids)?;
     apply(ctx, &leaves, &DAffine3::from_translation(args.delta))
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Rotate {
-    ids: Vec<ObjectId>,
-    axis: AxisArg,
-    degrees: f64,
+    pub ids: Vec<ObjectId>,
+    pub axis: AxisArg,
+    pub degrees: f64,
     #[serde(default)]
-    pivot: Pivot,
+    pub pivot: Pivot,
 }
 
-pub fn rotate(ctx: &mut Ctx, args: Rotate) -> CmdResult {
+pub fn rotate(ctx: &mut Ctx, args: Rotate) -> CmdResult<results::Transformed> {
     if !args.degrees.is_finite() {
         return Err(CommandError::invalid_arg(
             "degrees",
@@ -235,16 +235,16 @@ pub fn rotate(ctx: &mut Ctx, args: Rotate) -> CmdResult {
     apply(ctx, &leaves, &about(pivot, linear))
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Scale {
-    ids: Vec<ObjectId>,
-    factors: Factors,
+    pub ids: Vec<ObjectId>,
+    pub factors: Factors,
     #[serde(default)]
-    pivot: Pivot,
+    pub pivot: Pivot,
 }
 
-pub fn scale(ctx: &mut Ctx, args: Scale) -> CmdResult {
+pub fn scale(ctx: &mut Ctx, args: Scale) -> CmdResult<results::Transformed> {
     let factors = match args.factors {
         Factors::Uniform(f) => DVec3::splat(f),
         Factors::PerAxis(v) => v,
@@ -260,16 +260,16 @@ pub fn scale(ctx: &mut Ctx, args: Scale) -> CmdResult {
     apply(ctx, &leaves, &about(pivot, DMat3::from_diagonal(factors)))
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Flip {
-    ids: Vec<ObjectId>,
-    axis: AxisArg,
+    pub ids: Vec<ObjectId>,
+    pub axis: AxisArg,
     #[serde(default)]
-    pivot: Pivot,
+    pub pivot: Pivot,
 }
 
-pub fn flip(ctx: &mut Ctx, args: Flip) -> CmdResult {
+pub fn flip(ctx: &mut Ctx, args: Flip) -> CmdResult<results::Transformed> {
     let n = args.axis.unit("axis")?;
     let leaves = gather(ctx, &args.ids)?;
     let pivot = pivot_point(args.pivot, &leaves)?;

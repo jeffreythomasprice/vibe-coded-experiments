@@ -1,20 +1,30 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use glam::DVec3;
-use level_core::{ElementRef, EntityId, GroupId, LayerId, Object, ObjectId, ObjectKind, Part};
+use level_core::{
+    Document, ElementRef, EntityId, GroupId, LayerId, Object, ObjectId, ObjectKind, Part,
+};
 use level_geom::ray::{RayHit, ray_aabb, ray_brush, ray_mesh};
 use level_geom::{Aabb, brush_geometry, brush_intersect};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use super::results;
 use super::util::{BoxArg, brush_or_mesh, check_finite, non_empty};
 use super::{CmdResult, NoArgs, Outcome};
-use crate::bounds::{bounds_json, extent, object_bounds, scene_bounds};
+use crate::bounds::{bounds_box, bounds_json, extent, object_bounds, scene_bounds};
 use crate::ctx::Ctx;
 use crate::error::CommandError;
 
-pub fn summary(ctx: &Ctx, _: NoArgs) -> CmdResult {
+fn object_view(v: Value) -> results::ObjectView {
+    match v {
+        Value::Object(map) => results::ObjectView(map),
+        _ => unreachable!("describe builds objects"),
+    }
+}
+
+pub fn summary(ctx: &Ctx, _: NoArgs) -> CmdResult<results::Summary> {
     let doc = ctx.doc();
     let bounds = scene_bounds(doc);
 
@@ -22,33 +32,34 @@ pub fn summary(ctx: &Ctx, _: NoArgs) -> CmdResult {
     for e in doc.entities.values() {
         *classnames.entry(e.classname.as_str()).or_default() += 1;
     }
-    let layers: Vec<Value> = doc
+    let layers = doc
         .layers
         .values()
-        .map(|l| {
-            json!({
-                "id": l.id,
-                "name": l.name,
-                "objects": doc.children(l.id.into()).len(),
-            })
+        .map(|l| results::LayerRow {
+            id: l.id.into(),
+            name: l.name.clone(),
+            objects: doc.children(l.id.into()).len(),
         })
         .collect();
 
-    Ok(Outcome::new(json!({
-        "name": doc.name,
-        "counts": {
-            "brush": doc.brushes.len(),
-            "mesh": doc.meshes.len(),
-            "entity": doc.entities.len(),
-            "group": doc.groups.len(),
-            "layer": doc.layers.len(),
-            "camera": doc.cameras.len(),
+    Ok(Outcome::new(results::Summary {
+        name: doc.name.clone(),
+        counts: results::Counts {
+            brush: doc.brushes.len(),
+            mesh: doc.meshes.len(),
+            entity: doc.entities.len(),
+            group: doc.groups.len(),
+            layer: doc.layers.len(),
+            camera: doc.cameras.len(),
         },
-        "bounds": bounds.map(bounds_json),
-        "layers": layers,
-        "classnames": classnames,
-        "selection": ctx.selection().len(),
-    })))
+        bounds: bounds.map(bounds_box),
+        layers,
+        classnames: classnames
+            .into_iter()
+            .map(|(k, n)| (k.to_string(), n))
+            .collect(),
+        selection: ctx.selection().len(),
+    }))
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, JsonSchema)]
@@ -129,7 +140,7 @@ fn describe(object: &Object, detail: Detail) -> Value {
     out
 }
 
-pub fn get(ctx: &Ctx, args: Get) -> CmdResult {
+pub fn get(ctx: &Ctx, args: Get) -> CmdResult<results::Objects> {
     let doc = ctx.doc();
     let objects = args
         .ids
@@ -140,7 +151,9 @@ pub fn get(ctx: &Ctx, args: Get) -> CmdResult {
                 .ok_or_else(|| CommandError::not_found(id))
         })
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(Outcome::new(json!({ "objects": objects })))
+    Ok(Outcome::new(results::Objects {
+        objects: objects.into_iter().map(object_view).collect(),
+    }))
 }
 
 const ENTITY_HALF: f64 = 8.0;
@@ -186,7 +199,7 @@ fn name_of(object: &Object) -> Option<&str> {
     }
 }
 
-pub fn list(ctx: &Ctx, args: List) -> CmdResult {
+pub fn list(ctx: &Ctx, args: List) -> CmdResult<results::ObjectPage> {
     let limit = args.limit.unwrap_or(100);
     if !(1..=1000).contains(&limit) {
         return Err(CommandError::invalid_arg(
@@ -252,19 +265,20 @@ pub fn list(ctx: &Ctx, args: List) -> CmdResult {
         page.push(object);
     }
     let next_cursor = more.then(|| page.last().map(Object::id)).flatten();
-    let objects: Vec<Value> = page
+    let objects: Vec<results::ObjectView> = page
         .iter()
         .map(|o| {
             let mut v = describe(o, Detail::Summary);
             if let (Some(fields), Some(map)) = (&args.fields, v.as_object_mut()) {
                 map.retain(|k, _| k == "id" || fields.contains(k));
             }
-            v
+            object_view(v)
         })
         .collect();
-    Ok(Outcome::new(
-        json!({ "objects": objects, "next_cursor": next_cursor }),
-    ))
+    Ok(Outcome::new(results::ObjectPage {
+        objects,
+        next_cursor,
+    }))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -273,7 +287,7 @@ pub struct Bounds {
     ids: Vec<ObjectId>,
 }
 
-pub fn bounds(ctx: &Ctx, args: Bounds) -> CmdResult {
+pub fn bounds(ctx: &Ctx, args: Bounds) -> CmdResult<results::BoundsResult> {
     non_empty("ids", &args.ids)?;
     let mut combined: Option<Aabb> = None;
     let mut items = Vec::new();
@@ -285,11 +299,15 @@ pub fn bounds(ctx: &Ctx, args: Bounds) -> CmdResult {
         if let Some(b) = b {
             combined = Some(combined.map_or(b, |c| c.merge(b)));
         }
-        items.push(json!({ "id": id, "bounds": b.map(bounds_json) }));
+        items.push(results::ObjectBounds {
+            id,
+            bounds: b.map(bounds_box),
+        });
     }
-    Ok(Outcome::new(
-        json!({ "bounds": items, "combined": combined.map(bounds_json) }),
-    ))
+    Ok(Outcome::new(results::BoundsResult {
+        bounds: items,
+        combined: combined.map(bounds_box),
+    }))
 }
 
 const SOLID_KINDS: [ObjectKind; 3] = [ObjectKind::Brush, ObjectKind::Mesh, ObjectKind::Entity];
@@ -305,46 +323,21 @@ fn check_kinds(kinds: &Option<Vec<ObjectKind>>) -> Result<BTreeSet<ObjectKind>, 
     Ok(kinds.into_iter().collect())
 }
 
-#[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct Raycast {
-    #[schemars(with = "[f64; 3]")]
+/// Every brush, mesh or point entity the ray hits, nearest first.
+pub fn ray_hits(
+    doc: &Document,
     origin: DVec3,
-    #[schemars(with = "[f64; 3]")]
     dir: DVec3,
+    kinds: &BTreeSet<ObjectKind>,
+    ignore: &BTreeSet<ObjectId>,
     max_dist: Option<f64>,
-    /// brush, mesh and/or entity (default all three).
-    kinds: Option<Vec<ObjectKind>>,
-    #[serde(default)]
-    ignore: Vec<ObjectId>,
-}
-
-pub fn raycast(ctx: &Ctx, args: Raycast) -> CmdResult {
-    check_finite("origin", args.origin)?;
-    let dir = args
-        .dir
-        .is_finite()
-        .then(|| args.dir.try_normalize())
-        .flatten()
-        .ok_or_else(|| CommandError::invalid_arg("dir", "dir must be a non-zero finite vector"))?;
-    if args.max_dist.is_some_and(|d| !(d.is_finite() && d > 0.0)) {
-        return Err(CommandError::invalid_arg(
-            "max_dist",
-            "max_dist must be positive",
-        ));
-    }
-    let kinds = check_kinds(&args.kinds)?;
-    let ignore: BTreeSet<ObjectId> = args.ignore.iter().copied().collect();
-    let doc = ctx.doc();
-    let origin = args.origin;
-
-    let mut best: Option<(ObjectId, RayHit)> = None;
+) -> Vec<results::RayHit> {
+    let mut found: Vec<(ObjectId, RayHit)> = Vec::new();
     let mut consider = |id: ObjectId, hit: Option<RayHit>| {
         if let Some(h) = hit
-            && args.max_dist.is_none_or(|m| h.t <= m)
-            && best.is_none_or(|(_, b)| h.t < b.t)
+            && max_dist.is_none_or(|m| h.t <= m)
         {
-            best = Some((id, h));
+            found.push((id, h));
         }
     };
     if kinds.contains(&ObjectKind::Brush) {
@@ -381,17 +374,59 @@ pub fn raycast(ctx: &Ctx, args: Raycast) -> CmdResult {
             consider(id, ray_aabb(origin, dir, &bounds));
         }
     }
-
-    let hit = best.map(|(id, h)| {
-        json!({
-            "id": id,
-            "face": h.face.map(|f| ElementRef { object: id, part: Part::Face(f) }.to_string()),
-            "point": origin + dir * h.t,
-            "normal": h.normal,
-            "distance": h.t,
+    found.sort_by(|a, b| a.1.t.total_cmp(&b.1.t));
+    found
+        .into_iter()
+        .map(|(id, h)| results::RayHit {
+            id,
+            face: h.face.map(|f| {
+                ElementRef {
+                    object: id,
+                    part: Part::Face(f),
+                }
+                .to_string()
+            }),
+            point: origin + dir * h.t,
+            normal: h.normal,
+            distance: h.t,
         })
-    });
-    Ok(Outcome::new(json!({ "hit": hit })))
+        .collect()
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Raycast {
+    #[schemars(with = "[f64; 3]")]
+    origin: DVec3,
+    #[schemars(with = "[f64; 3]")]
+    dir: DVec3,
+    max_dist: Option<f64>,
+    /// brush, mesh and/or entity (default all three).
+    kinds: Option<Vec<ObjectKind>>,
+    #[serde(default)]
+    ignore: Vec<ObjectId>,
+}
+
+pub fn raycast(ctx: &Ctx, args: Raycast) -> CmdResult<results::Raycast> {
+    check_finite("origin", args.origin)?;
+    let dir = args
+        .dir
+        .is_finite()
+        .then(|| args.dir.try_normalize())
+        .flatten()
+        .ok_or_else(|| CommandError::invalid_arg("dir", "dir must be a non-zero finite vector"))?;
+    if args.max_dist.is_some_and(|d| !(d.is_finite() && d > 0.0)) {
+        return Err(CommandError::invalid_arg(
+            "max_dist",
+            "max_dist must be positive",
+        ));
+    }
+    let kinds = check_kinds(&args.kinds)?;
+    let ignore: BTreeSet<ObjectId> = args.ignore.iter().copied().collect();
+    let hit = ray_hits(ctx.doc(), args.origin, dir, &kinds, &ignore, args.max_dist)
+        .into_iter()
+        .next();
+    Ok(Outcome::new(results::Raycast { hit }))
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, JsonSchema)]
@@ -414,7 +449,7 @@ pub struct QueryBox {
     kinds: Option<Vec<ObjectKind>>,
 }
 
-pub fn query_box(ctx: &Ctx, args: QueryBox) -> CmdResult {
+pub fn query_box(ctx: &Ctx, args: QueryBox) -> CmdResult<results::IdCount> {
     let region = BoxArg {
         min: args.min,
         max: args.max,
@@ -436,7 +471,10 @@ pub fn query_box(ctx: &Ctx, args: QueryBox) -> CmdResult {
                 })
         })
         .collect();
-    Ok(Outcome::new(json!({ "ids": ids, "count": ids.len() })))
+    Ok(Outcome::new(results::IdCount {
+        count: ids.len(),
+        ids,
+    }))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -460,7 +498,7 @@ fn interiors_overlap(a: &Aabb, b: &Aabb) -> bool {
     (hi - lo).min_element() > OVERLAP_EPS
 }
 
-pub fn overlaps(ctx: &Ctx, args: Overlaps) -> CmdResult {
+pub fn overlaps(ctx: &Ctx, args: Overlaps) -> CmdResult<results::Overlaps> {
     let doc = ctx.doc();
     let ids: Vec<ObjectId> = match args.ids {
         Some(ids) => {
@@ -522,7 +560,12 @@ pub fn overlaps(ctx: &Ctx, args: Overlaps) -> CmdResult {
                 truncated = true;
                 break 'outer;
             }
-            pairs.push(json!({ "a": a.id(), "b": b.id(), "approx": approx, "depth": depth }));
+            pairs.push(results::OverlapPair {
+                a: a.id(),
+                b: b.id(),
+                approx,
+                depth,
+            });
         }
     }
     let warnings = if truncated {
@@ -533,7 +576,10 @@ pub fn overlaps(ctx: &Ctx, args: Overlaps) -> CmdResult {
         vec![]
     };
     Ok(Outcome {
-        result: json!({ "pairs": pairs, "count": pairs.len() }),
+        result: results::Overlaps {
+            count: pairs.len(),
+            pairs,
+        },
         warnings,
     })
 }

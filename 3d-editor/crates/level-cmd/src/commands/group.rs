@@ -3,8 +3,8 @@ use std::collections::BTreeSet;
 use level_core::{Extra, Group, GroupId, Object, ObjectId};
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_json::json;
 
+use super::results;
 use super::util::{non_empty, set_group, world_object};
 use super::{CmdResult, Outcome};
 use crate::ctx::Ctx;
@@ -28,7 +28,7 @@ pub struct Create {
     name: Option<String>,
 }
 
-pub fn create(ctx: &mut Ctx, args: Create) -> CmdResult {
+pub fn create(ctx: &mut Ctx, args: Create) -> CmdResult<results::Created> {
     non_empty("objects", &args.objects)?;
     let name = args.name.unwrap_or_else(|| "group".into());
     if name.trim().is_empty() {
@@ -77,7 +77,7 @@ pub struct Ungroup {
     ids: Vec<GroupId>,
 }
 
-pub fn ungroup(ctx: &mut Ctx, args: Ungroup) -> CmdResult {
+pub fn ungroup(ctx: &mut Ctx, args: Ungroup) -> CmdResult<results::Ungrouped> {
     non_empty("ids", &args.ids)?;
     for g in &args.ids {
         if !ctx.doc().groups.contains_key(g) {
@@ -96,9 +96,10 @@ pub fn ungroup(ctx: &mut Ctx, args: Ungroup) -> CmdResult {
         }
         ctx.remove((*g).into());
     }
-    Ok(Outcome::new(
-        json!({ "ungrouped": args.ids.len(), "released": released }),
-    ))
+    Ok(Outcome::new(results::Ungrouped {
+        ungrouped: args.ids.len(),
+        released,
+    }))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -110,7 +111,7 @@ pub struct Move {
     group: Option<GroupId>,
 }
 
-pub fn move_objects(ctx: &mut Ctx, args: Move) -> CmdResult {
+pub fn move_objects(ctx: &mut Ctx, args: Move) -> CmdResult<results::Moved> {
     non_empty("objects", &args.objects)?;
     let target = match args.group {
         Some(g) => Some(
@@ -153,5 +154,7 @@ pub fn move_objects(ctx: &mut Ctx, args: Move) -> CmdResult {
     for id in moving {
         set_group(ctx, id, target.as_ref().map(|t| t.id));
     }
-    Ok(Outcome::new(json!({ "moved": args.objects.len() })))
+    Ok(Outcome::new(results::Moved {
+        moved: args.objects.len(),
+    }))
 }

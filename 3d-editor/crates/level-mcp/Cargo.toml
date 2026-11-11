@@ -6,9 +6,8 @@ publish.workspace = true
 
 [dependencies]
 level-cmd.workspace = true
-level-core.workspace = true
-level-fmt.workspace = true
-level-host.workspace = true
+schemars.workspace = true
+level-proto.workspace = true
 base64.workspace = true
 clap.workspace = true
 rmcp.workspace = true
@@ -19,3 +18,4 @@ tokio.workspace = true
 [dev-dependencies]
 rmcp = { workspace = true, features = ["client", "transport-child-process"] }
 image.workspace = true
+jsonschema.workspace = true

@@ -3,15 +3,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::{FaceAttrs, FaceId};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct BrushFace {
     pub id: FaceId,
     #[serde(rename = "plane")]
+    #[schemars(with = "[[f64; 3]; 3]")]
     pub points: [DVec3; 3],
     pub attrs: FaceAttrs,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Brush {
     pub faces: Vec<BrushFace>,
 }

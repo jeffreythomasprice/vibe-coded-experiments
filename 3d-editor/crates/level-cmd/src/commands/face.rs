@@ -4,9 +4,9 @@ use glam::{DVec2, DVec3};
 use level_core::{ElementRef, FaceAttrs, FaceId, Object, ObjectId, Part, VertexId};
 use level_geom::tolerance::snap_vec;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde_json::json;
+use serde::{Deserialize, Serialize};
 
+use super::results;
 use super::util::{check_finite, mesh_of, mesh_problems, non_empty};
 use super::{CmdResult, Outcome};
 use crate::ctx::Ctx;
@@ -90,17 +90,17 @@ fn update_attrs(
     Ok(count)
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SetMaterial {
-    faces: Vec<ElementRef>,
-    material: String,
+    pub faces: Vec<ElementRef>,
+    pub material: String,
 }
 
-pub fn set_material(ctx: &mut Ctx, args: SetMaterial) -> CmdResult {
+pub fn set_material(ctx: &mut Ctx, args: SetMaterial) -> CmdResult<results::FacesChanged> {
     let material = args.material;
     let count = update_attrs(ctx, &args.faces, |a| a.material = material.clone())?;
-    Ok(Outcome::new(json!({ "faces": count })))
+    Ok(Outcome::new(results::FacesChanged { faces: count }))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -114,7 +114,7 @@ pub struct SetUv {
     rotation: Option<f64>,
 }
 
-pub fn set_uv(ctx: &mut Ctx, args: SetUv) -> CmdResult {
+pub fn set_uv(ctx: &mut Ctx, args: SetUv) -> CmdResult<results::FacesChanged> {
     if args.offset.is_none() && args.scale.is_none() && args.rotation.is_none() {
         return Err(CommandError::invalid_arg(
             "offset",
@@ -153,7 +153,7 @@ pub fn set_uv(ctx: &mut Ctx, args: SetUv) -> CmdResult {
             a.rotation = r;
         }
     })?;
-    Ok(Outcome::new(json!({ "faces": count })))
+    Ok(Outcome::new(results::FacesChanged { faces: count }))
 }
 
 fn mesh_only(ctx: &Ctx, id: ObjectId) -> Result<(), CommandError> {
@@ -171,7 +171,7 @@ fn move_vertices(
     ctx: &mut Ctx,
     picks: BTreeMap<ObjectId, BTreeSet<VertexId>>,
     delta: DVec3,
-) -> CmdResult {
+) -> CmdResult<results::VerticesMoved> {
     let mut warnings = Vec::new();
     let mut updated = Vec::new();
     let mut moved = 0;
@@ -192,7 +192,7 @@ fn move_vertices(
         ctx.insert(Object::Mesh(mesh));
     }
     Ok(Outcome {
-        result: json!({ "vertices": moved }),
+        result: results::VerticesMoved { vertices: moved },
         warnings,
     })
 }
@@ -205,7 +205,7 @@ pub struct TranslateFaces {
     delta: DVec3,
 }
 
-pub fn translate_faces(ctx: &mut Ctx, args: TranslateFaces) -> CmdResult {
+pub fn translate_faces(ctx: &mut Ctx, args: TranslateFaces) -> CmdResult<results::VerticesMoved> {
     check_finite("delta", args.delta)?;
     let selection = group_faces(&args.faces)?;
     let mut picks: BTreeMap<ObjectId, BTreeSet<VertexId>> = BTreeMap::new();
@@ -235,7 +235,10 @@ pub struct TranslateVertices {
     delta: DVec3,
 }
 
-pub fn translate_vertices(ctx: &mut Ctx, args: TranslateVertices) -> CmdResult {
+pub fn translate_vertices(
+    ctx: &mut Ctx,
+    args: TranslateVertices,
+) -> CmdResult<results::VerticesMoved> {
     check_finite("delta", args.delta)?;
     non_empty("vertices", &args.vertices)?;
     let mut picks: BTreeMap<ObjectId, BTreeSet<VertexId>> = BTreeMap::new();

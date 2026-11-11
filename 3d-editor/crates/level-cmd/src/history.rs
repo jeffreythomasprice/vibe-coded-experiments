@@ -15,6 +15,8 @@ pub struct Change {
 pub struct HistoryEntry {
     pub label: String,
     pub client: String,
+    pub conn: u64,
+    pub merge_key: Option<String>,
     pub revision: u64,
     pub changes: Vec<Change>,
 }
@@ -68,4 +70,15 @@ pub fn apply(doc: &mut Document, changes: &[Change], reverse: bool) {
             }
         }
     }
+}
+
+/// Folds `new` into `into`, keeping each object's earliest `before` and latest `after`.
+pub fn merge(into: &mut Vec<Change>, new: Vec<Change>) {
+    for c in new {
+        match into.iter_mut().find(|e| e.id == c.id) {
+            Some(existing) => existing.after = c.after,
+            None => into.push(c),
+        }
+    }
+    into.retain(|c| c.before != c.after);
 }

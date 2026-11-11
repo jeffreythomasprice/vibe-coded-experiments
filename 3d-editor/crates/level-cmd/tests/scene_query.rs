@@ -435,3 +435,38 @@ fn ignore_same_group_keeps_ungrouped_pairs() {
     make_box(&mut s, [8, 8, 8], [24, 24, 24]);
     assert_eq!(pair_count(&mut s, json!({ "ignore_same_group": true })), 1);
 }
+
+#[test]
+fn ray_hits_lists_every_hit_nearest_first() {
+    use std::collections::BTreeSet;
+
+    use glam::DVec3;
+    use level_core::ObjectKind;
+
+    let mut s = session();
+    let low = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
+    let high = make_box(&mut s, [0, 0, 20], [8, 8, 28]);
+    let kinds: BTreeSet<ObjectKind> = [ObjectKind::Brush].into();
+    let origin = DVec3::new(4.0, 4.0, 50.0);
+    let down = DVec3::NEG_Z;
+
+    let hits = level_cmd::ray_hits(s.document(), origin, down, &kinds, &BTreeSet::new(), None);
+    let ids: Vec<String> = hits.iter().map(|h| h.id.to_string()).collect();
+    assert_eq!(ids, [high.clone(), low.clone()]);
+    assert!(hits[0].distance < hits[1].distance);
+
+    let ignore = [high.parse().unwrap()].into();
+    let hits = level_cmd::ray_hits(s.document(), origin, down, &kinds, &ignore, None);
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].id.to_string(), low);
+
+    let hits = level_cmd::ray_hits(
+        s.document(),
+        origin,
+        down,
+        &kinds,
+        &BTreeSet::new(),
+        Some(25.0),
+    );
+    assert_eq!(hits.len(), 1);
+}

@@ -37,3 +37,10 @@ impl schemars::JsonSchema for PropertyValue {
         })
     }
 }
+
+pub fn extra_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({
+        "type": "object",
+        "description": "Unrecognized keys preserved from the level file.",
+    })
+}

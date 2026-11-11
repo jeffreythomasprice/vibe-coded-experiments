@@ -3,20 +3,21 @@ use serde::{Deserialize, Serialize};
 
 use crate::{FaceAttrs, FaceId, VertexId};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct MeshVertex {
     pub id: VertexId,
+    #[schemars(with = "[f64; 3]")]
     pub pos: DVec3,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct MeshFace {
     pub id: FaceId,
     pub verts: Vec<VertexId>,
     pub attrs: FaceAttrs,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Mesh {
     pub vertices: Vec<MeshVertex>,
     pub faces: Vec<MeshFace>,

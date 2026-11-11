@@ -2,6 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::Cursor;
 
 use level_cmd::descendants;
+use level_cmd::results::{CameraView, ScreenshotLabel, ScreenshotResult};
 use level_cmd::{
     CameraArg, ColorMode, CommandError, Mode, Overlay, ScreenshotArgs, build_camera, camera_json,
     parse_args, resolve_camera, scene_bounds,
@@ -41,18 +42,31 @@ pub struct Shot {
 
 impl Shot {
     /// The JSON `result` of the `view.screenshot` response.
-    pub fn result(&self) -> Value {
-        let mut v = json!({ "width": self.width, "height": self.height, "camera": self.camera });
-        if let Some(labels) = &self.labels {
-            v["labels"] = labels
-                .iter()
-                .map(|l| json!({ "id": l.id, "x": l.x, "y": l.y, "pixels": l.pixels }))
-                .collect();
-            v["labels_drawn"] = json!(labels.len());
-            v["labels_omitted"] = json!(self.labels_omitted);
+    pub fn result(&self) -> ScreenshotResult {
+        let camera = match &self.camera {
+            Value::Object(map) => CameraView(map.clone()),
+            _ => CameraView(Default::default()),
+        };
+        ScreenshotResult {
+            width: self.width,
+            height: self.height,
+            camera,
+            labels: self.labels.as_ref().map(|labels| {
+                labels
+                    .iter()
+                    .map(|l| ScreenshotLabel {
+                        id: l.id,
+                        x: l.x,
+                        y: l.y,
+                        pixels: l.pixels,
+                    })
+                    .collect()
+            }),
+            labels_drawn: self.labels.as_ref().map(Vec::len),
+            labels_omitted: self.labels.as_ref().map(|_| self.labels_omitted),
+            legend: self.legend.clone(),
+            path: None,
         }
-        v["legend"] = self.legend.clone();
-        v
     }
 }
 

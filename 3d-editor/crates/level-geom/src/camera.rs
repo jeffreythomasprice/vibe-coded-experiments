@@ -161,6 +161,27 @@ impl View {
         })
     }
 
+    /// World-space ray through a pixel (row 0 at the top): origin and unit direction. The inverse of `project`.
+    pub fn ray(&self, px: DVec2) -> (DVec3, DVec3) {
+        let ndc_x = px.x / self.width * 2.0 - 1.0;
+        let ndc_y = 1.0 - px.y / self.height * 2.0;
+        match self.kind {
+            ViewKind::Perspective { fov_y } => {
+                let tan_y = (fov_y.to_radians() * 0.5).tan();
+                let tan_x = tan_y * self.width / self.height;
+                let dir = (self.forward + self.right * (ndc_x * tan_x) + self.up * (ndc_y * tan_y))
+                    .normalize();
+                (self.eye, dir)
+            }
+            ViewKind::Orthographic { zoom } => {
+                let origin = self.eye
+                    + self.right * (ndc_x * self.width / (2.0 * zoom))
+                    + self.up * (ndc_y * self.height / (2.0 * zoom));
+                (origin, self.forward)
+            }
+        }
+    }
+
     /// Visible world range along `(right, up)` of an orthographic view.
     pub fn ortho_extent(&self) -> Option<(DVec2, DVec2)> {
         let ViewKind::Orthographic { zoom } = self.kind else {
@@ -296,6 +317,26 @@ mod tests {
                 p.px
             );
             assert!((-1e-9..=1.0 + 1e-9).contains(&p.depth), "depth {}", p.depth);
+        }
+    }
+
+    #[test]
+    fn ray_through_a_projected_point_hits_it() {
+        let b = bounds();
+        let target = b.center() + DVec3::new(7.0, -3.0, 5.0);
+        for name in VIEWPORTS {
+            let cam = viewport_camera(name, Some(&b), 800, 600).unwrap();
+            let view = View::new(&cam, 800, 600, b.reach());
+            let px = view.project(target).unwrap().px;
+            let (origin, dir) = view.ray(px);
+            assert!((dir.length() - 1.0).abs() < 1e-9);
+            let t = (target - origin).dot(dir);
+            let closest = origin + dir * t;
+            assert!(
+                closest.distance(target) < 1e-6,
+                "{name}: ray misses by {}",
+                closest.distance(target)
+            );
         }
     }
 

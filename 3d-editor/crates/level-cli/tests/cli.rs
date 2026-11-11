@@ -8,11 +8,46 @@ static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 struct Dir(PathBuf);
 
+thread_local! {
+    static CONFIG: std::cell::RefCell<PathBuf> = const { std::cell::RefCell::new(PathBuf::new()) };
+}
+
+fn config() -> PathBuf {
+    CONFIG.with(|c| c.borrow().clone())
+}
+
+fn server_binary() -> PathBuf {
+    static BUILT: std::sync::Once = std::sync::Once::new();
+    BUILT.call_once(|| {
+        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+        let status = Command::new(cargo)
+            .args(["build", "-p", "level-server"])
+            .status()
+            .unwrap();
+        assert!(status.success());
+    });
+    Path::new(env!("CARGO_BIN_EXE_level-cli"))
+        .parent()
+        .unwrap()
+        .join("level-server")
+}
+
 impl Dir {
     fn new() -> Self {
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
         let p = std::env::temp_dir().join(format!("level-cli-test-{}-{n}", std::process::id()));
         std::fs::create_dir_all(&p).unwrap();
+        let cfg = p.join("config.toml");
+        std::fs::write(
+            &cfg,
+            format!(
+                "socket = {:?}\n[server]\nidle_exit_secs = 1\nbinary = {:?}\n",
+                p.join("s.sock").display().to_string(),
+                server_binary().display().to_string(),
+            ),
+        )
+        .unwrap();
+        CONFIG.with(|c| *c.borrow_mut() = cfg);
         Dir(p)
     }
 
@@ -23,6 +58,12 @@ impl Dir {
 
 impl Drop for Dir {
     fn drop(&mut self) {
+        if let Ok(config) = level_proto::Config::load_from(&self.0.join("config.toml"))
+            && let Ok(c) =
+                level_proto::Client::connect_with(&config, "cleanup", true, true, false, None)
+        {
+            let _ = c.control(level_proto::ControlAction::Stop, true);
+        }
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
@@ -30,6 +71,7 @@ impl Drop for Dir {
 fn cli(args: &[&str]) -> (i32, Value) {
     let out = Command::new(env!("CARGO_BIN_EXE_level-cli"))
         .args(args)
+        .env("LEVEL_EDITOR_CONFIG", config())
         .output()
         .unwrap();
     let text = String::from_utf8(out.stdout).unwrap();
@@ -40,6 +82,7 @@ fn cli(args: &[&str]) -> (i32, Value) {
 
 fn run(file: &Path, op: &str, args: Value) -> (i32, Value) {
     cli(&[
+        "--file",
         file.to_str().unwrap(),
         "run",
         op,
@@ -56,7 +99,8 @@ fn load(file: &Path) -> level_core::Document {
 fn new_then_build_and_reload() {
     let d = Dir::new();
     let f = d.file();
-    let (code, v) = cli(&[f.to_str().unwrap(), "new", "--name", "demo"]);
+    let (code, v) = cli(&["--file",
+        f.to_str().unwrap(), "new", "--name", "demo"]);
     assert_eq!((code, &v["ok"]), (0, &json!(true)), "{v}");
     assert_eq!(v["result"]["name"], "demo");
 
@@ -98,17 +142,21 @@ fn new_then_build_and_reload() {
 fn new_refuses_to_overwrite() {
     let d = Dir::new();
     let f = d.file();
-    assert_eq!(cli(&[f.to_str().unwrap(), "new"]).0, 0);
-    let (code, v) = cli(&[f.to_str().unwrap(), "new"]);
+    assert_eq!(cli(&["--file",
+        f.to_str().unwrap(), "new"]).0, 0);
+    let (code, v) = cli(&["--file",
+        f.to_str().unwrap(), "new"]);
     assert_eq!((code, v["code"].as_str()), (2, Some("Io")));
-    assert_eq!(cli(&[f.to_str().unwrap(), "new", "--force"]).0, 0);
+    assert_eq!(cli(&["--file",
+        f.to_str().unwrap(), "new", "--force"]).0, 0);
 }
 
 #[test]
 fn command_error_exits_1_and_leaves_file_alone() {
     let d = Dir::new();
     let f = d.file();
-    cli(&[f.to_str().unwrap(), "new"]);
+    cli(&["--file",
+        f.to_str().unwrap(), "new"]);
     let before = std::fs::read_to_string(&f).unwrap();
     let (code, v) = run(&f, "object.delete", json!({ "ids": ["b9"] }));
     assert_eq!(code, 1);
@@ -120,9 +168,11 @@ fn command_error_exits_1_and_leaves_file_alone() {
 fn dry_run_and_reads_do_not_write() {
     let d = Dir::new();
     let f = d.file();
-    cli(&[f.to_str().unwrap(), "new"]);
+    cli(&["--file",
+        f.to_str().unwrap(), "new"]);
     let before = std::fs::read_to_string(&f).unwrap();
     let (code, v) = cli(&[
+        "--file",
         f.to_str().unwrap(),
         "run",
         "brush.create_box",
@@ -141,8 +191,10 @@ fn dry_run_and_reads_do_not_write() {
 fn expect_revision_flag() {
     let d = Dir::new();
     let f = d.file();
-    cli(&[f.to_str().unwrap(), "new"]);
+    cli(&["--file",
+        f.to_str().unwrap(), "new"]);
     let (code, v) = cli(&[
+        "--file",
         f.to_str().unwrap(),
         "run",
         "scene.summary",
@@ -156,7 +208,8 @@ fn expect_revision_flag() {
 fn apply_batch_is_atomic() {
     let d = Dir::new();
     let f = d.file();
-    cli(&[f.to_str().unwrap(), "new"]);
+    cli(&["--file",
+        f.to_str().unwrap(), "new"]);
 
     let good = d.0.join("good.json");
     std::fs::write(
@@ -168,7 +221,8 @@ fn apply_batch_is_atomic() {
         .to_string(),
     )
     .unwrap();
-    let (code, v) = cli(&[f.to_str().unwrap(), "apply", good.to_str().unwrap()]);
+    let (code, v) = cli(&["--file",
+        f.to_str().unwrap(), "apply", good.to_str().unwrap()]);
     assert_eq!(code, 0, "{v}");
     assert_eq!(load(&f).brushes.len(), 2);
 
@@ -183,7 +237,8 @@ fn apply_batch_is_atomic() {
         .to_string(),
     )
     .unwrap();
-    let (code, v) = cli(&[f.to_str().unwrap(), "apply", bad.to_str().unwrap()]);
+    let (code, v) = cli(&["--file",
+        f.to_str().unwrap(), "apply", bad.to_str().unwrap()]);
     assert_eq!(code, 1);
     assert_eq!(v["index"], 1);
     assert_eq!(std::fs::read_to_string(&f).unwrap(), before);
@@ -202,8 +257,10 @@ fn io_and_format_errors_exit_2() {
     assert_eq!((code, v["code"].as_str()), (2, Some("Format")));
 
     let f = d.file();
-    cli(&[f.to_str().unwrap(), "new"]);
+    cli(&["--file",
+        f.to_str().unwrap(), "new"]);
     let (code, v) = cli(&[
+        "--file",
         f.to_str().unwrap(),
         "run",
         "scene.summary",
@@ -217,7 +274,8 @@ fn io_and_format_errors_exit_2() {
 fn saved_file_matches_scene_get() {
     let d = Dir::new();
     let f = d.file();
-    cli(&[f.to_str().unwrap(), "new"]);
+    cli(&["--file",
+        f.to_str().unwrap(), "new"]);
     run(
         &f,
         "brush.create_box",
@@ -242,7 +300,8 @@ fn saved_file_matches_scene_get() {
 
 fn level_with_box(d: &Dir) -> PathBuf {
     let f = d.file();
-    cli(&[f.to_str().unwrap(), "new"]);
+    cli(&["--file",
+        f.to_str().unwrap(), "new"]);
     let (code, _) = run(
         &f,
         "brush.create_box",
@@ -260,6 +319,7 @@ fn screenshot_writes_a_png_and_leaves_the_level_alone() {
     let out = d.0.join("shot.png");
 
     let (code, v) = cli(&[
+        "--file",
         f.to_str().unwrap(),
         "screenshot",
         "--camera",
@@ -293,6 +353,7 @@ fn screenshot_flags_override_args_json() {
     let f = level_with_box(&d);
     let out = d.0.join("shot.png");
     let (code, v) = cli(&[
+        "--file",
         f.to_str().unwrap(),
         "screenshot",
         "--args",
@@ -317,6 +378,7 @@ fn screenshot_errors() {
     let out = d.0.join("shot.png");
     let shoot = |extra: &[&str]| {
         let mut args = vec![
+            "--file",
             f.to_str().unwrap(),
             "screenshot",
             "-o",
@@ -341,23 +403,17 @@ fn screenshot_errors() {
         "{v}"
     );
     assert!(!out.exists());
-
-    let (code, v) = run(&f, "view.screenshot", json!({}));
-    assert_eq!(
-        (code, v["code"].as_str()),
-        (1, Some("InvalidArgument")),
-        "{v}"
-    );
-    assert!(v["hint"].as_str().unwrap().contains("screenshot"));
 }
 
 fn session_run(file: &Path, flags: &[&str], lines: &[Value]) -> (i32, Vec<Value>, String) {
     use std::io::Write;
     use std::process::Stdio;
     let mut child = Command::new(env!("CARGO_BIN_EXE_level-cli"))
+        .arg("--file")
         .arg(file)
         .arg("session")
         .args(flags)
+        .env("LEVEL_EDITOR_CONFIG", config())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -423,10 +479,27 @@ fn schema_prints_args_schema() {
 }
 
 #[test]
+fn schema_prints_result_and_wire_schemas() {
+    let run = |args: &[&str]| {
+        let out = Command::new(env!("CARGO_BIN_EXE_level-cli"))
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{args:?}");
+        serde_json::from_slice::<Value>(&out.stdout).unwrap()
+    };
+    let v = run(&["schema", "brush.create_box", "--result"]);
+    assert!(v["$defs"]["Created"]["properties"]["ids"].is_object(), "{v}");
+    let wire = run(&["schema", "--wire"]);
+    assert!(wire["client_msg"].is_object() && wire["server_msg"].is_object(), "{wire}");
+}
+
+#[test]
 fn session_keeps_undo_selection_and_saves_on_request() {
     let d = Dir::new();
     let f = d.file();
-    cli(&[f.to_str().unwrap(), "new"]);
+    cli(&["--file",
+        f.to_str().unwrap(), "new"]);
     let (code, r, stderr) = session_run(
         &f,
         &[],
@@ -456,7 +529,8 @@ fn session_keeps_undo_selection_and_saves_on_request() {
 fn session_warns_about_unsaved_changes_and_does_not_write() {
     let d = Dir::new();
     let f = d.file();
-    cli(&[f.to_str().unwrap(), "new"]);
+    cli(&["--file",
+        f.to_str().unwrap(), "new"]);
     let (_, _, stderr) = session_run(
         &f,
         &[],
@@ -470,7 +544,8 @@ fn session_warns_about_unsaved_changes_and_does_not_write() {
 fn session_autosave_and_read_only() {
     let d = Dir::new();
     let f = d.file();
-    cli(&[f.to_str().unwrap(), "new"]);
+    cli(&["--file",
+        f.to_str().unwrap(), "new"]);
     let (_, r, stderr) = session_run(
         &f,
         &["--autosave"],
@@ -499,12 +574,15 @@ fn session_autosave_and_read_only() {
 fn session_survives_garbage_lines() {
     let d = Dir::new();
     let f = d.file();
-    cli(&[f.to_str().unwrap(), "new"]);
+    cli(&["--file",
+        f.to_str().unwrap(), "new"]);
     use std::io::Write;
     use std::process::Stdio;
     let mut child = Command::new(env!("CARGO_BIN_EXE_level-cli"))
+        .arg("--file")
         .arg(&f)
         .arg("session")
+        .env("LEVEL_EDITOR_CONFIG", config())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -526,13 +604,127 @@ fn session_survives_garbage_lines() {
 }
 
 #[test]
-fn one_shot_run_rejects_session_only_ops() {
+fn one_shot_without_file_or_session_errors() {
+    let d = Dir::new();
+    let _ = &d;
+    let (code, v) = cli(&["run", "scene.summary"]);
+    assert_eq!((code, v["code"].as_str()), (1, Some("InvalidArgument")), "{v}");
+    assert!(v["hint"].as_str().unwrap().contains("--file"));
+}
+
+struct Live {
+    child: std::process::Child,
+    lines: std::io::BufReader<std::process::ChildStdout>,
+}
+
+impl Live {
+    fn start(file: &Path, flags: &[&str]) -> Self {
+        use std::process::Stdio;
+        let mut child = Command::new(env!("CARGO_BIN_EXE_level-cli"))
+            .arg("--file")
+            .arg(file)
+            .arg("session")
+            .args(flags)
+            .env("LEVEL_EDITOR_CONFIG", config())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let out = child.stdout.take().unwrap();
+        let mut live = Live {
+            child,
+            lines: std::io::BufReader::new(out),
+        };
+        let first = live.send(json!({ "op": "file.info" }));
+        assert_eq!(first["ok"], true, "{first}");
+        live
+    }
+
+    fn read(&mut self) -> Value {
+        use std::io::BufRead;
+        let mut line = String::new();
+        self.lines.read_line(&mut line).unwrap();
+        serde_json::from_str(&line).unwrap_or_else(|e| panic!("{line:?}: {e}"))
+    }
+
+    fn send(&mut self, request: Value) -> Value {
+        use std::io::Write;
+        let stdin = self.child.stdin.as_mut().unwrap();
+        writeln!(stdin, "{request}").unwrap();
+        stdin.flush().unwrap();
+        loop {
+            let v = self.read();
+            if v.get("event").is_none() {
+                return v;
+            }
+        }
+    }
+}
+
+impl Drop for Live {
+    fn drop(&mut self) {
+        drop(self.child.stdin.take());
+        let _ = self.child.wait();
+    }
+}
+
+#[test]
+fn one_shot_edits_a_live_session_without_saving() {
     let d = Dir::new();
     let f = d.file();
-    cli(&[f.to_str().unwrap(), "new"]);
-    let (code, v) = run(&f, "select.clear", json!({}));
-    assert_eq!(code, 1);
-    assert_eq!(v["code"], "InvalidArgument");
-    let (code, _) = run(&f, "history.undo", json!({}));
-    assert_eq!(code, 1);
+    cli(&["--file", f.to_str().unwrap(), "new"]);
+    let mut live = Live::start(&f, &[]);
+    let before = std::fs::read_to_string(&f).unwrap();
+    let (code, v) = run(&f, "brush.create_box", json!({ "min": [0,0,0], "max": [8,8,8] }));
+    assert_eq!(code, 0, "{v}");
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), before);
+    let seen = live.send(json!({ "op": "scene.summary" }));
+    assert_eq!(seen["result"]["counts"]["brush"], 1, "{seen}");
+
+    let (code, v) = run(&f, "scene.summary", json!({}));
+    assert_eq!((code, v["result"]["counts"]["brush"].clone()), (0, json!(1)));
+    let saved = live.send(json!({ "op": "file.save" }));
+    assert_eq!(saved["ok"], true);
+    assert_eq!(load(&f).brushes.len(), 1);
+}
+
+#[test]
+fn events_show_other_clients_edits() {
+    let d = Dir::new();
+    let f = d.file();
+    cli(&["--file", f.to_str().unwrap(), "new"]);
+    let mut live = Live::start(&f, &["--events"]);
+    let (code, _) = run(&f, "brush.create_box", json!({ "min": [0,0,0], "max": [8,8,8] }));
+    assert_eq!(code, 0);
+    let event = loop {
+        let v = live.read();
+        if v["event"] == "changed" {
+            break v;
+        }
+    };
+    assert_eq!(event["upsert"][0]["id"], "b2", "{event}");
+    assert!(event.get("document_toml").is_none());
+}
+
+#[test]
+fn sessions_and_server_status() {
+    let d = Dir::new();
+    let f = d.file();
+    cli(&["--file", f.to_str().unwrap(), "new"]);
+    let _live = Live::start(&f, &[]);
+    let (code, v) = cli(&["sessions"]);
+    assert_eq!(code, 0, "{v}");
+    assert_eq!(v["result"]["sessions"].as_array().unwrap().len(), 1);
+    assert_eq!(v["result"]["sessions"][0]["path"], f.canonicalize().unwrap().to_str().unwrap());
+    let (code, v) = cli(&["server", "status"]);
+    assert_eq!(code, 0, "{v}");
+    assert_eq!(v["result"]["connections"], 2);
+}
+
+#[test]
+fn server_stop_and_status_when_not_running() {
+    let d = Dir::new();
+    let _ = &d;
+    let (code, v) = cli(&["server", "status"]);
+    assert_eq!((code, v["result"]["running"].clone()), (0, json!(false)), "{v}");
 }

@@ -7,10 +7,10 @@ Every operation is a typed, serializable command. The GUI, CLI and MCP server ar
 Same for socket, CLI and MCP:
 
 ```json
-{ "op": "brush.create_box", "args": { "min": [0,0,0], "max": [64,64,64] }, "dry_run": false, "expect_revision": 41 }
+{ "op": "brush.create_box", "args": { "min": [0,0,0], "max": [64,64,64] }, "dry_run": false, "expect_revision": 41, "merge_key": "drag-3" }
 ```
 
-`expect_revision` is optional. Vectors are `[x,y,z]`; IDs are prefixed strings.
+`expect_revision` and `merge_key` are optional; `merge_key` folds consecutive edits into one undo step (see [semantics](#semantics)). Vectors are `[x,y,z]`; IDs are prefixed strings.
 
 Success:
 
@@ -18,8 +18,8 @@ Success:
 { "ok": true, "revision": 42, "result": {}, "changes": { "created": [], "modified": [], "deleted": [] }, "warnings": [] }
 ```
 
-Error: `{ "ok": false, "code", "message", "target"?, "field"?, "hint", "index"? }` (`index` is the failing command inside a `batch`), backed by a `CommandError` enum:
-`NotFound`, `WrongKind`, `InvalidArgument`, `InvalidGeometry`, `Locked`, `RevisionMismatch`, `NoTransaction`, `TransactionOpen`, `UnsavedChanges` (`file.new` / `file.open` over unsaved changes without `discard`), `NotPermitted` (the client was not granted that safety class, see [tier0-mcp.md](tier0-mcp.md)), `Io`, `Format`, `Render` (no graphics adapter, device or readback failure).
+Error: `{ "ok": false, "code", "message", "target"?, "field"?, "hint", "index"? }` (`index` is the failing command inside a `batch`), backed by a `CommandError` enum whose `ErrorCode` (a string enum in the error schema) is:
+`NotFound`, `WrongKind`, `InvalidArgument`, `InvalidGeometry`, `Locked`, `RevisionMismatch`, `NoTransaction`, `TransactionOpen`, `UnsavedChanges` (`file.new` / `file.open` over unsaved changes without `discard`), `SessionBusy` (another client holds an open transaction, with `holder` and `label` in the message), `FileInUse` (the path is open in another session; join it with `session.attach`), `NotPermitted` (the client was not granted that safety class, see [tier0-mcp.md](tier0-mcp.md)), `Io`, `Format`, `Render` (no graphics adapter, device or readback failure), and the client-side `ServerUnavailable` and `Protocol` (cannot reach the [server](server.md), or its protocol version differs).
 
 Mutating commands report what they created as `result.ids` (in creation order) and `result.id` (the first one, when any). Batch references read these. Objects a command only modified or deleted appear in `changes`, not in `result.ids`.
 
@@ -31,14 +31,15 @@ Argument errors (`InvalidArgument`) carry the full path to the offending value i
 
 `level_cmd::OPS` is the single source of truth, generated with `dispatch` from one `ops!` table in `crates/level-cmd/src/commands/mod.rs`. Each entry declares:
 
-- `name`, `summary` (one line; becomes the MCP tool description) and `args_schema`, a JSON schema derived with `schemars` from the args struct. Results are not schematized: they are documented here.
+- `name`, `summary` (one line; becomes the MCP tool description) and `args_schema` and `result_schema`, JSON schemas derived with `schemars` from the args struct and from the typed result struct the handler returns (`CmdResult<R>`, see `commands/results.rs`; the `ops!` row names both types, so a handler cannot drift from its declared result). `response_schema` wraps the result in the full `Success` envelope. All of them reject unknown fields. Two result fields stay open objects because their shape depends on the object: each entry of `scene.get` / `scene.list` `objects` (always has `id`) and the cameras in `view.camera.*` results. The per-op shapes are documented below. `tests/result_schemas.rs` runs every document and session op and validates the response against its `response_schema`, and fails if a new op has no fixture.
 - `safety`: `read`, `mutate` or `destructive`.
 - `exec`, where the op runs:
   - `Document`: `dispatch` runs it through a `Ctx`. These are the only ops that can be batched or dry-run, and they are undoable unless `read`.
   - `Session`: `Session` handles it itself (`history.*`, `select.*`, `file.*`). Not batchable, no dry run, no undo entry.
-  - `Client`: needs a renderer. Only `view.screenshot`. `level-cmd` never executes it (`dispatch` answers `InvalidArgument` with a hint); `level-host` calls `level_render::screenshot`.
+  - `Client`: needs a renderer. Only `view.screenshot`. `level-cmd` never executes it (`dispatch` answers `InvalidArgument` with a hint); the server's `Hub` calls `level_render::screenshot_with_selection`.
+  - `Server`: `session.list`, `session.attach`, `session.info`. They concern the server's set of sessions, so only the `Hub` runs them; a bare `Session` answers `InvalidArgument`. Not batchable. See [server.md](server.md#sessions).
 
-MCP tools and the CLI's `ops` / `schema` commands are generated from the registry. Safety gating is enforced by `level-host`, see [tier0-mcp.md](tier0-mcp.md). Ids in schemas are strings with a prefix pattern; vectors are `[x, y, z]`.
+MCP tools and the CLI's `ops` / `schema` commands are generated from the registry. Safety gating is enforced per connection by the server (`level-host`), see [server.md](server.md#policy) and [tier0-mcp.md](tier0-mcp.md). Ids in schemas are strings with a prefix pattern; vectors are `[x, y, z]`.
 
 ## Catalog
 
@@ -50,6 +51,12 @@ The session owns the open document and its path.
 - `file.save {path?, overwrite?}` (mutate) writes atomically, creating missing parent directories. With `path` it becomes the document path (save as); without one the document needs a path already. When the document is still named `untitled` and had no path, the name becomes the file stem. Saving to a different, existing file fails with `FileExists` unless `overwrite` is true. Rejected while a transaction is open (`TransactionOpen`).
 - `file.new {name?, path?, discard?}` (with `path` the empty document is bound to it, name defaults to the file stem, nothing is written until `file.save`, and an existing file fails with `FileExists`) and `file.open {path, discard?}` (destructive) replace the document. They fail with `UnsavedChanges` while dirty unless `discard` is true, and with `TransactionOpen` inside a transaction. They clear undo, redo and selection and bump the revision so a stale `expect_revision` fails.
 - `file.export` is T3.
+
+### `session.*` (T0, server)
+Which document a connection is working on; see [server.md](server.md#sessions). All are `read`, and every client must `session.attach` before any other op.
+- `session.attach {id?, path?, create?}` → the session row `{id, path, name, dirty, revision, focused, clients, created}`. By `path` it joins or loads that file (`create` writes a missing one, and needs mutate access); with neither it joins the focused session.
+- `session.list` → `{sessions: [row], focused}`.
+- `session.info` → the row of this connection's session.
 
 ### `scene.*` (T0, read)
 - `summary` → `{name, counts, bounds, layers, classnames, selection}` (`selection` is the selection size).
@@ -136,7 +143,7 @@ Selection is shared session state: not saved, not undoable, no revision bump, ne
 - The `selection` screenshot overlay tints the selection.
 
 ### `history.*` (T0)
-`begin {label}`, `commit`, `rollback`, `undo`, `redo`, `list {limit}` (label, author client, revision, change counts).
+`begin {label}`, `commit`, `rollback`, `undo`, `redo`, `list {limit}` (label, author client, revision, change counts). `rollback` returns what it reverted in `changes`. An open transaction belongs to the connection that began it; others get `SessionBusy` for mutations until it ends or its owner disconnects (which rolls it back).
 
 ### `batch` (T0)
 Ordered list of `Document` commands run as one transaction, all-or-nothing (session and client ops are rejected inside). Items are `{op, args?, as?}`; `op` may be dotted or underscored. Later items reference earlier results in any string inside `args`:
@@ -171,11 +178,12 @@ Returns issues `{code, severity, ids, elements?, message, hint}`. `ids` are obje
 
 ## Semantics
 
-- **Transactions:** a batch or `begin`/`commit` pair applies atomically and undoes as one step. GUI drags use the same mechanism, with consecutive-edit merging.
+- **Transactions:** a batch or `begin`/`commit` pair applies atomically and undoes as one step.
+- **Merging:** with no transaction open, a request carrying `merge_key` folds into the top undo entry when that entry was made by the same connection with the same key: the entry keeps each object's earliest "before" and latest "after", and is dropped if they cancel. The revision still advances on every step, `changes` in each response describes that step alone, and anything else (another key, another connection, an undo) ends the chain. GUI drags send one `transform.translate` per snapped step under a fresh key, so a drag is one undo step without holding a transaction; cancelling sends the inverse translate with the same key, which folds to nothing and leaves no redo entry.
 - **Revision:** every edit that changes the document advances the revision, including edits inside an open transaction, so `expect_revision` chains mid-transaction. `commit` does not advance it again and its undo entry records the revision at commit. `rollback` advances it once if the transaction changed anything, so a revision is never reused for different content; the rolled-back document counts as clean if it was clean at `begin`.
-- **Concurrency:** the editor process is the single writer. A revision counter increments per committed transaction; `expect_revision` rejects stale writes with `RevisionMismatch`.
-- **Events:** every committed change is broadcast to all connected clients.
-- **Attribution:** each transaction records its originating client, shown in `history.list`.
+- **Concurrency:** the [server](server.md) is the single writer, one op at a time across all clients. The revision counter advances on every edit; `expect_revision` rejects stale writes with `RevisionMismatch`. Transactions are exclusive to their connection (`SessionBusy`).
+- **Events:** every change to a session, whatever caused it (including edits inside an open transaction, rollback, undo and redo), is broadcast to all clients attached to it as a `changed` event, or a `snapshot` when the document is replaced. See [server.md](server.md#protocol).
+- **Attribution:** each undo entry records its originating client name and connection, shown in `history.list`.
 - **Dry run:** returns the would-be changeset without committing.
 - **Undo storage:** each history entry stores before/after snapshots of every object it touched, so undo and redo work the same for every command. Undo never rewinds the ID counter.
 - **File mode:** `level-cli` loads the file, runs the command in a fresh session and saves, so revision and undo history do not carry from one invocation to the next. A long-lived editor session keeps them.
@@ -185,23 +193,28 @@ Returns issues `{code, severity, ids, elements?, message, hint}`. `ids` are obje
 
 ```
 level-cli ops [--safety read|mutate|destructive] [--json]
-level-cli schema <op>
-level-cli <file> new [--name N] [--force]
-level-cli <file> run <op> --args '{...}' [--dry-run] [--expect-revision N]
-level-cli <file> apply batch.json [--dry-run]
-level-cli <file> screenshot --camera top -o out.png
-level-cli <file> session [--autosave] [--read-only]
+level-cli schema <op> [--result]
+level-cli schema --wire
+level-cli --file <f> new [--name N] [--force]
+level-cli [--file <f>] run <op> --args '{...}' [--dry-run] [--expect-revision N] [--save]
+level-cli [--file <f>] apply batch.json [--dry-run] [--save]
+level-cli [--file <f>] screenshot --camera top -o out.png
+level-cli [--file <f>] session [--autosave] [--read-only] [--events [--full]]
+level-cli [--file <f>] watch [--full]
+level-cli sessions
+level-cli server status | stop [--force]
 ```
 
-The response JSON goes to stdout (`--pretty` to indent). Exit code 0 on success, 1 for a command error, 2 for an I/O, file-format, usage or render (`Render`) error. The file is rewritten atomically, and only when a non-dry-run command changed something.
+`--config PATH` and `--pretty` apply to every command. The response JSON goes to stdout. Exit code 0 on success, 1 for a command error, 2 for an I/O, file-format, usage, render (`Render`), `ServerUnavailable` or `Protocol` error.
 
-`ops` lists the registry (name, safety, summary; `--json` adds scope and undoable). `schema` prints an op's argument schema. Neither needs a file.
+`ops` and `schema` list the registry (`--json` adds scope and undoable) and need no server. `schema <op>` prints the argument schema, `--result` the whole response schema, `--wire` the socket protocol's schemas (see [server.md](server.md#protocol)). `new` writes an empty level file locally and does not use the server.
 
-`run` and `apply` are one-shot: they load the file, run in a fresh session and save, so ops that keep state between commands (`history.*`, `select.*`, `file.new`, `file.open`) are refused with `InvalidArgument` and a hint to use `session` or MCP. `file.info` and `file.save` work.
+Every other command is a client of the [server](server.md), which it autospawns. `--file` attaches to that file's session (loading it if nobody has it open); without `--file` it attaches to the focused session, so `level-cli run ...` edits whatever the GUI has open, live.
 
-`session` loads the file once and keeps one in-memory `Session` and one renderer:
-- Each non-empty stdin line is a request envelope (`{"op", "args"?, "dry_run"?, "expect_revision"?}`); each gets exactly one response line on stdout. Bad JSON and command errors are response lines, not exits.
-- Undo, transactions, selection, revision and dirty state work as in MCP. Nothing is written until `file.save` (or after every change with `--autosave`). EOF with unsaved changes prints a warning on stderr. `--read-only` refuses mutate and destructive ops (`NotPermitted`).
-- `view.screenshot` takes an extra `path`; the PNG is written there. Without it the result carries `png_base64`.
+**Saving.** If the command made the session (nobody had the file open), it is a one-shot: after a successful, non-dry-run command the CLI saves the file if it is dirty and disconnects, and the clean session is dropped. If the session was already open elsewhere, the CLI does not save (the other client owns that decision); `--save` forces it. `run` and `apply` without `--file` against a server with no open session fail with `InvalidArgument`.
 
-`screenshot` flags: `--camera` (default `viewport.persp`), `-o/--out` (required; written atomically), `--width`, `--height`, `--mode`, `--overlay grid,axes,labels,bounds,selection`, `--highlight b1,b2`, `--hide ids`, `--clip-above Z`, `--label-ids ids`, `--max-labels N`, `--colors material|orientation|layer`, `--material-color NAME=#rrggbb` (repeatable), and `--args '{...}'` for the full `view.screenshot` arguments (flags override it). It never modifies the level file and has no selection (it is a one-shot). The `Render` exit code is also used when no graphics adapter exists, so a headless machine needs a Vulkan driver (see the plan, risk 5).
+`run` accepts any op, including `history.*` and `select.*`: they act on the shared session. `view.screenshot` through `run` works too.
+
+`session` holds one connection and reads one request envelope per stdin line, writing exactly one response line each; bad JSON and command errors are response lines, not exits. Undo, transactions, selection, revision and dirty state work as in MCP. `--autosave` saves after every change; `--read-only` connects with a read-only policy. `--events` also prints the session's change events as JSON lines (`{"event":"changed",...}`, `snapshot` without its document unless `--full`), interleaved with the responses. On exit with unsaved changes it prints a warning (the server keeps the session). `view.screenshot` takes an extra `path`; without it the result carries `png_base64`. `watch` attaches and prints events until the server closes.
+
+`screenshot` flags: `--camera` (default `viewport.persp`), `-o/--out` (required; written by the server, atomically), `--width`, `--height`, `--mode`, `--overlay grid,axes,labels,bounds,selection`, `--highlight b1,b2`, `--hide ids`, `--clip-above Z`, `--label-ids ids`, `--max-labels N`, `--colors material|orientation|layer`, `--material-color NAME=#rrggbb` (repeatable), and `--args '{...}'` for the full `view.screenshot` arguments (flags override it). It never modifies the level. It renders in the server, so the `selection` overlay shows the shared selection, and the `Render` exit code is used when the server has no graphics adapter, so a headless machine needs a Vulkan driver (see the plan, risk 5). Relative paths in arguments resolve against the CLI's working directory.

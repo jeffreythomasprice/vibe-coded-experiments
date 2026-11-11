@@ -3,20 +3,21 @@ mod tools;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use clap::Parser;
-use level_cmd::Session;
-use level_core::Document;
-use level_host::{Host, Policy};
+use level_cmd::results::FileInfoResult;
+use level_proto::{Client, ClientError, Config, ConfigError, Policy};
 use rmcp::ServiceExt;
 use server::LevelServer;
+use serde_json::json;
 
 #[derive(Parser)]
-#[command(about = "MCP server for the level editor command API (stdio)")]
+#[command(about = "MCP server (stdio) for the level editor; a client of level-server")]
 struct Args {
-    /// Level file to edit; without one the document lives only in memory
+    /// Level file to attach to; without one, join the server's focused session
     file: Option<PathBuf>,
-    /// Create the file if it does not exist
+    /// Create the file if it does not exist (needs --allow-mutate)
     #[arg(long)]
     create: bool,
     /// Enable mutating tools
@@ -25,49 +26,60 @@ struct Args {
     /// Enable destructive tools (implies --allow-mutate)
     #[arg(long)]
     allow_destructive: bool,
+    /// Config file (default: $LEVEL_EDITOR_CONFIG or ~/.config/level-editor/config.toml)
+    #[arg(long)]
+    config: Option<PathBuf>,
 }
 
 #[derive(Debug, thiserror::Error)]
 enum MainError {
     #[error(transparent)]
-    File(#[from] level_fmt::FileError),
+    Config(#[from] ConfigError),
+    #[error(transparent)]
+    Client(#[from] ClientError),
     #[error("{0} does not exist (pass --create to start a new level there)")]
     Missing(PathBuf),
+    #[error("attaching to a session: {0}")]
+    Attach(String),
     #[error("mcp transport: {0}")]
     Transport(String),
 }
 
-fn open_session(args: &Args) -> Result<Session, MainError> {
-    let Some(path) = &args.file else {
-        return Ok(Session::new(Document::new("untitled")));
-    };
-    if !path.exists() {
-        if !args.create {
-            return Err(MainError::Missing(path.clone()));
+fn attach(client: &Client, args: &Args) -> Result<(), MainError> {
+    let request = match &args.file {
+        Some(path) => {
+            if !path.exists() && !args.create {
+                return Err(MainError::Missing(path.clone()));
+            }
+            json!({ "op": "session.attach", "args": { "path": path, "create": args.create } })
         }
-        let name = path
-            .file_name()
-            .map(|n| {
-                n.to_string_lossy()
-                    .trim_end_matches(".level.toml")
-                    .to_string()
-            })
-            .unwrap_or_default();
-        let doc = Document::new(name);
-        level_fmt::save_file(path, &doc)?;
-        return Ok(Session::with_path(doc, path.clone()));
+        None => json!({ "op": "session.attach", "args": {} }),
+    };
+    let reply = client.request_value(request)?;
+    if reply.is_ok() {
+        return Ok(());
     }
-    Ok(Session::with_path(
-        level_fmt::load_file(path)?,
-        path.clone(),
-    ))
+    let (message, hint) = reply
+        .error()
+        .map_or(("refused", ""), |e| (e.message.as_str(), e.hint.as_str()));
+    Err(MainError::Attach(format!("{message} {hint}").trim().to_string()))
 }
 
 async fn serve(args: Args) -> Result<(), MainError> {
-    let session = open_session(&args)?;
-    let policy = Policy::new(args.allow_mutate, args.allow_destructive);
-    let server = LevelServer::new(Host::new(session, policy));
-    let host = server.host();
+    let config = match &args.config {
+        Some(path) => Config::load_from(path)?,
+        None => Config::load()?,
+    };
+    let destructive = args.allow_destructive || config.mcp.allow_destructive;
+    let mutate = args.allow_mutate || config.mcp.allow_mutate || destructive;
+    let policy = Policy::new(mutate, destructive);
+
+    let client = Client::connect(&config, "mcp", mutate, destructive)?;
+    client.discard_events();
+    attach(&client, &args)?;
+    let client = Arc::new(client);
+
+    let server = LevelServer::new(client.clone(), policy);
     let running = server
         .serve(rmcp::transport::stdio())
         .await
@@ -76,9 +88,10 @@ async fn serve(args: Args) -> Result<(), MainError> {
         .waiting()
         .await
         .map_err(|e| MainError::Transport(e.to_string()))?;
-    let host = host.lock().unwrap_or_else(|p| p.into_inner());
-    if host.session().is_dirty() {
-        eprintln!("level-mcp: exiting with unsaved changes (file_save was not called)");
+    if let Ok(reply) = client.request_value(json!({ "op": "file.info" }))
+        && reply.result::<FileInfoResult>().is_ok_and(|i| i.dirty)
+    {
+        eprintln!("level-mcp: the session has unsaved changes (level-server keeps it; file_save was not called)");
     }
     Ok(())
 }

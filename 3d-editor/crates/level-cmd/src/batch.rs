@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 
+use crate::commands::results::BatchResults;
 use crate::commands::{CmdResult, Exec, OpInfo, Outcome, dispatch};
 use crate::ctx::Ctx;
 use crate::error::CommandError;
@@ -132,7 +133,7 @@ fn substitute(value: Value, results: &Results) -> Result<Value, CommandError> {
     }
 }
 
-pub fn run(ctx: &mut Ctx, batch: Batch) -> CmdResult {
+pub fn run(ctx: &mut Ctx, batch: Batch) -> CmdResult<BatchResults> {
     let mut results: Vec<Value> = Vec::new();
     let mut names: HashMap<String, usize> = HashMap::new();
     let mut warnings = Vec::new();
@@ -174,7 +175,7 @@ pub fn run(ctx: &mut Ctx, batch: Batch) -> CmdResult {
         results.push(outcome.result);
     }
     Ok(Outcome {
-        result: json!({ "results": results }),
+        result: BatchResults { results },
         warnings,
     })
 }

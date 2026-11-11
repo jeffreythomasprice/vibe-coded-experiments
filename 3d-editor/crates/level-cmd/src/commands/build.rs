@@ -3,10 +3,10 @@ use level_core::{BrushId, BrushObject, Extra, Group, GroupId, LayerId, Object, O
 use level_geom::{Aabb, normalize, shapes};
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_json::{Value, json};
 
 use super::brush::{dominant_material, geometry_error, set_material};
 use super::csg::subtract_brushes;
+use super::results;
 use super::util::{brush_of, check_finite, resolve_layer};
 use super::{CmdResult, Outcome};
 use crate::bounds::object_bounds;
@@ -90,17 +90,6 @@ fn add_box(
     Ok(id.into())
 }
 
-fn finish(ids: Vec<ObjectId>, at: &Placement, extra: Vec<(&str, Value)>) -> super::Outcome {
-    let mut out = Outcome::created(ids, vec![]);
-    if let Some(g) = at.created_group {
-        out.result["group"] = json!(g);
-    }
-    for (key, value) in extra {
-        out.result[key] = value;
-    }
-    out
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum RoomSide {
@@ -137,7 +126,7 @@ pub struct RoomCreate {
     open_sides: Vec<RoomSide>,
 }
 
-pub fn room_create(ctx: &mut Ctx, args: RoomCreate) -> CmdResult {
+pub fn room_create(ctx: &mut Ctx, args: RoomCreate) -> CmdResult<results::RoomCreated> {
     check_finite("min", args.min)?;
     check_finite("max", args.max)?;
     if !args.min.cmplt(args.max).all() {
@@ -210,13 +199,13 @@ pub fn room_create(ctx: &mut Ctx, args: RoomCreate) -> CmdResult {
         ),
     ];
     let mut ids = Vec::new();
-    let mut roles = serde_json::Map::new();
+    let mut roles = std::collections::BTreeMap::new();
     for (role, side, from, to, material) in parts {
         if args.open_sides.contains(&side) {
             continue;
         }
         let id = add_box(ctx, &at, from, to, material, role)?;
-        roles.insert(role.to_string(), json!(id));
+        roles.insert(role.to_string(), id);
         ids.push(id);
     }
     if ids.is_empty() {
@@ -225,7 +214,12 @@ pub fn room_create(ctx: &mut Ctx, args: RoomCreate) -> CmdResult {
             "every side is open, so there is nothing to build",
         ));
     }
-    Ok(finish(ids, &at, vec![("roles", Value::Object(roles))]))
+    Ok(Outcome::new(results::RoomCreated {
+        id: ids.first().copied(),
+        ids,
+        group: at.created_group,
+        roles,
+    }))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -245,7 +239,7 @@ fn crosses(a: &Aabb, b: &Aabb) -> bool {
     a.min.cmplt(b.max).all() && b.min.cmplt(a.max).all()
 }
 
-pub fn cut_opening(ctx: &mut Ctx, args: CutOpening) -> CmdResult {
+pub fn cut_opening(ctx: &mut Ctx, args: CutOpening) -> CmdResult<results::CreatedMapped> {
     check_finite("min", args.min)?;
     check_finite("max", args.max)?;
     if !args.min.cmplt(args.max).all() {
@@ -304,7 +298,7 @@ pub fn cut_opening(ctx: &mut Ctx, args: CutOpening) -> CmdResult {
         created.extend(result.iter().copied().filter(|r| *r != id));
         map.push((id, result));
     }
-    Ok(Outcome::created(created, vec![]).with_map(map))
+    Ok(Outcome::created_mapped(created, vec![], map))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
@@ -352,7 +346,7 @@ pub struct StairsCreate {
     name: Option<String>,
 }
 
-pub fn stairs_create(ctx: &mut Ctx, args: StairsCreate) -> CmdResult {
+pub fn stairs_create(ctx: &mut Ctx, args: StairsCreate) -> CmdResult<results::StairsCreated> {
     check_finite("origin", args.origin)?;
     if !(1..=256).contains(&args.steps) {
         return Err(CommandError::invalid_arg(
@@ -390,5 +384,10 @@ pub fn stairs_create(ctx: &mut Ctx, args: StairsCreate) -> CmdResult {
         let min = DVec3::new(min.x, min.y, args.origin.z);
         ids.push(add_box(ctx, &at, min, max, &args.material, "step")?);
     }
-    Ok(finish(ids, &at, vec![("top", json!(top))]))
+    Ok(Outcome::new(results::StairsCreated {
+        id: ids.first().copied(),
+        ids,
+        group: at.created_group,
+        top,
+    }))
 }

@@ -226,7 +226,12 @@ fn labels_are_reported_and_drawn() {
     let base = json!({ "camera": "viewport.top", "width": 400, "height": 400, "mode": "flat" });
     let (plain, plain_img) = shoot(&s, base.clone());
     assert!(plain.labels.is_none());
-    assert!(plain.result().get("labels").is_none());
+    assert!(
+        serde_json::to_value(plain.result())
+            .unwrap()
+            .get("labels")
+            .is_none()
+    );
 
     let mut args = base.clone();
     args["overlays"] = json!(["labels"]);
@@ -234,7 +239,10 @@ fn labels_are_reported_and_drawn() {
     let labels = shot.labels.as_ref().unwrap();
     let ids: Vec<String> = labels.iter().map(|l| l.id.to_string()).collect();
     assert_eq!(ids, vec![a.clone(), b.clone()]);
-    assert_eq!(shot.result()["labels"][0]["id"], a.as_str());
+    assert_eq!(
+        serde_json::to_value(shot.result()).unwrap()["labels"][0]["id"],
+        a.as_str()
+    );
 
     let la = &labels[0];
     let lb = &labels[1];
@@ -474,7 +482,7 @@ fn legend_and_colour_overrides() {
         ),
     );
     assert_eq!(rgb(&img, 200, 200), [255, 0, 0]);
-    let legend = shot.result()["legend"].clone();
+    let legend = serde_json::to_value(shot.result()).unwrap()["legend"].clone();
     assert_eq!(
         legend["faces"][0],
         json!({ "name": "m/a", "color": "#ff0000" })
@@ -485,7 +493,7 @@ fn legend_and_colour_overrides() {
         &s,
         with(flat("viewport.top"), json!({ "colors": "orientation" })),
     );
-    let names: Vec<String> = shot.result()["legend"]["faces"]
+    let names: Vec<String> = serde_json::to_value(shot.result()).unwrap()["legend"]["faces"]
         .as_array()
         .unwrap()
         .iter()
@@ -495,7 +503,10 @@ fn legend_and_colour_overrides() {
         names.contains(&"faces up (floors)".to_string()),
         "{names:?}"
     );
-    assert_eq!(shot.result()["legend"]["background"], "#292b30");
+    assert_eq!(
+        serde_json::to_value(shot.result()).unwrap()["legend"]["background"],
+        "#292b30"
+    );
     assert!(
         screenshot(
             renderer(),
@@ -520,7 +531,7 @@ fn orientation_legend_names_floors_ceilings_and_walls() {
             json!({ "camera": { "position": [-80, -120, 90], "target": [32, 32, 32] } }),
         ),
     );
-    let names: Vec<String> = shot.result()["legend"]["faces"]
+    let names: Vec<String> = serde_json::to_value(shot.result()).unwrap()["legend"]["faces"]
         .as_array()
         .unwrap()
         .iter()
@@ -563,7 +574,10 @@ fn label_kinds_and_min_label_pixels_filter_labels() {
     let overlay = json!({ "overlays": ["labels"] });
     let (shot, _) = shoot(&s, with(flat("viewport.front"), overlay.clone()));
     assert_eq!(shot.labels.as_ref().unwrap().len(), 2);
-    assert_eq!(shot.result()["labels_drawn"], 2);
+    assert_eq!(
+        serde_json::to_value(shot.result()).unwrap()["labels_drawn"],
+        2
+    );
 
     let (shot, _) = shoot(
         &s,

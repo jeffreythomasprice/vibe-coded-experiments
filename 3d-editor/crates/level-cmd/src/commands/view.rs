@@ -11,6 +11,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
+use super::results;
 use super::util::check_finite;
 use super::{CmdResult, NoArgs, Outcome, parse_args};
 use crate::bounds::{extent, scene_bounds};
@@ -280,16 +281,24 @@ pub fn camera_json(camera: &Camera, session: bool) -> Value {
     v
 }
 
-pub fn list(ctx: &Ctx, _: NoArgs) -> CmdResult {
+pub fn camera_view(camera: &Camera, session: bool) -> results::CameraView {
+    match camera_json(camera, session) {
+        Value::Object(map) => results::CameraView(map),
+        _ => unreachable!("cameras serialize to objects"),
+    }
+}
+
+pub fn list(ctx: &Ctx, _: NoArgs) -> CmdResult<results::CameraList> {
     let doc = ctx.doc();
-    let cameras: Vec<Value> = doc
+    let cameras = doc
         .cameras
         .values()
-        .map(|c| camera_json(c, false))
+        .map(|c| camera_view(c, false))
         .collect();
-    Ok(Outcome::new(
-        json!({ "cameras": cameras, "viewports": VIEWPORTS }),
-    ))
+    Ok(Outcome::new(results::CameraList {
+        cameras,
+        viewports: VIEWPORTS.iter().map(|v| v.to_string()).collect(),
+    }))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -298,12 +307,12 @@ pub struct Get {
     camera: String,
 }
 
-pub fn get(ctx: &Ctx, args: Get) -> CmdResult {
+pub fn get(ctx: &Ctx, args: Get) -> CmdResult<results::CameraOne> {
     let session = args.camera.starts_with("viewport.");
     let camera = resolve_camera(ctx.doc(), &args.camera, REFERENCE_WIDTH, REFERENCE_HEIGHT)?;
-    Ok(Outcome::new(
-        json!({ "camera": camera_json(&camera, session) }),
-    ))
+    Ok(Outcome::new(results::CameraOne {
+        camera: camera_view(&camera, session),
+    }))
 }
 
 /// A new camera from `create`-style params; ortho cameras without a position or zoom are framed on the scene.
@@ -350,7 +359,7 @@ pub fn build_camera(
     Ok(camera)
 }
 
-pub fn create(ctx: &mut Ctx, args: Value) -> CmdResult {
+pub fn create(ctx: &mut Ctx, args: Value) -> CmdResult<results::Created> {
     let (head, params) = split_args(args, &["name"])?;
     let name = string_field(&head, "name")?
         .ok_or_else(|| CommandError::invalid_arg("name", "name is required"))?;
@@ -361,7 +370,7 @@ pub fn create(ctx: &mut Ctx, args: Value) -> CmdResult {
     Ok(Outcome::created(vec![id.into()], vec![]))
 }
 
-pub fn set(ctx: &mut Ctx, args: Value) -> CmdResult {
+pub fn set(ctx: &mut Ctx, args: Value) -> CmdResult<results::IdOnly> {
     let (head, params) = split_args(args, &["camera", "name"])?;
     let reference = string_field(&head, "camera")?
         .ok_or_else(|| CommandError::invalid_arg("camera", "camera is required"))?;
@@ -375,7 +384,7 @@ pub fn set(ctx: &mut Ctx, args: Value) -> CmdResult {
     if camera != current {
         ctx.insert(Object::Camera(camera));
     }
-    Ok(Outcome::new(json!({ "id": id })))
+    Ok(Outcome::new(results::IdOnly { id: id.into() }))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -384,7 +393,7 @@ pub struct Delete {
     cameras: Vec<String>,
 }
 
-pub fn delete(ctx: &mut Ctx, args: Delete) -> CmdResult {
+pub fn delete(ctx: &mut Ctx, args: Delete) -> CmdResult<results::Deleted> {
     if args.cameras.is_empty() {
         return Err(CommandError::invalid_arg(
             "cameras",
@@ -398,7 +407,7 @@ pub fn delete(ctx: &mut Ctx, args: Delete) -> CmdResult {
     for &id in &ids {
         ctx.remove(id.into());
     }
-    Ok(Outcome::new(json!({ "deleted": ids.len() })))
+    Ok(Outcome::new(results::Deleted { deleted: ids.len() }))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -422,7 +431,7 @@ fn image_dim(field: &str, v: Option<u32>, default: u32) -> Result<u32, CommandEr
     }
 }
 
-pub fn frame(ctx: &mut Ctx, args: Frame) -> CmdResult {
+pub fn frame(ctx: &mut Ctx, args: Frame) -> CmdResult<results::Framed> {
     let width = image_dim("width", args.width, REFERENCE_WIDTH)?;
     let height = image_dim("height", args.height, REFERENCE_HEIGHT)?;
     let camera = document_camera(ctx.doc(), &args.camera)?.clone();
@@ -442,7 +451,10 @@ pub fn frame(ctx: &mut Ctx, args: Frame) -> CmdResult {
         CommandError::invalid_arg("ids", "none of the objects has any extent to frame")
     })?;
     let framed = frame_camera(&camera, &bounds, width, height);
-    let result = json!({ "id": framed.id, "camera": camera_json(&framed, false) });
+    let result = results::Framed {
+        id: framed.id.into(),
+        camera: camera_view(&framed, false),
+    };
     if framed != camera {
         ctx.insert(Object::Camera(framed));
     }

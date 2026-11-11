@@ -2,7 +2,7 @@
 
 A TrenchBroom-style brush level editor in Rust, designed from day one to be driven equally by a human (GUI) and an AI agent (MCP / CLI).
 
-Status: steps 1 to 4 of the order of work are built. Items marked **(verify)** are things I could not confirm in research and need a spike before we commit.
+Status: steps 1 to 4 of the order of work are built, the GUI spikes (7.2 to 7.4) are done (see [gui.md](gui.md)), and the editor is a headless server with the CLI, MCP and GUI as its clients (see [server.md](server.md)). Items marked **(verify)** are things I could not confirm in research and need a spike before we commit.
 
 ## 1. Goals and non-goals
 
@@ -22,15 +22,15 @@ Status: steps 1 to 4 of the order of work are built. Items marked **(verify)** a
 The central rule: **the document model and command layer know nothing about UI.**
 
 ```
-                 +-----------------------------+
-   egui GUI ---> |                             |
-   CLI -------> |   Command API (typed, JSON)  | ---> Document (level model)
-   MCP server -> |   queries + mutations       |        |
-                 +-----------------------------+        +--> Undo history
-                               |                        +--> Change events
-                               v
-                     Renderer (wgpu, offscreen
-                     views -> screenshots + GUI)
+                      unix socket                 level-server
+   egui GUI ---> |                        +-----------------------------+
+   CLI -------> |  JSON lines (level-proto) |   Command API (typed, JSON)  | ---> Sessions: Document (level model)
+   MCP shim --> |                        |   queries + mutations       |        |
+                 |                        +-----------------------------+        +--> Undo history
+                 |                                      |                         +--> Change events (to all clients)
+                 |                                      v
+                 +--- events <------------   Renderer (wgpu, offscreen
+                                              views -> screenshots)
 ```
 
 Proposed crates (workspace):
@@ -40,11 +40,13 @@ Proposed crates (workspace):
 | `level-core` | Level model: brushes, meshes, entities, groups, layers, materials. IDs, serialization. No GPU, no UI. |
 | `level-geom` | Plane-based convex brush math (clipping, vertex derivation, validity) and polygon-mesh ops (BSP CSG, welding, triangulation), picking/raycasts. |
 | `level-cmd` | Command layer: every operation as a typed, serializable command; transactions; undo/redo; queries. |
-| `level-render` | wgpu renderer. Renders any camera to any target (window surface or offscreen texture). Built on `level-cmd` for camera resolution and the `view.screenshot` arguments and errors; today it renders offscreen only. |
-| `level-host` | Session plus renderer plus permission policy: the shared host behind the MCP server and the CLI `session` mode. |
-| `level-mcp` | MCP server (tools generated 1:1 from the command registry). |
-| `level-cli` | Headless CLI over the same command API: one-shot `run`/`apply`/`screenshot`, registry introspection, and a JSON-lines `session` mode. |
-| `editor-app` | winit + egui + egui-wgpu shell: panels, viewports, tools, input. |
+| `level-render` | wgpu renderer. Renders any camera to any target (window surface or offscreen texture). Built on `level-cmd` for camera resolution and the `view.screenshot` arguments and errors. Draws offscreen with readback (screenshots, picking) or straight into a caller's texture on a shared device (the GUI panes). |
+| `level-proto` | GPU-free client side of the server: wire types, the shared TOML `Config`, `Policy`, and a blocking `Client` that autospawns the server. |
+| `level-host` | `Hub`: the sessions, connections with per-connection policy, the focused session, change-event fan-out and the one shared renderer. No I/O. |
+| `level-server` | The headless server binary: a unix socket around one `Hub`. Owns every open document. See [server.md](server.md). |
+| `level-mcp` | MCP server over stdio (tools generated 1:1 from the command registry); a thin client of `level-server`. |
+| `level-cli` | CLI client: `run`/`apply`/`screenshot`, `session` (JSON lines, optional events), `watch`, `sessions`, `server`, and registry introspection. |
+| `editor-app` | winit + egui + egui-wgpu shell: panels, viewports, tools, input. A client of `level-server` keeping a live replica of the document; see [gui.md](gui.md). |
 | `level-fmt` | Our file format reader/writer, versioning and migrations. |
 
 Key design decisions:
@@ -55,16 +57,16 @@ Key design decisions:
 4. **Transactions.** A batch of commands applies atomically and undoes as one step (also how the GUI groups a drag).
 5. **Headless-capable.** The model, geometry and command layers run without a window. Rendering runs offscreen with no surface and no display (verified, see risk 5).
 6. **Renderer is target-agnostic.** The same code draws the four GUI viewports and agent screenshots from named cameras.
-7. **One session, multiple clients.** The simplest model is the editor process owns the document and exposes the command API on a local socket; the MCP server and CLI connect to it. A headless mode runs the same process without a window. Concurrent human + agent editing means a single writer with events broadcast to all clients, no merging needed.
+7. **One server, multiple clients.** A headless `level-server` owns the documents (sessions) and exposes the command API on a unix socket; the GUI, the CLI and the MCP shim are all clients of it, found through one shared config file. Concurrent human + agent editing means a single writer with every change broadcast to all clients attached to the session, no merging needed. Transactions are exclusive to the connection that opened them. See [server.md](server.md).
 
 ## 3. Tech stack
 
 - **Language:** Rust.
-- **Windowing / input:** `winit`. Note: some GUI crates have lagged on new winit versions, so pin versions that agree with the egui release **(verify)**.
+- **Windowing / input:** `winit`. Pinned to 0.30 to agree with egui-winit 0.36.
 - **GPU:** `wgpu`.
 - **UI:** `egui` + `egui-wgpu` (+ `egui-winit`), via our own thin integration rather than `eframe`, so we control the device, the event loop and the offscreen views. `eframe` is an acceptable shortcut for the first spike.
-- **Docking:** `egui_dock` or similar **(verify)** — panels for outliner, inspector, material browser, console/issues.
-- **Theming:** egui looks like a debug UI by default. Options to evaluate **(verify all)**: a custom `egui::Style`/`Visuals` of our own, a themed-egui crate (e.g. catppuccin-egui or similar), and a custom icon font. I could not confirm what "egui_styled" refers to; check crates.io before choosing. Budget for owning the style ourselves.
+- **Docking:** `egui_dock` (verified in the spike) — panels for outliner, inspector, material browser, console/issues.
+- **Theming:** egui looks like a debug UI by default. We own the style (`theme.rs`); catppuccin-egui does not support egui 0.36. `egui_styled` (0.9.0, Tailwind-style utilities) and an icon font are untried.
 - **Viewport embedding:** egui paint callbacks (`egui_wgpu::Callback`), or render the four views to app-owned textures on the shared wgpu device and show them as egui images. The offscreen route is preferred because it doubles as the agent screenshot path. The custom3d wgpu demo in the egui repo is the reference.
 - **Math:** `glam`, `f64`. Geometry is epsilon-tolerant with snapping to a 2⁻²⁰ grid (decided in the geometry spike); see [tier0-model.md](tier0-model.md#tolerance).
 - **Serialization:** `serde`; format discussed in section 5.
@@ -79,7 +81,7 @@ Tier 0 = nothing works without it. Each later tier is a coherent release. Source
 
 *The agent interface is Tier 0 because it dictates the command architecture. Retrofitting it later is expensive.*
 
-Detailed specs: [tier0-model.md](tier0-model.md) (object kinds, IDs), [tier0-commands.md](tier0-commands.md) (command catalog), [tier0-mcp.md](tier0-mcp.md) (MCP server and session host), [level-format.md](level-format.md) (TOML format).
+Detailed specs: [tier0-model.md](tier0-model.md) (object kinds, IDs), [tier0-commands.md](tier0-commands.md) (command catalog), [server.md](server.md) (headless server, protocol, sessions), [tier0-mcp.md](tier0-mcp.md) (MCP shim), [level-format.md](level-format.md) (TOML format).
 
 **Document and commands**
 - Level model: convex brushes (face planes + material), polygon meshes (vertices + face loops, possibly concave, for CSG results and free vertex/face editing), entities (classname + key/values), stable IDs. Z-up, right-handed.
@@ -95,7 +97,7 @@ Detailed specs: [tier0-model.md](tier0-model.md) (object kinds, IDs), [tier0-com
 - **Validation tools:** run the issue checker and return structured results (leaks, invalid brushes, missing targets).
 - Batch/transaction tool with all-or-nothing semantics and structured errors (what failed, why, how to fix). Structured errors are what lets the agent self-correct.
 - Dry-run option for any mutation.
-- Session handling: the GUI process owns the document; agent and human can both edit live; GUI shows agent edits as they happen.
+- Session handling: the headless server owns the document; agent, CLI and human can all edit live; the GUI shows agent edits as they happen (change events pushed to every client).
 
 **Core editor loop (GUI)**
 - Four-pane layout (perspective + XY, XZ, YZ), with 1/2/3-pane and maximize options.
@@ -116,6 +118,8 @@ Detailed specs: [tier0-model.md](tier0-model.md) (object kinds, IDs), [tier0-com
 - **Groups** (nestable, open/close with lock semantics) and **layers** (hide, lock, omit from export).
 - **Hide / isolate / lock / show all** (all undoable).
 - **Materials:** material browser, per-face material assignment, face attribute editor (offset, scale, rotation).
+  - For now a material is a name, a string on each face. The viewport colours faces with `level_render::material_rgb8`, and the GUI lists the names in use and assigns one to the selected brushes and meshes with `face.set_material`.
+  - Texture images, UVs on screen and a materials directory wait for per-project config.
 - **Clipboard:** copy/paste (in place or at cursor), duplicate.
 - **Save/load robustness:** autosave and backups.
 
@@ -130,7 +134,7 @@ Detailed specs: [tier0-model.md](tier0-model.md) (object kinds, IDs), [tier0-com
 - **Rebindable shortcuts**, configurable mouse mapping, tablet mode.
 - **Entity model display** and entity icons/gizmos.
 - **Crash recovery:** crash dump of the last-good document.
-- **Agent extras:** subscribe-to-changes events, named bookmarks/cameras, "explain this object" semantic descriptions, prefab/library queries.
+- **Agent extras:** change events pushed to the MCP agent as notifications (clients already get them over the socket), named bookmarks/cameras, "explain this object" semantic descriptions, prefab/library queries.
 
 ### Tier 3 — Pipeline and compatibility
 
@@ -190,9 +194,9 @@ Open question: single file vs a directory of files (one per layer or group). The
 ## 7. Risks and spikes
 
 1. **Brush geometry robustness (highest risk). Spiked: plane brushes, clipping and brush CSG pass randomized tests with no failures.** Plane-based convex brushes, clipping, vertex fusing, CSG and degeneracy handling are where editors get hard. Spike: implement plane → polytope, clip, and subtract with a heavy randomized test suite before building any tools. Study how TrenchBroom (C++, open source) and Jackdaw (Rust, `jackdaw_geometry` and `jackdaw_csg` crates) do it.
-2. **egui looks and feel.** Spike a themed egui with docking and four live wgpu viewports; judge it honestly before committing. Fallbacks: more custom drawing inside egui, or a different UI layer later (the command architecture keeps this swappable).
-3. **egui + winit + wgpu version alignment.** These crates release in lockstep with occasional lag; pin and test.
-4. **Input routing across panes.** Pointer capture, per-viewport hover/focus, and gizmo hit-testing inside docked tabs need a deliberate design **(verify with egui_dock)**.
+2. **egui looks and feel. Spiked: acceptable with our own style.** Themed egui with `egui_dock` and four live wgpu viewports works and reads as an editor; no theme crate fits egui 0.36 (catppuccin-egui stops at 0.33), so we own the style in `theme.rs`. Icons are still text. Fallbacks if it stops being enough: more custom drawing inside egui, or a different UI layer later (the command architecture keeps this swappable). Details in [gui.md](gui.md).
+3. **egui + winit + wgpu version alignment. Spiked: works.** egui/egui-wgpu/egui-winit 0.36.2, egui_dock 0.21.1, wgpu 30.0.1 and winit 0.30.13 build together with one wgpu. egui 0.37 is out, but `egui_dock` 0.21 holds us on 0.36.
+4. **Input routing across panes. Spiked: works.** Per-pane hover and focus, drag capture across pane borders, and key isolation from text fields all hold under `egui_dock`; two traps are recorded in [gui.md](gui.md). Still open: gizmo hit-testing (no gizmos yet), cursor lock for mouse-look, HiDPI and Wayland.
 5. **Headless/offscreen rendering** for the CLI and CI on machines without a display. **Spiked: works.** `Renderer::new` requests an adapter with no surface (retrying with `force_fallback_adapter`) and renders to an offscreen texture; the level-render tests and `level-cli screenshot` pass with `DISPLAY` and `WAYLAND_DISPLAY` unset on Vulkan (NVIDIA). Still open: a machine with no GPU. This one has no software Vulkan driver (lavapipe), and the GL backend via Mesa EGL fails device creation, so a CI runner needs lavapipe (`mesa-vulkan-drivers`) installed. `WGPU_BACKEND` and `WGPU_ADAPTER_NAME` pick the adapter.
 6. **Agent usability.** The tool surface needs real trials with an agent: too fine-grained wastes turns, too coarse is brittle. Plan to iterate on it.
 7. **Mesh CSG robustness. Spiked: fixed cases and the donut pass; random slanted input fails about 0.02% of the time (chains only) and is reported as `CsgError::InvalidResult`. Exact predicates are the upgrade path if that proves too high.** Concave polygon meshes (BSP CSG, welding, snapping, n-gon triangulation, non-planar faces) are a second geometry kernel next to the plane-based one. Spike with randomized tests, e.g. donut = cylinder minus cylinder, then vertex edits and re-validation.
@@ -202,9 +206,10 @@ Open question: single file vs a directory of files (one per layer or group). The
 
 1. ~~Geometry spike (plane brushes, clip, CSG) with tests.~~ Done: `level-core` types, `level-geom` brush math and mesh CSG.
 2. ~~Document + command layer + native format + undo; CLI over it.~~ Done: `level-core` document model, `level-fmt` TOML reader/writer, `level-cmd` (envelope, transactions, snapshot undo, batch, the full Tier 0 catalog, selection and files in the session, and the schemars-backed registry) and `level-cli`.
-3. ~~Renderer drawing brushes to an offscreen texture; screenshots from the CLI.~~ Done: `level-geom` camera math, `level-cmd` `view.camera.*` and `view.frame`, `level-render` (flat/shaded/wireframe, grid, axes, bounds, id labels, highlight) and `level-cli screenshot`. `view.screenshot` is client-side because `level-cmd` stays GPU-free; `level-host` calls `level_render::screenshot` the same way. The `selection` overlay arrived with selection state. Labels are occlusion-aware (an object id buffer), with hide, clip-height, colour modes, a legend and a `path` to save the PNG.
-4. ~~MCP server on the command API (now an agent can build and view a level headlessly).~~ Done: `level-host` (session, one long-lived renderer, gating), `level-mcp` (tools generated from `OPS`, image content for `view.screenshot`, read/mutate/destructive flags) and the CLI `session` mode. Args schemas only; result schemas and event push come later. See [tier0-mcp.md](tier0-mcp.md).
-5. egui shell with four viewports, camera, selection, grid, move/cuboid tool.
+3. ~~Renderer drawing brushes to an offscreen texture; screenshots from the CLI.~~ Done: `level-geom` camera math, `level-cmd` `view.camera.*` and `view.frame`, `level-render` (flat/shaded/wireframe, grid, axes, bounds, id labels, highlight) and `level-cli screenshot`. `view.screenshot` is client-side because `level-cmd` stays GPU-free; the server's hub calls `level_render::screenshot_with_selection` the same way. The `selection` overlay arrived with selection state. Labels are occlusion-aware (an object id buffer), with hide, clip-height, colour modes, a legend and a `path` to save the PNG.
+4. ~~MCP server on the command API (now an agent can build and view a level headlessly).~~ Done: `level-mcp` (tools generated from `OPS`, image content for `view.screenshot`, read/mutate/destructive flags). Args schemas only; result schemas come later. See [tier0-mcp.md](tier0-mcp.md). It was first a standalone process with its own session; the shared server below replaced that.
+4b. ~~Headless server: every client on one session.~~ Done: `level-server` over a unix socket (`level-proto` wire and config, `level-host` `Hub`), with the MCP shim, CLI and GUI as clients, change events pushed to all clients, per-connection transaction ownership (`SessionBusy`) and `merge_key` undo merging. See [server.md](server.md).
+5. egui shell with four viewports, camera, selection, grid, move/cuboid tool. Spike done: `editor-app` has the four docked viewports on a shared device, navigation, picking, grid snapping, and Select/Move/Box tools that emit commands (a Move drag is one transaction). The GUI is now a client of the shared server, so agent edits show up live. Still to do: the real tool set and gizmos. See [gui.md](gui.md).
 6. Tier 1 tools one at a time, each landing as commands first, then GUI.
 
 Building the headless path (steps 2–4) before the GUI keeps the architecture honest: if an agent can build a level without the GUI, the GUI is just another client.
