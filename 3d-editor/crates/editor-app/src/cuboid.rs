@@ -1,5 +1,5 @@
+use editor_geom::Aabb;
 use glam::DVec3;
-use level_geom::Aabb;
 
 pub const DEFAULT_DEPTH: f64 = 64.0;
 

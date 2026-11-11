@@ -1,23 +1,23 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
-use egui::{Context, Key, Ui};
-use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
-use glam::DVec3;
-use level_cmd::args::{
+use editor_cmd::args::{
     Axis, AxisArg, CreateBox, Delete, Factors, Flip, NoArgs, Pivot, Rename, Rotate, Save, Scale,
     SelectIds, SelectKind, SetClassname, SetLayer, SetMaterial, SetProperties, SetTransform,
     Translate,
 };
-use level_cmd::results::{
+use editor_cmd::results::{
     Created, Deleted, FacesChanged, IdCount, IdOnly, Moved, Saved, Stepped, Transformed, Updated,
 };
-use level_cmd::{Request, Success};
-use level_core::{ElementRef, ObjectId, ObjectKind, Part, Properties};
-use level_geom::Aabb;
-use level_geom::camera::{frame_camera, ortho_axes};
-use level_proto::WakeFn;
-use level_render::{PreparedScene, Renderer, ViewportOptions};
+use editor_cmd::{Request, Success};
+use editor_core::{ElementRef, ObjectId, ObjectKind, Part, Properties};
+use editor_geom::Aabb;
+use editor_geom::camera::{frame_camera, ortho_axes};
+use editor_proto::WakeFn;
+use editor_render::{PreparedScene, Renderer, ViewportOptions};
+use egui::{Context, Key, Ui};
+use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
+use glam::DVec3;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -299,7 +299,7 @@ impl Editor {
         self.remote
             .selection
             .iter()
-            .filter_map(|&id| level_cmd::extent(doc, id))
+            .filter_map(|&id| editor_cmd::extent(doc, id))
             .reduce(|a, b| a.merge(b))
     }
 
@@ -410,7 +410,7 @@ impl Editor {
             } => {
                 let kinds =
                     BTreeSet::from([ObjectKind::Brush, ObjectKind::Mesh, ObjectKind::Entity]);
-                let hits: Vec<ObjectId> = level_cmd::ray_hits(
+                let hits: Vec<ObjectId> = editor_cmd::ray_hits(
                     &self.remote.doc,
                     origin,
                     dir,
@@ -500,7 +500,7 @@ impl Editor {
 
     fn open(&mut self) {
         let Some(path) = rfd::FileDialog::new()
-            .add_filter("level", &["toml"])
+            .add_filter("scene", &["toml"])
             .pick_file()
         else {
             return;
@@ -688,7 +688,7 @@ impl Editor {
         self.call::<_, Stepped>("history.redo", &NoArgs::default(), None);
     }
 
-    pub fn ui(&mut self, ui: &mut Ui, level: &Renderer) {
+    pub fn ui(&mut self, ui: &mut Ui, renderer: &Renderer) {
         let ctx = ui.ctx().clone();
         for pane in self.panes.values_mut() {
             pane.visible = false;
@@ -699,7 +699,7 @@ impl Editor {
             Err(e) => self.status = e.to_string(),
         }
         if self.remote.closed {
-            self.status = "disconnected from level-server".into();
+            self.status = "disconnected from editor-server".into();
         }
         self.refresh_prepared();
         self.keys(&ctx);
@@ -725,7 +725,7 @@ impl Editor {
         {
             let env = PaneEnv {
                 prepared,
-                renderer: level,
+                renderer,
                 revision,
                 tool: self.tool,
                 grid: if self.snap { self.grid } else { 0.0 },
@@ -802,7 +802,7 @@ impl Editor {
                 continue;
             };
             let view = prepared.view(camera, want.0, want.1);
-            gfx.level
+            gfx.renderer
                 .draw_viewport(prepared, &view, options, want, &target.view);
         }
     }
@@ -1077,7 +1077,7 @@ impl Editor {
                 additive,
             }),
             Event::Frame(id) => {
-                if let Some(bounds) = level_cmd::extent(&self.remote.doc, id) {
+                if let Some(bounds) = editor_cmd::extent(&self.remote.doc, id) {
                     self.frame_bounds(bounds);
                 }
             }

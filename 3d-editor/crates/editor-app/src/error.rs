@@ -12,6 +12,6 @@ pub enum AppError {
     Device(#[from] wgpu::RequestDeviceError),
     #[error("the surface supports no usable configuration")]
     SurfaceConfig,
-    #[error("level-server: {0}")]
+    #[error("editor-server: {0}")]
     Server(#[from] crate::remote::RemoteError),
 }

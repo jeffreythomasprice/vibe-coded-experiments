@@ -1,10 +1,10 @@
 use std::collections::BTreeSet;
 
+use editor_core::{Document, LayerId, Object, ObjectId, ObjectKind, Properties, PropertyValue};
+use editor_render::material_rgb8;
 use egui::collapsing_header::CollapsingState;
 use egui::{Align, Color32, ComboBox, DragValue, Sense, Ui, vec2};
 use glam::DVec3;
-use level_core::{Document, LayerId, Object, ObjectId, ObjectKind, Properties, PropertyValue};
-use level_render::material_rgb8;
 
 use crate::tree::Tree;
 
@@ -372,7 +372,7 @@ impl Panels {
             });
         }
         Self::layer_combo(ui, doc, &[id], events);
-        if let Some(b) = level_cmd::object_bounds(&object) {
+        if let Some(b) = editor_cmd::object_bounds(&object) {
             egui::Grid::new("bounds").num_columns(2).show(ui, |ui| {
                 let s = b.size();
                 for (name, v) in [("min", b.min), ("max", b.max), ("size", s)] {
@@ -395,7 +395,7 @@ impl Panels {
         &mut self,
         ui: &mut Ui,
         id: ObjectId,
-        e: &level_core::Entity,
+        e: &editor_core::Entity,
         events: &mut Vec<Event>,
     ) {
         ui.horizontal(|ui| {

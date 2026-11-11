@@ -802,17 +802,17 @@ dependencies = [
 name = "editor-app"
 version = "0.1.0"
 dependencies = [
+ "editor-cmd",
+ "editor-core",
+ "editor-fmt",
+ "editor-geom",
+ "editor-proto",
+ "editor-render",
  "egui",
  "egui-wgpu",
  "egui-winit",
  "egui_dock",
  "glam",
- "level-cmd",
- "level-core",
- "level-fmt",
- "level-geom",
- "level-proto",
- "level-render",
  "pollster",
  "rfd",
  "serde",
@@ -820,6 +820,152 @@ dependencies = [
  "thiserror 2.0.21",
  "wgpu",
  "winit",
+]
+
+[[package]]
+name = "editor-cli"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "clap",
+ "editor-cmd",
+ "editor-core",
+ "editor-fmt",
+ "editor-proto",
+ "image",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "editor-cmd"
+version = "0.1.0"
+dependencies = [
+ "editor-core",
+ "editor-fmt",
+ "editor-geom",
+ "glam",
+ "jsonschema",
+ "proptest",
+ "schemars",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "editor-core"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "toml",
+]
+
+[[package]]
+name = "editor-fmt"
+version = "0.1.0"
+dependencies = [
+ "editor-core",
+ "editor-geom",
+ "glam",
+ "proptest",
+ "thiserror 2.0.21",
+ "toml",
+]
+
+[[package]]
+name = "editor-geom"
+version = "0.1.0"
+dependencies = [
+ "editor-core",
+ "glam",
+ "proptest",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "editor-host"
+version = "0.1.0"
+dependencies = [
+ "editor-cmd",
+ "editor-core",
+ "editor-fmt",
+ "editor-proto",
+ "editor-render",
+ "jsonschema",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "editor-mcp"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "clap",
+ "editor-cmd",
+ "editor-proto",
+ "image",
+ "jsonschema",
+ "rmcp",
+ "schemars",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
+name = "editor-proto"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "editor-cmd",
+ "editor-core",
+ "jsonschema",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "toml",
+]
+
+[[package]]
+name = "editor-render"
+version = "0.1.0"
+dependencies = [
+ "ab_glyph",
+ "bytemuck",
+ "editor-cmd",
+ "editor-core",
+ "editor-fmt",
+ "editor-geom",
+ "epaint_default_fonts",
+ "glam",
+ "image",
+ "pollster",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "wgpu",
+]
+
+[[package]]
+name = "editor-server"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "clap",
+ "editor-cmd",
+ "editor-core",
+ "editor-host",
+ "editor-proto",
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -1723,152 +1869,6 @@ dependencies = [
  "euclid",
  "polycool",
  "smallvec",
-]
-
-[[package]]
-name = "level-cli"
-version = "0.1.0"
-dependencies = [
- "base64",
- "clap",
- "image",
- "level-cmd",
- "level-core",
- "level-fmt",
- "level-proto",
- "serde_json",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "level-cmd"
-version = "0.1.0"
-dependencies = [
- "glam",
- "jsonschema",
- "level-core",
- "level-fmt",
- "level-geom",
- "proptest",
- "schemars",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "level-core"
-version = "0.1.0"
-dependencies = [
- "glam",
- "schemars",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "toml",
-]
-
-[[package]]
-name = "level-fmt"
-version = "0.1.0"
-dependencies = [
- "glam",
- "level-core",
- "level-geom",
- "proptest",
- "thiserror 2.0.21",
- "toml",
-]
-
-[[package]]
-name = "level-geom"
-version = "0.1.0"
-dependencies = [
- "glam",
- "level-core",
- "proptest",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "level-host"
-version = "0.1.0"
-dependencies = [
- "jsonschema",
- "level-cmd",
- "level-core",
- "level-fmt",
- "level-proto",
- "level-render",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "level-mcp"
-version = "0.1.0"
-dependencies = [
- "base64",
- "clap",
- "image",
- "jsonschema",
- "level-cmd",
- "level-proto",
- "rmcp",
- "schemars",
- "serde_json",
- "thiserror 2.0.21",
- "tokio",
-]
-
-[[package]]
-name = "level-proto"
-version = "0.1.0"
-dependencies = [
- "base64",
- "jsonschema",
- "level-cmd",
- "level-core",
- "schemars",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "toml",
-]
-
-[[package]]
-name = "level-render"
-version = "0.1.0"
-dependencies = [
- "ab_glyph",
- "bytemuck",
- "epaint_default_fonts",
- "glam",
- "image",
- "level-cmd",
- "level-core",
- "level-fmt",
- "level-geom",
- "pollster",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "wgpu",
-]
-
-[[package]]
-name = "level-server"
-version = "0.1.0"
-dependencies = [
- "base64",
- "clap",
- "level-cmd",
- "level-core",
- "level-host",
- "level-proto",
- "serde_json",
- "thiserror 2.0.21",
 ]
 
 [[package]]

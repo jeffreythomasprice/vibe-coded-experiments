@@ -46,7 +46,7 @@ impl App {
         let window = Arc::new(
             event_loop.create_window(
                 Window::default_attributes()
-                    .with_title("Level Editor")
+                    .with_title("Editor")
                     .with_inner_size(LogicalSize::new(1500.0, 900.0)),
             )?,
         );
@@ -92,7 +92,7 @@ impl App {
         let window = gfx.window.clone();
         let raw = egui_state.take_egui_input(&window);
         editor.repaint = false;
-        let output = ctx.run_ui(raw, |ui| editor.ui(ui, &gfx.level));
+        let output = ctx.run_ui(raw, |ui| editor.ui(ui, &gfx.renderer));
         let ui_done = Instant::now();
         egui_state.handle_platform_output(&window, output.platform_output);
         editor.finish_frame(gfx);

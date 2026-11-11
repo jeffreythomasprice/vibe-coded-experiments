@@ -1,8 +1,8 @@
 use std::f64::consts::TAU;
 
+use editor_geom::camera::{View, ViewKind};
 use egui::{Color32, Painter, Pos2, Rect, Shape, Stroke, vec2};
 use glam::{DVec2, DVec3};
-use level_geom::camera::{View, ViewKind};
 
 use crate::drag::{DragOp, wrap_degrees};
 use crate::pane::snap;
@@ -276,8 +276,8 @@ fn distance_to_segment(p: DVec2, a: DVec2, b: DVec2) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use level_geom::Aabb;
-    use level_geom::camera::viewport_camera;
+    use editor_geom::Aabb;
+    use editor_geom::camera::viewport_camera;
 
     use super::*;
 

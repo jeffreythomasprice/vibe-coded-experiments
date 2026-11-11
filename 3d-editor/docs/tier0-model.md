@@ -1,6 +1,6 @@
-# Tier 0 — Level model
+# Tier 0 — Scene model
 
-What exists in a level and how it is addressed. Companion docs: [commands](tier0-commands.md), [file format](level-format.md), [overall plan](plan.md).
+What exists in a scene and how it is addressed. Companion docs: [commands](tier0-commands.md), [file format](scene-format.md), [overall plan](plan.md).
 
 ## Space and units
 
@@ -31,7 +31,7 @@ IDs survive save/load and undo, so an agent's references stay valid.
 
 ## Element references
 
-A face or vertex is addressed from an object with a path, parsed by `level_core::ElementRef`:
+A face or vertex is addressed from an object with a path, parsed by `editor_core::ElementRef`:
 
 - `b12/f3`, `m3/f2`: a face. `m3/v10`: a mesh vertex.
 - A bare object id (`b12`) means every face (face operations) or every vertex (vertex operations).
@@ -47,7 +47,7 @@ document → layers → (nested groups) → objects.
 
 ## Brush (convex)
 
-Planes are the source of truth; vertices and edges are derived by `level-geom`.
+Planes are the source of truth; vertices and edges are derived by `editor-geom`.
 
 - At least 4 faces.
 - Each face: a plane given by 3 points (clockwise seen from outside, the Quake convention: normal = (c − a) × (b − a); grid-aligned planes stay exact), a material, and UV attributes (offset, scale, rotation; projection axis chosen from the normal).
@@ -73,11 +73,11 @@ Vertices are the source of truth. This is the kind that holds concave results su
 
 ## Tolerance
 
-`level-geom` uses epsilon-tolerant `f64`, not exact arithmetic. All constants live in `level-geom/src/tolerance.rs` and are ordered so each scale is well below the next: snap grid (2⁻²⁰) ≪ plane-side eps (1e-5 brushes, 1e-4 CSG) ≪ weld radius (1e-3) ≈ planarity (2e-3). Features smaller than the weld radius collapse. Coordinates must stay well inside ±2¹⁹.
+`editor-geom` uses epsilon-tolerant `f64`, not exact arithmetic. All constants live in `editor-geom/src/tolerance.rs` and are ordered so each scale is well below the next: snap grid (2⁻²⁰) ≪ plane-side eps (1e-5 brushes, 1e-4 CSG) ≪ weld radius (1e-3) ≈ planarity (2e-3). Features smaller than the weld radius collapse. Coordinates must stay well inside ±2¹⁹.
 
 Problems are reported, never panicked on: brushes return `BrushError`, meshes are checked by `validate` (errors vs warnings per the rules above), and CSG returns `CsgError`.
 
-Measured on random slanted brushes (cuboids cut by up to 4 random integer planes): no single operation in 10,000 pairs, and about 2 in 10,000 three-operand chains, end in `InvalidResult`. Axis-aligned, grid-aligned and regular-prism cases (including the donut) are exact. Property tests run every property under 8 fixed seeds; `LEVEL_GEOM_SEEDS` and `LEVEL_GEOM_SEED_BASE` widen or shift the sweep, and a failure message names the seed to replay. See `crates/level-geom/tests/`.
+Measured on random slanted brushes (cuboids cut by up to 4 random integer planes): no single operation in 10,000 pairs, and about 2 in 10,000 three-operand chains, end in `InvalidResult`. Axis-aligned, grid-aligned and regular-prism cases (including the donut) are exact. Property tests run every property under 8 fixed seeds; `EDITOR_GEOM_SEEDS` and `EDITOR_GEOM_SEED_BASE` widen or shift the sweep, and a failure message names the seed to replay. See `crates/editor-geom/tests/`.
 
 ## Entity
 
@@ -93,7 +93,7 @@ A name/path string on each face (e.g. `"base/concrete_01"`). Tier 0 renders a fl
 
 ## Camera
 
-Named cameras saved in the document: position, yaw/pitch, fov — or orthographic (view axis, zoom). The four GUI viewport cameras are session state, addressable as `viewport.persp`, `viewport.top`, `viewport.front`, `viewport.side`. The math lives in `level_geom::camera`.
+Named cameras saved in the document: position, yaw/pitch, fov — or orthographic (view axis, zoom). The four GUI viewport cameras are session state, addressable as `viewport.persp`, `viewport.top`, `viewport.front`, `viewport.side`. The math lives in `editor_geom::camera`.
 
 - **Perspective:** `position` is the eye. `yaw` is degrees about +Z (0 looks along +X, 90 along +Y); `pitch` is degrees, positive looks up, within ±89. `fov` is the vertical field of view in degrees.
 - **Orthographic:** the `ortho` axis fixes the orientation and `yaw`/`pitch` are ignored. Top looks −Z with +X right and +Y up; Front looks +Y with +X right and +Z up; Side looks −X with +Y right and +Z up. `position` is the view centre (its component along the view axis is ignored). `zoom` is pixels per world unit, so the visible area depends on the image size.

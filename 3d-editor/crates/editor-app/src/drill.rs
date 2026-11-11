@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use level_core::ObjectId;
+use editor_core::ObjectId;
 
 /// The object to select on a drill click: the hit behind the nearest already-selected one, wrapping,
 /// or the nearest hit when none of them is selected. `hits` is ordered nearest first.
@@ -14,7 +14,7 @@ pub fn next_hit(hits: &[ObjectId], selection: &BTreeSet<ObjectId>) -> Option<Obj
 
 #[cfg(test)]
 mod tests {
-    use level_core::BrushId;
+    use editor_core::BrushId;
 
     use super::*;
 

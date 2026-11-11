@@ -1,6 +1,6 @@
+use editor_core::{Camera, OrthoView, Projection};
+use editor_geom::camera::{MAX_PITCH, forward_from_angles, ortho_axes};
 use glam::DVec3;
-use level_core::{Camera, OrthoView, Projection};
-use level_geom::camera::{MAX_PITCH, forward_from_angles, ortho_axes};
 
 const LOOK_DEGREES_PER_POINT: f64 = 0.25;
 const MIN_ZOOM: f64 = 0.01;
@@ -93,8 +93,8 @@ pub fn dolly(camera: &mut Camera, pivot: DVec3, scroll: f64) {
 
 #[cfg(test)]
 mod tests {
+    use editor_core::{CameraId, Extra};
     use glam::DVec3;
-    use level_core::{CameraId, Extra};
 
     use super::*;
 

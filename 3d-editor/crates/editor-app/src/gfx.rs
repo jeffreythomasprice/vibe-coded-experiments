@@ -12,7 +12,7 @@ pub struct Gfx {
     pub queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     pub egui: egui_wgpu::Renderer,
-    pub level: level_render::Renderer,
+    pub renderer: editor_render::Renderer,
     pub adapter: String,
 }
 
@@ -56,7 +56,7 @@ impl Gfx {
             egui_wgpu::RendererOptions::default(),
         );
         let adapter_name = format!("{} ({:?})", info.name, info.backend);
-        let level = level_render::Renderer::from_device(
+        let renderer = editor_render::Renderer::from_device(
             device.clone(),
             queue.clone(),
             adapter_name.clone(),
@@ -68,7 +68,7 @@ impl Gfx {
             queue,
             config,
             egui,
-            level,
+            renderer,
             adapter: adapter_name,
         })
     }
@@ -93,7 +93,7 @@ impl Gfx {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: level_render::Renderer::COLOR_FORMAT,
+            format: editor_render::Renderer::COLOR_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });

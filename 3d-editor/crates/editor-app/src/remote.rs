@@ -1,11 +1,11 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use level_cmd::args::Attach;
-use level_cmd::results::SessionAttached;
-use level_cmd::{CommandError, ErrorResponse, Request, Response, Success};
-use level_core::{Document, ObjectId};
-use level_proto::{
+use editor_cmd::args::Attach;
+use editor_cmd::results::SessionAttached;
+use editor_cmd::{CommandError, ErrorResponse, Request, Response, Success};
+use editor_core::{Document, ObjectId};
+use editor_proto::{
     Client, ClientError, Config, ConfigError, FileInfo, HistoryInfo, ServerEvent, WakeFn,
 };
 
@@ -18,7 +18,7 @@ pub enum RemoteError {
     #[error("{0}")]
     Refused(String),
     #[error("the server sent an unreadable document: {0}")]
-    Document(#[from] level_fmt::LoadError),
+    Document(#[from] editor_fmt::LoadError),
 }
 
 /// A local copy of the attached session, kept current by the server's change events.
@@ -113,7 +113,7 @@ impl Remote {
             changed = true;
             match event {
                 ServerEvent::Snapshot(s) => {
-                    self.doc = level_fmt::read(&s.document_toml)?;
+                    self.doc = editor_fmt::read(&s.document_toml)?;
                     self.selection = s.selection.into_iter().collect();
                     self.revision = s.revision;
                     self.file = s.file;

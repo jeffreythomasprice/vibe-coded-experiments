@@ -1,0 +1,13 @@
+[package]
+name = "editor-geom"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+editor-core.workspace = true
+glam.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

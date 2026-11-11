@@ -1,6 +1,5 @@
 in flight:
 
-
 todo:
 
 just keep chewing through plan.md
@@ -10,10 +9,6 @@ Run an mcp test. Make sure to output screenshots to a directory and give me the 
 
 
 Propose next steps based on these results and plan.md. Include a handoff prompt I can give to a new agent that will get started.
-
-
-rename everything, currently using a "level" prefix for all crates and binary names, replace that prefix with "editor"
-this applies to config and tmp dir names too
 
 
 materials, textures

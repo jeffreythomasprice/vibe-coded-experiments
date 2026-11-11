@@ -18,10 +18,7 @@ use std::path::PathBuf;
 use error::AppError;
 use winit::event_loop::{ControlFlow, EventLoop};
 
-const DEFAULT_SCENE: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../scenes/test-scene.level.toml"
-);
+const DEFAULT_SCENE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../scenes/test.scene.toml");
 
 fn main() -> Result<(), AppError> {
     let path = std::env::args().nth(1).map(PathBuf::from);

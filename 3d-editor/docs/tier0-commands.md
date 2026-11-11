@@ -29,21 +29,21 @@ Argument errors (`InvalidArgument`) carry the full path to the offending value i
 
 ## Registry
 
-`level_cmd::OPS` is the single source of truth, generated with `dispatch` from one `ops!` table in `crates/level-cmd/src/commands/mod.rs`. Each entry declares:
+`editor_cmd::OPS` is the single source of truth, generated with `dispatch` from one `ops!` table in `crates/editor-cmd/src/commands/mod.rs`. Each entry declares:
 
 - `name`, `summary` (one line; becomes the MCP tool description) and `args_schema` and `result_schema`, JSON schemas derived with `schemars` from the args struct and from the typed result struct the handler returns (`CmdResult<R>`, see `commands/results.rs`; the `ops!` row names both types, so a handler cannot drift from its declared result). `response_schema` wraps the result in the full `Success` envelope. All of them reject unknown fields. Two result fields stay open objects because their shape depends on the object: each entry of `scene.get` / `scene.list` `objects` (always has `id`) and the cameras in `view.camera.*` results. The per-op shapes are documented below. `tests/result_schemas.rs` runs every document and session op and validates the response against its `response_schema`, and fails if a new op has no fixture.
 - `safety`: `read`, `mutate` or `destructive`.
 - `exec`, where the op runs:
   - `Document`: `dispatch` runs it through a `Ctx`. These are the only ops that can be batched or dry-run, and they are undoable unless `read`.
   - `Session`: `Session` handles it itself (`history.*`, `select.*`, `file.*`). Not batchable, no dry run, no undo entry.
-  - `Client`: needs a renderer. Only `view.screenshot`. `level-cmd` never executes it (`dispatch` answers `InvalidArgument` with a hint); the server's `Hub` calls `level_render::screenshot_with_selection`.
+  - `Client`: needs a renderer. Only `view.screenshot`. `editor-cmd` never executes it (`dispatch` answers `InvalidArgument` with a hint); the server's `Hub` calls `editor_render::screenshot_with_selection`.
   - `Server`: `session.list`, `session.attach`, `session.info`. They concern the server's set of sessions, so only the `Hub` runs them; a bare `Session` answers `InvalidArgument`. Not batchable. See [server.md](server.md#sessions).
 
-MCP tools and the CLI's `ops` / `schema` commands are generated from the registry. Safety gating is enforced per connection by the server (`level-host`), see [server.md](server.md#policy) and [tier0-mcp.md](tier0-mcp.md). Ids in schemas are strings with a prefix pattern; vectors are `[x, y, z]`.
+MCP tools and the CLI's `ops` / `schema` commands are generated from the registry. Safety gating is enforced per connection by the server (`editor-host`), see [server.md](server.md#policy) and [tier0-mcp.md](tier0-mcp.md). Ids in schemas are strings with a prefix pattern; vectors are `[x, y, z]`.
 
 ## Catalog
 
-Argument schemas come from the registry (`level-cli schema <op>`); this section documents results, errors and semantics. Tier tag in parentheses.
+Argument schemas come from the registry (`editor-cli schema <op>`); this section documents results, errors and semantics. Tier tag in parentheses.
 
 ### `file.*` (T0)
 The session owns the open document and its path.
@@ -103,7 +103,7 @@ Coarse ops that expand to ordinary brushes. Each is one `Document` op: one undo 
 - `room.cut_opening {min, max, targets?, material?}`. Cuts a box through brushes: `targets` defaults to every world brush (not a brush entity member) whose bounds the box crosses with positive volume. Explicit targets must be brushes (a mesh is `InvalidArgument` with a hint to use `csg.subtract`). The cutter never enters the document, so nothing is left to delete. New faces inside the opening use `material`, or each target's most common material. Result: `ids` (created fragments) and `map` (target -> resulting ids; a target the box only grazes maps to itself). A box that crosses nothing is `InvalidArgument`. A doorway between two rooms is one call; a corridor is `room.create` with `open_sides: ["east","west"]` plus one `cut_opening` box spanning both end walls.
 - `stairs.create {origin, direction, steps, rise, run, width, material?, layer?, group?, name?}`. `direction` is `+x`, `-x`, `+y` or `-y`. `origin` is the floor point at the centre of the first step's low edge. Step i is a solid box from `origin.z` up to `(i+1) * rise`, spanning `run` along the climb and `width` across it (centred on `origin`). Steps do not overlap. Result: `ids` bottom to top and `top`, the point on the floor plane at the far end of the last step, raised by the total rise (where a landing continues).
 
-Considered, not built: an arch. The trial's arch was a few `create_prism` and `clip` calls, and nothing else in the level repeated it; an arch op would be a curved-opening generator with many parameters (span, rise, segments, thickness) that one level uses once. Revisit if arches keep recurring. The ramp and `object.array`, the other two candidates, are built (`brush.create_wedge`, `object.array`).
+Considered, not built: an arch. The trial's arch was a few `create_prism` and `clip` calls, and nothing else in the scene repeated it; an arch op would be a curved-opening generator with many parameters (span, rise, segments, thickness) that one scene uses once. Revisit if arches keep recurring. The ramp and `object.array`, the other two candidates, are built (`brush.create_wedge`, `object.array`).
 
 ### `transform.*` (T0)
 All take `ids` and return `{transformed: n}`. They apply to brushes, meshes and point entities, and recurse through groups and brush entities. Layers and cameras are `WrongKind`. UVs are not adjusted (UV lock is T2). A result outside the world bounds is `InvalidGeometry`.
@@ -186,30 +186,30 @@ Returns issues `{code, severity, ids, elements?, message, hint}`. `ids` are obje
 - **Attribution:** each undo entry records its originating client name and connection, shown in `history.list`.
 - **Dry run:** returns the would-be changeset without committing.
 - **Undo storage:** each history entry stores before/after snapshots of every object it touched, so undo and redo work the same for every command. Undo never rewinds the ID counter.
-- **File mode:** `level-cli` loads the file, runs the command in a fresh session and saves, so revision and undo history do not carry from one invocation to the next. A long-lived editor session keeps them.
+- **File mode:** `editor-cli` loads the file, runs the command in a fresh session and saves, so revision and undo history do not carry from one invocation to the next. A long-lived editor session keeps them.
 - **Locks:** locked-object behaviour arrives with locking in T1.
 
 ## CLI mapping
 
 ```
-level-cli ops [--safety read|mutate|destructive] [--json]
-level-cli schema <op> [--result]
-level-cli schema --wire
-level-cli --file <f> new [--name N] [--force]
-level-cli [--file <f>] run <op> --args '{...}' [--dry-run] [--expect-revision N] [--save]
-level-cli [--file <f>] apply batch.json [--dry-run] [--save]
-level-cli [--file <f>] screenshot --camera top -o out.png
-level-cli [--file <f>] session [--autosave] [--read-only] [--events [--full]]
-level-cli [--file <f>] watch [--full]
-level-cli sessions
-level-cli server status | stop [--force]
+editor-cli ops [--safety read|mutate|destructive] [--json]
+editor-cli schema <op> [--result]
+editor-cli schema --wire
+editor-cli --file <f> new [--name N] [--force]
+editor-cli [--file <f>] run <op> --args '{...}' [--dry-run] [--expect-revision N] [--save]
+editor-cli [--file <f>] apply batch.json [--dry-run] [--save]
+editor-cli [--file <f>] screenshot --camera top -o out.png
+editor-cli [--file <f>] session [--autosave] [--read-only] [--events [--full]]
+editor-cli [--file <f>] watch [--full]
+editor-cli sessions
+editor-cli server status | stop [--force]
 ```
 
 `--config PATH` and `--pretty` apply to every command. The response JSON goes to stdout. Exit code 0 on success, 1 for a command error, 2 for an I/O, file-format, usage, render (`Render`), `ServerUnavailable` or `Protocol` error.
 
-`ops` and `schema` list the registry (`--json` adds scope and undoable) and need no server. `schema <op>` prints the argument schema, `--result` the whole response schema, `--wire` the socket protocol's schemas (see [server.md](server.md#protocol)). `new` writes an empty level file locally and does not use the server.
+`ops` and `schema` list the registry (`--json` adds scope and undoable) and need no server. `schema <op>` prints the argument schema, `--result` the whole response schema, `--wire` the socket protocol's schemas (see [server.md](server.md#protocol)). `new` writes an empty scene file locally and does not use the server.
 
-Every other command is a client of the [server](server.md), which it autospawns. `--file` attaches to that file's session (loading it if nobody has it open); without `--file` it attaches to the focused session, so `level-cli run ...` edits whatever the GUI has open, live.
+Every other command is a client of the [server](server.md), which it autospawns. `--file` attaches to that file's session (loading it if nobody has it open); without `--file` it attaches to the focused session, so `editor-cli run ...` edits whatever the GUI has open, live.
 
 **Saving.** If the command made the session (nobody had the file open), it is a one-shot: after a successful, non-dry-run command the CLI saves the file if it is dirty and disconnects, and the clean session is dropped. If the session was already open elsewhere, the CLI does not save (the other client owns that decision); `--save` forces it. `run` and `apply` without `--file` against a server with no open session fail with `InvalidArgument`.
 
@@ -217,4 +217,4 @@ Every other command is a client of the [server](server.md), which it autospawns.
 
 `session` holds one connection and reads one request envelope per stdin line, writing exactly one response line each; bad JSON and command errors are response lines, not exits. Undo, transactions, selection, revision and dirty state work as in MCP. `--autosave` saves after every change; `--read-only` connects with a read-only policy. `--events` also prints the session's change events as JSON lines (`{"event":"changed",...}`, `snapshot` without its document unless `--full`), interleaved with the responses. On exit with unsaved changes it prints a warning (the server keeps the session). `view.screenshot` takes an extra `path`; without it the result carries `png_base64`. `watch` attaches and prints events until the server closes.
 
-`screenshot` flags: `--camera` (default `viewport.persp`), `-o/--out` (required; written by the server, atomically), `--width`, `--height`, `--mode`, `--overlay grid,axes,labels,bounds,selection`, `--highlight b1,b2`, `--hide ids`, `--clip-above Z`, `--label-ids ids`, `--max-labels N`, `--colors material|orientation|layer`, `--material-color NAME=#rrggbb` (repeatable), and `--args '{...}'` for the full `view.screenshot` arguments (flags override it). It never modifies the level. It renders in the server, so the `selection` overlay shows the shared selection, and the `Render` exit code is used when the server has no graphics adapter, so a headless machine needs a Vulkan driver (see the plan, risk 5). Relative paths in arguments resolve against the CLI's working directory.
+`screenshot` flags: `--camera` (default `viewport.persp`), `-o/--out` (required; written by the server, atomically), `--width`, `--height`, `--mode`, `--overlay grid,axes,labels,bounds,selection`, `--highlight b1,b2`, `--hide ids`, `--clip-above Z`, `--label-ids ids`, `--max-labels N`, `--colors material|orientation|layer`, `--material-color NAME=#rrggbb` (repeatable), and `--args '{...}'` for the full `view.screenshot` arguments (flags override it). It never modifies the scene. It renders in the server, so the `selection` overlay shows the shared selection, and the `Render` exit code is used when the server has no graphics adapter, so a headless machine needs a Vulkan driver (see the plan, risk 5). Relative paths in arguments resolve against the CLI's working directory.

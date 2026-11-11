@@ -1,13 +1,13 @@
 use std::collections::BTreeSet;
 
+use editor_core::{Camera, Document, ObjectId, ObjectKind, OrthoView, Projection};
+use editor_geom::Aabb;
+use editor_geom::camera::{View, viewport_camera};
+use editor_render::{PickMap, PreparedScene, Renderer};
 use egui::{
     Align2, Color32, FontId, PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2,
 };
 use glam::{DVec2, DVec3};
-use level_core::{Camera, Document, ObjectId, ObjectKind, OrthoView, Projection};
-use level_geom::Aabb;
-use level_geom::camera::{View, viewport_camera};
-use level_render::{PickMap, PreparedScene, Renderer};
 
 use crate::cuboid::{self, BoxPlane};
 use crate::drag::{DragOp, wrap_degrees};
@@ -485,7 +485,7 @@ impl Pane {
             let l = (origin - resp.rect.min) * ppp;
             let ray = ray_of(pos2(l.x, l.y));
             let kinds = BTreeSet::from([ObjectKind::Brush, ObjectKind::Mesh, ObjectKind::Entity]);
-            let plane = level_cmd::ray_hits(env.doc, ray.0, ray.1, &kinds, &BTreeSet::new(), None)
+            let plane = editor_cmd::ray_hits(env.doc, ray.0, ray.1, &kinds, &BTreeSet::new(), None)
                 .first()
                 .map_or(BoxPlane::ground(), |h| {
                     BoxPlane::from_hit(h.point, h.normal)

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use level_core::{Document, ObjectId};
+use editor_core::{Document, ObjectId};
 
 /// The outliner's view of a document: layers at the top, then groups, brush entities and their contents.
 /// An object sits under its entity if it has one, else its group, else its layer.
@@ -60,9 +60,9 @@ impl Tree {
 }
 
 fn owner(
-    entity: Option<level_core::EntityId>,
-    group: Option<level_core::GroupId>,
-    layer: level_core::LayerId,
+    entity: Option<editor_core::EntityId>,
+    group: Option<editor_core::GroupId>,
+    layer: editor_core::LayerId,
 ) -> ObjectId {
     entity
         .map(ObjectId::Entity)
@@ -72,7 +72,7 @@ fn owner(
 
 #[cfg(test)]
 mod tests {
-    use level_cmd::Session;
+    use editor_cmd::Session;
     use serde_json::{Value, json};
 
     use super::*;

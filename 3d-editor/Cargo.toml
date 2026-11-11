@@ -1,16 +1,16 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/level-core",
-    "crates/level-geom",
-    "crates/level-cmd",
-    "crates/level-fmt",
-    "crates/level-render",
-    "crates/level-proto",
-    "crates/level-host",
-    "crates/level-server",
-    "crates/level-mcp",
-    "crates/level-cli",
+    "crates/editor-core",
+    "crates/editor-geom",
+    "crates/editor-cmd",
+    "crates/editor-fmt",
+    "crates/editor-render",
+    "crates/editor-proto",
+    "crates/editor-host",
+    "crates/editor-server",
+    "crates/editor-mcp",
+    "crates/editor-cli",
     "crates/editor-app",
 ]
 
@@ -20,13 +20,13 @@ edition = "2024"
 publish = false
 
 [workspace.dependencies]
-level-core = { path = "crates/level-core" }
-level-geom = { path = "crates/level-geom" }
-level-cmd = { path = "crates/level-cmd" }
-level-fmt = { path = "crates/level-fmt" }
-level-render = { path = "crates/level-render" }
-level-proto = { path = "crates/level-proto" }
-level-host = { path = "crates/level-host" }
+editor-core = { path = "crates/editor-core" }
+editor-geom = { path = "crates/editor-geom" }
+editor-cmd = { path = "crates/editor-cmd" }
+editor-fmt = { path = "crates/editor-fmt" }
+editor-render = { path = "crates/editor-render" }
+editor-proto = { path = "crates/editor-proto" }
+editor-host = { path = "crates/editor-host" }
 
 glam = { version = "0.34", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }

@@ -1,22 +1,22 @@
 # Tier 0 — MCP server and session host
 
-`level-mcp` exposes the [command catalog](tier0-commands.md) as MCP tools over stdio, as a client of the [headless server](server.md). Companion docs: [server](server.md), [plan](plan.md), [model](tier0-model.md).
+`editor-mcp` exposes the [command catalog](tier0-commands.md) as MCP tools over stdio, as a client of the [headless server](server.md). Companion docs: [server](server.md), [plan](plan.md), [model](tier0-model.md).
 
 ## Crates
 
-`level-mcp` is a thin stdio client of [`level-server`](server.md), which owns the session. It holds one `level_proto::Client` (autospawning the server if needed) and forwards each tool call as a request; `view.screenshot` renders in the server and the PNG comes back over the socket. Tool definitions are generated locally from `OPS`, so the shim never loads the renderer. The CLI's `session` mode and the GUI are clients of the same server, so all three see one document and each other's edits.
+`editor-mcp` is a thin stdio client of [`editor-server`](server.md), which owns the session. It holds one `editor_proto::Client` (autospawning the server if needed) and forwards each tool call as a request; `view.screenshot` renders in the server and the PNG comes back over the socket. Tool definitions are generated locally from `OPS`, so the shim never loads the renderer. The CLI's `session` mode and the GUI are clients of the same server, so all three see one document and each other's edits.
 
 ## Running
 
 ```
-level-mcp [FILE] [--create] [--allow-mutate] [--allow-destructive] [--config PATH]
+editor-mcp [FILE] [--create] [--allow-mutate] [--allow-destructive] [--config PATH]
 ```
 
-- With `FILE` the shim attaches to the session for that file (loading it if no client has it open) and `file.save` writes back to it. `--create` writes a new level there if the file is missing (it needs `--allow-mutate`); without it a missing file is a startup error.
+- With `FILE` the shim attaches to the session for that file (loading it if no client has it open) and `file.save` writes back to it. `--create` writes a new scene there if the file is missing (it needs `--allow-mutate`); without it a missing file is a startup error.
 - Without `FILE` the shim attaches to the server's focused session: the GUI's document when one is open (the live-view workflow), else a new in-memory one (`file.info` reports a null `path`) that the agent binds with `file.save {path}`, or switches with `session_attach`. Registering without `FILE` is the recommended setup.
 - Nothing reaches disk until `file.save`. Unsaved changes stay in the server after the agent disconnects; exiting with some prints a warning on stderr (stdout carries the protocol; the shim never prints there).
 - Flags add to the `[mcp]` defaults in the shared config (`allow_mutate`, `allow_destructive`).
-- Register it with Claude Code: `claude mcp add editor -- /path/to/level-mcp --allow-mutate`.
+- Register it with Claude Code: `claude mcp add editor -- /path/to/editor-mcp --allow-mutate`.
 
 ## Gating
 
