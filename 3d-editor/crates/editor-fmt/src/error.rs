@@ -6,6 +6,8 @@ pub enum LoadError {
     Parse { message: String },
     #[error("file version {found} is not supported (latest is {supported})")]
     UnsupportedVersion { found: i64, supported: u32 },
+    #[error("file version {found} is too old (the oldest readable is {oldest})")]
+    VersionTooOld { found: i64, oldest: u32 },
     #[error("duplicate id {id}")]
     DuplicateId { id: String },
     #[error("{id}.{field} refers to missing {target}")]

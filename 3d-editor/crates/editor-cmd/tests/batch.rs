@@ -78,12 +78,12 @@ fn batch_dollar_escape() {
         &mut s,
         "batch",
         json!({ "commands": [
-            { "op": "entity.create", "args": { "classname": "info_x", "origin": [0,0,0], "properties": { "note": "$$price" } } },
+            { "op": "entity.create", "args": { "origin": [0,0,0], "components": { "note": { "text": "$$price" } } } },
         ]}),
     );
     ok(&r);
     let e = full(&mut s, r["result"]["results"][0]["id"].as_str().unwrap());
-    assert_eq!(e["properties"]["note"], "$price");
+    assert_eq!(e["components"]["note"]["text"], "$price");
 }
 
 #[test]

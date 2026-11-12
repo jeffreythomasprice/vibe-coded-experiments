@@ -32,6 +32,8 @@ pub struct Renderer {
 
 pub struct DrawLists<'a> {
     pub faces: &'a [FaceBatch],
+    /// More face batches, e.g. posed entity geometry; drawn with `faces`.
+    pub extra_faces: &'a [FaceBatch],
     pub lines: &'a [Vertex],
     pub on_top: &'a [Vertex],
 }
@@ -380,6 +382,7 @@ impl Renderer {
             lists
                 .faces
                 .iter()
+                .chain(lists.extra_faces)
                 .filter(move |b| b.material.as_ref().is_some_and(|m| m.blended) == blended)
                 .map(|b| Item::Faces {
                     material: b.material.as_deref(),

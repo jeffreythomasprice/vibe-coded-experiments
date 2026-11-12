@@ -78,7 +78,7 @@ impl Parents {
 }
 
 pub fn renumber(id: ObjectId, number: u64) -> ObjectId {
-    use editor_core::{BrushId, CameraId, MaterialId, MeshId};
+    use editor_core::{BrushId, CameraId, ComponentDefsId, MaterialId, MeshId};
     match id {
         ObjectId::Brush(_) => BrushId(number).into(),
         ObjectId::Mesh(_) => MeshId(number).into(),
@@ -87,6 +87,7 @@ pub fn renumber(id: ObjectId, number: u64) -> ObjectId {
         ObjectId::Layer(_) => LayerId(number).into(),
         ObjectId::Camera(_) => CameraId(number).into(),
         ObjectId::Material(_) => MaterialId(number).into(),
+        ObjectId::ComponentDefs(_) => ComponentDefsId(number).into(),
     }
 }
 
@@ -197,8 +198,6 @@ pub fn set_group(ctx: &mut crate::ctx::Ctx, id: ObjectId, group: Option<GroupId>
         }
     }
 }
-
-pub const RESERVED_PROPERTIES: &[&str] = &["classname", "origin", "angles"];
 
 #[derive(Debug, Clone, Copy, serde::Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]

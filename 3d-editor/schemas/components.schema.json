@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://editor.local/schemas/components.schema.json",
+  "title": "Built-in component data",
+  "$defs": {
+    "KeyframeAnimation": {
+      "description": "Loops the entity through its keyframes in the simulation. Offsets and angles are relative to the entity's pose in the editor. Times are seconds; the loop length is the last keyframe's time.",
+      "type": "object",
+      "properties": {
+        "keyframes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Keyframe"
+          },
+          "minItems": 1,
+          "default": [
+            {
+              "time": 0
+            }
+          ]
+        },
+        "interpolation": {
+          "$ref": "#/$defs/Interpolation",
+          "default": "linear"
+        }
+      },
+      "required": [
+        "keyframes"
+      ],
+      "additionalProperties": false
+    },
+    "Keyframe": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "description": "Seconds from the start of the loop.",
+          "type": "number",
+          "minimum": 0
+        },
+        "offset": {
+          "description": "Translation from the rest origin, world units.",
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "default": [
+            0,
+            0,
+            0
+          ]
+        },
+        "angles": {
+          "description": "[pitch, yaw, roll] degrees added to the rest orientation.",
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "default": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "required": [
+        "time"
+      ],
+      "additionalProperties": false
+    },
+    "Interpolation": {
+      "description": "`linear`, or `smooth` (smoothstep easing between keyframes).",
+      "type": "string",
+      "enum": [
+        "linear",
+        "smooth"
+      ]
+    },
+    "PlayerStart": {
+      "description": "Where the player spawns in the game client; the entity's origin and yaw are used.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  }
+}

@@ -6,7 +6,8 @@ const FIXTURE: &str = include_str!("fixtures/example.scene.toml");
 fn fixture_loads() {
     let doc = read(FIXTURE).unwrap();
     assert_eq!(doc.name, "example");
-    assert_eq!(doc.next_id(), 20);
+    assert_eq!(doc.next_id(), 22);
+    assert_eq!(doc.component_defs.len(), 2);
     assert_eq!(doc.brushes.len(), 2);
     assert_eq!(doc.entities.len(), 3);
 }
@@ -41,14 +42,14 @@ fn fixture_brushes_have_volume() {
 
 fn doc(body: &str) -> String {
     format!(
-        "format = \"scene\"\nversion = 1\n[meta]\nname = \"t\"\nnext_id = 10\n[[layer]]\nid = \"l1\"\nname = \"main\"\n{body}"
+        "format = \"scene\"\nversion = 3\n[meta]\nname = \"t\"\nnext_id = 10\n[[layer]]\nid = \"l1\"\nname = \"main\"\n{body}"
     )
 }
 
 #[test]
 fn unknown_keys_are_preserved() {
     let text =
-        doc("[[entity]]\nid = \"e2\"\nclassname = \"x\"\nlayer = \"l1\"\ncustom = { a = 1 }\n");
+        doc("[[entity]]\nid = \"e2\"\norigin = [0, 0, 0]\nlayer = \"l1\"\ncustom = { a = 1 }\n");
     let d = read(&text).unwrap();
     assert!(
         d.entities
@@ -63,7 +64,7 @@ fn unknown_keys_are_preserved() {
 
 #[test]
 fn next_id_is_repaired() {
-    let text = doc("[[entity]]\nid = \"e50\"\nclassname = \"x\"\nlayer = \"l1\"\n");
+    let text = doc("[[entity]]\nid = \"e50\"\norigin = [0, 0, 0]\nlayer = \"l1\"\n");
     assert_eq!(read(&text).unwrap().next_id(), 51);
 }
 
@@ -74,7 +75,7 @@ fn rejects_newer_version() {
         err,
         LoadError::UnsupportedVersion {
             found: 99,
-            supported: 2
+            supported: 3
         }
     );
 }
@@ -90,7 +91,7 @@ fn rejects_bad_toml() {
 #[test]
 fn rejects_duplicate_record_id() {
     let text = doc(
-        "[[entity]]\nid = \"e2\"\nclassname = \"x\"\nlayer = \"l1\"\n[[entity]]\nid = \"e2\"\nclassname = \"y\"\nlayer = \"l1\"\n",
+        "[[entity]]\nid = \"e2\"\norigin = [0, 0, 0]\nlayer = \"l1\"\n[[entity]]\nid = \"e2\"\norigin = [1, 1, 1]\nlayer = \"l1\"\n",
     );
     assert_eq!(
         read(&text).unwrap_err(),
@@ -101,7 +102,7 @@ fn rejects_duplicate_record_id() {
 #[test]
 fn rejects_number_shared_across_kinds() {
     let text = doc(
-        "[[entity]]\nid = \"e2\"\nclassname = \"x\"\nlayer = \"l1\"\n[[group]]\nid = \"g2\"\nname = \"g\"\nlayer = \"l1\"\n",
+        "[[entity]]\nid = \"e2\"\norigin = [0, 0, 0]\nlayer = \"l1\"\n[[group]]\nid = \"g2\"\nname = \"g\"\nlayer = \"l1\"\n",
     );
     assert!(matches!(
         read(&text).unwrap_err(),
@@ -122,7 +123,7 @@ fn rejects_duplicate_face_id() {
 
 #[test]
 fn rejects_dangling_reference() {
-    let text = doc("[[entity]]\nid = \"e2\"\nclassname = \"x\"\nlayer = \"l9\"\n");
+    let text = doc("[[entity]]\nid = \"e2\"\norigin = [0, 0, 0]\nlayer = \"l9\"\n");
     let err = read(&text).unwrap_err();
     assert!(
         matches!(err, LoadError::DanglingReference { field: "layer", .. }),
@@ -165,7 +166,7 @@ fn rejects_mesh_with_missing_vertex() {
 
 #[test]
 fn hidden_and_locked_flags_round_trip() {
-    let text = "format = \"scene\"\nversion = 1\n[meta]\nname = \"t\"\nnext_id = 10\n[[layer]]\nid = \"l1\"\nname = \"main\"\nhidden = true\nomit_from_export = true\n\n[[group]]\nid = \"g2\"\nname = \"g\"\nlayer = \"l1\"\nlocked = true\n\n[[entity]]\nid = \"e3\"\nclassname = \"x\"\nlayer = \"l1\"\ngroup = \"g2\"\nhidden = true\nlocked = true\n";
+    let text = "format = \"scene\"\nversion = 3\n[meta]\nname = \"t\"\nnext_id = 10\n[[layer]]\nid = \"l1\"\nname = \"main\"\nhidden = true\nomit_from_export = true\n\n[[group]]\nid = \"g2\"\nname = \"g\"\nlayer = \"l1\"\nlocked = true\n\n[[entity]]\nid = \"e3\"\norigin = [0, 0, 0]\nlayer = \"l1\"\ngroup = \"g2\"\nhidden = true\nlocked = true\n";
     let d = read(text).unwrap();
     let layer = d.layers.values().next().unwrap();
     assert!(layer.flags.hidden && !layer.flags.locked && layer.omit_from_export);
@@ -190,7 +191,7 @@ fn unflagged_objects_write_no_flag_keys() {
 #[test]
 fn flags_must_be_booleans() {
     let text =
-        doc("[[entity]]\nid = \"e2\"\nclassname = \"x\"\nlayer = \"l1\"\nhidden = \"yes\"\n");
+        doc("[[entity]]\nid = \"e2\"\norigin = [0, 0, 0]\nlayer = \"l1\"\nhidden = \"yes\"\n");
     assert!(matches!(read(&text), Err(LoadError::Parse { .. })));
 }
 
@@ -216,11 +217,16 @@ fn fixture_materials_load() {
 }
 
 #[test]
-fn version_one_files_still_load() {
-    let doc =
-        read("format = \"scene\"\nversion = 1\n[meta]\nname = \"old\"\nnext_id = 2\n").unwrap();
-    assert_eq!(doc.name, "old");
-    assert!(doc.materials.is_empty());
+fn old_versions_are_rejected() {
+    let err =
+        read("format = \"scene\"\nversion = 2\n[meta]\nname = \"old\"\nnext_id = 2\n").unwrap_err();
+    assert_eq!(
+        err,
+        LoadError::VersionTooOld {
+            found: 2,
+            oldest: 3
+        }
+    );
 }
 
 #[test]
@@ -237,6 +243,34 @@ fn duplicate_material_names_are_rejected() {
 fn lone_axis_is_rejected() {
     let text = doc(
         "[[brush]]\nid = \"b5\"\nlayer = \"l1\"\nfaces = [\n  { id = 1, plane = [[0,0,0],[0,1,0],[1,0,0]], u_axis = [1, 0, 0] },\n]\n",
+    );
+    assert!(matches!(read(&text), Err(LoadError::Parse { .. })));
+}
+
+#[test]
+fn nested_properties_round_trip_exactly() {
+    let doc = read(FIXTURE).unwrap();
+    let door = &doc.entities[&editor_core::EntityId(7)];
+    assert_eq!(
+        door.components["button"]["targets"],
+        serde_json::json!(["e5"])
+    );
+    let keys = &door.components["keyframe_animation"]["keyframes"];
+    assert_eq!(keys[1]["time"], serde_json::json!(1.5));
+    assert!(keys[0]["time"].is_i64());
+}
+
+#[test]
+fn dates_in_properties_are_rejected() {
+    let text = FIXTURE.replace("intensity = 300", "intensity = 1979-05-27");
+    assert!(matches!(read(&text), Err(LoadError::Parse { .. })));
+}
+
+#[test]
+fn defs_need_exactly_one_source() {
+    let text = FIXTURE.replace(
+        "path = \"defs/game.components.json\"",
+        "path = \"a\"\njson = \"{}\"",
     );
     assert!(matches!(read(&text), Err(LoadError::Parse { .. })));
 }

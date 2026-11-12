@@ -11,6 +11,7 @@ mod viewport;
 pub use color::{BACKGROUND, material_rgb8};
 pub use error::RenderError;
 pub use gpu::Renderer;
+pub use scene::{ComponentLook, component_looks};
 pub use screenshot::{
     LabelPos, Shot, ShotContext, screenshot, screenshot_with_context, screenshot_with_selection,
 };

@@ -1,7 +1,10 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use editor_core::{ElementRef, GroupId, ObjectId};
+use editor_core::{ComponentDef, ComponentDefsId, ElementRef, GroupId, ObjectId};
+
+use crate::component_defs::DefsProblemKind;
+use crate::links::EntityLink;
 use glam::DVec3;
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
@@ -165,7 +168,6 @@ pub struct Ungrouped {
 #[serde(deny_unknown_fields)]
 pub struct Released {
     pub released: usize,
-    pub deleted_entities: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -221,7 +223,8 @@ pub struct Summary {
     pub counts: Counts,
     pub bounds: Option<BoundsBox>,
     pub layers: Vec<LayerRow>,
-    pub classnames: BTreeMap<String, usize>,
+    /// Entities carrying each component name.
+    pub components: BTreeMap<String, usize>,
     pub selection: usize,
     /// Objects hidden, directly or through their layer, group or entity.
     pub hidden: usize,
@@ -307,9 +310,8 @@ pub struct Overlaps {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct IssueView {
-    pub code: String,
-    /// `error` or `warning`.
-    pub severity: String,
+    pub code: super::check::IssueCode,
+    pub severity: super::check::IssueSeverity,
     pub ids: Vec<ObjectId>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub elements: Vec<ElementRef>,
@@ -320,8 +322,8 @@ pub struct IssueView {
 impl From<super::check::Issue> for IssueView {
     fn from(i: super::check::Issue) -> Self {
         Self {
-            code: i.code.into(),
-            severity: i.severity.into(),
+            code: i.code,
+            severity: i.severity,
             ids: i.ids,
             elements: i.elements,
             message: i.message,
@@ -593,4 +595,54 @@ pub struct FaceUv {
 #[serde(deny_unknown_fields)]
 pub struct FaceUvList {
     pub faces: Vec<FaceUv>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Links {
+    pub links: Vec<EntityLink>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DefsSourceKind {
+    Path,
+    Embedded,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DefsRecordInfo {
+    pub id: ComponentDefsId,
+    pub source: DefsSourceKind,
+    /// As stored in the scene, for a `path` source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// Components this record currently provides (overridden ones do not count).
+    pub components: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentInfo {
+    /// The record that provides this component; null for a built-in.
+    pub from: Option<ComponentDefsId>,
+    pub def: ComponentDef,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DefsProblemView {
+    pub from: ComponentDefsId,
+    pub kind: DefsProblemKind,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentDefsList {
+    pub defs: Vec<DefsRecordInfo>,
+    /// Resolved components, one per name: the built-ins, then the records, later ones overriding earlier ones.
+    pub components: Vec<ComponentInfo>,
+    pub problems: Vec<DefsProblemView>,
 }

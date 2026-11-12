@@ -3,8 +3,8 @@ use std::fmt::Write;
 use base64::Engine;
 
 use editor_core::{
-    DVec2, DVec3, Document, Extra, FaceAttrs, Filter, Flags, Material, OrthoView, Projection,
-    Properties, PropertyValue, TextureSource,
+    ComponentDefs, DVec2, DVec3, DefsSource, Document, Extra, FaceAttrs, Filter, Flags, Material,
+    OrthoView, Projection, Properties, TextureSource,
 };
 
 use crate::{FORMAT, VERSION};
@@ -20,7 +20,7 @@ pub fn write(doc: &Document) -> String {
 
     out.push_str("\n[world]\n");
     for (k, v) in &doc.world {
-        let _ = writeln!(out, "{} = {}", key(k), property(v));
+        let _ = writeln!(out, "{} = {}", key(k), json(v));
     }
 
     out.push_str("\n[editor]\n");
@@ -29,6 +29,10 @@ pub fn write(doc: &Document) -> String {
 
     for m in doc.materials.values() {
         write_material(&mut out, m);
+    }
+
+    for d in doc.component_defs.values() {
+        write_defs(&mut out, d);
     }
 
     for l in doc.layers.values() {
@@ -85,20 +89,17 @@ pub fn write(doc: &Document) -> String {
     for e in doc.entities.values() {
         out.push_str("\n[[entity]]\n");
         let _ = writeln!(out, "id = \"{}\"", e.id);
-        let _ = writeln!(out, "classname = {}", quote(&e.classname));
         let _ = writeln!(out, "layer = \"{}\"", e.layer);
         if let Some(g) = e.group {
             let _ = writeln!(out, "group = \"{g}\"");
         }
         write_flags(&mut out, e.flags);
-        if let Some(o) = e.origin {
-            let _ = writeln!(out, "origin = {}", vec3(o));
-        }
+        let _ = writeln!(out, "origin = {}", vec3(e.origin));
         if e.angles != DVec3::ZERO {
             let _ = writeln!(out, "angles = {}", vec3(e.angles));
         }
-        if !e.properties.is_empty() {
-            let _ = writeln!(out, "properties = {}", inline_properties(&e.properties));
+        if !e.components.is_empty() {
+            let _ = writeln!(out, "components = {}", inline_components(&e.components));
         }
         write_extra(&mut out, &e.extra);
     }
@@ -256,20 +257,67 @@ fn write_extra(out: &mut String, extra: &Extra) {
     }
 }
 
-fn inline_properties(p: &Properties) -> String {
-    let items: Vec<String> = p
+fn inline_components(c: &std::collections::BTreeMap<String, Properties>) -> String {
+    let map: serde_json::Map<String, serde_json::Value> = c
         .iter()
-        .map(|(k, v)| format!("{} = {}", key(k), property(v)))
+        .map(|(k, v)| (k.clone(), serde_json::Value::Object(v.clone())))
         .collect();
-    format!("{{ {} }}", items.join(", "))
+    json(&serde_json::Value::Object(map))
 }
 
-fn property(v: &PropertyValue) -> String {
+fn write_defs(out: &mut String, d: &ComponentDefs) {
+    out.push_str("\n[[component_defs]]\n");
+    let _ = writeln!(out, "id = \"{}\"", d.id);
+    match &d.source {
+        DefsSource::Path { path } => {
+            let _ = writeln!(out, "path = {}", quote(path));
+        }
+        DefsSource::Embedded { defs } => {
+            let text = serde_json::to_string_pretty(defs).expect("definitions serialize");
+            if text.contains("\'\'\'") {
+                let _ = writeln!(out, "json = {}", quote(&text));
+            } else {
+                let _ = writeln!(out, "json = \'\'\'\n{text}\n\'\'\'");
+            }
+        }
+    }
+    write_extra(out, &d.extra);
+}
+
+fn json(v: &serde_json::Value) -> String {
+    use serde_json::Value as J;
     match v {
-        PropertyValue::Bool(b) => b.to_string(),
-        PropertyValue::Number(n) => num(*n),
-        PropertyValue::Vec3(v) => vec3(*v),
-        PropertyValue::String(s) => quote(s),
+        J::Null => "\"\"".into(),
+        J::Bool(b) => b.to_string(),
+        J::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                i.to_string()
+            } else {
+                let f = n.as_f64().unwrap_or(0.0);
+                if f.fract() == 0.0 && f.abs() < 1e15 {
+                    format!("{f:.1}")
+                } else {
+                    format!("{f:?}")
+                }
+            }
+        }
+        J::String(s) => quote(s),
+        J::Array(items) => {
+            let items: Vec<String> = items.iter().map(json).collect();
+            format!("[{}]", items.join(", "))
+        }
+        J::Object(map) => {
+            if map.is_empty() {
+                return "{}".into();
+            }
+            let mut entries: Vec<(&String, &J)> = map.iter().collect();
+            entries.sort_by_key(|(k, _)| k.as_str());
+            let items: Vec<String> = entries
+                .into_iter()
+                .map(|(k, v)| format!("{} = {}", key(k), json(v)))
+                .collect();
+            format!("{{ {} }}", items.join(", "))
+        }
     }
 }
 

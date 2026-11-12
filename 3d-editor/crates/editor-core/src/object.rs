@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
 
@@ -5,8 +6,8 @@ use glam::DVec3;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
-    Brush, BrushId, CameraId, EntityId, Extra, GroupId, IdParseError, LayerId, Material,
-    MaterialId, Mesh, MeshId, Properties,
+    Brush, BrushId, CameraId, ComponentDefs, ComponentDefsId, EntityId, Extra, GroupId,
+    IdParseError, LayerId, Material, MaterialId, Mesh, MeshId, Properties,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -18,6 +19,7 @@ pub enum ObjectId {
     Layer(LayerId),
     Camera(CameraId),
     Material(MaterialId),
+    ComponentDefs(ComponentDefsId),
 }
 
 #[derive(
@@ -42,6 +44,7 @@ pub enum ObjectKind {
     Layer,
     Camera,
     Material,
+    ComponentDefs,
 }
 
 impl ObjectId {
@@ -54,6 +57,7 @@ impl ObjectId {
             ObjectId::Layer(i) => i.0,
             ObjectId::Camera(i) => i.0,
             ObjectId::Material(i) => i.0,
+            ObjectId::ComponentDefs(i) => i.0,
         }
     }
 
@@ -66,6 +70,7 @@ impl ObjectId {
             ObjectId::Layer(_) => ObjectKind::Layer,
             ObjectId::Camera(_) => ObjectKind::Camera,
             ObjectId::Material(_) => ObjectKind::Material,
+            ObjectId::ComponentDefs(_) => ObjectKind::ComponentDefs,
         }
     }
 }
@@ -80,6 +85,7 @@ impl fmt::Display for ObjectId {
             ObjectId::Layer(i) => i.fmt(f),
             ObjectId::Camera(i) => i.fmt(f),
             ObjectId::Material(i) => i.fmt(f),
+            ObjectId::ComponentDefs(i) => i.fmt(f),
         }
     }
 }
@@ -97,6 +103,7 @@ impl FromStr for ObjectId {
             Some('l') => s.parse().map(ObjectId::Layer),
             Some('c') => s.parse().map(ObjectId::Camera),
             Some('t') => s.parse().map(ObjectId::Material),
+            Some('d') => s.parse().map(ObjectId::ComponentDefs),
             Some(_) => Err(IdParseError::UnknownPrefix),
         }
     }
@@ -114,8 +121,8 @@ impl schemars::JsonSchema for ObjectId {
     fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
         schemars::json_schema!({
             "type": "string",
-            "pattern": "^[bmegilct][0-9]+$",
-            "description": "Object id: b brush, m mesh, e entity, g group, l layer, c camera, t material",
+            "pattern": "^[bmegilctd][0-9]+$",
+            "description": "Object id: b brush, m mesh, e entity, g group, l layer, c camera, t material, d entity definitions",
             "examples": ["b12"],
         })
     }
@@ -151,6 +158,7 @@ from_id!(Group, GroupId);
 from_id!(Layer, LayerId);
 from_id!(Camera, CameraId);
 from_id!(Material, MaterialId);
+from_id!(ComponentDefs, ComponentDefsId);
 
 fn is_false(b: &bool) -> bool {
     !*b
@@ -198,14 +206,14 @@ pub struct Entity {
     pub id: EntityId,
     #[serde(flatten)]
     pub flags: Flags,
-    pub classname: String,
     pub layer: LayerId,
     pub group: Option<GroupId>,
-    #[schemars(with = "Option<[f64; 3]>")]
-    pub origin: Option<DVec3>,
+    #[schemars(with = "[f64; 3]")]
+    pub origin: DVec3,
     #[schemars(with = "[f64; 3]")]
     pub angles: DVec3,
-    pub properties: Properties,
+    /// Component name to its data object; each is validated by the component's schema, not by the model.
+    pub components: BTreeMap<String, Properties>,
     #[schemars(schema_with = "crate::property::extra_schema")]
     pub extra: Extra,
 }
@@ -272,6 +280,7 @@ pub enum Object {
     Layer(Layer),
     Camera(Camera),
     Material(Material),
+    ComponentDefs(ComponentDefs),
 }
 
 impl Object {
@@ -284,6 +293,7 @@ impl Object {
             Object::Layer(o) => o.id.into(),
             Object::Camera(o) => o.id.into(),
             Object::Material(o) => o.id.into(),
+            Object::ComponentDefs(o) => o.id.into(),
         }
     }
 
@@ -293,7 +303,10 @@ impl Object {
             Object::Mesh(o) => Some(o.layer),
             Object::Entity(o) => Some(o.layer),
             Object::Group(o) => Some(o.layer),
-            Object::Layer(_) | Object::Camera(_) | Object::Material(_) => None,
+            Object::Layer(_)
+            | Object::Camera(_)
+            | Object::Material(_)
+            | Object::ComponentDefs(_) => None,
         }
     }
 
@@ -303,7 +316,10 @@ impl Object {
             Object::Mesh(o) => o.group,
             Object::Entity(o) => o.group,
             Object::Group(o) => o.parent,
-            Object::Layer(_) | Object::Camera(_) | Object::Material(_) => None,
+            Object::Layer(_)
+            | Object::Camera(_)
+            | Object::Material(_)
+            | Object::ComponentDefs(_) => None,
         }
     }
 
@@ -314,7 +330,7 @@ impl Object {
             Object::Entity(o) => Some(o.flags),
             Object::Group(o) => Some(o.flags),
             Object::Layer(o) => Some(o.flags),
-            Object::Camera(_) | Object::Material(_) => None,
+            Object::Camera(_) | Object::Material(_) | Object::ComponentDefs(_) => None,
         }
     }
 
@@ -325,7 +341,7 @@ impl Object {
             Object::Entity(o) => o.flags = flags,
             Object::Group(o) => o.flags = flags,
             Object::Layer(o) => o.flags = flags,
-            Object::Camera(_) | Object::Material(_) => {}
+            Object::Camera(_) | Object::Material(_) | Object::ComponentDefs(_) => {}
         }
         self
     }

@@ -845,11 +845,12 @@ dependencies = [
  "editor-core",
  "editor-fmt",
  "editor-geom",
+ "editor-schema",
  "glam",
  "image",
  "jsonschema",
  "proptest",
- "schemars",
+ "schemars 1.2.3",
  "serde",
  "serde_json",
  "serde_path_to_error",
@@ -861,8 +862,11 @@ name = "editor-core"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "editor-schema",
+ "editor-schema-gen",
  "glam",
- "schemars",
+ "regress",
+ "schemars 1.2.3",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
@@ -876,10 +880,31 @@ dependencies = [
  "base64",
  "editor-core",
  "editor-geom",
+ "editor-schema",
  "glam",
  "proptest",
+ "serde_json",
  "thiserror 2.0.21",
  "toml",
+]
+
+[[package]]
+name = "editor-game"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "editor-cmd",
+ "editor-core",
+ "editor-geom",
+ "editor-proto",
+ "editor-render",
+ "editor-sim",
+ "glam",
+ "pollster",
+ "serde_json",
+ "thiserror 2.0.21",
+ "wgpu",
+ "winit",
 ]
 
 [[package]]
@@ -917,7 +942,7 @@ dependencies = [
  "image",
  "jsonschema",
  "rmcp",
- "schemars",
+ "schemars 1.2.3",
  "serde_json",
  "thiserror 2.0.21",
  "tokio",
@@ -930,8 +955,9 @@ dependencies = [
  "base64",
  "editor-cmd",
  "editor-core",
+ "editor-fmt",
  "jsonschema",
- "schemars",
+ "schemars 1.2.3",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
@@ -949,6 +975,7 @@ dependencies = [
  "editor-core",
  "editor-fmt",
  "editor-geom",
+ "editor-sim",
  "epaint_default_fonts",
  "glam",
  "image",
@@ -957,6 +984,31 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "wgpu",
+]
+
+[[package]]
+name = "editor-schema"
+version = "0.1.0"
+dependencies = [
+ "jsonschema",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "editor-schema-gen"
+version = "0.1.0"
+dependencies = [
+ "editor-schema",
+ "prettyplease",
+ "proc-macro2",
+ "schemars 0.8.22",
+ "serde_json",
+ "syn 2.0.119",
+ "thiserror 2.0.21",
+ "typify",
 ]
 
 [[package]]
@@ -969,6 +1021,22 @@ dependencies = [
  "editor-core",
  "editor-host",
  "editor-proto",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "editor-sim"
+version = "0.1.0"
+dependencies = [
+ "editor-core",
+ "editor-fmt",
+ "editor-geom",
+ "editor-schema",
+ "editor-schema-gen",
+ "glam",
+ "regress",
+ "serde",
  "serde_json",
  "thiserror 2.0.21",
 ]
@@ -2737,6 +2805,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8cf8e6a8aa66ce33f63993ffc4ea4271eb5b0530a9002db8455ea6050c77bfa"
 
 [[package]]
+name = "prettyplease"
+version = "0.2.37"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
+dependencies = [
+ "proc-macro2",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "proc-macro-crate"
 version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3008,6 +3086,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
+name = "regress"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "158a764437582235e3501f683b93a0a6f8d825d04a789dbe5ed30b8799b8908a"
+dependencies = [
+ "hashbrown 0.16.1",
+ "memchr",
+]
+
+[[package]]
 name = "renderdoc-sys"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3056,7 +3144,7 @@ dependencies = [
  "pin-project-lite",
  "process-wrap",
  "rmcp-macros",
- "schemars",
+ "schemars 1.2.3",
  "serde",
  "serde_json",
  "sha2",
@@ -3157,6 +3245,18 @@ dependencies = [
 
 [[package]]
 name = "schemars"
+version = "0.8.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fbf2ae1b8bc8e02df939598064d22402220cd5bbcca1c76f7d6a310974d5615"
+dependencies = [
+ "dyn-clone",
+ "schemars_derive 0.8.22",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "schemars"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab508826f74a77ca9d5aba6ff19b522583ee3eaf28a19384ff3d0e5835fadf6e"
@@ -3164,9 +3264,21 @@ dependencies = [
  "chrono",
  "dyn-clone",
  "ref-cast",
- "schemars_derive",
+ "schemars_derive 1.2.3",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "0.8.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32e265784ad618884abaea0600a9adf15393368d840e0222d101a072f3f7534d"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde_derive_internals 0.29.1",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -3177,7 +3289,7 @@ checksum = "e1c3a92094fa7d61aa124645844facb6b554dfc797136d0f5fd1f890e2bffc69"
 dependencies = [
  "proc-macro2",
  "quote",
- "serde_derive_internals",
+ "serde_derive_internals 0.30.0",
  "syn 3.0.10",
 ]
 
@@ -3217,6 +3329,10 @@ name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
+dependencies = [
+ "serde",
+ "serde_core",
+]
 
 [[package]]
 name = "serde"
@@ -3246,6 +3362,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.10",
+]
+
+[[package]]
+name = "serde_derive_internals"
+version = "0.29.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18d26a20a969b9e3fdf2fc2d9f21eda6c40e2de84c9408bb5d3b05d499aae711"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -3290,6 +3417,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c187e0a369471c550af028cba56d4f4fa2a489ad28151ae95a4d340a2a8b782"
 dependencies = [
  "serde_core",
+]
+
+[[package]]
+name = "serde_tokenstream"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7c49585c52c01f13c5c2ebb333f14f6885d76daa768d8a037d28017ec538c69"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -3807,6 +3946,53 @@ name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
+
+[[package]]
+name = "typify"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc0b89f47309feaeb23c4509c15c9a04234f7deccef6f96c3bfe95319819a304"
+dependencies = [
+ "typify-impl",
+ "typify-macro",
+]
+
+[[package]]
+name = "typify-impl"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa7b026f540b148b81043c720889dbb942b08659aa8a43f624ac4f04dbfc1861"
+dependencies = [
+ "heck",
+ "log",
+ "proc-macro2",
+ "quote",
+ "regress",
+ "schemars 0.8.22",
+ "semver",
+ "serde",
+ "serde_json",
+ "syn 2.0.119",
+ "thiserror 2.0.21",
+ "unicode-ident",
+]
+
+[[package]]
+name = "typify-macro"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39ed96c57f06ae0839416b986921a98f18b220da63bbb243a8570a00c8492183"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "schemars 0.8.22",
+ "semver",
+ "serde",
+ "serde_json",
+ "serde_tokenstream",
+ "syn 2.0.119",
+ "typify-impl",
+]
 
 [[package]]
 name = "unarray"

@@ -1,14 +1,18 @@
 format = "scene"
-version = 1
+version = 3
 
 [meta]
 name = "Courtyard Keep"
-next_id = 60
+next_id = 62
 
 [world]
 
 [editor]
 grid = 16
+
+[[component_defs]]
+id = "d60"
+path = "defs/example.components.json"
 
 [[layer]]
 id = "l1"
@@ -76,51 +80,52 @@ fov = 60
 
 [[entity]]
 id = "e33"
-classname = "func_door"
 layer = "l1"
-properties = { locked = false, sound = "door_creak", speed = 2.5 }
+origin = [-64, 56, 0]
+components = { door = { locked = false, sound = "door_creak" }, keyframe_animation = { interpolation = "smooth", keyframes = [{ angles = [0, 0, 0], time = 0 }, { angles = [0, 90, 0], time = 1.5 }, { angles = [0, 90, 0], time = 3.5 }, { angles = [0, 0, 0], time = 5 }, { angles = [0, 0, 0], time = 7 }] } }
 
 [[entity]]
 id = "e34"
-classname = "info_player_start"
 layer = "l1"
 origin = [0, -260, 32]
 angles = [0, 90, 0]
+components = { player_start = {} }
 
 [[entity]]
 id = "e35"
-classname = "light"
 layer = "l3"
 origin = [-112, 84, 120]
-properties = { color = [1, 0.7, 0.35], flicker = true, intensity = 250, name = "torch west" }
+components = { light = { color = [1, 0.7, 0.35], flicker = true, intensity = 250 } }
 
 [[entity]]
 id = "e36"
-classname = "light"
 layer = "l3"
 origin = [112, 84, 120]
-properties = { color = [1, 0.7, 0.35], flicker = true, intensity = 250, name = "torch east" }
+components = { light = { color = [1, 0.7, 0.35], flicker = true, intensity = 250 } }
 
 [[entity]]
 id = "e37"
-classname = "light"
 layer = "l3"
 origin = [-192, -192, 128]
-properties = { color = [0.9, 0.85, 0.6], intensity = 160, name = "lamp sw" }
+components = { light = { color = [0.9, 0.85, 0.6], intensity = 160 } }
 
 [[entity]]
 id = "e38"
-classname = "light"
 layer = "l3"
 origin = [192, -192, 128]
-properties = { color = [0.9, 0.85, 0.6], intensity = 160, name = "lamp se" }
+components = { light = { color = [0.9, 0.85, 0.6], intensity = 160 } }
 
 [[entity]]
 id = "e39"
-classname = "light"
 layer = "l3"
 origin = [0, 0, 400]
-properties = { color = [0.55, 0.65, 1], intensity = 90, name = "moon" }
+components = { light = { color = [0.55, 0.65, 1], intensity = 90 } }
+
+[[entity]]
+id = "e61"
+layer = "l1"
+origin = [64, 56, 0]
+components = { door = { locked = false, sound = "door_creak" }, keyframe_animation = { interpolation = "smooth", keyframes = [{ angles = [0, 0, 0], time = 0 }, { angles = [0, -90, 0], time = 1.5 }, { angles = [0, -90, 0], time = 3.5 }, { angles = [0, 0, 0], time = 5 }, { angles = [0, 0, 0], time = 7 }] } }
 
 [[brush]]
 id = "b4"
@@ -380,7 +385,7 @@ faces = [
 [[brush]]
 id = "b32"
 layer = "l1"
-entity = "e33"
+entity = "e61"
 faces = [
   { id = 1, plane = [[8, 52, 112], [64, 60, 112], [64, 52, 112]], material = "door/oak" },
   { id = 2, plane = [[8, 52, 0], [64, 60, 0], [8, 60, 0]], material = "door/oak" },

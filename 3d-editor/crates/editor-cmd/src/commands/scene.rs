@@ -28,9 +28,11 @@ pub fn summary(ctx: &Ctx, _: NoArgs) -> CmdResult<results::Summary> {
     let doc = ctx.doc();
     let bounds = scene_bounds(doc);
 
-    let mut classnames: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut components: BTreeMap<&str, usize> = BTreeMap::new();
     for e in doc.entities.values() {
-        *classnames.entry(e.classname.as_str()).or_default() += 1;
+        for name in e.components.keys() {
+            *components.entry(name.as_str()).or_default() += 1;
+        }
     }
     let layers = doc
         .layers
@@ -58,7 +60,7 @@ pub fn summary(ctx: &Ctx, _: NoArgs) -> CmdResult<results::Summary> {
         },
         bounds: bounds.map(bounds_box),
         layers,
-        classnames: classnames
+        components: components
             .into_iter()
             .map(|(k, n)| (k.to_string(), n))
             .collect(),
@@ -107,11 +109,19 @@ fn describe(object: &Object, detail: Detail) -> Value {
                 v["entity"] = json!(e);
             }
             match object {
-                Object::Entity(e) => v["classname"] = json!(e.classname),
+                Object::Entity(e) => {
+                    v["components"] = json!(e.components.keys().collect::<Vec<_>>());
+                }
                 Object::Group(g) => v["name"] = json!(g.name),
                 Object::Layer(l) => v["name"] = json!(l.name),
                 Object::Camera(c) => v["name"] = json!(c.name),
                 Object::Material(m) => v["name"] = json!(m.name),
+                Object::ComponentDefs(d) => {
+                    v["source"] = json!(match d.source {
+                        editor_core::DefsSource::Path { .. } => "path",
+                        editor_core::DefsSource::Embedded { .. } => "embedded",
+                    })
+                }
                 Object::Brush(b) => v["faces"] = json!(b.brush.faces.len()),
                 Object::Mesh(m) => {
                     v["vertices"] = json!(m.mesh.vertices.len());
@@ -182,7 +192,8 @@ pub struct List {
     layer: Option<LayerId>,
     group: Option<GroupId>,
     entity: Option<EntityId>,
-    classname: Option<String>,
+    /// Only entities carrying this component.
+    component: Option<String>,
     /// Exact name of a group, layer or camera.
     name: Option<String>,
     /// Only objects whose bounds lie inside this box.
@@ -256,8 +267,8 @@ pub fn list(ctx: &Ctx, args: List) -> CmdResult<results::ObjectPage> {
         if args.entity.is_some_and(|e| object.entity() != Some(e)) {
             return false;
         }
-        if let Some(c) = &args.classname
-            && !matches!(object, Object::Entity(e) if &e.classname == c)
+        if let Some(c) = &args.component
+            && !matches!(object, Object::Entity(e) if e.components.contains_key(c))
         {
             return false;
         }
@@ -395,8 +406,8 @@ pub fn ray_hits(
     if kinds.contains(&ObjectKind::Entity) {
         for e in doc.entities.values() {
             let id = ObjectId::from(e.id);
-            let Some(o) = e.origin else { continue };
-            if ignore.contains(&id) {
+            let o = e.origin;
+            if ignore.contains(&id) || !doc.children(id).is_empty() {
                 continue;
             }
             let bounds = Aabb {

@@ -95,9 +95,9 @@ fn creating_a_box_and_selecting_it_is_one_undo_step() {
 #[test]
 fn inspector_args_are_accepted_by_the_ops() {
     use editor_cmd::args::{
-        Rename, SetClassname, SetLayer, SetMaterial, SetProperties, SetTransform,
+        AddComponent, Members, Rename, SetLayer, SetMaterial, SetTransform, UpdateComponent,
     };
-    use editor_core::{ElementRef, Part, PropertyValue};
+    use editor_core::{ElementRef, Part};
     use serde_json::json;
 
     let mut s = session();
@@ -105,7 +105,7 @@ fn inspector_args_are_accepted_by_the_ops() {
     let entity = id_of(&exec(
         &mut s,
         "entity.create",
-        json!({ "classname": "light", "origin": [0, 0, 0] }),
+        json!({ "origin": [0, 0, 0] }),
     ));
     let layer = id_of(&exec(&mut s, "layer.create", json!({ "name": "extra" })));
     let group = id_of(&exec(
@@ -132,18 +132,23 @@ fn inspector_args_are_accepted_by_the_ops() {
     ));
     ok(&run(
         &mut s,
-        "entity.set_classname",
-        &SetClassname {
+        "entity.add_component",
+        &AddComponent {
             ids: vec![entity.parse().unwrap()],
-            classname: "spot".into(),
+            name: "light".into(),
+            data: None,
         },
     ));
     ok(&run(
         &mut s,
-        "entity.set_properties",
-        &SetProperties {
+        "entity.update_component",
+        &UpdateComponent {
             ids: vec![entity.parse().unwrap()],
-            set: [("intensity".to_string(), PropertyValue::Number(3.0))].into(),
+            name: "light".into(),
+            set: serde_json::json!({ "intensity": 3.0 })
+                .as_object()
+                .unwrap()
+                .clone(),
             remove: vec![],
         },
     ));
@@ -154,6 +159,7 @@ fn inspector_args_are_accepted_by_the_ops() {
             id: entity.parse().unwrap(),
             origin: Some(DVec3::new(1.0, 2.0, 3.0)),
             angles: None,
+            members: Members::Carry,
         },
     ));
     ok(&run(

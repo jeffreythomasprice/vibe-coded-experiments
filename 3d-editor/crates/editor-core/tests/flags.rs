@@ -21,12 +21,11 @@ fn setup() -> (Document, LayerId, GroupId, GroupId, EntityId, BrushId) {
     doc.insert(Object::Entity(Entity {
         flags: Flags::default(),
         id: entity,
-        classname: "func_door".into(),
         layer,
         group: Some(inner),
-        origin: None,
+        origin: DVec3::ZERO,
         angles: DVec3::ZERO,
-        properties: Properties::new(),
+        components: Default::default(),
         extra: Extra::new(),
     }));
     let brush = BrushId(doc.alloc_id());

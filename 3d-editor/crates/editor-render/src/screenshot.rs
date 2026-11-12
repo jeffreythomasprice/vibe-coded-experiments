@@ -1,7 +1,9 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::Cursor;
 
+use editor_cmd::component_defs::Catalog;
 use editor_cmd::descendants;
+use editor_cmd::links::doc_links;
 use editor_cmd::results::{CameraView, ScreenshotLabel, ScreenshotResult};
 use editor_cmd::{
     CameraArg, ColorMode, CommandError, Mode, Overlay, ScreenshotArgs, build_camera, camera_json,
@@ -15,10 +17,10 @@ use crate::color::BACKGROUND;
 use crate::error::RenderError;
 use crate::gpu::{DrawLists, DrawParams, Renderer};
 use crate::label::{Text, draw_labels, text_size};
-use crate::overlay::{axes_lines, bounds_lines, grid_lines};
+use crate::overlay::{axes_lines, bounds_lines, grid_lines, link_lines};
 use crate::scene::{
     EdgeStyle, HIGHLIGHT_COLOR, SELECTION_COLOR, SceneOptions, Shading, TextureInputs, build_scene,
-    decode_id,
+    component_looks, decode_id,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -302,9 +304,21 @@ pub fn screenshot_with_context(
     }
 
     let mut hidden = expand(doc, &args.hide)?;
-    if !args.show_hidden {
-        hidden.extend(doc.hidden_ids());
+    let (sim, poses) = match args.simulate {
+        Some(sim) => {
+            let (mut loaded, _) = editor_sim::Sim::load(doc);
+            loaded.set_time(sim.time);
+            let poses = loaded.poses();
+            (Some(loaded), poses)
+        }
+        None => (None, HashMap::new()),
+    };
+    match &sim {
+        Some(sim) => hidden.extend(sim.excluded().iter().copied()),
+        None if !args.show_hidden => hidden.extend(doc.hidden_ids()),
+        None => {}
     }
+    let played = sim.is_some();
     let label_filter = expand(doc, &args.label_ids)?;
     if let Some(bad) = args
         .label_kinds
@@ -339,13 +353,17 @@ pub fn screenshot_with_context(
     let view = View::new(&camera, width, height, reach);
 
     let (shading, edges, draw_faces) = match args.mode {
+        Mode::Shaded if played => (Shading::Lit, EdgeStyle::None, true),
         Mode::Shaded => (Shading::Lit, EdgeStyle::Dark, true),
         Mode::Flat => (Shading::Flat, EdgeStyle::None, true),
         Mode::Wireframe => (Shading::Flat, EdgeStyle::Colored, false),
     };
+    let catalog = Catalog::resolve(doc, context.scene_dir);
+    let looks = component_looks(&catalog);
     let scene = build_scene(
         doc,
         &SceneOptions {
+            looks: &looks,
             shading,
             edges,
             draw_faces,
@@ -359,8 +377,11 @@ pub fn screenshot_with_context(
                 scene_dir: context.scene_dir,
             }),
             face_tint: &face_tint,
+            markers: !played,
+            split_owned: played,
         },
     );
+    let posed = crate::viewport::posed_batches(&scene.owned, &poses);
 
     let mut overlay_lines = Vec::new();
     if args.overlays.contains(&Overlay::Grid) {
@@ -374,6 +395,10 @@ pub fn screenshot_with_context(
     }
     let mut lines = scene.edges;
     lines.extend(overlay_lines);
+    let mut on_top = scene.highlight_edges;
+    if args.overlays.contains(&Overlay::Links) {
+        on_top.extend(link_lines(doc, &doc_links(doc, &catalog), selection));
+    }
 
     let [r, g, b] = BACKGROUND.map(|c| f64::from(c) / 255.0);
     let mut rgba = renderer.draw(
@@ -386,8 +411,9 @@ pub fn screenshot_with_context(
         },
         &DrawLists {
             faces: &scene.faces,
+            extra_faces: &posed,
             lines: &lines,
-            on_top: &scene.highlight_edges,
+            on_top: &on_top,
         },
     )?;
 
@@ -434,7 +460,7 @@ pub fn screenshot_with_context(
         })).collect::<Vec<_>>(),
         "textures": scene.legend_textures,
         "entities": scene.legend_entities.iter().map(|(class, (rgb, marker))| json!({
-            "classname": class, "color": hex(*rgb), "marker": marker,
+            "component": class, "color": hex(*rgb), "marker": marker,
         })).collect::<Vec<_>>(),
     });
 

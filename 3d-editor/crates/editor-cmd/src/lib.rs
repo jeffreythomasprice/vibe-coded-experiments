@@ -1,17 +1,20 @@
 mod batch;
 mod bounds;
 mod commands;
+pub mod component_defs;
 mod ctx;
 mod envelope;
 mod error;
 mod history;
+pub mod links;
 mod session;
 pub mod texture;
 
 pub use bounds::{bounds_json, extent, object_bounds, scene_bounds};
+pub use commands::check::{IssueCode, IssueSeverity};
 pub use commands::results;
 pub use commands::scene::ray_hits;
-pub use commands::screenshot::{CameraArg, ColorMode, Mode, Overlay, ScreenshotArgs};
+pub use commands::screenshot::{CameraArg, ColorMode, Mode, Overlay, ScreenshotArgs, Simulate};
 pub use commands::session_args::Attach;
 pub use commands::util::descendants;
 pub use commands::view::{CameraParams, build_camera, camera_json, resolve_camera};
@@ -24,7 +27,11 @@ pub mod args {
     pub use crate::commands::NoArgs;
     pub use crate::commands::brush::Axis;
     pub use crate::commands::brush::{Clip, CreateBox, Keep};
-    pub use crate::commands::entity::{SetClassname, SetProperties, SetTransform};
+    pub use crate::commands::defs::{Add as AddDefs, Embed as EmbedDefs, Remove as RemoveDefs};
+    pub use crate::commands::entity::{
+        AddComponent, Create as CreateEntity, CreateBrushEntity, Links, Members, RemoveComponent,
+        SetComponent, SetTransform, UpdateComponent,
+    };
     pub use crate::commands::face::{BrushVertexAt, SetMaterial, SetUv, TranslateVertices, UvMode};
     pub use crate::commands::material::{
         Create, Delete as DeleteMaterial, Embed, Rename as RenameMaterial, Set, Store, TextureInput,

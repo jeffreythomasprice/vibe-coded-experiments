@@ -2,16 +2,17 @@ use std::str::FromStr;
 
 use base64::Engine;
 use editor_core::{
-    Brush, BrushFace, BrushId, BrushObject, Camera, CameraId, DVec2, DVec3, Document, Entity,
-    EntityId, Extra, FaceAttrs, FaceId, Flags, Group, GroupId, HierarchyError, Layer, LayerId,
-    Material, MaterialId, Mesh, MeshFace, MeshId, MeshObject, MeshVertex, ObjectId, OrthoView,
-    Projection, Properties, PropertyValue, TextureSource, UvAxes, VertexId,
+    Brush, BrushFace, BrushId, BrushObject, Camera, CameraId, ComponentDefs, ComponentDefsFile,
+    ComponentDefsId, DVec2, DVec3, DefsSource, Document, Entity, EntityId, Extra, FaceAttrs,
+    FaceId, Flags, Group, GroupId, HierarchyError, Layer, LayerId, Material, MaterialId, Mesh,
+    MeshFace, MeshId, MeshObject, MeshVertex, ObjectId, OrthoView, Projection, Properties,
+    TextureSource, UvAxes, VertexId,
 };
 use editor_geom::brush_geometry;
 use editor_geom::mesh::{Severity, validate};
 use toml::{Table, Value};
 
-use crate::{FORMAT, LoadError, VERSION, migrate};
+use crate::{FORMAT, LoadError, OLDEST_VERSION, VERSION};
 
 type Result<T> = std::result::Result<T, LoadError>;
 
@@ -166,27 +167,60 @@ fn sub_table(root: &mut Table, key: &str) -> Result<Table> {
     }
 }
 
+fn json_of(v: Value, ctx: &str, path: &str) -> Result<serde_json::Value> {
+    use serde_json::Value as J;
+    Ok(match v {
+        Value::Boolean(b) => J::Bool(b),
+        Value::Integer(i) => J::from(i),
+        Value::Float(f) => serde_json::Number::from_f64(f)
+            .map(J::Number)
+            .ok_or_else(|| parse_err(ctx, format!("`{path}` is not a finite number")))?,
+        Value::String(s) => J::String(s),
+        Value::Datetime(_) => {
+            return Err(parse_err(
+                ctx,
+                format!("`{path}` is a date, which is not supported"),
+            ));
+        }
+        Value::Array(items) => J::Array(
+            items
+                .into_iter()
+                .enumerate()
+                .map(|(i, item)| json_of(item, ctx, &format!("{path}[{i}]")))
+                .collect::<Result<_>>()?,
+        ),
+        Value::Table(t) => J::Object(
+            t.into_iter()
+                .map(|(k, item)| {
+                    let p = format!("{path}.{k}");
+                    json_of(item, ctx, &p).map(|j| (k, j))
+                })
+                .collect::<Result<_>>()?,
+        ),
+    })
+}
+
 fn properties(t: Table, ctx: &str) -> Result<Properties> {
-    let mut out = Properties::new();
-    for (k, v) in t {
-        let pv = match &v {
-            Value::Boolean(b) => PropertyValue::Bool(*b),
-            Value::Integer(_) | Value::Float(_) => PropertyValue::Number(as_f64(&v).unwrap()),
-            Value::String(s) => PropertyValue::String(s.clone()),
-            Value::Array(_) => match as_vec3(&v) {
-                Some(v3) => PropertyValue::Vec3(v3),
-                None => return Err(parse_err(ctx, format!("property `{k}` must be a vec3"))),
-            },
-            _ => {
-                return Err(parse_err(
-                    ctx,
-                    format!("property `{k}` has an unsupported type"),
-                ));
+    t.into_iter()
+        .map(|(k, v)| json_of(v, ctx, &k).map(|j| (k, j)))
+        .collect()
+}
+
+fn components(t: Table, ctx: &str) -> Result<std::collections::BTreeMap<String, Properties>> {
+    t.into_iter()
+        .map(|(name, v)| {
+            if !editor_core::valid_component_name(&name) {
+                return Err(parse_err(ctx, format!("invalid component name {name:?}")));
             }
-        };
-        out.insert(k, pv);
-    }
-    Ok(out)
+            match v {
+                Value::Table(data) => properties(data, &format!("{ctx}.{name}")).map(|d| (name, d)),
+                _ => Err(parse_err(
+                    ctx,
+                    format!("component `{name}` must be a table"),
+                )),
+            }
+        })
+        .collect()
 }
 
 fn face_attrs(t: &mut Table, ctx: &str) -> Result<FaceAttrs> {
@@ -327,10 +361,12 @@ pub fn read(text: &str) -> Result<Document> {
             supported: VERSION,
         });
     }
-    if found < 1 {
-        return Err(parse_err("header", "`version` must be at least 1"));
+    if found < OLDEST_VERSION as i64 {
+        return Err(LoadError::VersionTooOld {
+            found,
+            oldest: OLDEST_VERSION,
+        });
     }
-    migrate(&mut root, found as u32);
 
     let mut meta = sub_table(&mut root, "meta")?;
     let name = opt(&mut meta, "name", "meta", "a string", as_string)?.unwrap_or_default();
@@ -395,6 +431,30 @@ pub fn read(text: &str) -> Result<Document> {
             });
         }
         insert_checked(&mut doc, editor_core::Object::Material(m))?;
+    }
+
+    for mut t in records(&mut root, "component_defs")? {
+        let id: ComponentDefsId = req(&mut t, "id", "component_defs", "an entity defs id", as_id)?;
+        let ctx = id.to_string();
+        let path = opt(&mut t, "path", &ctx, "a string", as_string)?;
+        let json = opt(&mut t, "json", &ctx, "a string", as_string)?;
+        let source = match (path, json) {
+            (Some(path), None) => DefsSource::Path { path },
+            (None, Some(text)) => DefsSource::Embedded {
+                defs: editor_schema::parse_str::<ComponentDefsFile>(&text).map_err(|e| {
+                    parse_err(&ctx, format!("`json` is not a definitions file: {e}"))
+                })?,
+            },
+            _ => return Err(parse_err(&ctx, "needs exactly one of `path` and `json`")),
+        };
+        insert_checked(
+            &mut doc,
+            editor_core::Object::ComponentDefs(ComponentDefs {
+                id,
+                source,
+                extra: rest(t),
+            }),
+        )?;
     }
 
     for mut t in records(&mut root, "layer")? {
@@ -473,26 +533,24 @@ pub fn read(text: &str) -> Result<Document> {
     for mut t in records(&mut root, "entity")? {
         let id: EntityId = req(&mut t, "id", "entity", "an entity id", as_id)?;
         let ctx = id.to_string();
-        let classname = req(&mut t, "classname", &ctx, "a string", as_string)?;
         let layer = req(&mut t, "layer", &ctx, "a layer id", as_id)?;
         let group = opt(&mut t, "group", &ctx, "a group id", as_id)?;
-        let origin = opt(&mut t, "origin", &ctx, "an [x, y, z] point", as_vec3)?;
+        let origin = req(&mut t, "origin", &ctx, "an [x, y, z] point", as_vec3)?;
         let angles =
             opt(&mut t, "angles", &ctx, "an [x, y, z] triple", as_vec3)?.unwrap_or(DVec3::ZERO);
-        let props = match t.remove("properties") {
-            None => Properties::new(),
-            Some(Value::Table(p)) => properties(p, &ctx)?,
-            Some(_) => return Err(parse_err(&ctx, "`properties` must be a table")),
+        let components = match t.remove("components") {
+            None => Default::default(),
+            Some(Value::Table(c)) => components(c, &ctx)?,
+            Some(_) => return Err(parse_err(&ctx, "`components` must be a table")),
         };
         let entity = Entity {
             flags: flags(&mut t, &ctx)?,
             id,
-            classname,
             layer,
             group,
             origin,
             angles,
-            properties: props,
+            components,
             extra: rest(t),
         };
         insert_checked(&mut doc, editor_core::Object::Entity(entity))?;

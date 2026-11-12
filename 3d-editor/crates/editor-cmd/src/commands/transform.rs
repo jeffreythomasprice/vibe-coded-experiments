@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use editor_core::{Object, ObjectId};
+use editor_geom::euler::{angles_of, orientation};
 use editor_geom::tolerance::WORLD_BOUND;
 use editor_geom::transform::{transform_brush, transform_mesh};
 use glam::{DAffine3, DMat3, DVec3};
@@ -65,25 +66,6 @@ pub enum Factors {
     PerAxis(#[schemars(with = "[f64; 3]")] DVec3),
 }
 
-fn orientation(angles: DVec3) -> DMat3 {
-    DMat3::from_rotation_z(angles.y.to_radians())
-        * DMat3::from_rotation_y(-angles.x.to_radians())
-        * DMat3::from_rotation_x(angles.z.to_radians())
-}
-
-fn angles_of(m: DMat3) -> DVec3 {
-    let f = m.x_axis;
-    let yaw = f.y.atan2(f.x);
-    let pitch = f.z.clamp(-1.0, 1.0).asin();
-    let base = DMat3::from_rotation_z(yaw) * DMat3::from_rotation_y(-pitch);
-    let r = base.transpose() * m;
-    let roll = r.y_axis.z.atan2(r.y_axis.y);
-    DVec3::new(pitch, yaw, roll).map(|a| {
-        let degrees = a.to_degrees();
-        (degrees * 1e6).round() / 1e6 + 0.0
-    })
-}
-
 fn is_rotation(m: &DMat3) -> bool {
     let tol = 1e-9;
     (m.determinant() - 1.0).abs() < tol
@@ -125,11 +107,9 @@ pub fn transform_object(
         }
         Object::Entity(e) => {
             let mut e = e.clone();
-            if let Some(origin) = e.origin {
-                e.origin = Some(m.transform_point3(origin));
-                if is_rotation(&m.matrix3) {
-                    e.angles = angles_of(m.matrix3 * orientation(e.angles));
-                }
+            e.origin = m.transform_point3(e.origin);
+            if is_rotation(&m.matrix3) {
+                e.angles = angles_of(m.matrix3 * orientation(e.angles));
             }
             Object::Entity(e)
         }
@@ -149,11 +129,7 @@ fn gather(ctx: &Ctx, ids: &[ObjectId]) -> Result<Vec<Object>, CommandError> {
     let leaves: Vec<Object> = set
         .into_iter()
         .filter_map(|id| ctx.doc().get(id))
-        .filter(|o| match o {
-            Object::Brush(_) | Object::Mesh(_) => true,
-            Object::Entity(e) => e.origin.is_some(),
-            _ => false,
-        })
+        .filter(|o| matches!(o, Object::Brush(_) | Object::Mesh(_) | Object::Entity(_)))
         .collect();
     if leaves.is_empty() {
         return Err(CommandError::invalid_arg(

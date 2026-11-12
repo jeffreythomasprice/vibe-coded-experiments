@@ -3,6 +3,7 @@ pub mod brush_csg;
 pub mod camera;
 pub mod clip;
 pub mod convert;
+pub mod euler;
 pub mod hull;
 pub mod mesh;
 pub mod plane;

@@ -1,43 +1,65 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
-use editor_core::{Entity, EntityId, Extra, GroupId, LayerId, Object, ObjectId, Properties};
-use glam::DVec3;
+use editor_core::{
+    Entity, EntityId, Extra, GroupId, LayerId, Object, ObjectId, Properties, find_null,
+    valid_component_name,
+};
+use editor_geom::euler::orientation;
+use glam::{DAffine3, DVec3};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use super::results;
-use super::util::{RESERVED_PROPERTIES, check_finite, non_empty, resolve_layer, with_entity};
+use super::util::{check_finite, non_empty, resolve_layer, with_entity};
 use super::{CmdResult, Outcome};
+use crate::component_defs::Catalog;
 use crate::ctx::Ctx;
 use crate::error::CommandError;
 
-fn check_classname(classname: &str) -> Result<(), CommandError> {
-    if classname.trim().is_empty() {
-        return Err(CommandError::invalid_arg(
-            "classname",
-            "classname must not be empty",
-        ));
+pub type Components = BTreeMap<String, Properties>;
+
+fn check_name(name: &str) -> Result<(), CommandError> {
+    if valid_component_name(name) {
+        Ok(())
+    } else {
+        Err(CommandError::invalid_arg(
+            "name",
+            format!("`{name}` is not a component name: use letters, digits and underscores"),
+        ))
+    }
+}
+
+fn check_components(field: &str, components: &Components) -> Result<(), CommandError> {
+    for (name, data) in components {
+        check_name(name)?;
+        check_data(field, name, data)?;
     }
     Ok(())
 }
 
-fn check_property_keys<'a>(keys: impl Iterator<Item = &'a String>) -> Result<(), CommandError> {
-    for key in keys {
-        if key.trim().is_empty() {
+fn check_data(field: &str, name: &str, data: &Properties) -> Result<(), CommandError> {
+    for (key, value) in data {
+        if let Some(pointer) = find_null(value) {
             return Err(CommandError::invalid_arg(
-                "properties",
-                "property names must not be empty",
-            ));
-        }
-        if RESERVED_PROPERTIES.contains(&key.as_str()) {
-            return Err(CommandError::invalid_arg(
-                "properties",
-                format!("`{key}` is not a property"),
+                field,
+                format!("`{name}/{key}{pointer}` is null, which scenes cannot store"),
             )
-            .with_hint("use entity.set_classname or entity.set_transform"));
+            .with_hint("remove the key instead, or use false, 0 or an empty string"));
         }
     }
     Ok(())
+}
+
+fn warnings_for(catalog: &Catalog, id: EntityId, components: &Components) -> Vec<String> {
+    components
+        .iter()
+        .flat_map(|(name, data)| {
+            catalog
+                .component_issues(name, data)
+                .into_iter()
+                .map(move |issue| format!("{id}: {name}: {issue}"))
+        })
+        .collect()
 }
 
 fn check_angles(angles: DVec3) -> Result<(), CommandError> {
@@ -64,26 +86,33 @@ fn entity_of(ctx: &Ctx, id: ObjectId) -> Result<Entity, CommandError> {
     }
 }
 
-#[derive(Deserialize, JsonSchema)]
+fn pose(origin: DVec3, angles: DVec3) -> DAffine3 {
+    DAffine3::from_translation(origin) * DAffine3::from_mat3(orientation(angles))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Create {
-    classname: String,
     #[schemars(with = "[f64; 3]")]
-    origin: DVec3,
+    pub origin: DVec3,
     #[schemars(with = "Option<[f64; 3]>")]
-    angles: Option<DVec3>,
-    #[serde(default)]
-    properties: Properties,
-    layer: Option<LayerId>,
-    group: Option<GroupId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub angles: Option<DVec3>,
+    /// Component name to its data object. Data is not filled from schema defaults here; use entity.add_component for that.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub components: Option<Components>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<LayerId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<GroupId>,
 }
 
 pub fn create(ctx: &mut Ctx, args: Create) -> CmdResult<results::Created> {
-    check_classname(&args.classname)?;
     check_finite("origin", args.origin)?;
     let angles = args.angles.unwrap_or(DVec3::ZERO);
     check_angles(angles)?;
-    check_property_keys(args.properties.keys())?;
+    let components = args.components.unwrap_or_default();
+    check_components("components", &components)?;
 
     let (layer, group) = match args.group {
         Some(g) => {
@@ -103,32 +132,44 @@ pub fn create(ctx: &mut Ctx, args: Create) -> CmdResult<results::Created> {
         None => (resolve_layer(ctx.doc(), args.layer)?, None),
     };
     let id = EntityId(ctx.alloc_id());
+    let warnings = warnings_for(
+        &Catalog::resolve(ctx.doc(), ctx.scene_dir()),
+        id,
+        &components,
+    );
     ctx.insert(Object::Entity(Entity {
         flags: Default::default(),
         id,
-        classname: args.classname,
         layer,
         group,
-        origin: Some(args.origin),
+        origin: args.origin,
         angles,
-        properties: args.properties,
+        components,
         extra: Extra::new(),
     }));
-    Ok(Outcome::created(vec![id.into()], vec![]))
+    Ok(Outcome::created(vec![id.into()], warnings))
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CreateBrushEntity {
-    classname: String,
-    objects: Vec<ObjectId>,
-    #[serde(default)]
-    properties: Properties,
+    pub objects: Vec<ObjectId>,
+    /// The pivot. Default: the centre of the members' bounds.
+    #[schemars(with = "Option<[f64; 3]>")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<DVec3>,
+    #[schemars(with = "Option<[f64; 3]>")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub angles: Option<DVec3>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub components: Option<Components>,
 }
 
 pub fn create_brush_entity(ctx: &mut Ctx, args: CreateBrushEntity) -> CmdResult<results::Created> {
-    check_classname(&args.classname)?;
-    check_property_keys(args.properties.keys())?;
+    let components = args.components.unwrap_or_default();
+    check_components("components", &components)?;
+    let angles = args.angles.unwrap_or(DVec3::ZERO);
+    check_angles(angles)?;
     non_empty("objects", &args.objects)?;
 
     let mut members = Vec::new();
@@ -161,23 +202,39 @@ pub fn create_brush_entity(ctx: &mut Ctx, args: CreateBrushEntity) -> CmdResult<
         )
         .with_hint("use object.set_layer or group.move to line them up"));
     }
+    let origin = match args.origin {
+        Some(o) => {
+            check_finite("origin", o)?;
+            o
+        }
+        None => members
+            .iter()
+            .filter_map(crate::bounds::object_bounds)
+            .reduce(|a, b| a.merge(b))
+            .map(|b| b.center())
+            .unwrap_or(DVec3::ZERO),
+    };
 
     let id = EntityId(ctx.alloc_id());
+    let warnings = warnings_for(
+        &Catalog::resolve(ctx.doc(), ctx.scene_dir()),
+        id,
+        &components,
+    );
     ctx.insert(Object::Entity(Entity {
         flags: Default::default(),
         id,
-        classname: args.classname,
         layer,
         group,
-        origin: None,
-        angles: DVec3::ZERO,
-        properties: args.properties,
+        origin,
+        angles,
+        components,
         extra: Extra::new(),
     }));
     for member in members {
         ctx.insert(with_entity(member, Some(id)));
     }
-    Ok(Outcome::created(vec![id.into()], vec![]))
+    Ok(Outcome::created(vec![id.into()], warnings))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -192,11 +249,15 @@ pub fn release_objects(ctx: &mut Ctx, args: Release) -> CmdResult<results::Relea
     for &id in &args.ids {
         match id {
             ObjectId::Entity(_) => {
-                let entity = entity_of(ctx, id)?;
-                if entity.origin.is_some() {
-                    return Err(CommandError::wrong_kind(id, "brush entity"));
+                entity_of(ctx, id)?;
+                let children = ctx.doc().children(id);
+                if children.is_empty() {
+                    return Err(CommandError::invalid_arg(
+                        "ids",
+                        format!("{id} has no brushes or meshes to release"),
+                    ));
                 }
-                members.extend(ctx.doc().children(id));
+                members.extend(children);
             }
             _ => {
                 let object = super::util::brush_or_mesh(ctx.doc(), id)?;
@@ -210,88 +271,194 @@ pub fn release_objects(ctx: &mut Ctx, args: Release) -> CmdResult<results::Relea
             }
         }
     }
-
-    let owners: BTreeSet<EntityId> = members
-        .iter()
-        .filter_map(|&id| ctx.doc().get(id).and_then(|o| o.entity()))
-        .collect();
     for &id in &members {
         if let Some(object) = ctx.doc().get(id) {
             ctx.insert(with_entity(object, None));
         }
     }
+    Ok(Outcome::new(results::Released {
+        released: members.len(),
+    }))
+}
+
+fn resolved_ids(ctx: &Ctx, ids: &[ObjectId]) -> Result<Vec<Entity>, CommandError> {
+    non_empty("ids", ids)?;
+    ids.iter().map(|&id| entity_of(ctx, id)).collect()
+}
+
+fn store(ctx: &mut Ctx, name: &str, entities: Vec<Entity>) -> CmdResult<results::Updated> {
+    let catalog = Catalog::resolve(ctx.doc(), ctx.scene_dir());
+    let count = entities.len();
     let mut warnings = Vec::new();
-    let mut removed = 0;
-    for owner in owners {
-        if ctx.doc().children(owner.into()).is_empty() {
-            ctx.remove(owner.into());
-            removed += 1;
-            warnings.push(format!("{owner} has no objects left and was deleted"));
+    for entity in entities {
+        if let Some(data) = entity.components.get(name) {
+            warnings.extend(
+                catalog
+                    .component_issues(name, data)
+                    .into_iter()
+                    .map(|issue| format!("{}: {name}: {issue}", entity.id)),
+            );
         }
+        ctx.insert(Object::Entity(entity));
     }
-    Ok(Outcome {
-        result: results::Released {
-            released: members.len(),
-            deleted_entities: removed,
-        },
+    Ok(Outcome::with_warnings(
+        results::Updated { updated: count },
         warnings,
-    })
+    ))
+}
+
+fn missing(id: EntityId, name: &str) -> CommandError {
+    CommandError::invalid_arg("name", format!("{id} has no component `{name}`"))
+        .with_hint("add it with entity.add_component")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct SetProperties {
+pub struct AddComponent {
     pub ids: Vec<ObjectId>,
+    pub name: String,
+    /// JSON object. Omitted: the schema's top-level property defaults, when the component has a definition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<Properties>,
+}
+
+pub fn add_component(ctx: &mut Ctx, args: AddComponent) -> CmdResult<results::Updated> {
+    check_name(&args.name)?;
+    if let Some(data) = &args.data {
+        check_data("data", &args.name, data)?;
+    }
+    let data = match args.data {
+        Some(d) => d,
+        None => Catalog::resolve(ctx.doc(), ctx.scene_dir()).defaults(&args.name),
+    };
+    let mut entities = resolved_ids(ctx, &args.ids)?;
+    for entity in &mut entities {
+        if entity.components.contains_key(&args.name) {
+            return Err(CommandError::invalid_arg(
+                "name",
+                format!("{} already has component `{}`", entity.id, args.name),
+            )
+            .with_hint("use entity.set_component or entity.update_component"));
+        }
+        entity.components.insert(args.name.clone(), data.clone());
+    }
+    store(ctx, &args.name, entities)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RemoveComponent {
+    pub ids: Vec<ObjectId>,
+    pub name: String,
+}
+
+pub fn remove_component(ctx: &mut Ctx, args: RemoveComponent) -> CmdResult<results::Updated> {
+    check_name(&args.name)?;
+    let mut entities = resolved_ids(ctx, &args.ids)?;
+    for entity in &mut entities {
+        if entity.components.remove(&args.name).is_none() {
+            return Err(missing(entity.id, &args.name));
+        }
+    }
+    store(ctx, &args.name, entities)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SetComponent {
+    pub ids: Vec<ObjectId>,
+    pub name: String,
+    /// The whole new data object. Its shape is defined by the component schema; the editor only warns when it does not match.
+    pub data: Properties,
+}
+
+pub fn set_component(ctx: &mut Ctx, args: SetComponent) -> CmdResult<results::Updated> {
+    check_name(&args.name)?;
+    check_data("data", &args.name, &args.data)?;
+    let mut entities = resolved_ids(ctx, &args.ids)?;
+    for entity in &mut entities {
+        let Some(slot) = entity.components.get_mut(&args.name) else {
+            return Err(missing(entity.id, &args.name));
+        };
+        *slot = args.data.clone();
+    }
+    store(ctx, &args.name, entities)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateComponent {
+    pub ids: Vec<ObjectId>,
+    pub name: String,
+    /// Top-level keys to set.
     #[serde(default)]
     pub set: Properties,
+    /// Top-level keys to remove.
     #[serde(default)]
     pub remove: Vec<String>,
 }
 
-pub fn set_properties(ctx: &mut Ctx, args: SetProperties) -> CmdResult<results::Updated> {
-    non_empty("ids", &args.ids)?;
-    check_property_keys(args.set.keys().chain(args.remove.iter()))?;
-    let mut updated = Vec::new();
-    for &id in &args.ids {
-        let mut entity = entity_of(ctx, id)?;
+pub fn update_component(ctx: &mut Ctx, args: UpdateComponent) -> CmdResult<results::Updated> {
+    check_name(&args.name)?;
+    check_data("set", &args.name, &args.set)?;
+    let mut entities = resolved_ids(ctx, &args.ids)?;
+    for entity in &mut entities {
+        let Some(data) = entity.components.get_mut(&args.name) else {
+            return Err(missing(entity.id, &args.name));
+        };
         for (k, v) in &args.set {
-            entity.properties.insert(k.clone(), v.clone());
+            data.insert(k.clone(), v.clone());
         }
         for k in &args.remove {
-            entity.properties.remove(k);
+            data.remove(k);
         }
-        updated.push(entity);
     }
-    for entity in updated {
-        ctx.insert(Object::Entity(entity));
-    }
-    Ok(Outcome::new(results::Updated {
-        updated: args.ids.len(),
-    }))
+    store(ctx, &args.name, entities)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct SetClassname {
-    pub ids: Vec<ObjectId>,
-    pub classname: String,
+pub struct Links {
+    /// Entities whose outgoing links to list; default all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ids: Option<Vec<ObjectId>>,
 }
 
-pub fn set_classname(ctx: &mut Ctx, args: SetClassname) -> CmdResult<results::Updated> {
-    non_empty("ids", &args.ids)?;
-    check_classname(&args.classname)?;
-    let mut updated = Vec::new();
-    for &id in &args.ids {
-        let mut entity = entity_of(ctx, id)?;
-        entity.classname = args.classname.clone();
-        updated.push(entity);
+pub fn links(ctx: &Ctx, args: Links) -> CmdResult<results::Links> {
+    let filter: Option<BTreeSet<EntityId>> = match args.ids {
+        None => None,
+        Some(ids) => {
+            let mut set = BTreeSet::new();
+            for id in ids {
+                match id {
+                    ObjectId::Entity(e) if ctx.doc().entities.contains_key(&e) => {
+                        set.insert(e);
+                    }
+                    _ if ctx.doc().contains(id) => {
+                        return Err(CommandError::wrong_kind(id, "entity"));
+                    }
+                    _ => return Err(CommandError::not_found(id)),
+                }
+            }
+            Some(set)
+        }
+    };
+    let catalog = Catalog::resolve(ctx.doc(), ctx.scene_dir());
+    let mut links = crate::links::doc_links(ctx.doc(), &catalog);
+    if let Some(filter) = filter {
+        links.retain(|l| filter.contains(&l.from));
     }
-    for entity in updated {
-        ctx.insert(Object::Entity(entity));
-    }
-    Ok(Outcome::new(results::Updated {
-        updated: args.ids.len(),
-    }))
+    Ok(Outcome::new(results::Links { links }))
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Members {
+    /// Move the member brushes and meshes by the same rigid change (default).
+    #[default]
+    Carry,
+    /// Move only the pivot.
+    Keep,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -299,28 +466,36 @@ pub fn set_classname(ctx: &mut Ctx, args: SetClassname) -> CmdResult<results::Up
 pub struct SetTransform {
     pub id: ObjectId,
     #[schemars(with = "Option<[f64; 3]>")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<DVec3>,
     #[schemars(with = "Option<[f64; 3]>")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub angles: Option<DVec3>,
+    /// For a brush entity: carry the members along with the pivot, or move only the pivot.
+    #[serde(default)]
+    pub members: Members,
 }
 
 pub fn set_transform(ctx: &mut Ctx, args: SetTransform) -> CmdResult<results::IdOnly> {
     let mut entity = entity_of(ctx, args.id)?;
-    if entity.origin.is_none() {
-        return Err(CommandError::invalid_arg(
-            "id",
-            format!("{} is a brush entity and has no origin", args.id),
-        )
-        .with_hint("move its brushes with transform.translate"));
-    }
+    let before = pose(entity.origin, entity.angles);
     if let Some(origin) = args.origin {
         check_finite("origin", origin)?;
-        entity.origin = Some(origin);
+        entity.origin = origin;
     }
     if let Some(angles) = args.angles {
         check_angles(angles)?;
         entity.angles = angles;
     }
+    let delta = pose(entity.origin, entity.angles) * before.inverse();
     ctx.insert(Object::Entity(entity));
+    if args.members == Members::Carry {
+        for child in ctx.doc().children(args.id) {
+            if let Some(object) = ctx.doc().get(child) {
+                let moved = super::transform::transform_object(&object, &delta, true)?;
+                ctx.insert(moved);
+            }
+        }
+    }
     Ok(Outcome::new(results::IdOnly { id: args.id }))
 }

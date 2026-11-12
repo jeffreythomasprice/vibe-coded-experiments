@@ -5,7 +5,8 @@ One process owns every open document. The GUI, the CLI and the MCP server are cl
 ```
 editor-mcp (stdio shim) ─┐
 editor-cli ──────────────┼─ unix socket, JSON lines ─> editor-server ─> editor_host::Hub ─> Sessions
-editor-app (replica) ───┘   (editor-proto)                                 └─ one lazy Renderer
+editor-app (replica) ───┤   (editor-proto)                                 └─ one lazy Renderer
+editor-game (replica) ──┘
 ```
 
 ## Crates
@@ -13,6 +14,8 @@ editor-app (replica) ───┘   (editor-proto)                              
 - `editor-proto` (GPU-free): the wire types, `Config`, `Policy`, and a blocking `Client` with autospawn. Every client depends on this and nothing heavier.
 - `editor-host`: `Hub`, the state machine. It holds the sessions, the connections (each with a client name, a `Policy` and a working directory), the focused session and the one shared renderer. It does no I/O: `Hub::handle(conn, request)` returns the reply plus the events to deliver, which makes it unit-testable. Only the server depends on it.
 - `editor-server`: the binary. A thread reads each connection, a second thread writes to it, and one mutex around the `Hub` makes every edit single-writer. Events are queued before the reply on the same connection, so a client that has its reply has already received the events that caused it.
+- `editor-proto::Replica`: a local copy of one session (document, selection, face selection, revision, file and history info) that applies `ServerEvent`s (snapshots by replacement, `changed` by insert and remove). `editor-app` and `editor-game` both build on it; it needs no GPU.
+- `editor-game`: a client like the GUI, with the client name `game` and no mutate access. Only a `gui` client moves the focused session, so the game never steals it. See [game.md](game.md).
 - `editor-cmd` knows nothing of any of this beyond the `Actor`, the change feed and the `Exec::Server` ops below.
 
 ## Config
@@ -41,7 +44,7 @@ Any client autospawns the server when it cannot connect (detached into its own p
 One JSON object per line each way, version `PROTOCOL = 2`. Every message is a typed Rust enum or struct in `editor-proto`'s `wire.rs` with a derived JSON Schema that rejects unknown fields; `editor-cli schema --wire` prints them, and `crates/editor-proto/tests/wire.rs` checks samples against them. A client must send `hello` first; a protocol mismatch is answered with a `Protocol` error and the connection closes (restart the server).
 
 Client to server:
-- `{"type":"hello","id":0,"protocol":2,"client":"gui","mutate":true,"destructive":true,"cwd":"/path"}`. `client` is the attribution name (`gui`, `cli`, `mcp`). The two flags are this connection's `Policy`. Relative `path` arguments of `session.attach`, `file.open`, `file.new`, `file.save` and `view.screenshot` resolve against `cwd`.
+- `{"type":"hello","id":0,"protocol":2,"client":"gui","mutate":true,"destructive":true,"cwd":"/path"}`. `client` is the attribution name (`gui`, `cli`, `mcp`, `game`). The two flags are this connection's `Policy`. Relative `path` arguments of `session.attach`, `file.open`, `file.new`, `file.save` and `view.screenshot` resolve against `cwd`.
 - `{"type":"request","id":N,"request":{op, args, dry_run?, expect_revision?, merge_key?}}`, the [envelope](tier0-commands.md#envelope).
 - `{"type":"control","id":N,"action":"status"|"stop","force":false}`: server administration, not part of the op registry (`ControlAction`; any other action is rejected when the message is parsed). `stop` needs a destructive connection. `status` replies with `ControlStatus {protocol, connections, dirty_sessions, sessions}`, `stop` with `StopAck {stopping}`.
 

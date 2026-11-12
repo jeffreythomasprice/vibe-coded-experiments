@@ -1,14 +1,18 @@
 format = "scene"
-version = 1
+version = 3
 
 [meta]
 name = "test-scene"
-next_id = 42
+next_id = 44
 
 [world]
 
 [editor]
 grid = 16
+
+[[component_defs]]
+id = "d42"
+path = "defs/example.components.json"
 
 [[layer]]
 id = "l1"
@@ -36,24 +40,28 @@ layer = "l1"
 
 [[entity]]
 id = "e39"
-classname = "info_player_start"
 layer = "l1"
 origin = [100, 100, 32]
 angles = [0, 45, 0]
+components = { player_start = {} }
 
 [[entity]]
 id = "e40"
-classname = "light"
 layer = "l1"
 origin = [256, 192, 160]
-properties = { intensity = "300" }
+components = { light = { intensity = 300 } }
 
 [[entity]]
 id = "e41"
-classname = "light"
 layer = "l1"
 origin = [864, 192, 128]
-properties = { intensity = "200" }
+components = { light = { intensity = 200 } }
+
+[[entity]]
+id = "e43"
+layer = "l1"
+origin = [560, 192, 128]
+components = { relay = { event = "trigger", targets = ["e40", "e41"] } }
 
 [[brush]]
 id = "b3"

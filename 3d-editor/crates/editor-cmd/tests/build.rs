@@ -259,7 +259,7 @@ fn rooms_compose_with_batch_and_brush_entities() {
         json!({ "commands": [
             { "op": "room.create", "as": "hall", "args": { "min": [0,0,0], "max": [64,64,64], "wall": 8 } },
             { "op": "entity.create_brush_entity", "args": {
-                "classname": "func_group", "objects": ["$hall.ids[0]", "$hall.ids[1]"] } },
+                "objects": ["$hall.ids[0]", "$hall.ids[1]"] } },
         ]}),
     );
     ok(&r);

@@ -250,18 +250,40 @@ fn every_document_and_session_op_returns_its_declared_result() {
     r.call("group.move", json!({ "objects": [m], "group": g }));
     r.call("group.ungroup", json!({ "ids": [g] }));
 
-    let e = r.id(
-        "entity.create",
-        json!({ "classname": "light", "origin": [0, 0, 128] }),
+    let e = r.id("entity.create", json!({ "origin": [0, 0, 128] }));
+    r.call(
+        "entity.add_component",
+        json!({ "ids": [e], "name": "lamp", "data": { "color": "1 1 1" } }),
     );
     r.call(
-        "entity.set_properties",
-        json!({ "ids": [e], "set": { "color": "1 1 1" } }),
+        "entity.update_component",
+        json!({ "ids": [e], "name": "lamp", "set": { "intensity": 2 } }),
     );
     r.call(
-        "entity.set_classname",
-        json!({ "ids": [e], "classname": "lamp" }),
+        "entity.set_component",
+        json!({ "ids": [e], "name": "lamp", "data": { "link": "e1" } }),
     );
+    r.call(
+        "entity.add_component",
+        json!({ "ids": [e], "name": "keyframe_animation" }),
+    );
+    r.call(
+        "entity.remove_component",
+        json!({ "ids": [e], "name": "keyframe_animation" }),
+    );
+    let defs = r.id(
+        "component_defs.add",
+        json!({ "source": "embedded", "defs": { "version": 2, "components": [{
+            "name": "lamp",
+            "schema": { "type": "object", "properties": {
+                "link": { "type": "string", "editor": { "linkType": "entityID" } }
+            } }
+        }] } }),
+    );
+    r.call("component_defs.list", json!({}));
+    r.call("entity.links", json!({}));
+    r.call("component_defs.embed", json!({}));
+    r.call("component_defs.remove", json!({ "ids": [defs] }));
     r.call(
         "entity.set_transform",
         json!({ "id": e, "origin": [0, 0, 256] }),
@@ -270,10 +292,7 @@ fn every_document_and_session_op_returns_its_declared_result() {
         "brush.create_box",
         json!({ "min": [4000, 0, 0], "max": [4032, 32, 32] }),
     );
-    let be = r.id(
-        "entity.create_brush_entity",
-        json!({ "classname": "func_door", "objects": [brush] }),
-    );
+    let be = r.id("entity.create_brush_entity", json!({ "objects": [brush] }));
     r.call("entity.release_objects", json!({ "ids": [brush] }));
     let _ = be;
 

@@ -1,9 +1,9 @@
 format = "scene"
-version = 2
+version = 3
 
 [meta]
 name = "example"
-next_id = 20
+next_id = 22
 
 [world]
 sky = "sky/overcast"
@@ -28,6 +28,26 @@ emissive = [0.25, 0, 0]
 emissive_strength = 2
 unlit = true
 
+[[component_defs]]
+id = "d20"
+path = "defs/game.components.json"
+
+[[component_defs]]
+id = "d21"
+json = '''
+{
+  "components": [
+    {
+      "name": "button",
+      "schema": {
+        "type": "object"
+      }
+    }
+  ],
+  "version": 2
+}
+'''
+
 [[layer]]
 id = "l1"
 name = "main"
@@ -42,23 +62,22 @@ fov = 90
 
 [[entity]]
 id = "e5"
-classname = "info_player_start"
 layer = "l1"
 origin = [64, 64, 16]
 angles = [0, 90, 0]
+components = { player_start = {} }
 
 [[entity]]
 id = "e6"
-classname = "light"
 layer = "l1"
 origin = [128, 128, 112]
-properties = { color = [1, 0.9, 0.8], intensity = 300 }
+components = { light = { color = [1, 0.9, 0.8], intensity = 300 } }
 
 [[entity]]
 id = "e7"
-classname = "func_door"
 layer = "l1"
-properties = { speed = 100, targetname = "door1" }
+origin = [0, 0, 0]
+components = { button = { targets = ["e5"] }, keyframe_animation = { interpolation = "smooth", keyframes = [{ offset = [0, 0, 96], time = 0 }, { offset = [0, 0, 0], time = 1.5 }] } }
 
 [[brush]]
 id = "b8"

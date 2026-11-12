@@ -77,7 +77,7 @@ enum Cmd {
         /// shaded, flat or wireframe
         #[arg(long)]
         mode: Option<String>,
-        /// Comma-separated: grid, axes, labels, bounds, selection
+        /// Comma-separated: grid, axes, labels, bounds, selection, links
         #[arg(long, value_delimiter = ',')]
         overlay: Vec<String>,
         /// Comma-separated object ids to highlight

@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    BrushId, BrushObject, Camera, CameraId, Entity, EntityId, Extra, Flags, Group, GroupId, Layer,
-    LayerId, Material, MaterialId, MeshId, MeshObject, Object, ObjectId, Properties,
+    BrushId, BrushObject, Camera, CameraId, ComponentDefs, ComponentDefsId, Entity, EntityId,
+    Extra, Flags, Group, GroupId, Layer, LayerId, Material, MaterialId, MeshId, MeshObject, Object,
+    ObjectId, Properties,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,6 +32,7 @@ pub struct Document {
     pub groups: BTreeMap<GroupId, Group>,
     pub cameras: BTreeMap<CameraId, Camera>,
     pub materials: BTreeMap<MaterialId, Material>,
+    pub component_defs: BTreeMap<ComponentDefsId, ComponentDefs>,
     pub entities: BTreeMap<EntityId, Entity>,
     pub brushes: BTreeMap<BrushId, BrushObject>,
     pub meshes: BTreeMap<MeshId, MeshObject>,
@@ -48,6 +50,7 @@ impl Document {
             groups: BTreeMap::new(),
             cameras: BTreeMap::new(),
             materials: BTreeMap::new(),
+            component_defs: BTreeMap::new(),
             entities: BTreeMap::new(),
             brushes: BTreeMap::new(),
             meshes: BTreeMap::new(),
@@ -97,6 +100,11 @@ impl Document {
             ObjectId::Layer(i) => self.layers.get(&i).cloned().map(Object::Layer),
             ObjectId::Camera(i) => self.cameras.get(&i).cloned().map(Object::Camera),
             ObjectId::Material(i) => self.materials.get(&i).cloned().map(Object::Material),
+            ObjectId::ComponentDefs(i) => self
+                .component_defs
+                .get(&i)
+                .cloned()
+                .map(Object::ComponentDefs),
         }
     }
 
@@ -109,6 +117,7 @@ impl Document {
             ObjectId::Layer(i) => self.layers.contains_key(&i),
             ObjectId::Camera(i) => self.cameras.contains_key(&i),
             ObjectId::Material(i) => self.materials.contains_key(&i),
+            ObjectId::ComponentDefs(i) => self.component_defs.contains_key(&i),
         }
     }
 
@@ -121,6 +130,10 @@ impl Document {
             Object::Layer(o) => self.layers.insert(o.id, o).map(Object::Layer),
             Object::Camera(o) => self.cameras.insert(o.id, o).map(Object::Camera),
             Object::Material(o) => self.materials.insert(o.id, o).map(Object::Material),
+            Object::ComponentDefs(o) => self
+                .component_defs
+                .insert(o.id, o)
+                .map(Object::ComponentDefs),
         }
     }
 
@@ -133,6 +146,7 @@ impl Document {
             ObjectId::Layer(i) => self.layers.remove(&i).map(Object::Layer),
             ObjectId::Camera(i) => self.cameras.remove(&i).map(Object::Camera),
             ObjectId::Material(i) => self.materials.remove(&i).map(Object::Material),
+            ObjectId::ComponentDefs(i) => self.component_defs.remove(&i).map(Object::ComponentDefs),
         }
     }
 
@@ -142,6 +156,7 @@ impl Document {
         ids.extend(self.groups.keys().map(|&i| ObjectId::from(i)));
         ids.extend(self.cameras.keys().map(|&i| ObjectId::from(i)));
         ids.extend(self.materials.keys().map(|&i| ObjectId::from(i)));
+        ids.extend(self.component_defs.keys().map(|&i| ObjectId::from(i)));
         ids.extend(self.entities.keys().map(|&i| ObjectId::from(i)));
         ids.extend(self.brushes.keys().map(|&i| ObjectId::from(i)));
         ids.extend(self.meshes.keys().map(|&i| ObjectId::from(i)));
@@ -154,6 +169,7 @@ impl Document {
             + self.groups.len()
             + self.cameras.len()
             + self.materials.len()
+            + self.component_defs.len()
             + self.entities.len()
             + self.brushes.len()
             + self.meshes.len()
@@ -181,7 +197,10 @@ impl Document {
                 let o = self.groups.get(&i)?;
                 (None, o.parent, Some(o.layer))
             }
-            ObjectId::Layer(_) | ObjectId::Camera(_) | ObjectId::Material(_) => (None, None, None),
+            ObjectId::Layer(_)
+            | ObjectId::Camera(_)
+            | ObjectId::Material(_)
+            | ObjectId::ComponentDefs(_) => (None, None, None),
         })
     }
 
@@ -193,7 +212,7 @@ impl Document {
             ObjectId::Entity(i) => self.entities.get(&i).map(|o| o.flags),
             ObjectId::Group(i) => self.groups.get(&i).map(|o| o.flags),
             ObjectId::Layer(i) => self.layers.get(&i).map(|o| o.flags),
-            ObjectId::Camera(_) | ObjectId::Material(_) => None,
+            ObjectId::Camera(_) | ObjectId::Material(_) | ObjectId::ComponentDefs(_) => None,
         }
     }
 

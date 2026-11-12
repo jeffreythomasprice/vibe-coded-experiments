@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
 use editor_cmd::ColorMode;
-use editor_core::{Document, FaceAttrs, FaceId, ObjectId};
+use editor_core::{Document, EntityId, FaceAttrs, FaceId, ObjectId};
 use editor_geom::mesh::triangulate;
 use editor_geom::winding::newell;
 use editor_geom::{Aabb, brush_geometry};
@@ -56,12 +56,16 @@ pub struct Drawn {
 /// Triangles drawn with one material; `None` is the plain flat-coloured kind.
 pub struct FaceBatch {
     pub material: Option<Arc<RenderMaterial>>,
+    /// The entity whose geometry this is; set only when `SceneOptions::split_owned` is on.
+    pub owner: Option<EntityId>,
     pub verts: Vec<Vertex>,
 }
 
 #[derive(Default)]
 pub struct Scene {
     pub faces: Vec<FaceBatch>,
+    /// Batches of entity-owned geometry, kept apart so an entity can be moved without touching the rest.
+    pub owned: Vec<FaceBatch>,
     pub edges: Vec<Vertex>,
     pub highlight_edges: Vec<Vertex>,
     pub drawn: Vec<Drawn>,
@@ -73,23 +77,33 @@ pub struct Scene {
 }
 
 impl Scene {
-    fn batch(&mut self, material: &Option<Arc<RenderMaterial>>) -> &mut Vec<Vertex> {
-        let at = self
-            .faces
-            .iter()
-            .position(|b| match (&b.material, material) {
-                (None, None) => true,
-                (Some(a), Some(b)) => a.id == b.id,
-                _ => false,
-            });
+    fn batch(
+        &mut self,
+        material: &Option<Arc<RenderMaterial>>,
+        owner: Option<EntityId>,
+    ) -> &mut Vec<Vertex> {
+        let list = if owner.is_some() {
+            &mut self.owned
+        } else {
+            &mut self.faces
+        };
+        let at = list.iter().position(|b| {
+            b.owner == owner
+                && match (&b.material, material) {
+                    (None, None) => true,
+                    (Some(a), Some(b)) => a.id == b.id,
+                    _ => false,
+                }
+        });
         let at = at.unwrap_or_else(|| {
-            self.faces.push(FaceBatch {
+            list.push(FaceBatch {
                 material: material.clone(),
+                owner,
                 verts: Vec::new(),
             });
-            self.faces.len() - 1
+            list.len() - 1
         });
-        &mut self.faces[at].verts
+        &mut list[at].verts
     }
 }
 
@@ -100,7 +114,16 @@ pub struct TextureInputs<'a> {
     pub scene_dir: Option<&'a Path>,
 }
 
+/// How a defined entity class is drawn.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ComponentLook {
+    pub rgb: [u8; 3],
+    /// Marker box relative to the origin; `None` keeps the built-in marker.
+    pub size: Option<(DVec3, DVec3)>,
+}
+
 pub struct SceneOptions<'a> {
+    pub looks: &'a HashMap<String, ComponentLook>,
     pub shading: Shading,
     pub edges: EdgeStyle,
     pub draw_faces: bool,
@@ -111,6 +134,10 @@ pub struct SceneOptions<'a> {
     pub want_ids: bool,
     pub textures: Option<TextureInputs<'a>>,
     pub face_tint: &'a BTreeSet<(ObjectId, FaceId)>,
+    /// Draw a marker for each point entity.
+    pub markers: bool,
+    /// Keep entity-owned geometry in `Scene::owned`, so it can be posed.
+    pub split_owned: bool,
 }
 
 pub fn id_color(code: u32) -> [f32; 3] {
@@ -125,7 +152,6 @@ const UP_RGB: [u8; 3] = [96, 170, 96];
 const DOWN_RGB: [u8; 3] = [90, 120, 190];
 const SIDE_RGB: [u8; 3] = [190, 170, 130];
 const LIGHT_RGB: [u8; 3] = [255, 214, 64];
-const PLAYER_RGB: [u8; 3] = [80, 210, 110];
 
 fn face_color(
     opts: &SceneOptions,
@@ -184,7 +210,15 @@ fn mix(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
     [0, 1, 2].map(|i| a[i] * (1.0 - t) + b[i] * t)
 }
 
-fn emit(scene: &mut Scene, polys: &[Poly], tint: Option<[f32; 3]>, opts: &SceneOptions, code: u32) {
+fn emit(
+    scene: &mut Scene,
+    polys: &[Poly],
+    tint: Option<[f32; 3]>,
+    opts: &SceneOptions,
+    code: u32,
+    owner: Option<EntityId>,
+) {
+    let owner = owner.filter(|_| opts.split_owned);
     for poly in polys {
         if opts.want_ids && code != 0 {
             let color = id_color(code);
@@ -210,7 +244,7 @@ fn emit(scene: &mut Scene, polys: &[Poly], tint: Option<[f32; 3]>, opts: &SceneO
                 _ => opts.shading,
             };
             let color = shade(base, poly.normal, shading);
-            let out = scene.batch(&poly.material);
+            let out = scene.batch(&poly.material, owner);
             for t in &poly.tris {
                 for &i in t {
                     let uv = poly.uvs.get(i).copied().unwrap_or([0.0, 0.0]);
@@ -373,6 +407,28 @@ fn face_uvs(look: &FaceLook, attrs: &FaceAttrs, normal: DVec3, pts: &[DVec3]) ->
         .collect()
 }
 
+/// Looks of the components that set a colour or size; other components do not decide how an entity is drawn.
+pub fn component_looks(
+    catalog: &editor_cmd::component_defs::Catalog,
+) -> HashMap<String, ComponentLook> {
+    catalog
+        .components()
+        .filter(|r| r.def.color.is_some() || r.def.size.is_some())
+        .map(|r| {
+            let c = &r.def;
+            let rgb = c.color.map_or_else(
+                || material_rgb8(&c.name),
+                |rgb| rgb.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8),
+            );
+            let size = c
+                .size
+                .as_ref()
+                .map(|s| (DVec3::from(s.min), DVec3::from(s.max)));
+            (c.name.to_string(), ComponentLook { rgb, size })
+        })
+        .collect()
+}
+
 pub fn build_scene(doc: &Document, opts: &SceneOptions) -> Scene {
     let mut scene = Scene::default();
     let mut looks = Looks {
@@ -421,7 +477,14 @@ pub fn build_scene(doc: &Document, opts: &SceneOptions) -> Scene {
             scene.drawn.push(Drawn { id, bounds });
         }
         let code = scene.drawn.len() as u32;
-        emit(&mut scene, &polys, opts.tint.get(&id).copied(), opts, code);
+        emit(
+            &mut scene,
+            &polys,
+            opts.tint.get(&id).copied(),
+            opts,
+            code,
+            brush.entity,
+        );
     }
 
     for mesh in doc.meshes.values() {
@@ -465,31 +528,72 @@ pub fn build_scene(doc: &Document, opts: &SceneOptions) -> Scene {
             scene.drawn.push(Drawn { id, bounds });
         }
         let code = scene.drawn.len() as u32;
-        emit(&mut scene, &polys, opts.tint.get(&id).copied(), opts, code);
+        emit(
+            &mut scene,
+            &polys,
+            opts.tint.get(&id).copied(),
+            opts,
+            code,
+            mesh.entity,
+        );
     }
 
-    for entity in doc.entities.values() {
-        let Some(origin) = entity.origin else {
+    let owners: std::collections::HashSet<_> = doc
+        .brushes
+        .values()
+        .filter_map(|b| b.entity)
+        .chain(doc.meshes.values().filter_map(|m| m.entity))
+        .collect();
+    for entity in doc.entities.values().filter(|_| opts.markers) {
+        if owners.contains(&entity.id) {
             continue;
-        };
+        }
+        let origin = entity.origin;
         let id = ObjectId::from(entity.id);
         if opts.hidden.contains(&id) {
             continue;
         }
-        let (polys, bounds, rgb, marker) = entity_marker(&entity.classname, origin);
-        scene
-            .legend_entities
-            .insert(entity.classname.clone(), (rgb, marker));
+        let key = entity
+            .components
+            .keys()
+            .find(|name| opts.looks.contains_key(*name))
+            .or_else(|| entity.components.keys().next())
+            .map_or("entity", String::as_str);
+        let (polys, bounds, rgb, marker) = entity_marker(key, origin, opts.looks.get(key));
+        scene.legend_entities.insert(key.to_string(), (rgb, marker));
         scene.drawn.push(Drawn { id, bounds });
         let code = scene.drawn.len() as u32;
-        emit(&mut scene, &polys, opts.tint.get(&id).copied(), opts, code);
+        emit(
+            &mut scene,
+            &polys,
+            opts.tint.get(&id).copied(),
+            opts,
+            code,
+            None,
+        );
     }
 
     scene
 }
 
-fn entity_marker(classname: &str, origin: DVec3) -> (Vec<Poly>, Aabb, [u8; 3], &'static str) {
-    if classname.starts_with("light") {
+fn entity_marker(
+    key: &str,
+    origin: DVec3,
+    look: Option<&ComponentLook>,
+) -> (Vec<Poly>, Aabb, [u8; 3], &'static str) {
+    if let Some(ComponentLook {
+        rgb,
+        size: Some((lo, hi)),
+    }) = look
+    {
+        let bounds = Aabb {
+            min: origin + *lo,
+            max: origin + *hi,
+        };
+        return (box_polys(&bounds, *rgb), bounds, *rgb, "class box");
+    }
+    let tint = look.map(|l| l.rgb);
+    if key.starts_with("light") {
         let r = 10.0;
         let pts = [
             DVec3::X,
@@ -514,7 +618,7 @@ fn entity_marker(classname: &str, origin: DVec3) -> (Vec<Poly>, Aabb, [u8; 3], &
                 keys,
                 tris: vec![[0, 1, 2]],
                 normal,
-                rgb: LIGHT_RGB,
+                rgb: tint.unwrap_or(LIGHT_RGB),
                 material: None,
                 uvs: Vec::new(),
                 face_selected: false,
@@ -524,13 +628,13 @@ fn entity_marker(classname: &str, origin: DVec3) -> (Vec<Poly>, Aabb, [u8; 3], &
             min: origin - DVec3::splat(r),
             max: origin + DVec3::splat(r),
         };
-        return (polys, bounds, LIGHT_RGB, "octahedron");
+        return (polys, bounds, tint.unwrap_or(LIGHT_RGB), "octahedron");
     }
-    let (half, rgb, marker) = if classname.starts_with("info_player") {
-        (DVec3::new(6.0, 6.0, 16.0), PLAYER_RGB, "tall box")
-    } else {
-        (DVec3::splat(ENTITY_HALF), material_rgb8(classname), "box")
-    };
+    let (half, rgb, marker) = (
+        DVec3::splat(ENTITY_HALF),
+        tint.unwrap_or_else(|| material_rgb8(key)),
+        "box",
+    );
     let bounds = Aabb {
         min: origin - half,
         max: origin + half,

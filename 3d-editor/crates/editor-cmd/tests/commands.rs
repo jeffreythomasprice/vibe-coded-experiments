@@ -269,12 +269,11 @@ fn doc_with_entity() -> (Session, EntityId, BrushId, LayerId) {
         Entity {
             flags: Default::default(),
             id: eid,
-            classname: "func_door".into(),
             layer,
             group: None,
-            origin: None,
+            origin: DVec3::ZERO,
             angles: DVec3::ZERO,
-            properties: Properties::new(),
+            components: [("func_door".to_string(), Properties::new())].into(),
             extra: Extra::new(),
         },
     );
@@ -334,16 +333,15 @@ fn delete_layer_rules() {
 
 #[test]
 fn validate_reports_issues() {
-    let (mut s, eid, _, _) = doc_with_entity();
+    let (mut s, _, _, _) = doc_with_entity();
     let r = exec(&mut s, "object.delete", json!({ "ids": [] }));
     assert_eq!(err_code(&r), "InvalidArgument");
 
-    let mut doc = s.into_document();
-    doc.brushes.clear();
-    let e = doc.entities.get_mut(&eid).unwrap();
-    e.properties
-        .insert("target".into(), PropertyValue::String("nowhere".into()));
-    let mut s = Session::new(doc);
+    ok(&exec(
+        &mut s,
+        "component_defs.add",
+        json!({ "source": "embedded", "defs": { "version": 2, "components": [{ "name": "other" }] } }),
+    ));
     let c = exec(&mut s, "check.validate", json!({}));
     let codes: Vec<&str> = c["result"]["issues"]
         .as_array()
@@ -351,8 +349,7 @@ fn validate_reports_issues() {
         .iter()
         .map(|i| i["code"].as_str().unwrap())
         .collect();
-    assert!(codes.contains(&"empty_brush_entity"), "{codes:?}");
-    assert!(codes.contains(&"missing_target"), "{codes:?}");
+    assert!(codes.contains(&"unknown_component"), "{codes:?}");
 }
 
 #[test]
@@ -371,7 +368,7 @@ fn scene_summary() {
     let res = &ok(&r)["result"];
     assert_eq!(res["counts"]["brush"], 1);
     assert_eq!(res["counts"]["entity"], 1);
-    assert_eq!(res["classnames"]["func_door"], 1);
+    assert_eq!(res["components"]["func_door"], 1);
     assert_eq!(res["layers"][0]["objects"], 2);
     assert_eq!(res["bounds"]["max"], json!([8.0, 8.0, 8.0]));
 }

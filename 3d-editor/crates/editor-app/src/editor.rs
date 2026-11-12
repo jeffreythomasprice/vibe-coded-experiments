@@ -2,22 +2,26 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
 use editor_cmd::args::{
-    Axis, AxisArg, BrushVertexAt, Clip, CreateBox, Delete, Factors, Flip, Isolate, Keep, NoArgs,
-    Pivot, Rename, Rotate, Save, Scale, SelectFaces, SelectIds, SelectKind, SetClassname,
-    SetHidden, SetLayer, SetLocked, SetMaterial, SetProperties, SetTransform, SetUv, TransferMode,
-    TransferUv, Translate, TranslateVertices, UvMode,
+    AddComponent, AddDefs, Axis, AxisArg, BrushVertexAt, Clip, CreateBox, CreateBrushEntity,
+    CreateEntity, Delete, EmbedDefs, Factors, Flip, Isolate, Keep, NoArgs, Pivot, RemoveComponent,
+    RemoveDefs, Rename, Rotate, Save, Scale, SelectFaces, SelectIds, SelectKind, SetComponent,
+    SetHidden, SetLayer, SetLocked, SetMaterial, SetTransform, SetUv, TransferMode, TransferUv,
+    Translate, TranslateVertices, UvMode,
 };
+use editor_cmd::links::{EntityLink, doc_links};
 use editor_cmd::results::{
     Created, CreatedMapped, Deleted, FaceSelection, FacesChanged, IdCount, IdOnly, Moved, Saved,
     Stepped, Transformed, Updated, VerticesMoved,
 };
 use editor_cmd::{Request, Success};
-use editor_core::{ElementRef, FaceId, GroupId, ObjectId, ObjectKind, Part, Properties};
+use editor_core::{ElementRef, FaceId, GroupId, ObjectId, ObjectKind, Part};
 use editor_geom::Aabb;
 use editor_geom::camera::{frame_camera, ortho_axes};
 use editor_geom::tolerance::snap_vec;
 use editor_proto::WakeFn;
-use editor_render::{PreparedScene, Renderer, SceneEnv, ViewportOptions};
+use editor_render::{
+    ComponentLook, PreparedScene, Renderer, SceneEnv, ViewportOptions, component_looks,
+};
 use egui::{Context, Key, Ui};
 use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 use glam::DVec3;
@@ -41,6 +45,12 @@ const GRIDS: [f64; 12] = [
     0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0,
 ];
 const DEFAULT_GRID: usize = 7;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LeftTab {
+    Outliner,
+    Entities,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Layout {
@@ -220,6 +230,10 @@ pub struct Editor {
     pub theme: Theme,
     show_grid: bool,
     show_axes: bool,
+    show_links: bool,
+    left_tab: LeftTab,
+    links: Vec<EntityLink>,
+    component_looks: HashMap<String, ComponentLook>,
     show_help: bool,
     hover: Option<ObjectId>,
     open_group: Option<GroupId>,
@@ -272,6 +286,8 @@ type PrepKey = (
     Option<GroupId>,
     Vec<(ObjectId, FaceId)>,
     u64,
+    u64,
+    bool,
 );
 
 impl Editor {
@@ -297,6 +313,10 @@ impl Editor {
             theme: Theme::Dark,
             show_grid: true,
             show_axes: true,
+            show_links: true,
+            left_tab: LeftTab::Outliner,
+            links: Vec::new(),
+            component_looks: HashMap::new(),
             show_help: false,
             hover: None,
             open_group: None,
@@ -331,7 +351,7 @@ impl Editor {
         request.merge_key = merge_key.map(String::from);
         match self.remote.call(request) {
             Ok(success) => {
-                self.status.clear();
+                self.status = success.warnings.join("; ");
                 Some(success)
             }
             Err(e) => {
@@ -684,6 +704,7 @@ impl Editor {
                     self.drag_step(undo);
                 }
             }
+            Action::DropComponent { name, point } => self.place_component(name, Some(point)),
             Action::CreateBox { min, max } => {
                 self.last_box = Some(Aabb { min, max });
                 let args = CreateBox {
@@ -902,6 +923,8 @@ impl Editor {
             self.open_group,
             self.remote.face_selection.iter().copied().collect(),
             self.texture_generation,
+            self.remote.defs_generation,
+            self.show_links,
         )
     }
 
@@ -918,19 +941,56 @@ impl Editor {
             .path
             .as_deref()
             .and_then(|p| Path::new(p).parent());
+        let links = if self.show_links {
+            doc_links(&self.remote.doc, &self.remote.catalog)
+        } else {
+            Vec::new()
+        };
+        let looks = component_looks(&self.remote.catalog);
         let env = SceneEnv {
             scene_dir,
             textures: renderer.textures(),
             faces: &self.remote.face_selection,
+            looks: &looks,
+            links: &links,
         };
         let scene = PreparedScene::new(&self.remote.doc, &tinted, self.hover, &hidden, &env);
+        self.links = doc_links(&self.remote.doc, &self.remote.catalog);
+        self.component_looks = looks;
         self.prepared = Some((key, scene));
         self.repaint = true;
+    }
+
+    /// Starts the game client, which sits next to this binary, on the current session.
+    fn play(&mut self) {
+        let exe = match std::env::current_exe() {
+            Ok(p) => p.with_file_name("editor-game"),
+            Err(e) => {
+                self.status = format!("cannot find editor-game: {e}");
+                return;
+            }
+        };
+        match std::process::Command::new(&exe)
+            .arg("--session")
+            .arg(&self.remote.session)
+            .spawn()
+        {
+            Ok(mut child) => {
+                self.status = "started the game client".into();
+                std::thread::spawn(move || {
+                    let _ = child.wait();
+                });
+            }
+            Err(e) => self.status = format!("cannot start {}: {e}", exe.display()),
+        }
     }
 
     fn keys(&mut self, ctx: &Context) {
         if ctx.text_edit_focused() {
             return;
+        }
+        if ctx.input(|i| i.key_pressed(Key::F5)) {
+            self.play();
         }
         let keys = ctx.input(Keys::read);
         if keys.undo {
@@ -1062,6 +1122,9 @@ impl Editor {
             Ok(true) => self.repaint = true,
             Ok(false) => {}
             Err(e) => self.status = e.to_string(),
+        }
+        if let Err(e) = self.remote.refresh_defs() {
+            self.status = e.to_string();
         }
         if self
             .open_group
@@ -1304,6 +1367,7 @@ impl Editor {
                     ui.checkbox(&mut self.link_zoom, "Link 2D zoom");
                     ui.checkbox(&mut self.show_grid, "Grid");
                     ui.checkbox(&mut self.show_axes, "Axes");
+                    ui.checkbox(&mut self.show_links, "Entity links");
                     ui.separator();
                     ui.menu_button("Theme", |ui| {
                         for t in Theme::ALL {
@@ -1313,6 +1377,13 @@ impl Editor {
                         }
                     });
                 });
+                if ui
+                    .add(egui::Button::new("Play").shortcut_text("F5"))
+                    .on_hover_text("Open the scene in the game client")
+                    .clicked()
+                {
+                    self.play();
+                }
                 ui.menu_button("Help", |ui| {
                     if ui.button("Controls").clicked() {
                         self.show_help = true;
@@ -1441,14 +1512,23 @@ impl Editor {
             .default_size(200.0)
             .size_range(140.0..=320.0)
             .show(ui, |ui| {
-                ui.heading("Outliner");
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut self.left_tab, LeftTab::Outliner, "Outliner");
+                    ui.selectable_value(&mut self.left_tab, LeftTab::Entities, "Entities");
+                });
                 ui.separator();
-                events = self.panels.outliner(
-                    ui,
-                    &self.remote.doc,
-                    self.remote.revision,
-                    &self.remote.selection,
-                );
+                events = match self.left_tab {
+                    LeftTab::Outliner => self.panels.outliner(
+                        ui,
+                        &self.remote.doc,
+                        self.remote.revision,
+                        &self.remote.selection,
+                    ),
+                    LeftTab::Entities => {
+                        self.panels
+                            .browser(ui, &self.remote.catalog, &self.remote.defs)
+                    }
+                };
             });
         for event in events {
             self.panel_event(event);
@@ -1472,9 +1552,13 @@ impl Editor {
                 ui.separator();
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     if self.remote.face_selection.is_empty() {
-                        events =
-                            self.panels
-                                .inspector(ui, &self.remote.doc, &self.remote.selection);
+                        events = self.panels.inspector(
+                            ui,
+                            &self.remote.doc,
+                            &self.remote.selection,
+                            &self.remote.catalog,
+                            &self.links,
+                        );
                     } else {
                         self.surface.faces(
                             ui,
@@ -1592,43 +1676,163 @@ impl Editor {
                 };
                 self.call::<_, Updated>("object.set_locked", &args, None);
             }
-            Event::SetClassname { id, classname } => {
-                let args = SetClassname {
-                    ids: vec![id],
-                    classname,
-                };
-                self.call::<_, Updated>("entity.set_classname", &args, None);
-            }
             Event::SetTransform {
                 id,
                 origin,
                 angles,
+                members,
                 merge,
             } => {
-                let args = SetTransform { id, origin, angles };
+                let args = SetTransform {
+                    id,
+                    origin,
+                    angles,
+                    members,
+                };
                 self.call::<_, IdOnly>("entity.set_transform", &args, merge.as_deref());
             }
-            Event::SetProperty {
-                id,
-                key,
-                value,
-                merge,
-            } => {
-                let args = SetProperties {
+            Event::SetComponent { id, name, data } => {
+                let args = SetComponent {
                     ids: vec![id],
-                    set: [(key, value)].into(),
-                    remove: Vec::new(),
+                    name,
+                    data,
                 };
-                self.call::<_, Updated>("entity.set_properties", &args, merge.as_deref());
+                self.call::<_, Updated>("entity.set_component", &args, None);
             }
-            Event::RemoveProperty { id, key } => {
-                let args = SetProperties {
+            Event::AddComponent { ids, name } => {
+                let args = AddComponent {
+                    ids,
+                    name,
+                    data: None,
+                };
+                self.call::<_, Updated>("entity.add_component", &args, None);
+            }
+            Event::RemoveComponent { id, name } => {
+                let args = RemoveComponent {
                     ids: vec![id],
-                    set: Properties::new(),
-                    remove: vec![key],
+                    name,
                 };
-                self.call::<_, Updated>("entity.set_properties", &args, None);
+                self.call::<_, Updated>("entity.remove_component", &args, None);
             }
+            Event::PlaceComponent { name, point } => self.place_component(name, point),
+            Event::EntityFromSelection => self.entity_from_selection(None),
+            Event::ReloadDefs => self.remote.reload_defs(),
+            Event::AddDefsFile => {
+                let Some(path) = rfd::FileDialog::new()
+                    .add_filter("entity definitions", &["json"])
+                    .pick_file()
+                else {
+                    return;
+                };
+                let args = AddDefs::File {
+                    path: path.to_string_lossy().into_owned(),
+                    store: None,
+                };
+                self.call::<_, Created>("component_defs.add", &args, None);
+            }
+            Event::EmbedDefs(id) => {
+                self.call::<_, Updated>("component_defs.embed", &EmbedDefs { ids: vec![id] }, None);
+            }
+            Event::RemoveDefs(id) => {
+                self.call::<_, Deleted>(
+                    "component_defs.remove",
+                    &RemoveDefs { ids: vec![id] },
+                    None,
+                );
+            }
+        }
+    }
+
+    fn snapped_center(&self) -> DVec3 {
+        let center = self
+            .selection_bounds()
+            .or_else(|| {
+                self.prepared
+                    .as_ref()
+                    .and_then(|(_, p)| p.bounds().copied())
+            })
+            .map_or(DVec3::ZERO, |b| b.center());
+        DVec3::new(
+            crate::pane::snap(center.x, self.grid),
+            crate::pane::snap(center.y, self.grid),
+            crate::pane::snap(center.z, self.grid),
+        )
+    }
+
+    fn world_geometry_selection(&self) -> Vec<ObjectId> {
+        self.remote
+            .selection
+            .iter()
+            .copied()
+            .filter(|id| {
+                self.remote.doc.get(*id).is_some_and(|o| {
+                    o.entity().is_none()
+                        && matches!(id.kind(), ObjectKind::Brush | ObjectKind::Mesh)
+                })
+            })
+            .collect()
+    }
+
+    fn component_data(&self, name: &str) -> serde_json::Map<String, Value> {
+        self.remote.catalog.defaults(name)
+    }
+
+    /// Adds a component to the selected entities; failing that, makes an entity of the selected world geometry, or places a point entity.
+    fn place_component(&mut self, name: String, point: Option<DVec3>) {
+        if point.is_none() {
+            let entities: Vec<ObjectId> = self
+                .remote
+                .selection
+                .iter()
+                .copied()
+                .filter(|id| matches!(id, ObjectId::Entity(_)))
+                .collect();
+            if !entities.is_empty() {
+                let args = AddComponent {
+                    ids: entities,
+                    name,
+                    data: None,
+                };
+                self.call::<_, Updated>("entity.add_component", &args, None);
+                return;
+            }
+            if !self.world_geometry_selection().is_empty() {
+                self.entity_from_selection(Some(name));
+                return;
+            }
+        }
+        let origin = point.unwrap_or_else(|| self.snapped_center());
+        let components = [(name.clone(), self.component_data(&name))].into();
+        let args = CreateEntity {
+            origin,
+            angles: None,
+            components: Some(components),
+            layer: None,
+            group: None,
+        };
+        let created = self.call::<_, Created>("entity.create", &args, None);
+        if let Some(id) = created.and_then(|c| c.id) {
+            self.select("select.set", vec![id]);
+        }
+    }
+
+    /// Turns the selected world brushes and meshes into one entity, optionally with a component.
+    fn entity_from_selection(&mut self, component: Option<String>) {
+        let objects = self.world_geometry_selection();
+        if objects.is_empty() {
+            self.status = "select world brushes or meshes first".into();
+            return;
+        }
+        let components = component.map(|name| [(name.clone(), self.component_data(&name))].into());
+        let args = CreateBrushEntity {
+            objects,
+            origin: None,
+            angles: None,
+            components,
+        };
+        let created = self.call::<_, Created>("entity.create_brush_entity", &args, None);
+        if let Some(id) = created.and_then(|c| c.id) {
+            self.select("select.set", vec![id]);
         }
     }
 
@@ -1656,6 +1860,7 @@ impl Editor {
                             "select the next object along the ray (Shift adds)",
                         ),
                         ("Shift + LMB drag", "paint-select (Select tool)"),
+                        ("F5", "open the scene in the game client"),
                         ("Ctrl+A / Ctrl+I", "select all / invert"),
                         ("Ctrl+H / Alt+H", "hide the selection / show all"),
                         ("Ctrl+Shift+H", "isolate the selection"),

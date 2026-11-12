@@ -42,6 +42,17 @@ pub enum Overlay {
     Labels,
     Bounds,
     Selection,
+    /// Arrows between entities that reference each other (properties marked `editor.linkType = entityID`).
+    Links,
+}
+
+/// Render the scene as the game client would at a given simulation time.
+#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Simulate {
+    /// Seconds since the simulation started; animations are sampled here. 0 is the rest pose.
+    #[serde(default)]
+    pub time: f64,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -81,6 +92,8 @@ pub struct ScreenshotArgs {
     pub material_colors: BTreeMap<String, String>,
     /// Draw material images (default true). false draws every face as a flat colour.
     pub textures: Option<bool>,
+    /// Draw the scene as played: animated entities posed at this time, no entity markers or edge lines, and hidden flags ignored (layers marked omit_from_export are left out).
+    pub simulate: Option<Simulate>,
     /// Also write the PNG to this path (needs mutate access).
     pub path: Option<String>,
 }

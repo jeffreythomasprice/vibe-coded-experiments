@@ -12,9 +12,14 @@ use crate::error::CommandError;
 
 fn flaggable(doc: &Document, id: ObjectId) -> Result<Object, CommandError> {
     match id {
-        ObjectId::Camera(_) | ObjectId::Material(_) if doc.contains(id) => Err(
-            CommandError::wrong_kind(id, "brush, mesh, entity, group or layer"),
-        ),
+        ObjectId::Camera(_) | ObjectId::Material(_) | ObjectId::ComponentDefs(_)
+            if doc.contains(id) =>
+        {
+            Err(CommandError::wrong_kind(
+                id,
+                "brush, mesh, entity, group or layer",
+            ))
+        }
         _ => doc.get(id).ok_or_else(|| CommandError::not_found(id)),
     }
 }
@@ -100,7 +105,12 @@ pub fn isolate(ctx: &mut Ctx, args: Isolate) -> CmdResult<results::Updated> {
     }
     let mut hide = Vec::new();
     for id in doc.all_ids() {
-        if keep.contains(&id) || matches!(id, ObjectId::Camera(_) | ObjectId::Material(_)) {
+        if keep.contains(&id)
+            || matches!(
+                id,
+                ObjectId::Camera(_) | ObjectId::Material(_) | ObjectId::ComponentDefs(_)
+            )
+        {
             continue;
         }
         let Some(object) = doc.get(id) else { continue };

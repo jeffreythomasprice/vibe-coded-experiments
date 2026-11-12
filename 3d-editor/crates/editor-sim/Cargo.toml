@@ -1,0 +1,22 @@
+[package]
+name = "editor-sim"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+editor-core.workspace = true
+editor-geom.workspace = true
+editor-schema.workspace = true
+glam.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+regress.workspace = true
+
+[build-dependencies]
+editor-schema-gen.workspace = true
+
+[dev-dependencies]
+editor-fmt.workspace = true
+

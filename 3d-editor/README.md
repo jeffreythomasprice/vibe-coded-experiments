@@ -49,3 +49,9 @@ Open the GUI (needs a display and a Vulkan adapter; Help > Controls lists the in
 ```
 cargo run -p editor-app -- scenes/test.scene.toml
 ```
+
+Play a scene in the first-person game client (WASD, mouse look, click to capture the mouse; `docs/game.md`). It attaches to the editor's session, or opens the demo:
+
+```
+cargo run -p editor-game -- scenes/demo-courtyard.scene.toml
+```

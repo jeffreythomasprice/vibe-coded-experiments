@@ -10,34 +10,52 @@ fn entity_create_and_edit() {
     let r = exec(
         &mut s,
         "entity.create",
-        json!({ "classname": "light", "origin": [0, 0, 64], "properties": { "intensity": 300, "color": [1, 0.5, 0], "cast": true, "name": "lamp" } }),
+        json!({ "origin": [0, 0, 64], "components": { "light": { "intensity": 300, "color": [1, 0.5, 0], "cast": true } } }),
     );
     let e = id_of(&r);
     let v = full(&mut s, &e);
-    assert_eq!(v["classname"], "light");
-    assert_eq!(v["properties"]["intensity"], 300.0);
+    assert_eq!(v["components"]["light"]["intensity"], 300.0);
 
     ok(&exec(
         &mut s,
-        "entity.set_properties",
-        json!({ "ids": [&e], "set": { "intensity": 500 }, "remove": ["cast"] }),
+        "entity.update_component",
+        json!({ "ids": [&e], "name": "light", "set": { "intensity": 500 }, "remove": ["cast"] }),
     ));
     let v = full(&mut s, &e);
-    assert_eq!(v["properties"]["intensity"], 500.0);
-    assert!(v["properties"].get("cast").is_none());
+    assert_eq!(v["components"]["light"]["intensity"], 500.0);
+    assert!(v["components"]["light"].get("cast").is_none());
 
     ok(&exec(
         &mut s,
-        "entity.set_classname",
-        json!({ "ids": [&e], "classname": "light_spot" }),
+        "entity.add_component",
+        json!({ "ids": [&e], "name": "keyframe_animation" }),
     ));
+    assert_eq!(
+        full(&mut s, &e)["components"]["keyframe_animation"]["interpolation"],
+        "linear"
+    );
+    ok(&exec(
+        &mut s,
+        "entity.set_component",
+        json!({ "ids": [&e], "name": "keyframe_animation", "data": { "keyframes": [{ "time": 1 }] } }),
+    ));
+    ok(&exec(
+        &mut s,
+        "entity.remove_component",
+        json!({ "ids": [&e], "name": "keyframe_animation" }),
+    ));
+    assert!(
+        full(&mut s, &e)["components"]
+            .get("keyframe_animation")
+            .is_none()
+    );
+
     ok(&exec(
         &mut s,
         "entity.set_transform",
         json!({ "id": &e, "origin": [1, 2, 3], "angles": [10, 20, 30] }),
     ));
     let v = full(&mut s, &e);
-    assert_eq!(v["classname"], "light_spot");
     assert_eq!(v["origin"], json!([1.0, 2.0, 3.0]));
     assert_eq!(v["angles"], json!([10.0, 20.0, 30.0]));
 
@@ -53,7 +71,7 @@ fn entity_errors() {
         bad(
             &mut s,
             "entity.create",
-            json!({ "classname": " ", "origin": [0, 0, 0] })
+            json!({ "origin": [0, 0, 0], "components": { "a b": {} } })
         ),
         "InvalidArgument"
     );
@@ -61,7 +79,7 @@ fn entity_errors() {
         bad(
             &mut s,
             "entity.create",
-            json!({ "classname": "x", "origin": [0, 0, 0], "properties": { "origin": "1 2 3" } })
+            json!({ "origin": [0, 0, 0], "components": { "x": { "k": null } } })
         ),
         "InvalidArgument"
     );
@@ -69,7 +87,7 @@ fn entity_errors() {
         bad(
             &mut s,
             "entity.create",
-            json!({ "classname": "x", "origin": [0, 0, 0], "layer": "l99" })
+            json!({ "origin": [0, 0, 0], "layer": "l99" })
         ),
         "NotFound"
     );
@@ -77,32 +95,63 @@ fn entity_errors() {
     assert_eq!(
         bad(
             &mut s,
-            "entity.set_properties",
-            json!({ "ids": [&b], "set": { "a": 1 } })
+            "entity.add_component",
+            json!({ "ids": [&b], "name": "a" })
         ),
         "WrongKind"
     );
-    let brush_ent = id_of(&exec(
+    let e = id_of(&exec(
         &mut s,
-        "entity.create_brush_entity",
-        json!({ "classname": "func_wall", "objects": [&b] }),
+        "entity.create",
+        json!({ "origin": [0, 0, 0] }),
     ));
     assert_eq!(
         bad(
             &mut s,
-            "entity.set_transform",
-            json!({ "id": &brush_ent, "origin": [0, 0, 0] })
+            "entity.remove_component",
+            json!({ "ids": [&e], "name": "a" })
         ),
         "InvalidArgument"
     );
     assert_eq!(
         bad(
             &mut s,
-            "entity.create_brush_entity",
-            json!({ "classname": "x", "objects": [&b] })
+            "entity.set_component",
+            json!({ "ids": [&e], "name": "a", "data": {} })
         ),
         "InvalidArgument"
     );
+    ok(&exec(
+        &mut s,
+        "entity.add_component",
+        json!({ "ids": [&e], "name": "a", "data": {} }),
+    ));
+    assert_eq!(
+        bad(
+            &mut s,
+            "entity.add_component",
+            json!({ "ids": [&e], "name": "a" })
+        ),
+        "InvalidArgument"
+    );
+    let brush_ent = id_of(&exec(
+        &mut s,
+        "entity.create_brush_entity",
+        json!({ "objects": [&b] }),
+    ));
+    assert_eq!(
+        bad(
+            &mut s,
+            "entity.create_brush_entity",
+            json!({ "objects": [&b] })
+        ),
+        "InvalidArgument"
+    );
+    ok(&exec(
+        &mut s,
+        "entity.set_transform",
+        json!({ "id": &brush_ent, "origin": [0, 0, 0] }),
+    ));
 }
 
 #[test]
@@ -113,29 +162,30 @@ fn brush_entity_lifecycle() {
     let ent = id_of(&exec(
         &mut s,
         "entity.create_brush_entity",
-        json!({ "classname": "func_door", "objects": [&a, &b], "properties": { "speed": 100 } }),
+        json!({ "objects": [&a, &b], "components": { "door": { "speed": 100 } } }),
     ));
     assert_eq!(full(&mut s, &a)["entity"], json!(ent));
+    assert_eq!(full(&mut s, &ent)["origin"], json!([12.0, 4.0, 4.0]));
 
     let r = exec(&mut s, "entity.release_objects", json!({ "ids": [&a] }));
     assert!(ok(&r)["warnings"].as_array().unwrap().is_empty());
     assert!(full(&mut s, &a).get("entity").is_none_or(|e| e.is_null()));
 
     let r = exec(&mut s, "entity.release_objects", json!({ "ids": [&b] }));
-    assert_eq!(ok(&r)["warnings"].as_array().unwrap().len(), 1);
-    assert_eq!(r["changes"]["deleted"], json!([ent]));
-    assert_eq!(summary(&mut s)["counts"]["entity"], 0);
-
-    exec(&mut s, "history.undo", json!({}));
+    assert!(ok(&r)["warnings"].as_array().unwrap().is_empty());
     assert_eq!(summary(&mut s)["counts"]["entity"], 1);
     assert_eq!(
         err_code(&exec(
             &mut s,
             "entity.release_objects",
-            json!({ "ids": [&a] })
+            json!({ "ids": [&ent] })
         )),
         "InvalidArgument"
     );
+
+    exec(&mut s, "history.undo", json!({}));
+    exec(&mut s, "history.undo", json!({}));
+    assert_eq!(full(&mut s, &a)["entity"], json!(ent));
 }
 
 #[test]
@@ -153,7 +203,7 @@ fn brush_entity_needs_matching_layer_and_group() {
         err_code(&exec(
             &mut s,
             "entity.create_brush_entity",
-            json!({ "classname": "x", "objects": [&a, &b] })
+            json!({ "objects": [&a, &b] })
         )),
         "InvalidArgument"
     );
@@ -226,7 +276,7 @@ fn group_rules() {
     let ent = id_of(&exec(
         &mut s,
         "entity.create_brush_entity",
-        json!({ "classname": "x", "objects": [&a] }),
+        json!({ "objects": [&a] }),
     ));
     let _ = ent;
     assert_eq!(
@@ -382,12 +432,12 @@ fn duplicate_brush_entity_and_point_entity() {
     let ent = id_of(&exec(
         &mut s,
         "entity.create_brush_entity",
-        json!({ "classname": "func_door", "objects": [&a] }),
+        json!({ "objects": [&a] }),
     ));
     let light = id_of(&exec(
         &mut s,
         "entity.create",
-        json!({ "classname": "light", "origin": [0, 0, 0] }),
+        json!({ "origin": [0, 0, 0] }),
     ));
     let r = exec(
         &mut s,
@@ -439,7 +489,7 @@ fn array_copies_group_and_entity_contents() {
     let ent = id_of(&exec(
         &mut s,
         "entity.create_brush_entity",
-        json!({ "classname": "func_door", "objects": [c] }),
+        json!({ "objects": [c] }),
     ));
     let g = id_of(&exec(
         &mut s,

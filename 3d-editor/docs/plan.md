@@ -14,8 +14,8 @@ Status: steps 1 to 4 of the order of work are built, the GUI spikes (7.2 to 7.4)
 
 **Non-goals (for now)**
 - Compatibility with Quake `.map` / `.bsp` as the native format (import/export may come later, Tier 3).
-- A runtime/game engine. The editor is the product; a minimal preview/runtime loader is a later question.
-- Terrain, animation, node graphs, play-in-editor (cf. Jackdaw's scope).
+- A full runtime/game engine. The editor is the product. A deliberately small simulation exists (a hand-written ECS, `keyframe_animation`, and a noclip first-person client) to play scenes: see `docs/ecs.md`, `docs/components.md` and `docs/game.md`.
+- Terrain, node graphs (cf. Jackdaw's scope).
 
 ## 2. Architecture
 
@@ -84,7 +84,7 @@ Tier 0 = nothing works without it. Each later tier is a coherent release. Source
 Detailed specs: [tier0-model.md](tier0-model.md) (object kinds, IDs), [tier0-commands.md](tier0-commands.md) (command catalog), [server.md](server.md) (headless server, protocol, sessions), [tier0-mcp.md](tier0-mcp.md) (MCP shim), [scene-format.md](scene-format.md) (TOML format).
 
 **Document and commands**
-- Scene model: convex brushes (face planes + material), polygon meshes (vertices + face loops, possibly concave, for CSG results and free vertex/face editing), entities (classname + key/values), stable IDs. Z-up, right-handed.
+- Scene model: convex brushes (face planes + material), polygon meshes (vertices + face loops, possibly concave, for CSG results and free vertex/face editing), entities (a pose plus named components), stable IDs. Z-up, right-handed.
 - Command layer: typed, serializable commands and queries; transactions; unlimited undo/redo; consecutive-edit merging.
 - Our native scene format (plain TOML, versioned, git-diffable) with load/save. See section 5.
 
@@ -92,7 +92,7 @@ Detailed specs: [tier0-model.md](tier0-model.md) (object kinds, IDs), [tier0-com
 - MCP server exposing the command API as tools. Read-only tools available by default; mutating tools gated, with tools tagged read-only / mutating / destructive (the Godot MCP server does this and it's a good pattern).
 - CLI over the same API, usable in scripts and CI (e.g. `editor-cli apply batch.json`, `editor-cli query ...`).
 - Query tools: scene summary (compact: counts, bounds, layers, entity classes), list/filter objects by type/layer/tag/region, get object details, raycast, bounding-box and overlap queries.
-- Mutation tools: create brush (cuboid/shape), transform (move/rotate/scale/flip), delete, clip, CSG, create/edit entity and properties, group/layer ops, selection ops.
+- Mutation tools: create brush (cuboid/shape), transform (move/rotate/scale/flip), delete, clip, CSG, create/edit entities and their components, group/layer ops, selection ops.
 - **Vision:** `screenshot(camera)` returning an image; named cameras (top/front/side/perspective + custom); optional overlays (grid, axes, object ID labels) so the agent can map pixels to objects.
 - **Validation tools:** run the issue checker and return structured results (leaks, invalid brushes, missing targets).
 - Batch/transaction tool with all-or-nothing semantics and structured errors (what failed, why, how to fix). Structured errors are what lets the agent self-correct.
@@ -106,7 +106,7 @@ Detailed specs: [tier0-model.md](tier0-model.md) (object kinds, IDs), [tier0-com
 - Selection: click, add/remove, paint-select, select all/invert, drill through occluded objects.
 - Basic transforms: move, rotate, scale, flip.
 - Simple shape tool: drag out a cuboid.
-- Basic inspector (properties) and outliner.
+- Basic inspector (transform and components) and outliner.
 
 ### Tier 1 — A real brush editor
 
@@ -114,8 +114,8 @@ Detailed specs: [tier0-model.md](tier0-model.md) (object kinds, IDs), [tier0-com
 - **Vertex, edge and face tools:** move components; vertex fusing; face chopping so brushes never go concave.
   - Built as commands: `vertex.translate` and `face.translate` work on brushes by rebuilding the convex hull of the moved corners (`editor_geom::move_brush_vertices`). The GUI has vertex, edge and face tools (keys 6, 8, 9) that drag corners, edge midpoints and face centres in every view, sent as `vertex.translate`; see `docs/gui.md`. Texture lock keeps face UVs on the geometry through these edits and through transforms; see `docs/materials.md`.
 - **CSG:** `csg.subtract`, `csg.union` (convex merge for brushes), `csg.intersect` and `csg.hollow` are built; see `docs/tier0-commands.md`.
-- **Entities:** point entities and brush entities; entity definitions (our own schema file, or optional FGD import) driving classnames, property types and defaults; entity browser with drag-and-drop.
-- **Entity links:** visualize `target`-style references as lines in the viewport.
+- **Entities:** an entity is a pose (origin, angles) plus named components; an entity that owns brushes is a brush entity, with its origin as the pivot. Built: components are open JSON; component definitions (our own JSON file, absolute, scene-relative or embedded) carry a JSON Schema per component and drive defaults, validation warnings, marker colour and size; built-in components (`keyframe_animation`, `player_start`); component browser with drag-and-drop; `editor.linkType = entityID` links with arrows in the viewports and screenshots. FGD import and a form generated from the schema are still to do. See `docs/entities.md` and `docs/components.md`.
+- **Play mode:** `editor-sim` runs entities as an ECS (static brushes and meshes stay static geometry) and `editor-game` is a separate first-person client for it; the editor never animates anything. Built: keyframe animation on a loop, noclip fly controls, live updates from the server session, Play button (F5), `view.screenshot` with `simulate`. Still to do: triggers and events, several animations per entity, collision, culling. See `docs/ecs.md` and `docs/game.md`.
 - **Groups** (nestable, open/close with lock semantics) and **layers** (hide, lock, omit from export).
 - **Hide / isolate / lock / show all** (all undoable). Built: `object.set_hidden`, `set_locked`, `isolate`, `show_all`, `unlock_all`, saved in the scene file; locks are enforced for every op in one place. Group open/close is GUI-only state.
 - **Materials:** material browser, per-face material assignment, face attribute editor (offset, scale, rotation). Built: materials are document objects with an image (absolute, relative to the scene file, or embedded) and tint, emissive, roughness, metallic, filter and flags; faces have UVs with optional explicit axes, texture lock, `face.align_uv` / `face.transfer_uv` / `face.get_uv`, a shared face selection, textured rendering and a Surface tool plus inspector panels in the GUI. See `docs/materials.md`. A materials directory and search paths still wait for per-project config.
@@ -149,7 +149,7 @@ Detailed specs: [tier0-model.md](tier0-model.md) (object kinds, IDs), [tier0-com
 
 - Curved surfaces / patches (Quake 3-style), heightmap terrain.
 - Lightmap or light preview, in-editor lighting approximation.
-- In-editor play/preview of a minimal runtime.
+- In-editor play/preview of a minimal runtime. (The first version is the separate `editor-game` client; embedding it in the editor window is still open.)
 - Scripting/plugin API beyond MCP (e.g. Rust or WASM extensions).
 - Multi-user collaborative editing.
 - Additional map formats (Quake 2/3, Hexen 2).

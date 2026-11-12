@@ -138,7 +138,7 @@ fn entity_origin_and_angles_follow_rotation() {
     let e = id_of(&exec(
         &mut s,
         "entity.create",
-        json!({ "classname": "light", "origin": [10, 0, 0] }),
+        json!({ "origin": [10, 0, 0] }),
     ));
     ok(&exec(
         &mut s,
@@ -170,7 +170,7 @@ fn groups_and_brush_entities_transform_their_contents() {
     let ent = id_of(&exec(
         &mut s,
         "entity.create_brush_entity",
-        json!({ "classname": "func_door", "objects": [&b] }),
+        json!({ "objects": [&b] }),
     ));
     ok(&exec(
         &mut s,

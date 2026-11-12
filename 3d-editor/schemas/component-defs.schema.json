@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://editor.local/schemas/component-defs.schema.json",
+  "title": "Component definitions file (*.components.json)",
+  "$ref": "#/$defs/ComponentDefsFile",
+  "$defs": {
+    "ComponentDefsFile": {
+      "description": "The component definitions file format.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ComponentDef"
+          }
+        }
+      },
+      "required": [
+        "version",
+        "components"
+      ],
+      "additionalProperties": false
+    },
+    "ComponentDef": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Component name: letters, digits and underscores.",
+          "pattern": "^[A-Za-z0-9_]+$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "color": {
+          "description": "Marker colour, each channel 0..1.",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "size": {
+          "$ref": "#/$defs/ComponentSize"
+        },
+        "schema": {
+          "description": "Open JSON Schema (draft 2020-12) for the component's data object. A string node with `\"editor\": {\"linkType\": \"entityID\"}` holds the id of another entity. Open on purpose: its shape is whatever the component author writes, and it is compiled separately.",
+          "default": {}
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "description": "A named component an entity can carry, with a JSON Schema for its data."
+    },
+    "ComponentSize": {
+      "description": "Box drawn for a point entity carrying the component, relative to its origin.",
+      "type": "object",
+      "properties": {
+        "min": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "max": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "min",
+        "max"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

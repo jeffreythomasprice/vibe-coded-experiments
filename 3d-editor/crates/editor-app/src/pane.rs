@@ -17,6 +17,7 @@ use crate::elements::{self, ElementHandle, Kind};
 use crate::gfx::Target;
 use crate::gizmo::{Gizmo, GizmoDrag, Handle, Mode};
 use crate::nav;
+use crate::panels::ComponentDrag;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PaneId {
@@ -140,6 +141,10 @@ pub enum Action {
     CreateBox {
         min: DVec3,
         max: DVec3,
+    },
+    DropComponent {
+        name: String,
+        point: DVec3,
     },
     ClipAdd {
         point: DVec3,
@@ -332,6 +337,41 @@ impl Pane {
         ))
     }
 
+    /// Where a dragged entity class lands: on the surface under the cursor in the perspective view, else on the ground; in an ortho view on the plane through the selection (or last box) across the view.
+    fn drop_point(env: &PaneEnv, view: &View, ortho: bool, local: Pos2) -> Option<DVec3> {
+        let ray = view.ray(DVec2::new(f64::from(local.x), f64::from(local.y)));
+        let grid = env.grid;
+        let on_plane = |plane: BoxPlane| {
+            let mut p = plane.point_at(ray)?;
+            for i in (0..3).filter(|&i| i != plane.axis) {
+                p[i] = snap(p[i], grid);
+            }
+            Some(p)
+        };
+        if ortho {
+            let abs = ray.1.abs();
+            let axis = if abs.x >= abs.y && abs.x >= abs.z {
+                0
+            } else if abs.y >= abs.z {
+                1
+            } else {
+                2
+            };
+            let offset = env.depth_hint.map_or(0.0, |b| b.center()[axis]);
+            return on_plane(BoxPlane {
+                axis,
+                offset,
+                sign: 1.0,
+            });
+        }
+        let kinds = BTreeSet::from([ObjectKind::Brush, ObjectKind::Mesh]);
+        let hidden = env.doc.hidden_ids();
+        match editor_cmd::ray_hits(env.doc, ray.0, ray.1, &kinds, &hidden, None).first() {
+            Some(h) => Some(snap_to_face(h.point, h.normal, grid) + h.normal * 8.0),
+            None => on_plane(BoxPlane::ground()),
+        }
+    }
+
     fn ortho_to_screen(view: &View, uv: DVec2, rect: Rect, ppp: f32) -> Pos2 {
         let p = view.right * uv.x + view.up * uv.y;
         let projected = view.project(p).map_or(DVec2::ZERO, |p| p.px);
@@ -388,6 +428,24 @@ impl Pane {
             pos2(l.x, l.y)
         };
         let pointer = resp.hover_pos().or_else(|| resp.interact_pointer_pos());
+
+        if resp.dnd_hover_payload::<ComponentDrag>().is_some() {
+            painter.rect_stroke(
+                rect.shrink(2.0),
+                0.0,
+                egui::Stroke::new(2.0, Color32::from_rgb(0x60, 0xa0, 0xe0)),
+                egui::StrokeKind::Inside,
+            );
+        }
+        if let Some(payload) = resp.dnd_release_payload::<ComponentDrag>()
+            && let Some(p) = ui.ctx().pointer_latest_pos()
+            && let Some(point) = Self::drop_point(env, &view, is_ortho, local_px(p))
+        {
+            env.actions.push(Action::DropComponent {
+                name: payload.name.clone(),
+                point,
+            });
+        }
 
         let navigating = secondary || middle || (primary && mods.alt);
         if resp.hovered()

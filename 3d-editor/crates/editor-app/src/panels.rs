@@ -1,11 +1,18 @@
 use std::collections::BTreeSet;
 
-use editor_core::{Document, LayerId, Object, ObjectId, ObjectKind, Properties, PropertyValue};
+use editor_cmd::args::Members;
+use editor_cmd::component_defs::Catalog;
+use editor_cmd::links::{EntityLink, LinkStatus};
+use editor_cmd::results::ComponentDefsList;
+use editor_core::{Document, LayerId, Object, ObjectId, ObjectKind, Properties, Value, find_null};
 use egui::collapsing_header::CollapsingState;
 use egui::{Align, ComboBox, DragValue, Ui};
 use glam::DVec3;
 
 use crate::tree::Tree;
+
+const ERROR: egui::Color32 = egui::Color32::from_rgb(0xe0, 0x5a, 0x5a);
+const WARN: egui::Color32 = egui::Color32::from_rgb(0xe0, 0xb0, 0x50);
 
 /// What a panel asks the editor to do. Panels only read the document; the editor turns these into ops.
 #[derive(Debug, Clone)]
@@ -31,26 +38,92 @@ pub enum Event {
         ids: Vec<ObjectId>,
         layer: LayerId,
     },
-    SetClassname {
-        id: ObjectId,
-        classname: String,
-    },
     SetTransform {
         id: ObjectId,
         origin: Option<DVec3>,
         angles: Option<DVec3>,
+        members: Members,
         merge: Option<String>,
     },
-    SetProperty {
+    SetComponent {
         id: ObjectId,
-        key: String,
-        value: PropertyValue,
-        merge: Option<String>,
+        name: String,
+        data: Properties,
     },
-    RemoveProperty {
+    AddComponent {
+        ids: Vec<ObjectId>,
+        name: String,
+    },
+    RemoveComponent {
         id: ObjectId,
-        key: String,
+        name: String,
     },
+    /// Add a component to the selected entities, or make an entity of the selected geometry, or place a point entity at `point` (or the middle of the selection or scene).
+    PlaceComponent {
+        name: String,
+        point: Option<DVec3>,
+    },
+    EntityFromSelection,
+    ReloadDefs,
+    AddDefsFile,
+    EmbedDefs(ObjectId),
+    RemoveDefs(ObjectId),
+}
+
+/// Drag-and-drop payload of the component browser.
+#[derive(Debug, Clone)]
+pub struct ComponentDrag {
+    pub name: String,
+}
+
+/// What a component's JSON text area holds.
+#[derive(Debug, PartialEq)]
+pub enum JsonCheck {
+    Syntax(String),
+    NotObject,
+    Null(String),
+    /// Valid JSON object; `schema` lists mismatches with the component schema (advisory).
+    Object {
+        data: Properties,
+        schema: Vec<String>,
+    },
+}
+
+pub fn check_json(text: &str, catalog: &Catalog, component: &str) -> JsonCheck {
+    let value: Value = match serde_json::from_str(text) {
+        Ok(v) => v,
+        Err(e) => {
+            return JsonCheck::Syntax(format!("line {}, column {}: {e}", e.line(), e.column()));
+        }
+    };
+    let Value::Object(data) = value else {
+        return JsonCheck::NotObject;
+    };
+    if let Some(pointer) = find_null(&Value::Object(data.clone())) {
+        return JsonCheck::Null(pointer);
+    }
+    let schema = catalog
+        .validate(component, &data)
+        .into_iter()
+        .map(|e| {
+            format!(
+                "{}: {}",
+                if e.pointer.is_empty() {
+                    "/"
+                } else {
+                    &e.pointer
+                },
+                e.message
+            )
+        })
+        .collect();
+    JsonCheck::Object { data, schema }
+}
+
+#[derive(Default)]
+struct JsonEdit {
+    text: String,
+    base: String,
 }
 
 #[derive(Default)]
@@ -61,8 +134,9 @@ pub struct Panels {
     clicked_here: bool,
     drag_serial: u64,
     drag_key: String,
-    new_key: String,
-    new_value: String,
+    json: std::collections::HashMap<(ObjectId, String), JsonEdit>,
+    pivot_only: bool,
+    browser_search: String,
 }
 
 fn label(doc: &Document, id: ObjectId) -> String {
@@ -75,36 +149,17 @@ fn label(doc: &Document, id: ObjectId) -> String {
             .groups
             .get(&g)
             .map_or_else(|| id.to_string(), |x| x.name.clone()),
-        ObjectId::Entity(e) => doc
-            .entities
-            .get(&e)
-            .map_or_else(|| id.to_string(), |x| format!("{}  {id}", x.classname)),
+        ObjectId::Entity(e) => doc.entities.get(&e).map_or_else(
+            || id.to_string(),
+            |x| {
+                let what = x.components.keys().next().map_or("entity", String::as_str);
+                format!("{what}  {id}")
+            },
+        ),
         ObjectId::Brush(_) => format!("brush  {id}"),
         ObjectId::Mesh(_) => format!("mesh  {id}"),
-        ObjectId::Camera(_) | ObjectId::Material(_) => id.to_string(),
+        ObjectId::Camera(_) | ObjectId::Material(_) | ObjectId::ComponentDefs(_) => id.to_string(),
     }
-}
-
-fn parse_value(text: &str) -> PropertyValue {
-    let text = text.trim();
-    match text {
-        "true" => return PropertyValue::Bool(true),
-        "false" => return PropertyValue::Bool(false),
-        _ => {}
-    }
-    if let Ok(n) = text.parse::<f64>() {
-        return PropertyValue::Number(n);
-    }
-    let parts: Vec<f64> = text
-        .split_whitespace()
-        .filter_map(|p| p.parse().ok())
-        .collect();
-    if let [x, y, z] = parts[..]
-        && text.split_whitespace().count() == 3
-    {
-        return PropertyValue::Vec3(DVec3::new(x, y, z));
-    }
-    PropertyValue::String(text.to_string())
 }
 
 /// A single-line text field that reports its new text when edited and left, and drops the edit on Escape.
@@ -137,6 +192,7 @@ fn kind_name(kind: ObjectKind) -> &'static str {
         ObjectKind::Layer => "layer",
         ObjectKind::Camera => "camera",
         ObjectKind::Material => "material",
+        ObjectKind::ComponentDefs => "entity definitions",
     }
 }
 
@@ -296,6 +352,8 @@ impl Panels {
         ui: &mut Ui,
         doc: &Document,
         selection: &BTreeSet<ObjectId>,
+        catalog: &Catalog,
+        links: &[EntityLink],
     ) -> Vec<Event> {
         let mut events = Vec::new();
         let ids: Vec<ObjectId> = selection.iter().copied().collect();
@@ -303,7 +361,7 @@ impl Panels {
             [] => {
                 ui.weak("Nothing selected");
             }
-            [id] => self.single(ui, doc, *id, &mut events),
+            [id] => self.single(ui, doc, *id, catalog, links, &mut events),
             many => Self::several(ui, doc, many, &mut events),
         }
         events
@@ -340,7 +398,10 @@ impl Panels {
             .filter(|o| {
                 !matches!(
                     o,
-                    Object::Layer(_) | Object::Camera(_) | Object::Material(_)
+                    Object::Layer(_)
+                        | Object::Camera(_)
+                        | Object::Material(_)
+                        | Object::ComponentDefs(_)
                 )
             })
             .map(|o| o.layer())
@@ -370,7 +431,15 @@ impl Panels {
         });
     }
 
-    fn single(&mut self, ui: &mut Ui, doc: &Document, id: ObjectId, events: &mut Vec<Event>) {
+    fn single(
+        &mut self,
+        ui: &mut Ui,
+        doc: &Document,
+        id: ObjectId,
+        catalog: &Catalog,
+        links: &[EntityLink],
+        events: &mut Vec<Event>,
+    ) {
         let Some(object) = doc.get(id) else { return };
         ui.strong(format!("{}  {id}", kind_name(id.kind())));
         let name = match &object {
@@ -388,7 +457,7 @@ impl Panels {
             });
         }
         Self::layer_combo(ui, doc, &[id], events);
-        if let Some(b) = editor_cmd::object_bounds(&object) {
+        if let Some(b) = editor_cmd::extent(doc, id) {
             egui::Grid::new("bounds").num_columns(2).show(ui, |ui| {
                 let s = b.size();
                 for (name, v) in [("min", b.min), ("max", b.max), ("size", s)] {
@@ -403,131 +472,333 @@ impl Panels {
             ui.weak(format!("{faces} faces"));
         }
         if let Object::Entity(e) = &object {
-            self.entity(ui, id, e, events);
+            let has_members = !doc.children(id).is_empty();
+            self.entity(ui, e, catalog, links, has_members, events);
         }
     }
 
     fn entity(
         &mut self,
         ui: &mut Ui,
-        id: ObjectId,
         e: &editor_core::Entity,
+        catalog: &Catalog,
+        links: &[EntityLink],
+        has_members: bool,
         events: &mut Vec<Event>,
     ) {
-        ui.horizontal(|ui| {
-            ui.weak("class");
-            if let Some(classname) = text_field(ui, ("classname", id), &e.classname) {
-                events.push(Event::SetClassname { id, classname });
-            }
-        });
-        if let Some(origin) = e.origin {
-            ui.weak("origin");
-            if let Some((origin, key)) = self.vec3(ui, origin, 1.0) {
-                events.push(Event::SetTransform {
-                    id,
-                    origin: Some(origin),
-                    angles: None,
-                    merge: Some(key),
-                });
-            }
-            ui.weak("angles (pitch yaw roll)");
-            if let Some((angles, key)) = self.vec3(ui, e.angles, 1.0) {
-                events.push(Event::SetTransform {
-                    id,
-                    origin: None,
-                    angles: Some(angles),
-                    merge: Some(key),
-                });
-            }
+        let id = ObjectId::from(e.id);
+        let members = if has_members && self.pivot_only {
+            Members::Keep
+        } else {
+            Members::Carry
+        };
+        ui.weak("origin");
+        if let Some((origin, key)) = self.vec3(ui, e.origin, 1.0) {
+            events.push(Event::SetTransform {
+                id,
+                origin: Some(origin),
+                angles: None,
+                members,
+                merge: Some(key),
+            });
+        }
+        ui.weak("angles (pitch yaw roll)");
+        if let Some((angles, key)) = self.vec3(ui, e.angles, 1.0) {
+            events.push(Event::SetTransform {
+                id,
+                origin: None,
+                angles: Some(angles),
+                members,
+                merge: Some(key),
+            });
+        }
+        if has_members {
+            ui.checkbox(&mut self.pivot_only, "Move pivot only")
+                .on_hover_text("Edit the origin and angles without moving the brushes");
         }
         ui.add_space(4.0);
-        ui.weak("properties");
-        self.properties(ui, id, &e.properties, events);
+        ui.horizontal(|ui| {
+            ui.strong("Components");
+            let missing: Vec<&str> = catalog
+                .components()
+                .map(|r| r.def.name.as_str())
+                .filter(|n| !e.components.contains_key(*n))
+                .collect();
+            ComboBox::from_id_salt(("add-component", id))
+                .selected_text("+ add")
+                .show_ui(ui, |ui| {
+                    for name in missing {
+                        if ui.selectable_label(false, name).clicked() {
+                            events.push(Event::AddComponent {
+                                ids: vec![id],
+                                name: name.to_string(),
+                            });
+                        }
+                    }
+                });
+        });
+        for (name, data) in &e.components {
+            self.component(ui, id, name, data, catalog, events);
+        }
+        Self::links(ui, id, links, events);
     }
 
-    fn properties(
+    fn component(
         &mut self,
         ui: &mut Ui,
         id: ObjectId,
-        properties: &Properties,
+        name: &str,
+        data: &Properties,
+        catalog: &Catalog,
         events: &mut Vec<Event>,
     ) {
-        for (key, value) in properties {
-            ui.horizontal(|ui| {
-                ui.monospace(key);
-                match value {
-                    PropertyValue::Bool(b) => {
-                        let mut next = *b;
-                        if ui.checkbox(&mut next, "").changed() {
-                            events.push(Event::SetProperty {
-                                id,
-                                key: key.clone(),
-                                value: PropertyValue::Bool(next),
-                                merge: None,
-                            });
-                        }
+        let def = catalog.component(name);
+        let header = egui::CollapsingHeader::new(name)
+            .id_salt(("component", id, name))
+            .default_open(true);
+        header.show(ui, |ui| {
+            match def {
+                Some(r) => {
+                    if let Some(d) = &r.def.description {
+                        ui.weak(d);
                     }
-                    PropertyValue::Number(n) => {
-                        let mut next = *n;
-                        if let Some(merge) = self.number(ui, &mut next, 0.1) {
-                            events.push(Event::SetProperty {
-                                id,
-                                key: key.clone(),
-                                value: PropertyValue::Number(next),
-                                merge: Some(merge),
-                            });
+                }
+                None if catalog.components().any(|r| r.from.is_some()) => {
+                    ui.colored_label(WARN, "no definition for this component");
+                }
+                None => {}
+            }
+            let canonical =
+                serde_json::to_string_pretty(&Value::Object(data.clone())).unwrap_or_default();
+            let edit = self.json.entry((id, name.to_string())).or_default();
+            if edit.text == edit.base && canonical != edit.base || edit.base.is_empty() {
+                edit.text = canonical.clone();
+                edit.base = canonical;
+            }
+            ui.add(
+                egui::TextEdit::multiline(&mut edit.text)
+                    .id_salt(("component-json", id, name))
+                    .code_editor()
+                    .desired_rows(6)
+                    .desired_width(f32::INFINITY)
+                    .lock_focus(true),
+            );
+            let dirty = edit.text != edit.base;
+            let check = check_json(&edit.text, catalog, name);
+            let mut applicable = None;
+            match &check {
+                JsonCheck::Syntax(m) => {
+                    ui.colored_label(ERROR, m);
+                }
+                JsonCheck::NotObject => {
+                    ui.colored_label(ERROR, "must be a JSON object");
+                }
+                JsonCheck::Null(p) => {
+                    ui.colored_label(ERROR, format!("{p} is null, which scenes cannot store"));
+                }
+                JsonCheck::Object { data, schema } => {
+                    applicable = Some(data);
+                    if def.is_some() {
+                        if schema.is_empty() {
+                            ui.weak("matches the schema");
                         }
-                    }
-                    PropertyValue::Vec3(v) => {
-                        if let Some((next, merge)) = self.vec3(ui, *v, 0.1) {
-                            events.push(Event::SetProperty {
-                                id,
-                                key: key.clone(),
-                                value: PropertyValue::Vec3(next),
-                                merge: Some(merge),
-                            });
-                        }
-                    }
-                    PropertyValue::String(s) => {
-                        if let Some(next) = text_field(ui, ("property", id, key), s) {
-                            events.push(Event::SetProperty {
-                                id,
-                                key: key.clone(),
-                                value: PropertyValue::String(next),
-                                merge: None,
-                            });
+                        for message in schema {
+                            ui.colored_label(WARN, message);
                         }
                     }
                 }
-                if ui.small_button("×").on_hover_text("Remove").clicked() {
-                    events.push(Event::RemoveProperty {
+            }
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled(dirty && applicable.is_some(), egui::Button::new("Apply"))
+                    .clicked()
+                    && let Some(data) = applicable
+                {
+                    edit.base = serde_json::to_string_pretty(&Value::Object(data.clone()))
+                        .unwrap_or_default();
+                    edit.text = edit.base.clone();
+                    events.push(Event::SetComponent {
                         id,
-                        key: key.clone(),
+                        name: name.to_string(),
+                        data: data.clone(),
+                    });
+                }
+                if ui.add_enabled(dirty, egui::Button::new("Revert")).clicked() {
+                    edit.text = edit.base.clone();
+                }
+                if ui.button("Remove").clicked() {
+                    events.push(Event::RemoveComponent {
+                        id,
+                        name: name.to_string(),
                     });
                 }
             });
+        });
+    }
+
+    fn links(ui: &mut Ui, id: ObjectId, links: &[EntityLink], events: &mut Vec<Event>) {
+        let ours: Vec<&EntityLink> = links
+            .iter()
+            .filter(|l| ObjectId::from(l.from) == id)
+            .collect();
+        let incoming: Vec<&EntityLink> = links
+            .iter()
+            .filter(|l| l.to.is_some_and(|t| ObjectId::from(t) == id))
+            .collect();
+        if ours.is_empty() && incoming.is_empty() {
+            return;
         }
+        ui.add_space(4.0);
+        ui.weak("links");
+        for l in ours {
+            ui.horizontal(|ui| {
+                ui.monospace(format!("{}{} ->", l.component, l.pointer));
+                match (l.status, l.to) {
+                    (LinkStatus::Ok, Some(to)) => {
+                        if ui.link(to.to_string()).clicked() {
+                            events.push(Event::Select {
+                                id: to.into(),
+                                additive: false,
+                            });
+                        }
+                    }
+                    (LinkStatus::Missing, _) => {
+                        ui.colored_label(WARN, format!("{} (missing)", l.value));
+                    }
+                    (LinkStatus::NotEntity, _) => {
+                        ui.colored_label(WARN, format!("{} (not an entity)", l.value));
+                    }
+                    _ => {
+                        ui.colored_label(WARN, format!("{:?} (not an id)", l.value));
+                    }
+                }
+            });
+        }
+        for l in incoming {
+            ui.horizontal(|ui| {
+                ui.weak("from");
+                if ui.link(l.from.to_string()).clicked() {
+                    events.push(Event::Select {
+                        id: l.from.into(),
+                        additive: false,
+                    });
+                }
+                ui.monospace(format!("{}{}", l.component, l.pointer));
+            });
+        }
+    }
+
+    pub fn browser(
+        &mut self,
+        ui: &mut Ui,
+        catalog: &Catalog,
+        defs: &ComponentDefsList,
+    ) -> Vec<Event> {
+        let mut events = Vec::new();
         ui.horizontal(|ui| {
             ui.add(
-                egui::TextEdit::singleline(&mut self.new_key)
-                    .desired_width(70.0)
-                    .hint_text("key"),
+                egui::TextEdit::singleline(&mut self.browser_search)
+                    .desired_width(ui.available_width() - 60.0)
+                    .hint_text("search"),
             );
-            ui.add(
-                egui::TextEdit::singleline(&mut self.new_value)
-                    .desired_width(70.0)
-                    .hint_text("value"),
-            );
-            let ready = !self.new_key.trim().is_empty();
-            if ui.add_enabled(ready, egui::Button::new("Add")).clicked() {
-                events.push(Event::SetProperty {
-                    id,
-                    key: self.new_key.trim().to_string(),
-                    value: parse_value(&self.new_value),
-                    merge: None,
+            if ui
+                .small_button("Reload")
+                .on_hover_text("Read the definition files again")
+                .clicked()
+            {
+                events.push(Event::ReloadDefs);
+            }
+        });
+        if ui
+            .button("Entity from selection")
+            .on_hover_text("Make one entity that owns the selected world brushes and meshes")
+            .clicked()
+        {
+            events.push(Event::EntityFromSelection);
+        }
+        let needle = self.browser_search.trim().to_lowercase();
+        let mut groups: std::collections::BTreeMap<&str, Vec<&editor_core::ComponentDef>> =
+            Default::default();
+        for r in catalog.components() {
+            let c = &r.def;
+            if needle.is_empty() || c.name.to_lowercase().contains(&needle) {
+                groups
+                    .entry(c.category.as_deref().unwrap_or("other"))
+                    .or_default()
+                    .push(c);
+            }
+        }
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for (category, components) in groups {
+                egui::CollapsingHeader::new(category)
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        for c in components {
+                            Self::component_row(ui, c, &mut events);
+                        }
+                    });
+            }
+            ui.add_space(8.0);
+            ui.separator();
+            ui.strong("Definitions");
+            for d in &defs.defs {
+                ui.horizontal_wrapped(|ui| {
+                    let what = d.path.as_deref().unwrap_or("embedded");
+                    ui.monospace(format!("{}  {what}", d.id));
+                    ui.weak(format!("{} components", d.components));
+                    if d.path.is_some() && ui.small_button("Embed").clicked() {
+                        events.push(Event::EmbedDefs(d.id.into()));
+                    }
+                    if ui.small_button("Remove").clicked() {
+                        events.push(Event::RemoveDefs(d.id.into()));
+                    }
                 });
-                self.new_key.clear();
-                self.new_value.clear();
+            }
+            for p in &defs.problems {
+                ui.colored_label(ERROR, &p.message);
+            }
+            if ui.button("Add file...").clicked() {
+                events.push(Event::AddDefsFile);
+            }
+        });
+        events
+    }
+
+    fn component_row(ui: &mut Ui, c: &editor_core::ComponentDef, events: &mut Vec<Event>) {
+        let [r, g, b] = c.color.map_or_else(
+            || editor_render::material_rgb8(&c.name),
+            |rgb| rgb.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8),
+        );
+        ui.horizontal(|ui| {
+            let (swatch, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+            ui.painter()
+                .rect_filled(swatch, 2.0, egui::Color32::from_rgb(r, g, b));
+            let drag_id = egui::Id::new(("component-drag", c.name.as_str()));
+            let response = ui
+                .dnd_drag_source(
+                    drag_id,
+                    ComponentDrag {
+                        name: c.name.to_string(),
+                    },
+                    |ui| {
+                        ui.label(c.name.as_str());
+                    },
+                )
+                .response;
+            if let Some(d) = &c.description {
+                response.on_hover_text(d);
+            }
+            if ui
+                .small_button("+")
+                .on_hover_text(
+                    "Add to the selected entities, make an entity of the selected brushes, or place a point entity",
+                )
+                .clicked()
+            {
+                events.push(Event::PlaceComponent {
+                    name: c.name.to_string(),
+                    point: None,
+                });
             }
         });
     }
@@ -549,15 +820,42 @@ impl Panels {
 mod tests {
     use super::*;
 
+    fn catalog() -> Catalog {
+        Catalog::from_components([(
+            Some(editor_core::ComponentDefsId(1)),
+            editor_core::ComponentDef {
+                name: "light".parse().unwrap(),
+                description: None,
+                category: None,
+                color: None,
+                size: None,
+                schema: serde_json::json!({
+                    "type": "object",
+                    "properties": { "intensity": { "type": "number" } }
+                }),
+            },
+        )])
+    }
+
     #[test]
-    fn typed_values_are_recognised() {
-        assert_eq!(parse_value("true"), PropertyValue::Bool(true));
-        assert_eq!(parse_value(" 2.5 "), PropertyValue::Number(2.5));
+    fn text_is_checked_for_syntax_shape_nulls_and_schema() {
+        let c = catalog();
+        assert!(matches!(check_json("{", &c, "light"), JsonCheck::Syntax(_)));
+        assert_eq!(check_json("[1]", &c, "light"), JsonCheck::NotObject);
         assert_eq!(
-            parse_value("1 2 3"),
-            PropertyValue::Vec3(DVec3::new(1.0, 2.0, 3.0))
+            check_json(r#"{"a": [null]}"#, &c, "light"),
+            JsonCheck::Null("/a/0".into())
         );
-        assert_eq!(parse_value("1 2"), PropertyValue::String("1 2".to_string()));
-        assert_eq!(parse_value("door"), PropertyValue::String("door".into()));
+        match check_json(r#"{"intensity": "bright"}"#, &c, "light") {
+            JsonCheck::Object { schema, .. } => {
+                assert_eq!(schema.len(), 1);
+                assert!(schema[0].starts_with("/intensity"));
+            }
+            other => panic!("{other:?}"),
+        }
+        match check_json(r#"{"intensity": 3}"#, &c, "other") {
+            JsonCheck::Object { schema, .. } => assert!(schema.is_empty()),
+            other => panic!("{other:?}"),
+        }
     }
 }

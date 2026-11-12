@@ -71,27 +71,30 @@ fn mesh_roundtrips() {
 
 #[test]
 fn entity_roundtrips() {
-    let mut properties = Properties::new();
-    properties.insert("light".into(), PropertyValue::Number(300.0));
-    properties.insert("on".into(), PropertyValue::Bool(true));
-    properties.insert(
-        "tint".into(),
-        PropertyValue::Vec3(DVec3::new(1.0, 0.5, 0.0)),
-    );
-    properties.insert("target".into(), PropertyValue::String("door".into()));
-    for origin in [Some(DVec3::new(8.0, 16.0, 24.0)), None] {
-        roundtrip(Object::Entity(Entity {
-            flags: Default::default(),
-            id: EntityId(5),
-            classname: "light".into(),
-            layer: layer(),
-            group: None,
-            origin,
-            angles: DVec3::new(0.0, 90.0, 0.0),
-            properties: properties.clone(),
-            extra: extra(),
-        }));
-    }
+    let data = match serde_json::json!({
+        "light": 300,
+        "on": true,
+        "tint": [1.0, 0.5, 0.0],
+        "keys": [{ "time": 0, "offset": [0, 0, 64] }],
+        "link": "e9",
+    }) {
+        serde_json::Value::Object(map) => map,
+        _ => unreachable!(),
+    };
+    roundtrip(Object::Entity(Entity {
+        flags: Default::default(),
+        id: EntityId(5),
+        layer: layer(),
+        group: None,
+        origin: DVec3::new(8.0, 16.0, 24.0),
+        angles: DVec3::new(0.0, 90.0, 0.0),
+        components: [
+            ("light".to_string(), data.clone()),
+            ("empty".to_string(), Default::default()),
+        ]
+        .into(),
+        extra: extra(),
+    }));
 }
 
 #[test]
@@ -128,4 +131,40 @@ fn group_layer_camera_roundtrip() {
             extra: Extra::new(),
         }));
     }
+}
+
+#[test]
+fn find_null_names_the_pointer() {
+    let v = serde_json::json!({ "a": [1, { "b/c": null }] });
+    assert_eq!(find_null(&v).as_deref(), Some("/a/1/b~1c"));
+    assert_eq!(find_null(&serde_json::json!({ "a": [1, 2] })), None);
+}
+
+#[test]
+fn component_defs_roundtrip() {
+    roundtrip(Object::ComponentDefs(ComponentDefs {
+        id: ComponentDefsId(4),
+        source: DefsSource::Embedded {
+            defs: ComponentDefsFile {
+                version: DEFS_VERSION,
+                components: vec![ComponentDef {
+                    name: "light".parse().unwrap(),
+                    description: None,
+                    category: Some("lights".into()),
+                    color: Some([1.0, 0.5, 0.0]),
+                    size: None,
+                    schema: serde_json::json!({ "type": "object" }),
+                }],
+            },
+        },
+        extra: Extra::new(),
+    }));
+    roundtrip(Object::ComponentDefs(ComponentDefs {
+        id: ComponentDefsId(5),
+        source: DefsSource::Path {
+            path: "defs/game.components.json".into(),
+        },
+        extra: Extra::new(),
+    }));
+    assert_eq!("d4".parse::<ObjectId>().unwrap(), ComponentDefsId(4).into());
 }

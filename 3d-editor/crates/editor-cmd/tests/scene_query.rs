@@ -25,19 +25,19 @@ fn list_filters_and_pages() {
     let e = id_of(&exec(
         &mut s,
         "entity.create",
-        json!({ "classname": "light", "origin": [4, 4, 4] }),
+        json!({ "origin": [4, 4, 4], "components": { "light": {} } }),
     ));
     let _ = id_of(&exec(
         &mut s,
         "entity.create",
-        json!({ "classname": "spawn", "origin": [200, 0, 0] }),
+        json!({ "origin": [200, 0, 0] }),
     ));
 
     let brushes = exec(&mut s, "scene.list", json!({ "kind": "brush" }));
     assert_eq!(ids(&brushes, "objects"), [a.clone(), b.clone()]);
     assert_eq!(
         ids(
-            &exec(&mut s, "scene.list", json!({ "classname": "light" })),
+            &exec(&mut s, "scene.list", json!({ "component": "light" })),
             "objects"
         ),
         [e.clone()]
@@ -208,7 +208,7 @@ fn raycast_hits_brush_mesh_and_entity() {
     let e = id_of(&exec(
         &mut s,
         "entity.create",
-        json!({ "classname": "light", "origin": [100, 0, 0] }),
+        json!({ "origin": [100, 0, 0] }),
     ));
     let h = &exec(
         &mut s,
@@ -319,7 +319,7 @@ fn bounds_of_groups_entities_and_layers() {
     let ent = id_of(&exec(
         &mut s,
         "entity.create_brush_entity",
-        json!({ "classname": "func_door", "objects": [c] }),
+        json!({ "objects": [c] }),
     ));
     let r = exec(&mut s, "scene.bounds", json!({ "ids": [outer, ent] }));
     let items = &ok(&r)["result"]["bounds"];

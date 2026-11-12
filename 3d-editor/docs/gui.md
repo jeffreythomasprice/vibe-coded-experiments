@@ -26,6 +26,11 @@ Run it with `cargo run -p editor-app [scene.toml]`; it connects to `editor-serve
 - The Surface tool (key `0`) selects faces instead of objects, through the server's shared face selection (`select.faces.*`), so an agent sees and sets it. A click finds the first pickable brush or mesh face under the cursor with `ray_hits` (`Pane::surface_face`), in any view. Shift toggles, Ctrl+click assigns the material chosen in the inspector, Ctrl+Shift+click wraps the first selected face's image onto the clicked face, arrow keys nudge the offset by the grid (Shift 1 texel) and Page Up/Down rotate 15°. Selecting faces clears the object selection and the other way round. Selected faces draw tinted orange with an outline (`PreparedScene` takes them in `SceneEnv`).
 - `surface.rs` draws the face inspector and the material browser/editor and returns its own `Event`s: field edits become `face.set_uv` in `relative` mode (so editing one field of several faces changes only that field), buttons become `face.align_uv` or relative `face.set_uv`, thumbnails are decoded through the renderer's shared `TextureCache` and cached per material by image key. "Pick image…" uses `rfd`. See [materials.md](materials.md).
 - The toolbar's **Tex lock** toggle (on by default) is sent as `texture_lock` on every transform and vertex/face drag.
+- The replica itself is `editor_proto::Replica` (shared with `editor-game`; see [game.md](game.md)); `Remote` wraps it and derefs to it.
+- Component definitions are resolved by the server (it reads the files, relative to the scene), so the replica fetches `component_defs.list` (`Remote::refresh_defs`) on connect and whenever a `d` record or the file path changes, builds an `editor_cmd::component_defs::Catalog` from the resolved components, and bumps `defs_generation` (part of the `PreparedScene` key). The Reload button refetches after a definitions file changes on disk. Link arrows and markers come from that catalog: `PreparedScene` takes the components' looks and the `EntityLink`s in `SceneEnv`, and draws the arrows on top of the scene. A selected entity that owns geometry also gets a small pivot cross at its origin.
+- The inspector shows an entity's origin and angles (with "Move pivot only" for an entity that owns geometry, which sends `members: keep`) and one collapsible section per component (`Panels::component`). Each is a JSON text area, kept per (entity, component) in `Panels.json` and re-seeded from the document only while the user has no unsaved edit. `check_json` classifies the text (syntax error, not an object, a `null`, or an object plus its schema violations); only the first three disable Apply, which sends `entity.set_component`. Remove sends `entity.remove_component`, and the `+ add` combo sends `entity.add_component`. Warnings from ops (schema, unknown component) land in the status bar.
+- The left panel has Outliner and Entities tabs. The Entities tab is the component browser (`Panels::browser`): `Ui::dnd_drag_source` carries a `ComponentDrag` payload, and `Pane::show` accepts it with `Response::dnd_release_payload` (it uses `contains_pointer`, since `hovered` is false while another widget is dragged) and turns the pointer into a point with `Pane::drop_point`. The editor then sends `entity.create` with the component's schema defaults (`Editor::place_component`). A drag source senses only drags, so placing without dragging is a `+` button instead of a double-click; it adds the component to the selected entities, or makes an entity of the selected world geometry (`entity.create_brush_entity`), or places a point entity. "Entity from selection" makes a component-less entity of the selected geometry.
+- Play (menu bar, or F5) starts the `editor-game` binary that sits next to the editor's own executable with `--session <current session id>`; the game shows the live document and the editor never runs the simulation itself.
 - `theme.rs` holds the style: our own dark and light palettes, and stock egui dark for comparison (View > Theme).
 
 ## Controls
@@ -54,6 +59,8 @@ Run it with `cargo run -p editor-app [scene.toml]`; it connects to `editor-serve
 | Any view | LMB click | select (Shift adds or removes) |
 | Any view | Ctrl + LMB click | select the next object along the ray, wrapping (Shift adds) |
 | Any view | LMB double-click | open the group under the cursor to edit its members |
+| Any view | drag a component from the Entities tab | create a point entity with that component under the cursor |
+| Anywhere | F5 | open the scene in the game client |
 | Any view | Shift + LMB drag, Select tool | paint-select |
 | Anywhere | Ctrl+A, Ctrl+I, Ctrl+Shift+A | select all, invert, none |
 | Anywhere | 1 2 3 4 5 6 7 8 9 | Select, Move, Box, Rotate, Scale, Vertex, Clip, Edge, Face |
@@ -114,7 +121,7 @@ Not verified (all testing ran in a virtual X server, scale factor 1): a real dis
 
 ## Next
 
-- Controls to settle before building more tools: marquee select, where the entity browser docks. Dragging a texture across a face in the viewport is not built (offset fields, nudge keys and buttons only).
+- Controls to settle before building more tools: marquee select. Dragging a texture across a face in the viewport is not built (offset fields, nudge keys and buttons only).
 - Cache MSAA/depth textures per pane size, and skip redrawing panes whose camera and document are unchanged.
 - Cursor lock (winit `set_cursor_grab`) for mouse-look.
 - Outliner: reveal every selected object, not just the first, and add rename and drag to regroup.

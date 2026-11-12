@@ -111,7 +111,7 @@ mod tests {
         let entity = id(&run(
             &mut s,
             "entity.create_brush_entity",
-            json!({ "classname": "func_door", "objects": [owned.to_string()] }),
+            json!({ "objects": [owned.to_string()] }),
         ));
 
         let tree = Tree::new(s.document());

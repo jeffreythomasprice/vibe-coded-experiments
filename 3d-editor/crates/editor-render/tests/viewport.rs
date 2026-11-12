@@ -29,6 +29,7 @@ fn session_with_box() -> (Session, ObjectId) {
 fn prepared(s: &Session) -> PreparedScene {
     let textures = Box::leak(Box::default());
     let faces = Box::leak(Box::default());
+    let looks = Box::leak(Box::default());
     PreparedScene::new(
         s.document(),
         &BTreeSet::new(),
@@ -38,6 +39,8 @@ fn prepared(s: &Session) -> PreparedScene {
             scene_dir: None,
             textures,
             faces,
+            looks,
+            links: &[],
         },
     )
 }

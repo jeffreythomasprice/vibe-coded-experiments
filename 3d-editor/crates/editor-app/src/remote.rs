@@ -1,13 +1,10 @@
-use std::collections::BTreeSet;
 use std::path::Path;
 
 use editor_cmd::args::Attach;
-use editor_cmd::results::SessionAttached;
+use editor_cmd::component_defs::Catalog;
+use editor_cmd::results::{ComponentDefsList, SessionAttached};
 use editor_cmd::{CommandError, ErrorResponse, Request, Response, Success};
-use editor_core::{Document, FaceId, ObjectId};
-use editor_proto::{
-    Client, ClientError, Config, ConfigError, FileInfo, HistoryInfo, ServerEvent, WakeFn,
-};
+use editor_proto::{Client, ClientError, Config, ConfigError, Replica, ReplicaError, WakeFn};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RemoteError {
@@ -17,21 +14,33 @@ pub enum RemoteError {
     Client(#[from] ClientError),
     #[error("{0}")]
     Refused(String),
-    #[error("the server sent an unreadable document: {0}")]
-    Document(#[from] editor_fmt::LoadError),
+    #[error(transparent)]
+    Replica(#[from] ReplicaError),
 }
 
-/// A local copy of the attached session, kept current by the server's change events.
+/// The attached session: a `Replica` kept current by the server's events, plus the resolved component definitions.
 pub struct Remote {
     client: Client,
-    pub doc: Document,
-    pub selection: BTreeSet<ObjectId>,
-    pub face_selection: BTreeSet<(ObjectId, FaceId)>,
-    pub revision: u64,
-    pub file: FileInfo,
-    pub history: HistoryInfo,
-    pub session: String,
-    pub closed: bool,
+    replica: Replica,
+    /// Resolved by the server, which reads definition files relative to the scene.
+    pub catalog: Catalog,
+    pub defs: ComponentDefsList,
+    pub defs_generation: u64,
+    defs_dirty: bool,
+}
+
+impl std::ops::Deref for Remote {
+    type Target = Replica;
+
+    fn deref(&self) -> &Replica {
+        &self.replica
+    }
+}
+
+impl std::ops::DerefMut for Remote {
+    fn deref_mut(&mut self) -> &mut Replica {
+        &mut self.replica
+    }
 }
 
 fn refusal(error: Option<&ErrorResponse>) -> String {
@@ -49,22 +58,15 @@ impl Remote {
         let client = Client::connect_with(&config, "gui", true, true, true, Some(wake))?;
         let mut remote = Self {
             client,
-            doc: Document::new("untitled"),
-            selection: BTreeSet::new(),
-            face_selection: BTreeSet::new(),
-            revision: 0,
-            file: FileInfo {
-                path: None,
-                name: String::new(),
-                dirty: false,
+            replica: Replica::default(),
+            catalog: Catalog::default(),
+            defs: ComponentDefsList {
+                defs: Vec::new(),
+                components: Vec::new(),
+                problems: Vec::new(),
             },
-            history: HistoryInfo {
-                can_undo: false,
-                can_redo: false,
-                transaction: None,
-            },
-            session: String::new(),
-            closed: false,
+            defs_generation: 0,
+            defs_dirty: true,
         };
         let attached = remote.attach(path)?;
         if path.is_none() && attached.created {
@@ -113,41 +115,35 @@ impl Remote {
         let mut changed = false;
         while let Some(event) = self.client.try_event() {
             changed = true;
-            match event {
-                ServerEvent::Snapshot(s) => {
-                    self.doc = editor_fmt::read(&s.document_toml)?;
-                    self.selection = s.selection.into_iter().collect();
-                    self.face_selection = face_set(s.face_selection);
-                    self.revision = s.revision;
-                    self.file = s.file;
-                    self.history = s.history;
-                    self.session = s.session;
-                }
-                ServerEvent::Changed(c) => {
-                    for object in c.upsert {
-                        self.doc.insert(object);
-                    }
-                    for id in c.deleted {
-                        self.doc.remove(id);
-                    }
-                    if let Some(selection) = c.selection {
-                        self.selection = selection.into_iter().collect();
-                    }
-                    if let Some(faces) = c.face_selection {
-                        self.face_selection = face_set(faces);
-                    }
-                    if let Some(file) = c.file {
-                        self.file = file;
-                    }
-                    if let Some(history) = c.history {
-                        self.history = history;
-                    }
-                    self.revision = c.revision;
-                }
-                ServerEvent::Closed => self.closed = true,
-            }
+            let applied = self.replica.apply(event)?;
+            self.defs_dirty |= applied.defs;
         }
         Ok(changed)
+    }
+
+    /// Asks the server to resolve the definitions again (after a file changed on disk, or the scene moved).
+    pub fn reload_defs(&mut self) {
+        self.defs_dirty = true;
+    }
+
+    /// Refetches the resolved definitions when something they depend on changed.
+    pub fn refresh_defs(&mut self) -> Result<(), RemoteError> {
+        if !self.defs_dirty {
+            return Ok(());
+        }
+        self.defs_dirty = false;
+        let reply = self
+            .client
+            .request(Request::new("component_defs.list", serde_json::json!({})))?;
+        if !reply.is_ok() {
+            return Err(RemoteError::Refused(refusal(reply.error())));
+        }
+        let list = reply.result::<ComponentDefsList>()?;
+        self.catalog =
+            Catalog::from_components(list.components.iter().map(|c| (c.from, c.def.clone())));
+        self.defs = list;
+        self.defs_generation += 1;
+        Ok(())
     }
 
     /// The other client holding a transaction open, if any.
@@ -158,13 +154,4 @@ impl Remote {
             .filter(|t| t.conn != self.client.conn())
             .map(|t| (t.holder.as_str(), t.label.as_str()))
     }
-}
-
-fn face_set(refs: Vec<editor_core::ElementRef>) -> BTreeSet<(ObjectId, FaceId)> {
-    refs.into_iter()
-        .filter_map(|r| match r.part {
-            editor_core::Part::Face(f) => Some((r.object, f)),
-            _ => None,
-        })
-        .collect()
 }

@@ -83,6 +83,7 @@ global_id!(GroupId, 'g');
 global_id!(LayerId, 'l');
 global_id!(CameraId, 'c');
 global_id!(MaterialId, 't');
+global_id!(ComponentDefsId, 'd');
 
 #[derive(
     Debug,

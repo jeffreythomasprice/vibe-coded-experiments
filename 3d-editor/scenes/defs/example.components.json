@@ -1,0 +1,275 @@
+{
+  "version": 2,
+  "components": [
+    {
+      "name": "light",
+      "category": "lights",
+      "description": "A point light.",
+      "color": [
+        1,
+        0.84,
+        0.25
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "color": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "minItems": 3,
+            "maxItems": 3,
+            "default": [
+              1,
+              1,
+              1
+            ]
+          },
+          "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "default": 300
+          },
+          "radius": {
+            "type": "number",
+            "minimum": 0,
+            "default": 512
+          },
+          "flicker": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "sound_source",
+      "category": "sound",
+      "description": "A positional sound emitter.",
+      "color": [
+        0.35,
+        0.65,
+        1
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "sound": {
+            "type": "string"
+          },
+          "volume": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 1
+          },
+          "radius": {
+            "type": "number",
+            "minimum": 0,
+            "default": 256
+          },
+          "loop": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "sound"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "relay",
+      "category": "logic",
+      "description": "Forwards an event to other entities.",
+      "color": [
+        0.9,
+        0.4,
+        0.9
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "type": "string",
+            "default": "trigger"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/entity"
+            },
+            "default": []
+          }
+        },
+        "$defs": {
+          "entity": {
+            "type": "string",
+            "editor": {
+              "linkType": "entityID"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "button",
+      "category": "logic",
+      "description": "Pressing it sends an event to its targets.",
+      "color": [
+        0.9,
+        0.55,
+        0.2
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "type": "string",
+            "default": "press"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/entity"
+            },
+            "default": []
+          }
+        },
+        "$defs": {
+          "entity": {
+            "type": "string",
+            "editor": {
+              "linkType": "entityID"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "trigger_zone",
+      "category": "logic",
+      "description": "An invisible region that reports entering and leaving.",
+      "color": [
+        0.3,
+        0.9,
+        0.9
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "on_enter": {
+            "$ref": "#/$defs/handlers"
+          },
+          "on_exit": {
+            "$ref": "#/$defs/handlers"
+          }
+        },
+        "$defs": {
+          "handlers": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "editor": {
+                    "linkType": "entityID"
+                  }
+                },
+                "event": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "target",
+                "event"
+              ]
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "door",
+      "category": "movers",
+      "description": "A door: whether it is locked and the sound it makes. Motion comes from keyframe_animation.",
+      "color": [
+        0.7,
+        0.55,
+        0.35
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "locked": {
+            "type": "boolean",
+            "default": false
+          },
+          "sound": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "elevator",
+      "category": "movers",
+      "description": "A platform that travels between named stops.",
+      "color": [
+        0.55,
+        0.6,
+        0.7
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "stops": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "wait": {
+                  "type": "number",
+                  "minimum": 0,
+                  "default": 2
+                }
+              },
+              "required": [
+                "offset"
+              ]
+            }
+          },
+          "speed": {
+            "type": "number",
+            "minimum": 0,
+            "default": 80
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}

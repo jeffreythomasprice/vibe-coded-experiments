@@ -472,7 +472,7 @@ fn legend_and_colour_overrides() {
     exec(
         &mut s,
         "entity.create",
-        json!({ "classname": "light", "origin": [100, 0, 0] }),
+        json!({ "origin": [100, 0, 0], "components": { "light": {} } }),
     );
     let (shot, img) = shoot(
         &s,
@@ -569,7 +569,7 @@ fn label_kinds_and_min_label_pixels_filter_labels() {
     exec(
         &mut s,
         "entity.create",
-        json!({ "classname": "light", "origin": [100, 32, 32] }),
+        json!({ "origin": [100, 32, 32], "components": { "light": {} } }),
     );
     let overlay = json!({ "overlays": ["labels"] });
     let (shot, _) = shoot(&s, with(flat("viewport.front"), overlay.clone()));
@@ -762,4 +762,164 @@ fn emissive_adds_light_and_a_missing_image_shows_a_checker() {
         "{:?}",
         shot.warnings
     );
+}
+
+fn linked_pair(s: &mut Session) -> (String, String) {
+    exec(
+        s,
+        "component_defs.add",
+        json!({ "source": "embedded", "defs": { "version": 2, "components": [{
+            "name": "relay", "color": [1, 0, 1],
+            "size": { "min": [-4, -4, -4], "max": [4, 4, 4] },
+            "schema": { "type": "object", "properties": {
+                "link": { "type": "string", "editor": { "linkType": "entityID" } }
+            } }
+        }] } }),
+    );
+    let b = exec(
+        s,
+        "entity.create",
+        json!({ "origin": [100, 0, 0], "components": { "relay": {} } }),
+    )["result"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let a = exec(
+        s,
+        "entity.create",
+        json!({ "origin": [-100, 0, 0], "components": { "relay": { "link": b } } }),
+    )["result"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    (a, b)
+}
+
+fn lit_pixels(img: &RgbaImage, x0: u32, x1: u32, y: u32) -> usize {
+    (x0..x1).filter(|&x| !is_background(img, x, y)).count()
+}
+
+#[test]
+fn class_colour_and_size_override_the_built_in_marker() {
+    let mut s = session();
+    linked_pair(&mut s);
+    let (shot, img) = shoot(&s, flat("viewport.top"));
+    assert!(
+        shot.legend["entities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["component"] == "relay" && e["color"] == "#ff00ff"),
+        "{:?}",
+        shot.legend
+    );
+    assert!(
+        (0..img.width()).any(|x| (0..img.height()).any(|y| rgb(&img, x, y) == [255, 0, 255])),
+        "magenta marker is drawn"
+    );
+}
+
+#[test]
+fn links_overlay_draws_an_arrow_between_linked_entities() {
+    let mut s = session();
+    linked_pair(&mut s);
+    let (_, plain) = shoot(&s, flat("viewport.top"));
+    let (_, linked) = shoot(
+        &s,
+        with(flat("viewport.top"), json!({ "overlays": ["links"] })),
+    );
+    let mid = plain.height() / 2;
+    let (x0, x1) = (plain.width() / 2 - 30, plain.width() / 2 + 30);
+    assert_eq!(lit_pixels(&plain, x0, x1, mid), 0, "nothing between them");
+    assert!(
+        lit_pixels(&linked, x0, x1, mid) > 20,
+        "the arrow crosses the gap"
+    );
+}
+
+#[test]
+fn dangling_links_draw_no_arrow() {
+    let mut s = session();
+    let (_, b) = linked_pair(&mut s);
+    exec(&mut s, "object.delete", json!({ "ids": [b] }));
+    let (_, plain) = shoot(&s, flat("viewport.top"));
+    let (_, linked) = shoot(
+        &s,
+        with(flat("viewport.top"), json!({ "overlays": ["links"] })),
+    );
+    assert_eq!(plain.as_raw(), linked.as_raw());
+}
+
+fn animated_box(s: &mut Session) {
+    make_box(s, [0, 0, 0], [64, 64, 64], "mover");
+    make_box(s, [-200, 0, 0], [-136, 64, 64], "wall");
+    let ents = exec(s, "scene.list", json!({ "kind": "brush" }));
+    let mover = ents["result"]["objects"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let e = exec(
+        s,
+        "entity.create_brush_entity",
+        json!({ "objects": [mover], "components": { "keyframe_animation": {
+            "keyframes": [{ "time": 0 }, { "time": 2, "offset": [200, 0, 0] }, { "time": 4, "offset": [200, 0, 0] }]
+        } } }),
+    )["result"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let _ = e;
+}
+
+fn sim(time: f64) -> Value {
+    json!({
+        "camera": { "ortho": "top", "position": [0, 32, 0], "zoom": 1.0 },
+        "width": 600, "height": 200, "mode": "flat",
+        "simulate": { "time": time },
+    })
+}
+
+#[test]
+fn simulate_poses_animated_entities_and_leaves_the_rest() {
+    let mut s = session();
+    animated_box(&mut s);
+    let (_, rest) = shoot(&s, sim(0.0));
+    let (_, moved) = shoot(&s, sim(2.0));
+    let (_, half) = shoot(&s, sim(1.0));
+
+    let at = |img: &RgbaImage, wx: i32| rgb(img, (300 + wx) as u32, 100);
+    assert_eq!(at(&rest, 32), material_rgb8("mover"));
+    assert!(is_background(&moved, (300 + 32) as u32, 100));
+    assert_eq!(at(&moved, 232), material_rgb8("mover"));
+    assert_eq!(at(&half, 132), material_rgb8("mover"));
+    for img in [&rest, &moved, &half] {
+        assert_eq!(at(img, -168), material_rgb8("wall"));
+    }
+}
+
+#[test]
+fn editor_view_never_animates() {
+    let mut s = session();
+    animated_box(&mut s);
+    let mut plain = sim(2.0);
+    plain.as_object_mut().unwrap().remove("simulate");
+    let (_, img) = shoot(&s, plain);
+    assert_eq!(rgb(&img, 332, 100), material_rgb8("mover"));
+}
+
+#[test]
+fn simulate_draws_no_markers_or_hidden_flags() {
+    let mut s = session();
+    make_box(&mut s, [0, 0, 0], [64, 64, 64], "a");
+    exec(
+        &mut s,
+        "entity.create",
+        json!({ "origin": [100, 32, 32], "components": { "light": {} } }),
+    );
+    let (editor, _) = shoot(&s, flat("viewport.front"));
+    assert!(!editor.legend["entities"].as_array().unwrap().is_empty());
+    let mut args = flat("viewport.front");
+    args["simulate"] = json!({});
+    let (played, _) = shoot(&s, args);
+    assert!(played.legend["entities"].as_array().unwrap().is_empty());
 }

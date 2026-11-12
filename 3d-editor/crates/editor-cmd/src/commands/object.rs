@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use editor_core::{EntityId, GroupId, LayerId, Object, ObjectId};
+use editor_core::{EntityId, GroupId, LayerId, Object, ObjectId, Value};
 use glam::{DAffine3, DVec3};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -9,8 +9,10 @@ use super::results;
 use super::transform::{AxisArg, about, reflection, transform_object};
 use super::util::{check_finite, descendants, non_empty, renumber, with_layer, world_object};
 use super::{CmdResult, Outcome};
+use crate::component_defs::Catalog;
 use crate::ctx::Ctx;
 use crate::error::CommandError;
+use crate::links;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -67,12 +69,28 @@ pub fn delete(ctx: &mut Ctx, args: Delete) -> CmdResult<results::Deleted> {
         );
     }
 
+    let catalog = Catalog::resolve(ctx.doc(), ctx.scene_dir());
+    let warnings: Vec<String> = links::doc_links(ctx.doc(), &catalog)
+        .into_iter()
+        .filter(|l| {
+            l.to.is_some_and(|t| doomed.contains(&t.into())) && !doomed.contains(&l.from.into())
+        })
+        .map(|l| {
+            format!(
+                "{} still links to deleted {} (properties{})",
+                l.from, l.value, l.pointer
+            )
+        })
+        .collect();
     for &id in &doomed {
         ctx.remove(id);
     }
-    Ok(Outcome::new(results::Deleted {
-        deleted: doomed.len(),
-    }))
+    Ok(Outcome::with_warnings(
+        results::Deleted {
+            deleted: doomed.len(),
+        },
+        warnings,
+    ))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -119,6 +137,33 @@ fn remap(object: Object, new_id: ObjectId, map: &BTreeMap<ObjectId, ObjectId>) -
     }
 }
 
+/// Points links between copied entities at the copies; links to anything not copied stay.
+fn remap_links(
+    catalog: &Catalog,
+    entity: &mut editor_core::Entity,
+    map: &BTreeMap<ObjectId, ObjectId>,
+) {
+    for (name, data) in &mut entity.components {
+        for link in catalog.links(name, data) {
+            let Some(new) = link
+                .value
+                .parse::<ObjectId>()
+                .ok()
+                .and_then(|old| map.get(&old))
+            else {
+                continue;
+            };
+            let mut root = Value::Object(std::mem::take(data));
+            if let Some(slot) = root.pointer_mut(&link.pointer) {
+                *slot = Value::String(new.to_string());
+            }
+            if let Value::Object(props) = root {
+                *data = props;
+            }
+        }
+    }
+}
+
 fn copy_order(ctx: &Ctx, ids: &[ObjectId]) -> Result<Vec<ObjectId>, CommandError> {
     non_empty("ids", ids)?;
     let mut all = BTreeSet::new();
@@ -151,10 +196,14 @@ fn make_copy(
         .iter()
         .map(|&old| (old, renumber(old, ctx.alloc_id())))
         .collect();
+    let catalog = Catalog::resolve(ctx.doc(), ctx.scene_dir());
     let mut copies = Vec::new();
     for &old in order {
         let source = ctx.doc().get(old).expect("collected from the document");
         let mut copy = remap(source, map[&old], &map);
+        if let Object::Entity(e) = &mut copy {
+            remap_links(&catalog, e, &map);
+        }
         if let Some(m) = m {
             copy = transform_object(&copy, m, true)?;
         }

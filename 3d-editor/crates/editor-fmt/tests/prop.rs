@@ -12,7 +12,7 @@ struct Spec {
     scale: (f64, f64),
     rotation: f64,
     props: Vec<(String, PropValue)>,
-    classname: String,
+    component: String,
     origin: Option<[f64; 3]>,
     camera: Option<(f64, f64, f64, bool)>,
     nest: bool,
@@ -24,6 +24,7 @@ enum PropValue {
     Num(f64),
     Vec([f64; 3]),
     Str(String),
+    Nested(f64, String),
 }
 
 fn float() -> impl Strategy<Value = f64> {
@@ -60,6 +61,7 @@ fn spec() -> impl Strategy<Value = Spec> {
                     float().prop_map(PropValue::Num),
                     prop::array::uniform3(float()).prop_map(PropValue::Vec),
                     text().prop_map(PropValue::Str),
+                    (float(), text()).prop_map(|(n, s)| PropValue::Nested(n, s)),
                 ],
             ),
             0..4,
@@ -78,7 +80,7 @@ fn spec() -> impl Strategy<Value = Spec> {
                 scale,
                 rotation,
                 props,
-                classname,
+                component,
                 origin,
                 camera,
                 nest,
@@ -91,7 +93,7 @@ fn spec() -> impl Strategy<Value = Spec> {
                     scale,
                     rotation,
                     props,
-                    classname,
+                    component,
                     origin,
                     camera,
                     nest,
@@ -112,7 +114,7 @@ fn build(specs: &[Spec]) -> Document {
                 Group {
                     flags: Default::default(),
                     id,
-                    name: s.classname.clone(),
+                    name: s.component.clone(),
                     layer,
                     parent: last_group,
                     extra: Extra::new(),
@@ -130,24 +132,28 @@ fn build(specs: &[Spec]) -> Document {
             properties.insert(
                 k.clone(),
                 match v {
-                    PropValue::Bool(b) => PropertyValue::Bool(*b),
-                    PropValue::Num(n) => PropertyValue::Number(*n),
-                    PropValue::Vec(v) => PropertyValue::Vec3(DVec3::from(*v)),
-                    PropValue::Str(s) => PropertyValue::String(s.clone()),
+                    PropValue::Bool(b) => serde_json::json!(b),
+                    PropValue::Num(n) => serde_json::json!(n),
+                    PropValue::Vec(v) => serde_json::json!(v),
+                    PropValue::Str(s) => serde_json::json!(s),
+                    PropValue::Nested(n, s) => {
+                        serde_json::json!({ "keys": [{ "time": n, "label": s }, { "time": 1 }], "e": {} })
+                    }
                 },
             );
         }
+        let mut components = std::collections::BTreeMap::new();
+        components.insert(s.component.clone(), properties);
         doc.entities.insert(
             eid,
             Entity {
                 flags: Default::default(),
                 id: eid,
-                classname: s.classname.clone(),
                 layer,
                 group,
-                origin: s.origin.map(DVec3::from),
+                origin: s.origin.map(DVec3::from).unwrap_or(DVec3::ZERO),
                 angles: DVec3::ZERO,
-                properties,
+                components,
                 extra: Extra::new(),
             },
         );

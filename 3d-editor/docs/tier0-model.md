@@ -92,15 +92,15 @@ Measured on random slanted brushes (cuboids cut by up to 4 random integer planes
 
 ## Entity
 
-- `classname` plus typed properties: string, number, bool, vec3. (Color is a vec3 until entity definitions arrive in Tier 1; the file cannot tell them apart.)
-- Point entity: `origin` and `angles` (pitch, yaw, roll).
-- Brush entity: owns brushes and meshes (children point at it).
-- Classnames are free-form in Tier 0; definitions arrive in Tier 1.
-- World geometry is any brush or mesh with no owning entity. World properties live on the document.
+- `origin` and `angles` (pitch, yaw, roll): the implied transform, on every entity. It is not a component.
+- `components`: named open JSON objects (no `null`). The editor does not interpret them; an optional definition carries a JSON Schema for each and marks entity references, and the simulation interprets the built-in ones. See [entities.md](entities.md), [components.md](components.md) and [ecs.md](ecs.md).
+- There is no classname. An entity with no members is a point entity (drawn as a marker); one that owns brushes and meshes (children point at it) is a brush entity, and its origin is the pivot those members move and animate about.
+- Component names are free-form (`[A-Za-z0-9_]+`); definitions (document objects, ids `d`) describe known ones and are advisory.
+- World geometry is any brush or mesh with no owning entity: static geometry in the simulation. World properties live on the document.
 
 ## Material
 
-A material is a document object (`t42`, never selected or hidden) with a unique name, an optional image (absolute path, path relative to the scene file, or embedded base64) and properties: tint colour with alpha, emissive, roughness, metallic, filter, double-sided, unlit, nodraw. Faces refer to it **by name**; a name no material defines still draws, as a flat colour hashed from the name (FNV-1a 64 of the UTF-8 bytes, hue = hash mod 360, saturation 0.5, lightness 0.45 to 0.65 from bits 16 to 23; the empty name is grey). Point entities draw as 16-unit boxes coloured the same way from the classname.
+A material is a document object (`t42`, never selected or hidden) with a unique name, an optional image (absolute path, path relative to the scene file, or embedded base64) and properties: tint colour with alpha, emissive, roughness, metallic, filter, double-sided, unlit, nodraw. Faces refer to it **by name**; a name no material defines still draws, as a flat colour hashed from the name (FNV-1a 64 of the UTF-8 bytes, hue = hash mod 360, saturation 0.5, lightness 0.45 to 0.65 from bits 16 to 23; the empty name is grey). Point entities draw as 16-unit boxes coloured the same way from their first component name.
 
 Each face also has UV attributes that place the image on it, and texture lock keeps them attached when geometry moves. The material system, its units, formulas and ops are described in [materials.md](materials.md).
 
@@ -122,5 +122,5 @@ One shared editor selection. It is session state: not saved, not in undo history
 - Rotation follows the right-hand rule: positive degrees about +Z turn +X toward +Y.
 - A mirroring transform (negative determinant) keeps solids valid: a brush's plane points swap so normals stay outward, a mesh's face loops reverse.
 - Brush plane points and mesh vertices are snapped back onto the geometry grid after any transform; the brush is then re-normalized, so an invalid result is an error rather than a broken brush.
-- Entity `angles` are `[pitch, yaw, roll]` in degrees. The orientation is `Rz(yaw) · Ry(−pitch) · Rx(roll)`: with zero angles an entity faces +X, positive pitch looks up, yaw 90 faces +Y. A pure rotation recomposes the angles; scales and mirrors leave them alone.
+- Entity `angles` are `[pitch, yaw, roll]` in degrees. The orientation is `Rz(yaw) · Ry(−pitch) · Rx(roll)`: with zero angles an entity faces +X, positive pitch looks up, yaw 90 faces +Y. A pure rotation recomposes the angles; scales and mirrors leave them alone. A transform applied to an entity with members moves the members and the pivot together.
 - Groups carry no transform: transforming a group transforms its members.

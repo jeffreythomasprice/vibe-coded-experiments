@@ -1,15 +1,17 @@
 use std::collections::{BTreeSet, HashMap};
 
-use editor_core::{ElementRef, ObjectId, Part, PropertyValue};
+use editor_core::{ElementRef, ObjectId, Part};
 use editor_geom::mesh::{MeshIssue, Severity, validate};
 use editor_geom::{BrushError, brush_geometry};
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::results;
 use super::{CmdResult, Outcome};
+use crate::component_defs::{Catalog, ComponentIssue, DefsProblem};
 use crate::ctx::Ctx;
 use crate::error::CommandError;
+use crate::links::{LinkStatus, status_of};
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -17,43 +19,72 @@ pub struct Validate {
     ids: Option<Vec<ObjectId>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum IssueSeverity {
+    Error,
+    Warning,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum IssueCode {
+    InvalidBrush,
+    InvalidMesh,
+    DegenerateFace,
+    MeshOpen,
+    MeshNonmanifold,
+    MeshNonplanarFace,
+    DuplicateObject,
+    TextureUnreadable,
+    UndefinedMaterial,
+    DefsLoadFailed,
+    DefsBadSchema,
+    DuplicateComponent,
+    UnknownComponent,
+    SchemaViolation,
+    DanglingLink,
+    LinkNotEntity,
+    SelfLink,
+}
+
 #[derive(Debug, Clone)]
 pub struct Issue {
-    pub code: &'static str,
-    pub severity: &'static str,
+    pub code: IssueCode,
+    pub severity: IssueSeverity,
     pub ids: Vec<ObjectId>,
     pub elements: Vec<ElementRef>,
     pub message: String,
     pub hint: &'static str,
 }
 
-fn severity(s: Severity) -> &'static str {
+fn severity(s: Severity) -> IssueSeverity {
     match s {
-        Severity::Error => "error",
-        Severity::Warning => "warning",
+        Severity::Error => IssueSeverity::Error,
+        Severity::Warning => IssueSeverity::Warning,
     }
 }
 
 fn mesh_issue(id: ObjectId, issue: &MeshIssue) -> Issue {
     let (code, hint) = match issue {
         MeshIssue::OpenEdge { .. } => (
-            "mesh_open",
+            IssueCode::MeshOpen,
             "close the hole by adding faces, or ignore if the mesh is meant to be open",
         ),
         MeshIssue::NonManifoldEdge { .. } | MeshIssue::InconsistentWinding { .. } => (
-            "mesh_nonmanifold",
+            IssueCode::MeshNonmanifold,
             "make each edge shared by exactly two faces with opposite winding",
         ),
         MeshIssue::NonPlanarFace { .. } => (
-            "mesh_nonplanar_face",
+            IssueCode::MeshNonplanarFace,
             "move the face vertices onto one plane or split the face",
         ),
         MeshIssue::ZeroAreaFace { .. } => (
-            "degenerate_face",
+            IssueCode::DegenerateFace,
             "delete the face or move its vertices apart",
         ),
         _ => (
-            "invalid_mesh",
+            IssueCode::InvalidMesh,
             "fix or delete the referenced face or vertex",
         ),
     };
@@ -151,14 +182,17 @@ pub fn validate_doc(ctx: &Ctx) -> Vec<Issue> {
             Err(e) => {
                 let (code, hint) = match e {
                     BrushError::DegeneratePlane(_) => (
-                        "degenerate_face",
+                        IssueCode::DegenerateFace,
                         "give the face three non-collinear plane points",
                     ),
-                    _ => ("invalid_brush", "recreate the brush or fix its face planes"),
+                    _ => (
+                        IssueCode::InvalidBrush,
+                        "recreate the brush or fix its face planes",
+                    ),
                 };
                 issues.push(Issue {
                     code,
-                    severity: "error",
+                    severity: IssueSeverity::Error,
                     ids: vec![b.id.into()],
                     elements: vec![],
                     message: format!("{}: {e}", b.id),
@@ -169,8 +203,8 @@ pub fn validate_doc(ctx: &Ctx) -> Vec<Issue> {
     }
     for ids in shapes.into_values().filter(|ids| ids.len() > 1) {
         issues.push(Issue {
-            code: "duplicate_object",
-            severity: "warning",
+            code: IssueCode::DuplicateObject,
+            severity: IssueSeverity::Warning,
             message: format!(
                 "{} occupy the same space",
                 ids.iter()
@@ -195,8 +229,8 @@ pub fn validate_doc(ctx: &Ctx) -> Vec<Issue> {
             && let Err(e) = crate::texture::source_size(source, ctx.scene_dir())
         {
             issues.push(Issue {
-                code: "texture_unreadable",
-                severity: "error",
+                code: IssueCode::TextureUnreadable,
+                severity: IssueSeverity::Error,
                 ids: vec![m.id.into()],
                 elements: vec![],
                 message: format!("{} ({:?}): {e}", m.id, m.name),
@@ -230,8 +264,8 @@ pub fn validate_doc(ctx: &Ctx) -> Vec<Issue> {
     }
     for (name, ids) in undefined {
         issues.push(Issue {
-            code: "undefined_material",
-            severity: "warning",
+            code: IssueCode::UndefinedMaterial,
+            severity: IssueSeverity::Warning,
             message: format!(
                 "material {name:?} is used by {} but not defined",
                 ids.iter()
@@ -245,36 +279,95 @@ pub fn validate_doc(ctx: &Ctx) -> Vec<Issue> {
         });
     }
 
-    let targetnames: BTreeSet<&str> = doc
-        .entities
-        .values()
-        .filter_map(|e| match e.properties.get("targetname") {
-            Some(PropertyValue::String(s)) => Some(s.as_str()),
-            _ => None,
-        })
-        .collect();
+    let catalog = Catalog::resolve(doc, ctx.scene_dir());
+    for problem in catalog.problems() {
+        let (code, severity, hint) = match problem {
+            DefsProblem::Unreadable { .. }
+            | DefsProblem::Malformed { .. }
+            | DefsProblem::UnsupportedVersion { .. } => (
+                IssueCode::DefsLoadFailed,
+                IssueSeverity::Error,
+                "fix the path or file, or re-add it with component_defs.add",
+            ),
+            DefsProblem::BadSchema { .. } => (
+                IssueCode::DefsBadSchema,
+                IssueSeverity::Error,
+                "fix the component schema in the definitions file",
+            ),
+            DefsProblem::DuplicateComponent { .. } => (
+                IssueCode::DuplicateComponent,
+                IssueSeverity::Warning,
+                "remove one of the definitions; a built-in wins, otherwise the later record",
+            ),
+        };
+        issues.push(Issue {
+            code,
+            severity,
+            ids: vec![problem.from().into()],
+            elements: vec![],
+            message: problem.to_string(),
+            hint,
+        });
+    }
+
     for e in doc.entities.values() {
-        if e.origin.is_none() && doc.children(e.id.into()).is_empty() {
-            issues.push(Issue {
-                code: "empty_brush_entity",
-                severity: "warning",
-                ids: vec![e.id.into()],
-                elements: vec![],
-                message: format!("{} ({}) owns no brushes or meshes", e.id, e.classname),
-                hint: "assign geometry to the entity or delete it",
-            });
+        for (name, data) in &e.components {
+            for found in catalog.component_issues(name, data) {
+                let (code, severity, hint) = match &found {
+                    ComponentIssue::Unknown { .. } => (
+                        IssueCode::UnknownComponent,
+                        IssueSeverity::Warning,
+                        "define the component with component_defs.add, or remove it",
+                    ),
+                    ComponentIssue::Schema(_) => (
+                        IssueCode::SchemaViolation,
+                        IssueSeverity::Error,
+                        "fix the value with entity.set_component or entity.update_component",
+                    ),
+                };
+                issues.push(Issue {
+                    code,
+                    severity,
+                    ids: vec![e.id.into()],
+                    elements: vec![],
+                    message: format!("{}: {name}: {found}", e.id),
+                    hint,
+                });
+            }
         }
-        if let Some(PropertyValue::String(t)) = e.properties.get("target")
-            && !targetnames.contains(t.as_str())
-        {
-            issues.push(Issue {
-                code: "missing_target",
-                severity: "warning",
-                ids: vec![e.id.into()],
-                elements: vec![],
-                message: format!("{} targets \"{t}\" but no entity has that targetname", e.id),
-                hint: "set targetname on the entity it should point at, or fix the target",
-            });
+        for (name, data) in &e.components {
+            for link in catalog.links(name, data) {
+                let (status, to) = status_of(doc, &link.value);
+                let (code, hint, what) = match status {
+                    LinkStatus::Ok if to == Some(e.id) => (
+                        IssueCode::SelfLink,
+                        "point the link at another entity",
+                        "itself",
+                    ),
+                    LinkStatus::Ok => continue,
+                    LinkStatus::Missing | LinkStatus::Malformed => (
+                        IssueCode::DanglingLink,
+                        "set the link to the id of an existing entity, or remove it",
+                        "nothing: no such entity",
+                    ),
+                    LinkStatus::NotEntity => (
+                        IssueCode::LinkNotEntity,
+                        "links point at entities (e ids), not brushes, meshes or groups",
+                        "an object that is not an entity",
+                    ),
+                };
+                issues.push(Issue {
+                    code,
+                    severity: IssueSeverity::Warning,
+                    ids: vec![e.id.into()],
+                    elements: vec![],
+                    message: format!(
+                        "{} link {name}{} = \"{}\" points at {what}",
+                        e.id, link.pointer, link.value
+                    ),
+                    hint,
+                });
+            }
         }
     }
     issues
@@ -296,7 +389,10 @@ pub fn validate_cmd(ctx: &Ctx, args: Validate) -> CmdResult<results::Validation>
     if let Some(f) = &filter {
         issues.retain(|i| i.ids.iter().any(|id| f.contains(id)));
     }
-    let errors = issues.iter().filter(|i| i.severity == "error").count();
+    let errors = issues
+        .iter()
+        .filter(|i| i.severity == IssueSeverity::Error)
+        .count();
     let warnings = issues.len() - errors;
     Ok(Outcome::new(results::Validation {
         issues: issues.into_iter().map(results::IssueView::from).collect(),

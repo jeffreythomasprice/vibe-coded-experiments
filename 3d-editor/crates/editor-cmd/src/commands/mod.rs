@@ -1,7 +1,8 @@
 pub(crate) mod brush;
 mod build;
-mod check;
+pub(crate) mod check;
 mod csg;
+pub(crate) mod defs;
 pub(crate) mod entity;
 pub(crate) mod face;
 mod group;
@@ -211,20 +212,27 @@ ops! {
         "object.show_all" Mutate NoArgs => results::Updated = visibility::show_all, "Show every hidden object.";
         "object.unlock_all" Mutate NoArgs => results::Updated = visibility::unlock_all, "Unlock every locked object.";
         "object.set_layer" Mutate object::SetLayer => results::Moved = object::set_layer, "Move objects, with their contents, to another layer.";
-        "entity.create" Mutate entity::Create => results::Created = entity::create, "Create a point entity with classname, origin, angles and properties.";
-        "entity.create_brush_entity" Mutate entity::CreateBrushEntity => results::Created = entity::create_brush_entity, "Make a brush entity that owns the given brushes and meshes.";
-        "entity.release_objects" Mutate entity::Release => results::Released = entity::release_objects, "Return brushes and meshes to the world; an emptied brush entity is deleted.";
-        "entity.set_properties" Mutate entity::SetProperties => results::Updated = entity::set_properties, "Set and remove key/value properties on entities.";
-        "entity.set_classname" Mutate entity::SetClassname => results::Updated = entity::set_classname, "Change the classname of entities.";
-        "entity.set_transform" Mutate entity::SetTransform => results::IdOnly = entity::set_transform, "Set a point entity's origin and/or angles (pitch, yaw, roll) absolutely.";
+        "entity.create" Mutate entity::Create => results::Created = entity::create, "Create a point entity at an origin, with optional angles and components (name -> data object).";
+        "entity.create_brush_entity" Mutate entity::CreateBrushEntity => results::Created = entity::create_brush_entity, "Make an entity that owns the given brushes and meshes. Its origin (the pivot) defaults to the centre of their bounds.";
+        "entity.release_objects" Mutate entity::Release => results::Released = entity::release_objects, "Return brushes and meshes to the world; the entity stays, as a point entity.";
+        "entity.add_component" Mutate entity::AddComponent => results::Updated = entity::add_component, "Add a named component to entities; data defaults to the schema defaults of its definition. Fails if already present.";
+        "entity.remove_component" Mutate entity::RemoveComponent => results::Updated = entity::remove_component, "Remove a named component from entities.";
+        "entity.set_component" Mutate entity::SetComponent => results::Updated = entity::set_component, "Replace the whole data object (arbitrary JSON, shaped by the component schema) of an existing component. Schema mismatches come back as warnings, never errors.";
+        "entity.update_component" Mutate entity::UpdateComponent => results::Updated = entity::update_component, "Set and remove top-level keys in an existing component's data.";
+        "entity.links" Read entity::Links => results::Links = entity::links, "List links between entities: schema nodes marked editor.linkType = entityID, with the target id and whether it resolves (ok, missing, not_entity, malformed).";
+        "component_defs.add" Mutate defs::Add => results::Created = defs::add, "Add component definitions (name, colour, size and a JSON Schema for its data) from a file (absolute, scene-relative or embedded) or inline.";
+        "component_defs.remove" Mutate defs::Remove => results::Deleted = defs::remove, "Remove component definitions records (d ids).";
+        "component_defs.embed" Mutate defs::Embed => results::Updated = defs::embed, "Copy file-backed definitions into the scene file.";
+        "component_defs.list" Read NoArgs => results::ComponentDefsList = defs::list, "The definitions records, the resolved components (built-ins included, schemas included) and any problems loading them.";
+        "entity.set_transform" Mutate entity::SetTransform => results::IdOnly = entity::set_transform, "Set an entity's origin and/or angles (pitch, yaw, roll) absolutely. A brush entity carries its members along unless members is keep.";
         "layer.create" Mutate layer::Create => results::Created = layer::create, "Create a layer.";
         "layer.set_omit_from_export" Mutate layer::SetOmitFromExport => results::IdOnly = layer::set_omit_from_export, "Mark a layer to be left out of exports; nothing exports yet, so this is only stored.";
         "layer.delete" Destructive layer::Delete => results::LayerDeleted = layer::delete, "Delete a layer, moving its contents to move_to if it has any.";
         "group.create" Mutate group::Create => results::Created = group::create, "Group objects that share a layer and parent group.";
         "group.ungroup" Mutate group::Ungroup => results::Ungrouped = group::ungroup, "Dissolve groups; their contents go to the group's parent.";
         "group.move" Mutate group::Move => results::Moved = group::move_objects, "Move objects into a group, or out of any group when group is null.";
-        "scene.summary" Read NoArgs => results::Summary = scene::summary, "Compact overview: counts by kind, bounds, layers (with their hidden, locked and omit_from_export flags), entity classnames, selection size and how many objects are hidden or locked.";
-        "scene.list" Read scene::List => results::ObjectPage = scene::list, "Filter and page through objects by kind, layer, group, entity, classname, name or region.";
+        "scene.summary" Read NoArgs => results::Summary = scene::summary, "Compact overview: counts by kind, bounds, layers (with their hidden, locked and omit_from_export flags), entity component counts, selection size and how many objects are hidden or locked.";
+        "scene.list" Read scene::List => results::ObjectPage = scene::list, "Filter and page through objects by kind, layer, group, entity, component, name or region.";
         "scene.get" Read scene::Get => results::Objects = scene::get, "Details of objects by id, at summary, full or geometry level.";
         "scene.bounds" Read scene::Bounds => results::BoundsResult = scene::bounds, "Axis-aligned bounds of objects, each and combined.";
         "scene.raycast" Read scene::Raycast => results::Raycast = scene::raycast, "First brush, mesh or point entity hit by a ray: id, face, point, normal, distance. Hidden objects are skipped unless include_hidden.";
@@ -264,7 +272,7 @@ ops! {
         "file.open" Destructive session_args::Open => results::Empty, "Load a scene file, replacing the document. Fails with UnsavedChanges unless discard is true.";
     }
     client {
-        "view.screenshot" Read screenshot::ScreenshotArgs => results::ScreenshotResult, "Render a PNG from a camera with optional overlays (grid, axes, labels, bounds) and highlighted objects.";
+        "view.screenshot" Read screenshot::ScreenshotArgs => results::ScreenshotResult, "Render a PNG from a camera with optional overlays (grid, axes, labels, bounds, selection, links) and highlighted objects. `simulate: {time}` draws the scene as the game client shows it at that time (animations posed).";
     }
     server {
         "session.list" Read NoArgs => results::SessionList, "List the server's open sessions (id, path, name, dirty, revision, connected clients) and which one is focused.";
