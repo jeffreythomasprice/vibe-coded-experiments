@@ -12,7 +12,7 @@ Extension `.scene.toml`. A single file in Tier 0.
 4. `[editor]` — grid size and other editor metadata
 5. Arrays of tables in fixed order, each sorted by numeric ID: `[[material]]`, `[[component_defs]]`, `[[layer]]`, `[[group]]`, `[[camera]]`, `[[entity]]`, `[[brush]]`, `[[mesh]]`
 
-Layers, groups, entities, brushes and meshes take optional `hidden = true` and `locked = true` (written only when true; they apply to everything the object contains), and a layer also `omit_from_export = true`. A file without them loads unchanged, so these did not bump `version`.
+Layers, groups, entities, brushes and meshes take optional `hidden = true` and `locked = true` (written only when true; they apply to everything the object contains), and a layer also `omit_from_export = true`. A file without them loads unchanged, so these did not bump `version`. A group's open state is session state and is never written.
 
 Children point at parents (`layer`, `group`, `entity`); records never list children. A nested group names its parent group with `group`, like any other object. Each record is independent, so a later split into `scene.toml` plus `layers/<name>.toml` is a pure re-partition.
 
@@ -97,6 +97,10 @@ Exactly one of `path` and `json` per record. The embedded text is the definition
 - Output is byte-stable for an unchanged document.
 - Unknown keys are preserved per record (flattened extra table) and written after known keys, sorted.
 - Strings use basic `"..."` quoting; keys are bare when they match `[A-Za-z0-9_-]+`.
+
+## Clipboard text
+
+`clipboard.copy` produces, and `clipboard.paste` accepts, an ordinary scene document: the copied objects with their groups, brush entity members and entities, plus the materials and layers they use (layers keep their name, so paste matches them by name). Because it is a scene file, a whole saved scene can be pasted too. Ids inside are the source document's; paste gives every object a new id.
 
 ## IDs
 

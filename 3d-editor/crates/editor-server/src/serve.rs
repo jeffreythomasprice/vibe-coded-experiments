@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use base64::Engine;
 use editor_cmd::{Changes, CommandError, Response, Success};
-use editor_host::{ConnId, Hub, Policy};
+use editor_host::{ConnId, Hub, Policy, RecoverySettings};
 use editor_proto::{ClientMsg, Config, HelloResult, PROTOCOL, ServerMsg};
 
 #[derive(Debug, thiserror::Error)]
@@ -176,6 +176,23 @@ fn handle_connection(shared: Shared, stream: UnixStream) {
     }
 }
 
+fn run_recovery(shared: &Shared, force: bool) {
+    let job = lock(shared).hub.recovery_due(Instant::now(), force);
+    if job.is_empty() {
+        return;
+    }
+    if let Err(e) = job.run() {
+        eprintln!("recovery: {e}");
+    }
+}
+
+fn watch_recovery(shared: Shared) {
+    loop {
+        std::thread::sleep(Duration::from_secs(1));
+        run_recovery(&shared, false);
+    }
+}
+
 fn watch_idle(shared: Shared, config: Config) {
     let limit = Duration::from_secs(config.server.idle_exit_secs);
     let mut idle_since = Instant::now();
@@ -193,6 +210,7 @@ fn watch_idle(shared: Shared, config: Config) {
         }
         if stopping || idle_since.elapsed() >= limit {
             if stopping {
+                run_recovery(&shared, true);
                 std::thread::sleep(Duration::from_millis(150));
             }
             let _ = std::fs::remove_file(config.socket_path());
@@ -224,7 +242,7 @@ pub fn run(config: &Config) -> Result<(), ServeError> {
     eprintln!("listening on {}", socket.display());
 
     let shared: Shared = Arc::new(Mutex::new(State {
-        hub: Hub::new(),
+        hub: Hub::with_recovery(RecoverySettings::from_config(config)),
         senders: HashMap::new(),
         stopping: false,
     }));
@@ -232,6 +250,10 @@ pub fn run(config: &Config) -> Result<(), ServeError> {
         let shared = shared.clone();
         let config = config.clone();
         std::thread::spawn(move || watch_idle(shared, config));
+    }
+    {
+        let shared = shared.clone();
+        std::thread::spawn(move || watch_recovery(shared));
     }
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };

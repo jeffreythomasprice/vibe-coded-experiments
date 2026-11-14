@@ -1,13 +1,14 @@
 pub(crate) mod brush;
 mod build;
 pub(crate) mod check;
+pub mod clipboard;
 mod csg;
 pub(crate) mod defs;
 pub(crate) mod entity;
 pub(crate) mod face;
-mod group;
+pub(crate) mod group;
 mod hints;
-mod layer;
+pub(crate) mod layer;
 mod locks;
 pub(crate) mod material;
 mod mesh;
@@ -205,6 +206,7 @@ ops! {
         "object.delete" Destructive object::Delete => results::Deleted = object::delete, "Delete objects and everything they own. Undoable.";
         "object.duplicate" Mutate object::Duplicate => results::Duplicated = object::duplicate, "Deep-copy objects (with group and entity contents), optionally offset. result.map lists old -> new ids.";
         "object.array" Mutate object::Array => results::Arrayed = object::array, "Make count extra deep copies at multiples of an offset, optionally with a mirrored copy of the whole row, as one step. result.map lists old -> new ids.";
+        "clipboard.paste" Mutate clipboard::Paste => results::Pasted = clipboard::paste, "Paste objects from scene-format `text` (default: the server's clipboard, filled by clipboard.copy) as new objects with their contents, materials and layers matched by name. `at` puts the centre of their bounds there; `offset` shifts them; with neither they land where they were copied from. result.map lists old -> new ids.";
         "object.rename" Mutate object::Rename => results::IdOnly = object::rename, "Rename a group, layer or camera.";
         "object.set_hidden" Mutate visibility::SetHidden => results::Updated = visibility::set_hidden, "Hide or show objects with everything they contain. Hidden objects are not drawn, picked or raycast, and drop out of the selection.";
         "object.set_locked" Mutate visibility::SetLocked => results::Updated = visibility::set_locked, "Lock or unlock objects with everything they contain. An op that would edit, delete or add to a locked object fails with Locked.";
@@ -230,6 +232,8 @@ ops! {
         "layer.delete" Destructive layer::Delete => results::LayerDeleted = layer::delete, "Delete a layer, moving its contents to move_to if it has any.";
         "group.create" Mutate group::Create => results::Created = group::create, "Group objects that share a layer and parent group.";
         "group.ungroup" Mutate group::Ungroup => results::Ungrouped = group::ungroup, "Dissolve groups; their contents go to the group's parent.";
+        "group.open" Mutate group::Open => results::OpenGroups = group::open, "Open a group (and its parent groups) to edit its members: everything outside it is locked, and objects created meanwhile join it. Any other open group closes. Undoable; never saved.";
+        "group.close" Mutate group::Close => results::OpenGroups = group::close, "Close the innermost open group, or every open group with all: true.";
         "group.move" Mutate group::Move => results::Moved = group::move_objects, "Move objects into a group, or out of any group when group is null.";
         "scene.summary" Read NoArgs => results::Summary = scene::summary, "Compact overview: counts by kind, bounds, layers (with their hidden, locked and omit_from_export flags), entity component counts, selection size and how many objects are hidden or locked.";
         "scene.list" Read scene::List => results::ObjectPage = scene::list, "Filter and page through objects by kind, layer, group, entity, component, name or region.";
@@ -277,6 +281,11 @@ ops! {
     server {
         "session.list" Read NoArgs => results::SessionList, "List the server's open sessions (id, path, name, dirty, revision, connected clients) and which one is focused.";
         "session.attach" Read session_args::Attach => results::SessionAttached, "Attach this connection to a session by `id` or file `path` (loading it if no session has it; `create` makes a missing file). With neither, attach to the focused session.";
+        "clipboard.copy" Read session_args::ClipboardCopy => results::ClipboardState, "Copy objects (with group and entity contents) to the server's clipboard, shared by every client and session. Returns the clipboard text, a scene-format fragment.";
+        "clipboard.get" Read NoArgs => results::ClipboardState, "The server's clipboard: text (null if empty), object count and a sequence number that bumps with every copy.";
+        "recovery.list" Read NoArgs => results::RecoveryList, "List autosaves left by earlier or running sessions (from the server's recovery directory): source file, time, revision, whether they are newer than the file, and whether a live session owns them.";
+        "recovery.restore" Destructive session_args::RecoveryRestore => results::Recovered, "Replace this session's document with an autosave. The session keeps its file and stays unsaved until file.save. Fails with UnsavedChanges unless discard is true.";
+        "recovery.discard" Destructive session_args::RecoveryDiscard => results::Discarded, "Delete an autosave. A live session's own autosave cannot be discarded.";
         "session.info" Read NoArgs => results::SessionRow, "The session this connection is attached to, with the connected clients.";
     }
 }
@@ -287,6 +296,7 @@ pub fn dispatch(ctx: &mut Ctx, op: &str, args: Value) -> CmdResult {
     let start = ctx.journal_len();
     let outcome = dispatch_op(ctx, op, args)?;
     if op != "batch" {
+        locks::adopt(ctx, start);
         locks::enforce(ctx, start)?;
     }
     Ok(outcome)

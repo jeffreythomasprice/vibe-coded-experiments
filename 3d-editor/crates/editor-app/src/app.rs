@@ -19,6 +19,7 @@ struct Running {
     editor: Editor,
     ctx: egui::Context,
     egui_state: egui_winit::State,
+    title: String,
 }
 
 pub struct App {
@@ -73,6 +74,7 @@ impl App {
             editor,
             ctx,
             egui_state,
+            title: String::new(),
         });
         window.request_redraw();
         Ok(())
@@ -84,6 +86,7 @@ impl App {
             editor,
             ctx,
             egui_state,
+            title,
         }) = self.running.as_mut()
         else {
             return;
@@ -95,6 +98,11 @@ impl App {
         let output = ctx.run_ui(raw, |ui| editor.ui(ui, &gfx.renderer));
         let ui_done = Instant::now();
         egui_state.handle_platform_output(&window, output.platform_output);
+        let wanted = editor.title();
+        if wanted != *title {
+            window.set_title(&wanted);
+            *title = wanted;
+        }
         editor.finish_frame(gfx);
         let panes_done = Instant::now();
         let jobs = ctx.tessellate(output.shapes, output.pixels_per_point);

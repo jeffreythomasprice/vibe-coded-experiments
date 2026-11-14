@@ -44,7 +44,7 @@ One tool per registry op, generated from `OPS` (including `session_list`, `sessi
 
 ## Instructions
 
-The server's `instructions` carry the workflow: `scene_summary` first; `history_begin` (or `batch`) for multi-step edits; `check_validate`; `view_screenshot` from a few cameras with the `labels` overlay to map pixels to ids; adjust; `history_commit` or `history_rollback`; `file_save` to persist; and the `batch` item shape (`{op, args, as?}`, dotted or underscored names, `$name` references).
+The server's `instructions` carry the workflow: `scene_summary` first; `history_begin` (or `batch`) for multi-step edits; `check_validate`; `view_screenshot` from a few cameras with the `labels` overlay to map pixels to ids; adjust; `history_commit` or `history_rollback`; `file_save` to persist; the clipboard (`clipboard_copy` / `clipboard_paste`, shared with the GUI and across files) and recovery of autosaves after a crash (`recovery_list`, `recovery_restore`); and the `batch` item shape (`{op, args, as?}`, dotted or underscored names, `$name` references).
 
 ## Attribution
 

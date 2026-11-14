@@ -117,10 +117,10 @@ Detailed specs: [tier0-model.md](tier0-model.md) (object kinds, IDs), [tier0-com
 - **Entities:** an entity is a pose (origin, angles) plus named components; an entity that owns brushes is a brush entity, with its origin as the pivot. Built: components are open JSON; component definitions (our own JSON file, absolute, scene-relative or embedded) carry a JSON Schema per component and drive defaults, validation warnings, marker colour and size; built-in components (`keyframe_animation`, `player_start`); component browser with drag-and-drop; `editor.linkType = entityID` links with arrows in the viewports and screenshots. FGD import and a form generated from the schema are still to do. See `docs/entities.md` and `docs/components.md`.
 - **Play mode:** `editor-sim` runs entities as an ECS (static brushes and meshes stay static geometry) and `editor-game` is a separate first-person client for it; the editor never animates anything. Built: keyframe animation on a loop, noclip fly controls, live updates from the server session, Play button (F5), `view.screenshot` with `simulate`. Still to do: triggers and events, several animations per entity, collision, culling. See `docs/ecs.md` and `docs/game.md`.
 - **Groups** (nestable, open/close with lock semantics) and **layers** (hide, lock, omit from export).
-- **Hide / isolate / lock / show all** (all undoable). Built: `object.set_hidden`, `set_locked`, `isolate`, `show_all`, `unlock_all`, saved in the scene file; locks are enforced for every op in one place. Group open/close is GUI-only state.
+- **Hide / isolate / lock / show all** (all undoable). Built: `object.set_hidden`, `set_locked`, `isolate`, `show_all`, `unlock_all`, saved in the scene file; locks are enforced for every op in one place. Group open/close is document state (`group.open`, `group.close`; undoable, not saved): everything outside the open group is locked and new objects join it. `layer.set_omit_from_export` has an outliner toggle.
 - **Materials:** material browser, per-face material assignment, face attribute editor (offset, scale, rotation). Built: materials are document objects with an image (absolute, relative to the scene file, or embedded) and tint, emissive, roughness, metallic, filter and flags; faces have UVs with optional explicit axes, texture lock, `face.align_uv` / `face.transfer_uv` / `face.get_uv`, a shared face selection, textured rendering and a Surface tool plus inspector panels in the GUI. See `docs/materials.md`. A materials directory and search paths still wait for per-project config.
-- **Clipboard:** copy/paste (in place or at cursor), duplicate.
-- **Save/load robustness:** autosave and backups.
+- **Clipboard:** built. One server-wide clipboard of scene-format text (`clipboard.copy`, `clipboard.get`, `clipboard.paste` with `at` / `offset`); the GUI has Ctrl+C/X/V (at the cursor), Ctrl+Shift+V (in place) and Ctrl+D, and mirrors the text to the system clipboard. See `docs/tier0-commands.md` and `docs/gui.md`.
+- **Save/load robustness:** built. The server autosaves dirty sessions and snapshots timed backups into an XDG state directory, flushes on a forced stop, and `recovery.list` / `restore` / `discard` (and a GUI banner) bring work back after a crash. See `docs/server.md`.
 
 ### Tier 2 — Productivity
 
@@ -132,7 +132,7 @@ Detailed specs: [tier0-model.md](tier0-model.md) (object kinds, IDs), [tier0-com
 - **Issue browser:** live list of problems with quick fixes and click-to-select.
 - **Rebindable shortcuts**, configurable mouse mapping, tablet mode.
 - **Entity model display** and entity icons/gizmos.
-- **Crash recovery:** crash dump of the last-good document.
+- **Crash recovery:** the autosave covers a killed server; a crash dump of the editor's own last-good document is still to do.
 - **Agent extras:** change events pushed to the MCP agent as notifications (clients already get them over the socket), named bookmarks/cameras, "explain this object" semantic descriptions, prefab/library queries.
 
 ### Tier 3 — Pipeline and compatibility

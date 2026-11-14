@@ -367,3 +367,189 @@ fn summary_and_list_report_flags() {
     let get = exec(&mut s, "scene.get", json!({ "ids": [&a] }));
     assert_eq!(ok(&get)["result"]["objects"][0]["locked"], true);
 }
+
+fn group_of(s: &mut editor_cmd::Session, ids: &[&str], name: &str) -> String {
+    id_of(ok(&exec(
+        s,
+        "group.create",
+        json!({ "objects": ids, "name": name }),
+    )))
+}
+
+fn run(s: &mut editor_cmd::Session, op: &str, args: serde_json::Value) -> serde_json::Value {
+    let r = exec(s, op, args);
+    ok(&r);
+    r
+}
+
+fn open_ids(s: &mut editor_cmd::Session) -> serde_json::Value {
+    summary(s)["open_group"].clone()
+}
+
+#[test]
+fn an_open_group_locks_everything_outside_it() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
+    let b = make_box(&mut s, [32, 0, 0], [40, 8, 8]);
+    let g = group_of(&mut s, &[&a], "inside");
+    assert!(open_ids(&mut s).is_null());
+
+    let r = run(&mut s, "group.open", json!({ "id": &g }));
+    assert_eq!(r["result"]["open"], json!([&g]));
+    assert_eq!(open_ids(&mut s), json!(&g));
+    assert_eq!(full(&mut s, &g)["open"], true);
+
+    let r = exec(
+        &mut s,
+        "transform.translate",
+        json!({ "ids": [&b], "delta": [1, 0, 0] }),
+    );
+    assert_eq!(err_code(&r), "Locked", "{r}");
+    assert_eq!(r["target"], b.as_str());
+    ok(&exec(
+        &mut s,
+        "transform.translate",
+        json!({ "ids": [&a], "delta": [1, 0, 0] }),
+    ));
+
+    ok(&exec(
+        &mut s,
+        "object.set_hidden",
+        json!({ "ids": [&b], "hidden": true }),
+    ));
+    lock(&mut s, &[&b], true);
+    lock(&mut s, &[&b], false);
+    ok(&exec(
+        &mut s,
+        "object.set_hidden",
+        json!({ "ids": [&b], "hidden": false }),
+    ));
+
+    assert_eq!(summary(&mut s)["locked"], 1);
+    ok(&exec(&mut s, "select.all", json!({})));
+    assert_eq!(
+        ok(&exec(&mut s, "select.get", json!({})))["result"]["ids"],
+        json!([&a, &g])
+    );
+
+    ok(&exec(&mut s, "group.close", json!({})));
+    assert!(open_ids(&mut s).is_null());
+    ok(&exec(
+        &mut s,
+        "transform.translate",
+        json!({ "ids": [&b], "delta": [1, 0, 0] }),
+    ));
+}
+
+#[test]
+fn opening_and_closing_undo_and_redo() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
+    let g = group_of(&mut s, &[&a], "g");
+    ok(&exec(&mut s, "group.open", json!({ "id": &g })));
+    exec(&mut s, "history.undo", json!({}));
+    assert!(open_ids(&mut s).is_null());
+    exec(&mut s, "history.redo", json!({}));
+    assert_eq!(open_ids(&mut s), json!(&g));
+    ok(&exec(&mut s, "group.close", json!({})));
+    exec(&mut s, "history.undo", json!({}));
+    assert_eq!(open_ids(&mut s), json!(&g));
+}
+
+#[test]
+fn opening_a_nested_group_keeps_its_parents_open_and_switches_others() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
+    let c = make_box(&mut s, [64, 0, 0], [72, 8, 8]);
+    let inner = group_of(&mut s, &[&a], "inner");
+    let outer = group_of(&mut s, &[&inner], "outer");
+    let other = group_of(&mut s, &[&c], "other");
+
+    let r = run(&mut s, "group.open", json!({ "id": &inner }));
+    assert_eq!(r["result"]["open"], json!([&inner, &outer]));
+    assert_eq!(open_ids(&mut s), json!(&inner));
+
+    ok(&exec(&mut s, "group.close", json!({})));
+    assert_eq!(open_ids(&mut s), json!(&outer));
+    ok(&exec(&mut s, "group.close", json!({ "all": true })));
+    assert!(open_ids(&mut s).is_null());
+
+    ok(&exec(&mut s, "group.open", json!({ "id": &inner })));
+    let r = run(&mut s, "group.open", json!({ "id": &other }));
+    assert_eq!(r["result"]["open"], json!([&other]));
+    let r = run(&mut s, "group.close", json!({}));
+    assert_eq!(r["result"]["open"], json!([]));
+    ok(&exec(&mut s, "group.close", json!({})));
+}
+
+#[test]
+fn objects_created_while_a_group_is_open_join_it() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
+    let g = group_of(&mut s, &[&a], "g");
+    ok(&exec(&mut s, "group.open", json!({ "id": &g })));
+
+    let n = make_box(&mut s, [100, 0, 0], [108, 8, 8]);
+    assert_eq!(full(&mut s, &n)["group"], g.as_str());
+
+    let r = run(
+        &mut s,
+        "batch",
+        json!({ "commands": [
+            { "op": "brush.create_box", "args": { "min": [200, 0, 0], "max": [208, 8, 8] }, "as": "x" },
+            { "op": "entity.create", "args": { "origin": [0, 0, 64] }, "as": "e" },
+        ] }),
+    );
+    for i in 0..2 {
+        let id = r["result"]["results"][i]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert_eq!(full(&mut s, &id)["group"], g.as_str(), "{id}");
+    }
+}
+
+#[test]
+fn removing_the_open_group_and_locked_groups() {
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
+    let g = group_of(&mut s, &[&a], "g");
+    ok(&exec(&mut s, "group.open", json!({ "id": &g })));
+    ok(&exec(&mut s, "group.ungroup", json!({ "ids": [&g] })));
+    assert!(open_ids(&mut s).is_null());
+
+    let h = group_of(&mut s, &[&a], "h");
+    lock(&mut s, &[&h], true);
+    let r = exec(&mut s, "group.open", json!({ "id": &h }));
+    assert_eq!(err_code(&r), "Locked", "{r}");
+    let r = exec(&mut s, "group.open", json!({ "id": &a }));
+    assert_eq!(err_code(&r), "InvalidArgument", "{r}");
+    let r = exec(&mut s, "group.open", json!({ "id": "g999" }));
+    assert_eq!(err_code(&r), "NotFound", "{r}");
+}
+
+#[test]
+fn an_open_group_is_not_saved() {
+    let dir = std::env::temp_dir().join(format!("editor-open-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("o.scene.toml");
+    let mut s = session();
+    let a = make_box(&mut s, [0, 0, 0], [8, 8, 8]);
+    let g = group_of(&mut s, &[&a], "g");
+    ok(&exec(&mut s, "group.open", json!({ "id": &g })));
+    ok(&exec(
+        &mut s,
+        "file.save",
+        json!({ "path": path.to_str().unwrap() }),
+    ));
+    assert!(!std::fs::read_to_string(&path).unwrap().contains("open"));
+
+    let mut t = session();
+    ok(&exec(
+        &mut t,
+        "file.open",
+        json!({ "path": path.to_str().unwrap(), "discard": true }),
+    ));
+    assert!(open_ids(&mut t).is_null());
+    std::fs::remove_dir_all(&dir).ok();
+}

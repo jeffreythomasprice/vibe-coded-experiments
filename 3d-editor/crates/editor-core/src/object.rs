@@ -226,6 +226,9 @@ pub struct Group {
     pub name: String,
     pub layer: LayerId,
     pub parent: Option<GroupId>,
+    /// Session state, never saved: while a group is open, everything outside it is locked.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub open: bool,
     #[schemars(schema_with = "crate::property::extra_schema")]
     pub extra: Extra,
 }

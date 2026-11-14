@@ -208,7 +208,7 @@ impl CommandError {
                 Some(target.clone()),
                 None,
                 Some(
-                    "unlock it (or the group, entity or layer holding it) with object.set_locked"
+                    "unlock it (or the group, entity or layer holding it) with object.set_locked, or close the open group with group.close if it lies outside it"
                         .to_string(),
                 ),
             ),

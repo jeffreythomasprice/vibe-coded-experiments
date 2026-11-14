@@ -383,3 +383,352 @@ fn server_and_client_ops_conform_to_their_result_schemas() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn the_clipboard_is_shared_across_connections_and_sessions() {
+    let dir = temp_dir("clipboard");
+    let mut hub = Hub::new();
+    let gui = connect(&mut hub, "gui");
+    let agent = connect(&mut hub, "mcp");
+    attach_new(&mut hub, gui, &dir.join("a.scene.toml"));
+    attach_new(&mut hub, agent, &dir.join("b.scene.toml"));
+
+    let (empty, _) = run(&mut hub, agent, "clipboard.get", json!({}));
+    assert_eq!(empty["result"]["text"], Value::Null);
+    assert_eq!(empty["result"]["seq"], 0);
+    let (v, _) = run(&mut hub, agent, "clipboard.paste", json!({}));
+    assert_eq!(v["field"], "text");
+
+    let (made, _) = make_box(&mut hub, gui);
+    let id = made["result"]["id"].as_str().unwrap().to_string();
+    let (copied, _) = run(&mut hub, gui, "clipboard.copy", json!({ "ids": [id] }));
+    assert_eq!(copied["ok"], true, "{copied}");
+    assert_eq!(copied["result"]["count"], 1);
+    assert_eq!(copied["result"]["seq"], 1);
+
+    let (pasted, _) = run(
+        &mut hub,
+        agent,
+        "clipboard.paste",
+        json!({ "at": [100, 0, 0] }),
+    );
+    assert_eq!(pasted["ok"], true, "{pasted}");
+    let (summary, _) = run(&mut hub, agent, "scene.summary", json!({}));
+    assert_eq!(summary["result"]["counts"]["brush"], 1, "{summary}");
+
+    let (batched, _) = run(
+        &mut hub,
+        agent,
+        "batch",
+        json!({ "commands": [
+            { "op": "clipboard_paste", "args": { "offset": [0, 64, 0] } },
+            { "op": "clipboard.paste" },
+        ] }),
+    );
+    assert_eq!(batched["ok"], true, "{batched}");
+
+    let (explicit, _) = run(
+        &mut hub,
+        agent,
+        "clipboard.paste",
+        json!({ "text": "not a scene [" }),
+    );
+    assert_eq!(explicit["code"], "InvalidArgument");
+
+    let (none, _) = run(&mut hub, agent, "clipboard.copy", json!({ "ids": [] }));
+    assert_eq!(none["code"], "InvalidArgument");
+}
+
+mod recovery {
+    use std::time::{Duration, Instant};
+
+    use editor_host::RecoverySettings;
+
+    use super::*;
+
+    fn settings(
+        dir: &std::path::Path,
+        autosave: u64,
+        backup: Option<u64>,
+        keep: usize,
+    ) -> RecoverySettings {
+        RecoverySettings {
+            dir: dir.join("state"),
+            autosave: Some(Duration::from_secs(autosave)),
+            backup: backup.map(Duration::from_secs),
+            keep,
+        }
+    }
+
+    fn files(dir: &std::path::Path) -> Vec<String> {
+        let mut out: Vec<String> = std::fs::read_dir(dir)
+            .map(|d| {
+                d.filter_map(Result::ok)
+                    .map(|e| e.file_name().to_string_lossy().into_owned())
+                    .collect()
+            })
+            .unwrap_or_default();
+        out.sort();
+        out
+    }
+
+    fn tick(hub: &mut Hub, ahead: u64, force: bool) {
+        hub.recovery_due(Instant::now() + Duration::from_secs(ahead), force)
+            .run()
+            .unwrap();
+    }
+
+    #[test]
+    fn dirty_sessions_are_autosaved_after_the_interval_and_cleaned_up_on_save() {
+        let dir = temp_dir("autosave");
+        let state = dir.join("state").join("autosave");
+        let path = dir.join("a.scene.toml");
+        let mut hub = Hub::with_recovery(settings(&dir, 5, None, 3));
+        let conn = connect(&mut hub, "mcp");
+        attach_new(&mut hub, conn, &path);
+
+        tick(&mut hub, 60, false);
+        assert!(files(&state).is_empty(), "clean sessions are not autosaved");
+
+        make_box(&mut hub, conn);
+        tick(&mut hub, 1, false);
+        assert!(files(&state).is_empty(), "before the interval");
+        tick(&mut hub, 60, false);
+        assert_eq!(files(&state).len(), 2, "{:?}", files(&state));
+
+        let (list, _) = run(&mut hub, conn, "recovery.list", json!({}));
+        let entry = &list["result"]["entries"][0];
+        assert_eq!(entry["live"], true, "{list}");
+        assert_eq!(entry["source_path"], path.display().to_string());
+        assert_eq!(entry["revision"], 1);
+
+        let before = files(&state);
+        tick(&mut hub, 120, false);
+        assert_eq!(files(&state), before, "nothing changed, nothing rewritten");
+
+        run(&mut hub, conn, "file.save", json!({}));
+        tick(&mut hub, 120, false);
+        assert!(files(&state).is_empty(), "{:?}", files(&state));
+    }
+
+    #[test]
+    fn open_transactions_are_not_autosaved() {
+        let dir = temp_dir("autosave-txn");
+        let mut hub = Hub::with_recovery(settings(&dir, 1, None, 3));
+        let conn = connect(&mut hub, "mcp");
+        attach_new(&mut hub, conn, &dir.join("a.scene.toml"));
+        run(&mut hub, conn, "history.begin", json!({}));
+        make_box(&mut hub, conn);
+        tick(&mut hub, 60, false);
+        assert!(files(&dir.join("state").join("autosave")).is_empty());
+        run(&mut hub, conn, "history.commit", json!({}));
+        tick(&mut hub, 60, false);
+        assert_eq!(files(&dir.join("state").join("autosave")).len(), 2);
+    }
+
+    #[test]
+    fn closing_a_clean_session_removes_its_autosave() {
+        let dir = temp_dir("autosave-close");
+        let state = dir.join("state").join("autosave");
+        let mut hub = Hub::with_recovery(settings(&dir, 1, None, 3));
+        let conn = connect(&mut hub, "mcp");
+        attach_new(&mut hub, conn, &dir.join("a.scene.toml"));
+        make_box(&mut hub, conn);
+        tick(&mut hub, 60, false);
+        assert_eq!(files(&state).len(), 2);
+        run(&mut hub, conn, "file.save", json!({}));
+        hub.disconnect(conn);
+        tick(&mut hub, 120, false);
+        assert!(files(&state).is_empty());
+    }
+
+    #[test]
+    fn backups_are_taken_per_interval_and_pruned() {
+        let dir = temp_dir("backups");
+        let path = dir.join("a.scene.toml");
+        let mut hub = Hub::with_recovery(settings(&dir, 1000, Some(10), 2));
+        let conn = connect(&mut hub, "mcp");
+        attach_new(&mut hub, conn, &path);
+        let backups = dir.join("state").join("backups");
+
+        tick(&mut hub, 60, false);
+        assert!(
+            files(&backups).is_empty(),
+            "an untouched document is not backed up"
+        );
+
+        for round in 1..=4u64 {
+            make_box(&mut hub, conn);
+            tick(&mut hub, 100 * round, false);
+        }
+        let key = files(&backups);
+        assert_eq!(key.len(), 1);
+        assert_eq!(files(&backups.join(&key[0])).len(), 2);
+        assert!(
+            files(&backups.join(&key[0]))
+                .iter()
+                .all(|f| f.ends_with(".scene.toml"))
+        );
+    }
+
+    #[test]
+    fn a_crashed_sessions_autosave_can_be_restored_or_discarded() {
+        let dir = temp_dir("restore");
+        let state = dir.join("state").join("autosave");
+        let path = dir.join("a.scene.toml");
+        let cfg = settings(&dir, 1, None, 3);
+
+        let mut first = Hub::with_recovery(cfg.clone());
+        let conn = connect(&mut first, "mcp");
+        attach_new(&mut first, conn, &path);
+        make_box(&mut first, conn);
+        make_box(&mut first, conn);
+        tick(&mut first, 60, false);
+        assert_eq!(files(&state).len(), 2);
+        drop(first);
+
+        let mut hub = Hub::with_recovery(cfg);
+        let conn = connect(&mut hub, "gui");
+        attach_new(&mut hub, conn, &path);
+        let (list, _) = run(&mut hub, conn, "recovery.list", json!({}));
+        let entry = list["result"]["entries"][0].clone();
+        assert_eq!(entry["live"], false, "{list}");
+        assert_eq!(entry["newer_than_source"], true);
+        let id = entry["id"].as_str().unwrap().to_string();
+
+        let (bad, _) = run(&mut hub, conn, "recovery.restore", json!({ "id": "../x" }));
+        assert_eq!(bad["code"], "InvalidArgument");
+        let (missing, _) = run(&mut hub, conn, "recovery.restore", json!({ "id": "nope" }));
+        assert_eq!(missing["code"], "NotFound");
+
+        let (restored, events) = run(&mut hub, conn, "recovery.restore", json!({ "id": id }));
+        assert_eq!(restored["ok"], true, "{restored}");
+        assert_eq!(restored["result"]["path"], path.display().to_string());
+        assert!(
+            events
+                .iter()
+                .any(|(_, m)| matches!(m, ServerMsg::Snapshot(_)))
+        );
+        let (info, _) = run(&mut hub, conn, "file.info", json!({}));
+        assert_eq!(info["result"]["dirty"], true);
+        let (summary, _) = run(&mut hub, conn, "scene.summary", json!({}));
+        assert_eq!(summary["result"]["counts"]["brush"], 2);
+
+        let (again, _) = run(&mut hub, conn, "recovery.restore", json!({ "id": id }));
+        assert_eq!(
+            again["code"], "InvalidArgument",
+            "owned by this session now: {again}"
+        );
+
+        tick(&mut hub, 60, false);
+        assert_eq!(
+            files(&state).len(),
+            2,
+            "its own autosave replaced the old one"
+        );
+        let (list, _) = run(&mut hub, conn, "recovery.list", json!({}));
+        assert_eq!(list["result"]["entries"].as_array().unwrap().len(), 1);
+        assert_eq!(list["result"]["entries"][0]["live"], true);
+        assert_ne!(list["result"]["entries"][0]["id"], id.as_str());
+    }
+
+    #[test]
+    fn restore_needs_discard_over_unsaved_work_and_discard_deletes() {
+        let dir = temp_dir("restore-guard");
+        let state = dir.join("state").join("autosave");
+        let path = dir.join("a.scene.toml");
+        let cfg = settings(&dir, 1, None, 3);
+        let mut first = Hub::with_recovery(cfg.clone());
+        let conn = connect(&mut first, "mcp");
+        attach_new(&mut first, conn, &path);
+        make_box(&mut first, conn);
+        tick(&mut first, 60, false);
+        drop(first);
+
+        let mut hub = Hub::with_recovery(cfg);
+        let conn = connect(&mut hub, "mcp");
+        attach_new(&mut hub, conn, &path);
+        make_box(&mut hub, conn);
+        let (list, _) = run(&mut hub, conn, "recovery.list", json!({}));
+        let id = list["result"]["entries"][0]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let (refused, _) = run(&mut hub, conn, "recovery.restore", json!({ "id": id }));
+        assert_eq!(refused["code"], "UnsavedChanges", "{refused}");
+        let (forced, _) = run(
+            &mut hub,
+            conn,
+            "recovery.restore",
+            json!({ "id": id, "discard": true }),
+        );
+        assert_eq!(forced["ok"], true, "{forced}");
+
+        let mut other = Hub::with_recovery(settings(&dir, 1, None, 3));
+        let conn = connect(&mut other, "mcp");
+        let (gone, _) = run(&mut other, conn, "recovery.discard", json!({ "id": id }));
+        assert_eq!(gone["ok"], true, "{gone}");
+        let (list, _) = run(&mut other, conn, "recovery.list", json!({}));
+        assert!(list["result"]["entries"].as_array().unwrap().is_empty());
+        let (again, _) = run(&mut other, conn, "recovery.discard", json!({ "id": id }));
+        assert_eq!(again["code"], "NotFound");
+        assert!(files(&state).is_empty(), "{:?}", files(&state));
+    }
+
+    #[test]
+    fn clipboard_and_recovery_results_conform_to_their_schemas() {
+        let dir = temp_dir("conform");
+        let path = dir.join("a.scene.toml");
+        let cfg = settings(&dir, 1, None, 3);
+        let mut first = Hub::with_recovery(cfg.clone());
+        let c = connect(&mut first, "cli");
+        attach_new(&mut first, c, &path);
+        let (made, _) = make_box(&mut first, c);
+        let id = made["result"]["id"].as_str().unwrap().to_string();
+        let (v, _) = run(&mut first, c, "clipboard.get", json!({}));
+        assert_conforms("clipboard.get", &v);
+        let (v, _) = run(&mut first, c, "clipboard.copy", json!({ "ids": [id] }));
+        assert_conforms("clipboard.copy", &v);
+        let (v, _) = run(&mut first, c, "recovery.list", json!({}));
+        assert_conforms("recovery.list", &v);
+        tick(&mut first, 60, false);
+        drop(first);
+
+        let mut hub = Hub::with_recovery(cfg);
+        let c = connect(&mut hub, "cli");
+        attach_new(&mut hub, c, &path);
+        let (list, _) = run(&mut hub, c, "recovery.list", json!({}));
+        assert_conforms("recovery.list", &list);
+        let id = list["result"]["entries"][0]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let (v, _) = run(&mut hub, c, "recovery.restore", json!({ "id": id }));
+        assert_conforms("recovery.restore", &v);
+        let mut other = Hub::with_recovery(settings(&dir, 1, None, 3));
+        let c = connect(&mut other, "cli");
+        let (v, _) = run(&mut other, c, "recovery.discard", json!({ "id": id }));
+        assert_conforms("recovery.discard", &v);
+    }
+
+    #[test]
+    fn a_forced_flush_writes_even_before_the_interval() {
+        let dir = temp_dir("flush");
+        let mut hub = Hub::with_recovery(settings(&dir, 3600, None, 3));
+        let conn = connect(&mut hub, "mcp");
+        attach_new(&mut hub, conn, &dir.join("a.scene.toml"));
+        make_box(&mut hub, conn);
+        tick(&mut hub, 1, false);
+        assert!(files(&dir.join("state").join("autosave")).is_empty());
+        tick(&mut hub, 1, true);
+        assert_eq!(files(&dir.join("state").join("autosave")).len(), 2);
+    }
+
+    #[test]
+    fn recovery_ops_need_a_configured_directory() {
+        let mut hub = Hub::new();
+        let conn = connect(&mut hub, "mcp");
+        let (v, _) = run(&mut hub, conn, "recovery.list", json!({}));
+        assert_eq!(v["code"], "InvalidArgument");
+    }
+}

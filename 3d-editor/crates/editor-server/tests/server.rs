@@ -18,9 +18,10 @@ impl Env {
         std::fs::write(
             &config_path,
             format!(
-                "socket = {:?}\n[server]\nidle_exit_secs = {idle_secs}\nbinary = {:?}\n",
+                "socket = {:?}\n[server]\nidle_exit_secs = {idle_secs}\nbinary = {:?}\n[recovery]\ndir = {:?}\nautosave_secs = 1\n",
                 dir.join("s.sock").display().to_string(),
                 env!("CARGO_BIN_EXE_editor-server"),
+                dir.join("state").display().to_string(),
             ),
         )
         .unwrap();
@@ -146,4 +147,104 @@ fn dirty_sessions_keep_the_server_alive() {
     let info = call(&again, "session.attach", json!({}));
     assert_eq!(info["result"]["dirty"], true, "{info}");
     assert_eq!(call(&again, "file.save", json!({}))["ok"], true);
+}
+
+fn kill_server(env: &Env) {
+    let marker = env.dir.join("config.toml").display().to_string();
+    for entry in std::fs::read_dir("/proc").unwrap().filter_map(Result::ok) {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name.bytes().all(|b| b.is_ascii_digit()) {
+            continue;
+        }
+        let Ok(cmdline) = std::fs::read(entry.path().join("cmdline")) else {
+            continue;
+        };
+        let cmdline = String::from_utf8_lossy(&cmdline).replace('\0', " ");
+        if cmdline.contains("editor-server") && cmdline.contains(&marker) {
+            let status = std::process::Command::new("kill")
+                .args(["-9", &name])
+                .status()
+                .unwrap();
+            assert!(status.success());
+        }
+    }
+    let socket = env.config.socket_path();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while std::os::unix::net::UnixStream::connect(&socket).is_ok() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+fn autosave_files(env: &Env) -> usize {
+    std::fs::read_dir(env.dir.join("state").join("autosave"))
+        .map(|d| d.count())
+        .unwrap_or(0)
+}
+
+#[test]
+fn a_killed_server_leaves_an_autosave_that_restores_the_work() {
+    let env = Env::new("crash", 30);
+    let c = env.client("cli");
+    assert_eq!(attach(&c, &env.scene())["ok"], true);
+    for min in [0, 32] {
+        call(
+            &c,
+            "brush.create_box",
+            json!({ "min": [min,0,0], "max": [min + 8,8,8] }),
+        );
+    }
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while autosave_files(&env) < 2 && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    assert_eq!(autosave_files(&env), 2, "no autosave appeared");
+    kill_server(&env);
+    drop(c);
+
+    let gui = env.client("gui");
+    assert_eq!(attach(&gui, &env.scene())["ok"], true);
+    assert_eq!(
+        call(&gui, "scene.summary", json!({}))["result"]["counts"]["brush"],
+        0
+    );
+    let list = call(&gui, "recovery.list", json!({}));
+    let entry = &list["result"]["entries"][0];
+    assert_eq!(entry["live"], false, "{list}");
+    assert_eq!(entry["newer_than_source"], true);
+    assert_eq!(entry["source_path"], env.scene());
+    let restored = call(&gui, "recovery.restore", json!({ "id": entry["id"] }));
+    assert_eq!(restored["ok"], true, "{restored}");
+    assert_eq!(
+        call(&gui, "scene.summary", json!({}))["result"]["counts"]["brush"],
+        2
+    );
+    assert_eq!(call(&gui, "file.info", json!({}))["result"]["dirty"], true);
+    assert_eq!(call(&gui, "file.save", json!({}))["ok"], true);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while autosave_files(&env) > 0 && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    assert_eq!(autosave_files(&env), 0, "saving clears the autosave");
+}
+
+#[test]
+fn a_forced_stop_flushes_unsaved_work_to_an_autosave() {
+    let env = Env::new("flush", 30);
+    let c = env.client("cli");
+    assert_eq!(attach(&c, &env.scene())["ok"], true);
+    call(
+        &c,
+        "brush.create_box",
+        json!({ "min": [0,0,0], "max": [8,8,8] }),
+    );
+    assert_eq!(autosave_files(&env), 0);
+    let stop = Client::connect_with(&env.config, "stopper", true, true, false, None)
+        .unwrap()
+        .control(editor_proto::ControlAction::Stop, true);
+    assert!(stop.is_ok());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while autosave_files(&env) < 2 && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert_eq!(autosave_files(&env), 2);
 }

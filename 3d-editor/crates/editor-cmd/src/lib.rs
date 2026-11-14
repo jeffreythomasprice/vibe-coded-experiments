@@ -12,10 +12,11 @@ pub mod texture;
 
 pub use bounds::{bounds_json, extent, object_bounds, scene_bounds};
 pub use commands::check::{IssueCode, IssueSeverity};
+pub use commands::clipboard::{Copied, copy_text};
 pub use commands::results;
 pub use commands::scene::ray_hits;
 pub use commands::screenshot::{CameraArg, ColorMode, Mode, Overlay, ScreenshotArgs, Simulate};
-pub use commands::session_args::Attach;
+pub use commands::session_args::{Attach, ClipboardCopy, RecoveryDiscard, RecoveryRestore};
 pub use commands::util::descendants;
 pub use commands::view::{CameraParams, build_camera, camera_json, resolve_camera};
 pub use commands::{Exec, NoArgs, OPS, OpInfo, Safety, parse_args, required_safety};
@@ -33,6 +34,8 @@ pub mod args {
         SetComponent, SetTransform, UpdateComponent,
     };
     pub use crate::commands::face::{BrushVertexAt, SetMaterial, SetUv, TranslateVertices, UvMode};
+    pub use crate::commands::group::{Close as CloseGroup, Open as OpenGroup};
+    pub use crate::commands::layer::SetOmitFromExport;
     pub use crate::commands::material::{
         Create, Delete as DeleteMaterial, Embed, Rename as RenameMaterial, Set, Store, TextureInput,
     };

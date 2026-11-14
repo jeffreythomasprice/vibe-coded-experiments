@@ -248,6 +248,8 @@ fn every_document_and_session_op_returns_its_declared_result() {
         json!({ "min": [6000, 0, 0], "max": [6008, 8, 8] }),
     );
     r.call("group.move", json!({ "objects": [m], "group": g }));
+    r.call("group.open", json!({ "id": g }));
+    r.call("group.close", json!({ "all": true }));
     r.call("group.ungroup", json!({ "ids": [g] }));
 
     let e = r.id("entity.create", json!({ "origin": [0, 0, 128] }));
@@ -334,6 +336,14 @@ fn every_document_and_session_op_returns_its_declared_result() {
     r.call("view.frame", json!({ "ids": [k1], "camera": "cam_two" }));
     r.call("view.camera.get", json!({ "camera": "cam_two" }));
     r.call("view.camera.delete", json!({ "cameras": [cam] }));
+
+    let text = editor_cmd::copy_text(r.s.document(), None, &[k1.parse().unwrap()])
+        .unwrap()
+        .text;
+    r.call(
+        "clipboard.paste",
+        json!({ "text": text, "offset": [0, 0, 200] }),
+    );
 
     r.call("select.set", json!({ "ids": [k1] }));
     r.call("select.add", json!({ "ids": [k2] }));

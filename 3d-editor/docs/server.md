@@ -31,13 +31,37 @@ binary = "..."           # editor-server to autospawn; default next to the runni
 [mcp]
 allow_mutate = false     # defaults for editor-mcp; its flags add to them
 allow_destructive = false
+[recovery]
+dir = "..."              # default $XDG_STATE_HOME/editor, else ~/.local/state/editor
+autosave_secs = 30       # 0 turns autosave off
+backup_secs = 600        # 0 turns backups off
+backup_keep = 10         # backups kept per scene; 0 turns backups off
 ```
 
 The socket path must be at most 100 bytes (the unix limit is about 108); a longer one is a config error. The server takes an exclusive lock on `<socket>.lock`, so two racing autospawns leave exactly one server, and it creates the socket with mode 0600.
 
+## Autosave and backups
+
+The server checks once a second (`watch_recovery` in `editor-server`, beside `watch_idle`). The decisions are `Hub::recovery_due(now, force)`, which only serializes under the hub lock and returns a `Job` of writes and removals; the thread runs the job outside the lock, so a slow disk never stalls clients. A failed write is a line in the server log.
+
+```
+<recovery.dir>/autosave/<key>.<run>-s<n>.scene.toml   the document
+<recovery.dir>/autosave/<key>.<run>-s<n>.json         sidecar: source path, name, revision, saved_at
+<recovery.dir>/backups/<key>/<YYYYMMDD-HHMMSS>.scene.toml
+```
+
+`key` is the scene's file stem plus a hash of its canonical path (`untitled` without a file); `run` is unique to one server process, so a new server never overwrites a crashed one's autosave, and `n` is the session number.
+
+- **Autosave:** a dirty session with no open transaction is written when its revision changed and `autosave_secs` have passed since its last autosave. A session that is clean again (saved, or undone back to the saved point) or dropped has its autosave removed; so has one whose file changed (save as, `file.new`, `file.open`). A forced stop writes one last autosave of every dirty session before exiting, so `server stop --force` does not lose work.
+- **Backups:** every `backup_secs`, a session whose revision changed since its last backup is snapshotted, unsaved state included, and the directory is pruned to the newest `backup_keep`. A freshly opened, untouched document is not backed up.
+- **Recovery:** `recovery.list` / `recovery.restore` / `recovery.discard` (see [tier0-commands.md](tier0-commands.md)). A restored session is dirty; its old autosave is deleted once the session has written its own, or saved.
+- Test servers should set `[recovery] dir` to a temp directory.
+
+The hub also holds the **clipboard** (`clipboard.copy` / `clipboard.get`): the text, an object count and a sequence number, shared by all connections. `hub.handle` fills the text into a `clipboard.paste` that has none, including inside a `batch`.
+
 ## Lifecycle
 
-Any client autospawns the server when it cannot connect (detached into its own process group, output to the log, up to 3 s to come up). The server exits after `idle_exit_secs` with no connections **and** no dirty session. A session with unsaved changes and no clients stays in memory, and the server with it, so a later client can attach and save. `editor-cli server stop` refuses while a session is dirty unless `--force`.
+Any client autospawns the server when it cannot connect (detached into its own process group, output to the log, up to 3 s to come up). The server exits after `idle_exit_secs` with no connections **and** no dirty session. A session with unsaved changes and no clients stays in memory, and the server with it, so a later client can attach and save; if the server dies anyway, the [autosave](#autosave-and-backups) is what is left. `editor-cli server stop` refuses while a session is dirty unless `--force`.
 
 ## Protocol
 

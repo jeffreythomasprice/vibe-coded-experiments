@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use editor_core::{Extra, Group, GroupId, Object, ObjectId};
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::results;
 use super::util::{non_empty, set_group, world_object};
@@ -64,6 +64,7 @@ pub fn create(ctx: &mut Ctx, args: Create) -> CmdResult<results::Created> {
         name,
         layer,
         parent,
+        open: false,
         extra: Extra::new(),
     }));
     for &member in &args.objects {
@@ -157,5 +158,85 @@ pub fn move_objects(ctx: &mut Ctx, args: Move) -> CmdResult<results::Moved> {
     }
     Ok(Outcome::new(results::Moved {
         moved: args.objects.len(),
+    }))
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Open {
+    pub id: GroupId,
+}
+
+fn open_ids(doc: &editor_core::Document) -> Vec<GroupId> {
+    doc.groups
+        .values()
+        .filter(|g| g.open)
+        .map(|g| g.id)
+        .collect()
+}
+
+fn set_open(ctx: &mut Ctx, wanted: &BTreeSet<GroupId>) {
+    let changes: Vec<Group> = ctx
+        .doc()
+        .groups
+        .values()
+        .filter(|g| g.open != wanted.contains(&g.id))
+        .map(|g| Group {
+            open: wanted.contains(&g.id),
+            ..g.clone()
+        })
+        .collect();
+    for group in changes {
+        ctx.insert(Object::Group(group));
+    }
+}
+
+pub fn open(ctx: &mut Ctx, args: Open) -> CmdResult<results::OpenGroups> {
+    let Some(group) = ctx.doc().groups.get(&args.id).cloned() else {
+        return Err(match ctx.doc().contains(args.id.into()) {
+            true => CommandError::wrong_kind(args.id, "group"),
+            false => CommandError::not_found(args.id),
+        });
+    };
+    let id = ObjectId::from(group.id);
+    let own_locked = std::iter::once(id)
+        .chain(ctx.doc().ancestors(id))
+        .filter_map(|i| ctx.doc().own_flags(i))
+        .any(|f| f.locked);
+    if own_locked {
+        return Err(CommandError::Locked {
+            target: id.to_string(),
+        });
+    }
+    let mut wanted = BTreeSet::from([group.id]);
+    let mut parent = group.parent;
+    while let Some(p) = parent {
+        wanted.insert(p);
+        parent = ctx.doc().groups.get(&p).and_then(|g| g.parent);
+    }
+    set_open(ctx, &wanted);
+    Ok(Outcome::new(results::OpenGroups {
+        open: open_ids(ctx.doc()),
+    }))
+}
+
+#[derive(Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Close {
+    /// Close every open group instead of only the innermost.
+    #[serde(default)]
+    pub all: bool,
+}
+
+pub fn close(ctx: &mut Ctx, args: Close) -> CmdResult<results::OpenGroups> {
+    let mut wanted: BTreeSet<GroupId> = open_ids(ctx.doc()).into_iter().collect();
+    if args.all {
+        wanted.clear();
+    } else if let Some(innermost) = ctx.doc().open_group() {
+        wanted.remove(&innermost);
+    }
+    set_open(ctx, &wanted);
+    Ok(Outcome::new(results::OpenGroups {
+        open: open_ids(ctx.doc()),
     }))
 }

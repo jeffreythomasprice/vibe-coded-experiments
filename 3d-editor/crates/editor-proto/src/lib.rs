@@ -5,7 +5,7 @@ mod replica;
 mod wire;
 
 pub use client::{Client, ClientError, Reply, ServerEvent, WakeFn, socket_is_live};
-pub use config::{Config, ConfigError, McpConfig, ServerConfig};
+pub use config::{Config, ConfigError, McpConfig, RecoveryConfig, ServerConfig};
 pub use policy::Policy;
 pub use replica::{Applied, Replica, ReplicaError};
 pub use wire::{

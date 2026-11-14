@@ -37,7 +37,7 @@ Argument errors (`InvalidArgument`) carry the full path to the offending value i
   - `Document`: `dispatch` runs it through a `Ctx`. These are the only ops that can be batched or dry-run, and they are undoable unless `read`.
   - `Session`: `Session` handles it itself (`history.*`, `select.*`, `file.*`). Not batchable, no dry run, no undo entry.
   - `Client`: needs a renderer. Only `view.screenshot`. `editor-cmd` never executes it (`dispatch` answers `InvalidArgument` with a hint); the server's `Hub` calls `editor_render::screenshot_with_selection`.
-  - `Server`: `session.list`, `session.attach`, `session.info`. They concern the server's set of sessions, so only the `Hub` runs them; a bare `Session` answers `InvalidArgument`. Not batchable. See [server.md](server.md#sessions).
+  - `Server`: `session.list`, `session.attach`, `session.info`, `clipboard.copy`, `clipboard.get`, `recovery.list`, `recovery.restore`, `recovery.discard`. They concern the server's set of sessions, so only the `Hub` runs them; a bare `Session` answers `InvalidArgument`. Not batchable. See [server.md](server.md#sessions).
 
 MCP tools and the CLI's `ops` / `schema` commands are generated from the registry. Safety gating is enforced per connection by the server (`editor-host`), see [server.md](server.md#policy) and [tier0-mcp.md](tier0-mcp.md). Ids in schemas are strings with a prefix pattern; vectors are `[x, y, z]`.
 
@@ -58,8 +58,19 @@ Which document a connection is working on; see [server.md](server.md#sessions). 
 - `session.list` → `{sessions: [row], focused}`.
 - `session.info` → the row of this connection's session.
 
+### `clipboard.*` and `recovery.*` (T1, server)
+The clipboard is one per server, shared by every connection and session, so a copy in the GUI can be pasted by an agent in another file and the other way round.
+- `clipboard.copy {ids}` (read) → `{text, count, seq}`. Copies brushes, meshes, entities and groups with everything inside them; it also stores the result as the server's clipboard. `text` is a scene-format fragment (see [scene-format.md](scene-format.md#clipboard-text)) with the materials and layers the objects use. Parents that are not copied are dropped from the fragment, so a lone group member pastes ungrouped. Relative texture paths are made absolute when the source scene has a file.
+- `clipboard.get` (read) → `{text, count, seq}`; `text` is null while nothing has been copied. `seq` bumps with every copy.
+- `recovery.list` (read) → `{entries: [{id, source_path, name, saved_at, revision, newer_than_source, live}]}`: the autosaves in the server's recovery directory, newest first. `live` marks one that a running session owns; the rest are leftovers of a crash or forced stop. `newer_than_source`: the scene file is missing or older than the autosave.
+- `recovery.restore {id, discard?}` (destructive) replaces this connection's session document with the autosave. The session keeps its file and stays unsaved (nothing is written until `file.save`); undo history and selection start over. `UnsavedChanges` unless `discard`. A live session's own autosave is `InvalidArgument`.
+- `recovery.discard {id}` (destructive) deletes an autosave (not a live one).
+- All of these are `InvalidArgument` on a hub with no recovery directory (`recovery.*` only; the clipboard always works).
+
+Autosave and backup behaviour is described in [server.md](server.md#autosave-and-backups).
+
 ### `scene.*` (T0, read)
-- `summary` → `{name, counts, bounds, layers, components, selection, hidden, locked}`. `components` counts the entities carrying each component name. `selection` is the selection size; `hidden` and `locked` count objects hidden or locked directly or through a container; each layer row also has `hidden`, `locked` and `omit_from_export`.
+- `summary` → `{name, counts, bounds, layers, components, selection, hidden, locked}`. `components` counts the entities carrying each component name. `selection` is the selection size; `hidden` and `locked` count objects hidden or locked directly, through a container, or (locked) by lying outside the open group; `open_group` is the innermost open group or null; each layer row also has `hidden`, `locked` and `omit_from_export`.
 - `list {kind?, layer?, group?, entity?, component?, name?, within?, intersects?, hidden?, locked?, fields?, limit?, cursor?}` → `{objects, next_cursor}`. Filters combine with AND. `hidden` and `locked` match effective state, so `{locked: true}` lists everything under a locked layer too. A summary has `hidden` / `locked` keys only for objects that carry the flag themselves. `layer`, `group` and `entity` match the direct parent pointer. `name` is an exact group, layer or camera name. `within` / `intersects` are `{min, max}` boxes tested against object bounds (objects without bounds never match). `fields` keeps only those keys of each summary (`id` always stays). Objects come in id-number order; `limit` defaults to 100 (max 1000); pass the previous `next_cursor` as `cursor`. `next_cursor` is null on the last page.
 - `get {ids, detail: summary|full|geometry}`
 - `bounds {ids}` → `{bounds: [{id, bounds|null}], combined}`. A group, brush entity or layer covers all its members (nested groups and brush entity members included, cameras excluded); an empty one is null. `scene.get` and the list filters still use an object's own geometry only.
@@ -125,6 +136,7 @@ All take `ids` and return `{transformed: n}`. They apply to brushes, meshes and 
 - `delete {ids}` (destructive, still undoable).
 - `duplicate {ids, offset?}`: deep copy of brushes, meshes, entities and groups, including group members and brush entity members, with parent pointers remapped inside the copy. A copy whose original parent is not copied lands beside the original (same layer, group and entity). `result.ids` lists copies of the requested ids first, then the rest; `result.map` maps every old id to its copy.
 - `array {ids, count, offset, mirror?}`: `count` extra deep copies (1..=256) of `ids` at `k * offset` for k = 1..count, as one undoable, dry-runnable op built on the `duplicate` copy path. `offset` must not be zero. `mirror: {axis, pivot}` (`axis` as for `transform.flip`, `pivot` a point) also adds a mirrored copy of the whole row, the originals included (`count + 1` more copies), across the plane through `pivot` with normal `axis`; mirrored brushes and meshes are fixed up exactly as `transform.flip` does. Result: `ids` in creation order (the row copies first, then the mirrored ones; within a copy, the requested ids first and then their contents), `copy_size` (objects per copy, so copy k starts at `ids[k * copy_size]`) and `map`, `{old_id: [copies in that order]}`. At most 10000 objects are created; a copy outside the world bounds is `InvalidGeometry` and nothing is created.
+- `clipboard.paste {text?, at?, offset?}`: creates new objects from scene-format `text`. Without `text` the server fills in its clipboard (`clipboard.copy`); a `clipboard.paste` item inside a `batch` is filled the same way. The text may be any scene file. With neither `at` nor `offset` the objects land where they were copied from; `offset` shifts them; `at` puts the centre of their bounds there (the two are exclusive). Every object gets a fresh id, parent pointers and entity links between pasted objects are remapped, and texture lock applies to the move. Materials are matched by name: a missing one is created, an existing one is kept (a warning if it differs). Layers are matched by name, else the objects go to the first layer. Pasting honours locks and the open group like any create. Result: `ids` (the top-level objects first, then their contents), `id`, `top_level` (how many leading ids are top-level) and `map` (old -> new). Bad text is `InvalidArgument` with `field: "text"`; at most 10000 objects.
 - `rename {id, name}` for groups, layers and cameras (layer and camera names must be unique).
 - `set_layer {ids, layer}` moves objects with their contents. An object whose group or entity stays on another layer is an error: move the parent too, or release the object first.
 
@@ -153,7 +165,9 @@ Definitions records (ids `d`) and what they define; see [entities.md](entities.m
 - `group.create {objects, name?}`: the objects share a layer and parent group and are not brush entity members (group the entity instead).
 - `group.ungroup {ids}`: members go to the group's parent.
 - `group.move {objects, group?}`: `group` null or absent removes the objects from their group. The target must be on the same layer, and a group cannot move into its own subtree.
-- `layer.set_omit_from_export {id, omit}`: stored only; nothing exports yet.
+- `group.open {id}` → `{open: [ids]}` (mutate, undoable): opens the group and its parent groups and closes any other open group. Everything outside the open group becomes effectively locked (edits fail with `Locked`, `select.all` skips it, `summary.locked` counts it), except that hiding, locking and opening or closing groups still work. Brushes, meshes, entities and groups created while a group is open are put into it (and onto its layer) unless the op placed them in a group already. A group locked on its own or through a container cannot be opened (`Locked`). Never saved.
+- `group.close {all?}` → `{open: [ids]}`: closes the innermost open group, or all of them. Nothing open is not an error.
+- `layer.set_omit_from_export {id, omit}`: stored in the scene; the game client and `simulate` screenshots leave the layer out. There is no exporter yet.
 
 ### Hide and lock
 All are `object.*`, mutate safety, undoable, and take effect for everything an object contains (see the [model](tier0-model.md#hidden-and-locked)). Brushes, meshes, entities, groups and layers are flaggable; a camera is `WrongKind`.

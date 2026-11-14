@@ -39,9 +39,10 @@ impl Env {
         std::fs::write(
             &config,
             format!(
-                "socket = {:?}\n[server]\nidle_exit_secs = 1\nbinary = {:?}\n",
+                "socket = {:?}\n[server]\nidle_exit_secs = 1\nbinary = {:?}\n[recovery]\ndir = {:?}\nautosave_secs = 1\n",
                 dir.join("s.sock").display().to_string(),
                 server_binary().display().to_string(),
+                dir.join("state").display().to_string(),
             ),
         )
         .unwrap();
@@ -364,4 +365,268 @@ async fn results_conform_to_the_declared_output_schema() {
     assert_eq!(result.is_error, Some(true));
     assert_eq!(validate("scene_get", &result), value);
     client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn visibility_locks_and_open_groups_work_over_mcp() {
+    let env = Env::new();
+    let client = connect(&env, &["--allow-destructive"]).await;
+    let list = names(&client).await;
+    for tool in [
+        "object_set_hidden",
+        "object_set_locked",
+        "object_isolate",
+        "object_show_all",
+        "object_unlock_all",
+        "layer_set_omit_from_export",
+        "group_open",
+        "group_close",
+    ] {
+        assert!(list.contains(&tool.to_string()), "{tool}");
+    }
+
+    let make = |min: i32| json!({ "min": [min, 0, 0], "max": [min + 8, 8, 8] });
+    let (_, a) = call(&client, "brush_create_box", make(0)).await;
+    let (_, b) = call(&client, "brush_create_box", make(32)).await;
+    let (a, b) = (
+        a["result"]["id"].as_str().unwrap().to_string(),
+        b["result"]["id"].as_str().unwrap().to_string(),
+    );
+
+    let (_, v) = call(
+        &client,
+        "object_set_hidden",
+        json!({ "ids": [&a], "hidden": true }),
+    )
+    .await;
+    assert_eq!(v["result"]["updated"], 1);
+    let (_, v) = call(&client, "scene_summary", json!({})).await;
+    assert_eq!(v["result"]["hidden"], 1);
+    call(&client, "object_show_all", json!({})).await;
+    call(&client, "object_isolate", json!({ "ids": [&a] })).await;
+    let (_, v) = call(&client, "scene_summary", json!({})).await;
+    assert_eq!(v["result"]["hidden"], 1);
+    call(&client, "object_show_all", json!({})).await;
+    let (_, v) = call(&client, "scene_summary", json!({})).await;
+    assert_eq!(v["result"]["hidden"], 0);
+
+    call(
+        &client,
+        "object_set_locked",
+        json!({ "ids": [&a], "locked": true }),
+    )
+    .await;
+    let (r, v) = call(
+        &client,
+        "transform_translate",
+        json!({ "ids": [&a], "delta": [1, 0, 0] }),
+    )
+    .await;
+    assert_eq!(r.is_error, Some(true));
+    assert_eq!(v["code"], "Locked");
+    call(&client, "object_unlock_all", json!({})).await;
+
+    let (_, g) = call(
+        &client,
+        "group_create",
+        json!({ "objects": [&a], "name": "inside" }),
+    )
+    .await;
+    let g = g["result"]["id"].as_str().unwrap().to_string();
+    let (_, v) = call(&client, "group_open", json!({ "id": &g })).await;
+    assert_eq!(v["result"]["open"], json!([&g]));
+    let (_, v) = call(&client, "scene_summary", json!({})).await;
+    assert_eq!(v["result"]["open_group"], json!(&g));
+
+    let (r, v) = call(
+        &client,
+        "transform_translate",
+        json!({ "ids": [&b], "delta": [1, 0, 0] }),
+    )
+    .await;
+    assert_eq!(r.is_error, Some(true));
+    assert_eq!(v["code"], "Locked");
+    let (_, c) = call(&client, "brush_create_box", make(64)).await;
+    let c = c["result"]["id"].as_str().unwrap().to_string();
+    let (_, v) = call(&client, "scene_get", json!({ "ids": [&c] })).await;
+    assert_eq!(v["result"]["objects"][0]["group"], json!(&g));
+
+    call(&client, "history_undo", json!({})).await;
+    call(&client, "history_undo", json!({})).await;
+    let (_, v) = call(&client, "scene_summary", json!({})).await;
+    assert!(v["result"]["open_group"].is_null());
+    let (_, v) = call(
+        &client,
+        "transform_translate",
+        json!({ "ids": [&b], "delta": [1, 0, 0] }),
+    )
+    .await;
+    assert_eq!(v["ok"], true);
+
+    let (_, layers) = call(&client, "scene_summary", json!({})).await;
+    let layer = layers["result"]["layers"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (_, v) = call(
+        &client,
+        "layer_set_omit_from_export",
+        json!({ "id": &layer, "omit": true }),
+    )
+    .await;
+    assert_eq!(v["ok"], true);
+    let (_, v) = call(&client, "scene_summary", json!({})).await;
+    assert_eq!(v["result"]["layers"][0]["omit_from_export"], true);
+    client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn clipboard_copies_between_clients_and_files() {
+    let env = Env::new();
+    let dir = env.dir.join("scenes");
+    std::fs::create_dir_all(&dir).unwrap();
+    let a = dir.join("a.scene.toml");
+    let b = dir.join("b.scene.toml");
+    let one = connect(&env, &[a.to_str().unwrap(), "--create", "--allow-mutate"]).await;
+    let two = connect(
+        &env,
+        &[b.to_str().unwrap(), "--create", "--allow-destructive"],
+    )
+    .await;
+
+    let list = names(&one).await;
+    for tool in ["clipboard_copy", "clipboard_get", "clipboard_paste"] {
+        assert!(list.contains(&tool.to_string()), "{tool} missing");
+    }
+
+    let (_, made) = call(
+        &one,
+        "brush_create_box",
+        json!({ "min": [0, 0, 0], "max": [16, 16, 16] }),
+    )
+    .await;
+    let id = made["result"]["id"].as_str().unwrap().to_string();
+    let (_, copied) = call(&one, "clipboard_copy", json!({ "ids": [id] })).await;
+    assert_eq!(copied["result"]["count"], 1, "{copied}");
+    assert!(
+        copied["result"]["text"]
+            .as_str()
+            .unwrap()
+            .contains("format")
+    );
+
+    let (_, got) = call(&two, "clipboard_get", json!({})).await;
+    assert_eq!(got["result"]["seq"], copied["result"]["seq"]);
+
+    let (_, pasted) = call(&two, "clipboard_paste", json!({ "at": [100, 50, 8] })).await;
+    assert_eq!(pasted["ok"], true, "{pasted}");
+    assert_eq!(pasted["result"]["top_level"], 1);
+    let new = pasted["result"]["id"].as_str().unwrap().to_string();
+    let (_, bounds) = call(&two, "scene_bounds", json!({ "ids": [new] })).await;
+    let min = &bounds["result"]["combined"]["min"];
+    assert_eq!(min[0], 92.0, "{bounds}");
+    assert_eq!(min[1], 42.0, "{bounds}");
+
+    let (_, one_summary) = call(&one, "scene_summary", json!({})).await;
+    assert_eq!(one_summary["result"]["counts"]["brush"], 1);
+
+    let (_, undone) = call(&two, "history_undo", json!({})).await;
+    assert_eq!(undone["ok"], true, "{undone}");
+    let (_, two_summary) = call(&two, "scene_summary", json!({})).await;
+    assert_eq!(two_summary["result"]["counts"]["brush"], 0);
+
+    let (_, bad) = call(&two, "clipboard_paste", json!({ "text": "garbage [" })).await;
+    assert_eq!(bad["code"], "InvalidArgument");
+
+    one.cancel().await.unwrap();
+    two.cancel().await.unwrap();
+}
+
+fn kill_server(env: &Env) {
+    let marker = env.config.display().to_string();
+    for entry in std::fs::read_dir("/proc").unwrap().filter_map(Result::ok) {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name.bytes().all(|b| b.is_ascii_digit()) {
+            continue;
+        }
+        let Ok(cmdline) = std::fs::read(entry.path().join("cmdline")) else {
+            continue;
+        };
+        let cmdline = String::from_utf8_lossy(&cmdline).replace('\0', " ");
+        if cmdline.contains("editor-server") && cmdline.contains(&marker) {
+            let status = std::process::Command::new("kill")
+                .args(["-9", &name])
+                .status()
+                .unwrap();
+            assert!(status.success());
+        }
+    }
+    let socket = env.dir.join("s.sock");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::os::unix::net::UnixStream::connect(&socket).is_ok()
+        && std::time::Instant::now() < deadline
+    {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+#[tokio::test]
+async fn an_agent_recovers_work_lost_when_the_server_dies() {
+    let env = Env::new();
+    let path = env.dir.join("scenes").join("r.scene.toml");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let first = connect(
+        &env,
+        &[path.to_str().unwrap(), "--create", "--allow-mutate"],
+    )
+    .await;
+    for min in [0, 32, 64] {
+        call(
+            &first,
+            "brush_create_box",
+            json!({ "min": [min, 0, 0], "max": [min + 8, 8, 8] }),
+        )
+        .await;
+    }
+    let autosave = env.dir.join("state").join("autosave");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while std::fs::read_dir(&autosave).map_or(0, |d| d.count()) < 2
+        && std::time::Instant::now() < deadline
+    {
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+    kill_server(&env);
+    let _ = first.cancel().await;
+
+    let second = connect(&env, &[path.to_str().unwrap(), "--allow-destructive"]).await;
+    let list = names(&second).await;
+    for tool in ["recovery_list", "recovery_restore", "recovery_discard"] {
+        assert!(list.contains(&tool.to_string()), "{tool} missing");
+    }
+    let (_, summary) = call(&second, "scene_summary", json!({})).await;
+    assert_eq!(summary["result"]["counts"]["brush"], 0);
+
+    let (_, found) = call(&second, "recovery_list", json!({})).await;
+    let entry = &found["result"]["entries"][0];
+    assert_eq!(entry["newer_than_source"], true, "{found}");
+    assert_eq!(entry["live"], false);
+
+    let (_, restored) = call(&second, "recovery_restore", json!({ "id": entry["id"] })).await;
+    assert_eq!(restored["ok"], true, "{restored}");
+    let (_, summary) = call(&second, "scene_summary", json!({})).await;
+    assert_eq!(summary["result"]["counts"]["brush"], 3);
+    let (_, info) = call(&second, "file_info", json!({})).await;
+    assert_eq!(info["result"]["dirty"], true);
+
+    call(&second, "file_save", json!({})).await;
+    let (_, after) = call(&second, "recovery_list", json!({})).await;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut entries = after["result"]["entries"].as_array().unwrap().len();
+    while entries > 0 && std::time::Instant::now() < deadline {
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        let (_, again) = call(&second, "recovery_list", json!({})).await;
+        entries = again["result"]["entries"].as_array().unwrap().len();
+    }
+    assert_eq!(entries, 0, "saving clears the autosave");
+    second.cancel().await.unwrap();
 }

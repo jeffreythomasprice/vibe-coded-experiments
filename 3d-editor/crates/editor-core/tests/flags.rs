@@ -12,6 +12,7 @@ fn setup() -> (Document, LayerId, GroupId, GroupId, EntityId, BrushId) {
             name: "g".into(),
             layer,
             parent,
+            open: false,
             extra: Extra::new(),
         })
     };
@@ -87,28 +88,39 @@ fn ancestors_run_entity_then_groups_then_layer() {
     assert!(doc.ancestors(layer.into()).is_empty());
 }
 
-#[test]
-fn clicks_select_the_outermost_closed_group() {
-    let (doc, _, outer, inner, entity, brush) = setup();
-    let b: ObjectId = brush.into();
-    assert_eq!(doc.pick_target(b, None), ObjectId::from(outer));
-    assert_eq!(doc.pick_target(b, Some(outer)), ObjectId::from(inner));
-    assert_eq!(doc.pick_target(b, Some(inner)), b);
-    assert_eq!(
-        doc.pick_target(entity.into(), Some(outer)),
-        ObjectId::from(inner)
-    );
-    let lone = ObjectId::from(outer);
-    assert_eq!(doc.pick_target(lone, None), lone);
+fn set_open(doc: &mut Document, id: GroupId, open: bool) {
+    let mut group = doc.groups.get(&id).unwrap().clone();
+    group.open = open;
+    doc.insert(Object::Group(group));
 }
 
 #[test]
-fn an_open_group_leaves_everything_else_unpickable() {
+fn clicks_select_the_outermost_closed_group() {
+    let (mut doc, _, outer, inner, entity, brush) = setup();
+    let b: ObjectId = brush.into();
+    assert_eq!(doc.pick_target(b), ObjectId::from(outer));
+    set_open(&mut doc, outer, true);
+    assert_eq!(doc.pick_target(b), ObjectId::from(inner));
+    assert_eq!(doc.pick_target(entity.into()), ObjectId::from(inner));
+    set_open(&mut doc, inner, true);
+    assert_eq!(doc.open_group(), Some(inner));
+    assert_eq!(doc.pick_target(b), b);
+    let lone = ObjectId::from(outer);
+    set_open(&mut doc, outer, false);
+    set_open(&mut doc, inner, false);
+    assert_eq!(doc.pick_target(lone), lone);
+}
+
+#[test]
+fn an_open_group_locks_everything_else() {
     let (mut doc, layer, outer, inner, _, brush) = setup();
     let b: ObjectId = brush.into();
-    assert!(doc.pickable(b, None));
-    assert!(doc.pickable(b, Some(inner)));
-    assert!(doc.pickable(b, Some(outer)));
+    assert_eq!(doc.open_group(), None);
+    assert!(doc.pickable(b));
+    set_open(&mut doc, inner, true);
+    assert_eq!(doc.open_group(), Some(inner));
+    assert!(doc.pickable(b));
+    assert!(!doc.effective_locked(outer.into()) && !doc.effective_locked(layer.into()));
 
     let other = BrushId(doc.alloc_id());
     doc.insert(Object::Brush(BrushObject {
@@ -120,8 +132,13 @@ fn an_open_group_leaves_everything_else_unpickable() {
         brush: Brush::default(),
         extra: Extra::new(),
     }));
-    assert!(doc.pickable(other.into(), None));
-    assert!(!doc.pickable(other.into(), Some(outer)));
+    assert!(doc.effective_locked(other.into()));
+    assert!(!doc.pickable(other.into()));
+    assert!(doc.locked_ids().contains(&other.into()));
+    set_open(&mut doc, inner, false);
+    assert!(doc.pickable(other.into()));
+    set_open(&mut doc, outer, true);
+    assert!(doc.pickable(b));
 
     set(
         &mut doc,
@@ -131,5 +148,5 @@ fn an_open_group_leaves_everything_else_unpickable() {
             locked: true,
         },
     );
-    assert!(!doc.pickable(b, None));
+    assert!(!doc.pickable(b));
 }

@@ -1,10 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
-use editor_cmd::results::{SessionAttached, SessionList};
+use editor_cmd::results::{
+    ClipboardState, Discarded, Recovered, RecoveryList, SessionAttached, SessionList,
+};
 use editor_cmd::{
-    Actor, Attach, CommandError, Exec, Feed, FileState, HistoryState, OpInfo, Request, Response,
-    Session, parse_args,
+    Actor, Attach, ClipboardCopy, CommandError, Exec, Feed, FileState, HistoryState, OpInfo,
+    RecoveryDiscard, RecoveryRestore, Request, Response, Session, parse_args,
 };
 use editor_core::{Document, ElementRef, ObjectId, Part};
 use editor_proto::{
@@ -14,6 +17,10 @@ use editor_proto::{
 use editor_render::Renderer;
 use serde_json::Value;
 
+use crate::recovery::{
+    self, Job, RecoverySettings, SlotRecovery, autosave_files, backup_path, key_of, sidecar_path,
+    sidecar_text, valid_id,
+};
 use crate::{HostReply, Policy, shot};
 
 pub type ConnId = u64;
@@ -38,6 +45,7 @@ impl Handled {
 struct Slot {
     session: Session,
     conns: BTreeSet<ConnId>,
+    rec: SlotRecovery,
 }
 
 struct Conn {
@@ -45,6 +53,52 @@ struct Conn {
     policy: Policy,
     session: Option<u64>,
     cwd: Option<PathBuf>,
+}
+
+#[derive(Default)]
+struct Clipboard {
+    text: Option<String>,
+    count: usize,
+    seq: u64,
+}
+
+impl Clipboard {
+    fn state(&self) -> ClipboardState {
+        ClipboardState {
+            text: self.text.clone(),
+            count: self.count,
+            seq: self.seq,
+        }
+    }
+
+    fn fill(&self, request: &mut Request) {
+        let Some(text) = &self.text else { return };
+        let is_paste = |op: &str| matches!(op, "clipboard.paste" | "clipboard_paste");
+        let fill = |args: &mut Value| {
+            if args.is_null() {
+                *args = Value::Object(Default::default());
+            }
+            if let Value::Object(map) = args
+                && !map.contains_key("text")
+            {
+                map.insert("text".into(), Value::String(text.clone()));
+            }
+        };
+        if is_paste(&request.op) {
+            fill(&mut request.args);
+        } else if request.op == "batch"
+            && let Some(Value::Array(items)) = request.args.get_mut("commands")
+        {
+            for item in items {
+                if item.get("op").and_then(Value::as_str).is_some_and(is_paste) {
+                    if item.get("args").is_none() {
+                        item["args"] = Value::Null;
+                    }
+                    fill(&mut item["args"]);
+                }
+            }
+        }
+    }
 }
 
 const PATH_OPS: &[&str] = &[
@@ -170,6 +224,10 @@ pub struct Hub {
     conns: HashMap<ConnId, Conn>,
     renderer: Option<Renderer>,
     focused: Option<u64>,
+    clipboard: Clipboard,
+    recovery: Option<RecoverySettings>,
+    run: String,
+    orphans: Vec<PathBuf>,
     next_conn: ConnId,
     next_session: u64,
 }
@@ -187,8 +245,26 @@ impl Hub {
             conns: HashMap::new(),
             renderer: None,
             focused: None,
+            clipboard: Clipboard::default(),
+            recovery: None,
+            run: format!(
+                "{:x}-p{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |d| d.as_nanos()),
+                std::process::id()
+            ),
+            orphans: Vec::new(),
             next_conn: 1,
             next_session: 1,
+        }
+    }
+
+    /// A hub that autosaves dirty sessions and snapshots backups into `settings.dir`; callers drive `recovery_due`.
+    pub fn with_recovery(settings: RecoverySettings) -> Self {
+        Self {
+            recovery: Some(settings),
+            ..Self::new()
         }
     }
 
@@ -264,8 +340,14 @@ impl Hub {
             events = self.events_for(sid);
         }
         let slot = &self.sessions[&sid];
-        if slot.conns.is_empty() && !slot.session.is_dirty() {
-            self.sessions.remove(&sid);
+        if slot.conns.is_empty()
+            && !slot.session.is_dirty()
+            && let Some(gone) = self.sessions.remove(&sid)
+        {
+            self.orphans
+                .extend(gone.rec.own.iter().flat_map(|p| autosave_files(p)));
+            self.orphans
+                .extend(gone.rec.superseded.iter().flat_map(|p| autosave_files(p)));
         }
         if self.focused == Some(sid) && !self.sessions.contains_key(&sid) {
             self.focused = self.sessions.keys().next_back().copied();
@@ -380,6 +462,7 @@ impl Hub {
         if let Some(cwd) = &cwd {
             resolve_paths(&mut request, cwd);
         }
+        self.clipboard.fill(&mut request);
         if info.is_some_and(|o| o.exec == Exec::Server) {
             return self.server_op(conn, &request);
         }
@@ -463,6 +546,14 @@ impl Hub {
             "session.list" => Ok(Handled::from_rows(self)),
             "session.info" => self.session_info(conn),
             "session.attach" => self.attach(conn, request),
+            "clipboard.copy" => self.clipboard_copy(conn, request),
+            "recovery.list" => self.recovery_list(conn),
+            "recovery.restore" => self.recovery_restore(conn, request),
+            "recovery.discard" => self.recovery_discard(conn, request),
+            "clipboard.get" => {
+                let revision = self.conn_session(conn).map_or(0, Session::revision);
+                Ok(self.ok(self.clipboard.state(), Vec::new(), revision))
+            }
             other => Err(CommandError::invalid_arg(
                 "op",
                 format!("unknown op `{other}`"),
@@ -472,6 +563,180 @@ impl Hub {
             Ok(h) => h,
             Err(e) => Handled::error(&e),
         }
+    }
+
+    /// Work for the recovery directory: autosaves of dirty sessions, interval backups, and cleanup of what a save or close made stale. `force` ignores the autosave interval (a stopping server).
+    pub fn recovery_due(&mut self, now: Instant, force: bool) -> Job {
+        let mut job = Job::default();
+        let Some(settings) = self.recovery.clone() else {
+            return job;
+        };
+        job.removes.append(&mut self.orphans);
+        let run = self.run.clone();
+        for (&sid, slot) in &mut self.sessions {
+            let session = &slot.session;
+            let rec = &mut slot.rec;
+            let key = key_of(session.path());
+            if rec.key != key {
+                if let Some(own) = rec.own.take() {
+                    job.removes.extend(autosave_files(&own));
+                }
+                rec.autosaved_rev = None;
+                rec.key = key.clone();
+            }
+            let revision = session.revision();
+            let busy = session.has_open_transaction();
+            let mut text: Option<String> = None;
+            if !session.is_dirty() {
+                if let Some(own) = rec.own.take() {
+                    job.removes.extend(autosave_files(&own));
+                }
+                rec.autosaved_rev = None;
+                for old in rec.superseded.drain(..) {
+                    job.removes.extend(autosave_files(&old));
+                }
+            } else if !busy
+                && let Some(every) = settings.autosave
+                && rec.autosaved_rev != Some(revision)
+                && (force || now.duration_since(rec.last_autosave) >= every)
+            {
+                let own = settings.autosave_path(&format!("{key}.{run}-s{sid}"));
+                let body = text.get_or_insert_with(|| editor_fmt::write(session.document()));
+                job.writes.push((own.clone(), body.clone()));
+                job.writes.push((
+                    sidecar_path(&own),
+                    sidecar_text(session.path(), &session.document().name, revision),
+                ));
+                rec.own = Some(own);
+                rec.autosaved_rev = Some(revision);
+                rec.last_autosave = now;
+                for old in rec.superseded.drain(..) {
+                    job.removes.extend(autosave_files(&old));
+                }
+            }
+            if !busy
+                && let Some(every) = settings.backup
+                && rec.backup_rev != Some(revision)
+                && now.duration_since(rec.last_backup) >= every
+            {
+                let body = text.get_or_insert_with(|| editor_fmt::write(session.document()));
+                job.writes.push((
+                    backup_path(&settings, &key, recovery::unix_now()),
+                    body.clone(),
+                ));
+                job.prune.push((settings.backup_dir(&key), settings.keep));
+                rec.backup_rev = Some(revision);
+                rec.last_backup = now;
+            }
+        }
+        job
+    }
+
+    fn live_ids(&self) -> BTreeSet<String> {
+        self.sessions
+            .values()
+            .flat_map(|s| s.rec.own.iter().chain(&s.rec.superseded))
+            .map(|p| recovery::id_of(p))
+            .collect()
+    }
+
+    fn recovery_settings(&self) -> Result<RecoverySettings, CommandError> {
+        self.recovery.clone().ok_or_else(|| {
+            CommandError::invalid_arg("op", "this server has no recovery directory configured")
+        })
+    }
+
+    fn checked_autosave(&self, id: &str) -> Result<PathBuf, CommandError> {
+        let settings = self.recovery_settings()?;
+        if !valid_id(id) {
+            return Err(CommandError::invalid_arg(
+                "id",
+                "not an autosave id; take one from recovery.list",
+            ));
+        }
+        if self.live_ids().contains(id) {
+            return Err(CommandError::invalid_arg(
+                "id",
+                "that autosave belongs to a running session",
+            ));
+        }
+        let path = settings.autosave_path(id);
+        if !path.exists() {
+            return Err(CommandError::not_found(id));
+        }
+        Ok(path)
+    }
+
+    fn recovery_list(&self, conn: ConnId) -> Result<Handled, CommandError> {
+        let settings = self.recovery_settings()?;
+        let entries = recovery::list(&settings, &self.live_ids());
+        let revision = self.conn_session(conn).map_or(0, Session::revision);
+        Ok(self.ok(RecoveryList { entries }, Vec::new(), revision))
+    }
+
+    fn recovery_restore(
+        &mut self,
+        conn: ConnId,
+        request: &Request,
+    ) -> Result<Handled, CommandError> {
+        let RecoveryRestore { id, discard } = parse_args(request.args.clone())?;
+        let path = self.checked_autosave(&id)?;
+        let sid = self
+            .conns
+            .get(&conn)
+            .and_then(|c| c.session)
+            .ok_or_else(|| {
+                CommandError::invalid_arg("op", "this connection has no session")
+                    .with_hint("call session.attach first")
+            })?;
+        let doc = editor_fmt::load_file(&path).map_err(file_error)?;
+        let slot = self
+            .sessions
+            .get_mut(&sid)
+            .expect("attached session exists");
+        slot.session.recover(doc, discard)?;
+        slot.rec.superseded.push(path);
+        slot.rec.autosaved_rev = None;
+        let file = slot.session.path().map(|p| p.display().to_string());
+        let revision = slot.session.revision();
+        let events = self.events_for(sid);
+        Ok(self.ok(Recovered { id, path: file }, events, revision))
+    }
+
+    fn recovery_discard(
+        &mut self,
+        conn: ConnId,
+        request: &Request,
+    ) -> Result<Handled, CommandError> {
+        let RecoveryDiscard { id } = parse_args(request.args.clone())?;
+        let path = self.checked_autosave(&id)?;
+        for file in autosave_files(&path) {
+            let _ = std::fs::remove_file(file);
+        }
+        let revision = self.conn_session(conn).map_or(0, Session::revision);
+        Ok(self.ok(Discarded { id }, Vec::new(), revision))
+    }
+
+    fn conn_session(&self, conn: ConnId) -> Option<&Session> {
+        let sid = self.conns.get(&conn)?.session?;
+        self.sessions.get(&sid).map(|s| &s.session)
+    }
+
+    fn clipboard_copy(&mut self, conn: ConnId, request: &Request) -> Result<Handled, CommandError> {
+        let ClipboardCopy { ids } = parse_args(request.args.clone())?;
+        let session = self.conn_session(conn).ok_or_else(|| {
+            CommandError::invalid_arg("op", "this connection has no session")
+                .with_hint("call session.attach first")
+        })?;
+        let copied =
+            editor_cmd::copy_text(session.document(), session.scene_dir().as_deref(), &ids)?;
+        let revision = session.revision();
+        self.clipboard = Clipboard {
+            text: Some(copied.text),
+            count: copied.count,
+            seq: self.clipboard.seq + 1,
+        };
+        Ok(self.ok(self.clipboard.state(), Vec::new(), revision))
     }
 
     fn session_info(&self, conn: ConnId) -> Result<Handled, CommandError> {
@@ -490,6 +755,7 @@ impl Hub {
         self.sessions.insert(
             sid,
             Slot {
+                rec: SlotRecovery::new(session.revision()),
                 session,
                 conns: BTreeSet::new(),
             },

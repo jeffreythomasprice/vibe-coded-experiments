@@ -52,6 +52,67 @@ pub struct Duplicated {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct Pasted {
+    /// The pasted top-level objects first, then their contents.
+    pub ids: Vec<ObjectId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<ObjectId>,
+    /// How many of the leading `ids` are top-level objects (not members of a pasted group or brush entity).
+    pub top_level: usize,
+    /// Each object in the clipboard text -> its new id.
+    pub map: BTreeMap<ObjectId, ObjectId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ClipboardState {
+    /// A scene-format fragment; null while nothing has been copied.
+    pub text: Option<String>,
+    /// Objects in the clipboard, contents included.
+    pub count: usize,
+    /// Bumps with every copy.
+    pub seq: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RecoveryEntry {
+    /// Pass to recovery.restore or recovery.discard.
+    pub id: String,
+    /// The scene file the autosave was taken from; null for an untitled document.
+    pub source_path: Option<String>,
+    pub name: String,
+    /// Seconds since the Unix epoch.
+    pub saved_at: u64,
+    pub revision: u64,
+    /// The source file is missing or older than the autosave.
+    pub newer_than_source: bool,
+    /// A running session owns it and keeps it current; it is not a leftover.
+    pub live: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RecoveryList {
+    pub entries: Vec<RecoveryEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Recovered {
+    pub id: String,
+    /// The session's file; the recovered document is unsaved until file.save.
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Discarded {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Arrayed {
     pub ids: Vec<ObjectId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -106,6 +167,13 @@ pub struct FaceSelection {
 #[serde(deny_unknown_fields)]
 pub struct IdOnly {
     pub id: ObjectId,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct OpenGroups {
+    /// Every open group in id order; the innermost one limits editing.
+    pub open: Vec<GroupId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -228,8 +296,10 @@ pub struct Summary {
     pub selection: usize,
     /// Objects hidden, directly or through their layer, group or entity.
     pub hidden: usize,
-    /// Objects locked, directly or through their layer, group or entity.
+    /// Objects locked, directly, through their layer, group or entity, or by lying outside the open group.
     pub locked: usize,
+    /// The innermost open group, if any.
+    pub open_group: Option<GroupId>,
 }
 
 /// A description of one object: a JSON object that always has `id` and `kind`; the other keys depend on the requested detail.

@@ -41,9 +41,10 @@ impl Dir {
         std::fs::write(
             &cfg,
             format!(
-                "socket = {:?}\n[server]\nidle_exit_secs = 1\nbinary = {:?}\n",
+                "socket = {:?}\n[server]\nidle_exit_secs = 1\nbinary = {:?}\n[recovery]\ndir = {:?}\n",
                 p.join("s.sock").display().to_string(),
                 server_binary().display().to_string(),
+                p.join("state").display().to_string(),
             ),
         )
         .unwrap();

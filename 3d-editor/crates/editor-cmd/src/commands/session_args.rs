@@ -66,3 +66,26 @@ pub struct Attach {
     #[serde(default)]
     pub create: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ClipboardCopy {
+    pub ids: Vec<ObjectId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RecoveryRestore {
+    /// From recovery.list.
+    pub id: String,
+    /// Replace the session's document even if it has unsaved changes.
+    #[serde(default)]
+    pub discard: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RecoveryDiscard {
+    /// From recovery.list.
+    pub id: String,
+}

@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use editor_cmd::args::{BrushVertexAt, Keep};
-use editor_core::{Camera, Document, FaceId, GroupId, ObjectId, ObjectKind, OrthoView, Projection};
+use editor_core::{Camera, Document, FaceId, ObjectId, ObjectKind, OrthoView, Projection};
 use editor_geom::Aabb;
 use editor_geom::camera::{View, viewport_camera};
 use editor_render::{PickMap, PreparedScene, Renderer};
@@ -146,6 +146,11 @@ pub enum Action {
         name: String,
         point: DVec3,
     },
+    PasteAt {
+        point: DVec3,
+        /// The surface normal at the point, when it lies on a surface.
+        normal: Option<DVec3>,
+    },
     ClipAdd {
         point: DVec3,
         dir: DVec3,
@@ -165,7 +170,6 @@ pub struct PaneEnv<'a> {
     pub selection: &'a BTreeSet<ObjectId>,
     pub sel_bounds: Option<Aabb>,
     pub doc: &'a Document,
-    pub open_group: Option<GroupId>,
     pub depth_hint: Option<Aabb>,
     pub picks: &'a [BrushVertexAt],
     pub clip: &'a ClipState,
@@ -177,6 +181,7 @@ pub struct PaneEnv<'a> {
     pub active: &'a mut Option<PaneId>,
     pub pivot: DVec3,
     pub pick_ms: &'a mut f32,
+    pub want_paste_point: bool,
 }
 
 #[derive(Default)]
@@ -326,7 +331,7 @@ impl Pane {
             return None;
         }
         map.at(local_px.x as u32, local_px.y as u32)
-            .filter(|&id| env.doc.pickable(id, env.open_group))
+            .filter(|&id| env.doc.pickable(id))
     }
 
     fn ortho_world(view: &View, px: Pos2) -> Option<DVec2> {
@@ -339,6 +344,16 @@ impl Pane {
 
     /// Where a dragged entity class lands: on the surface under the cursor in the perspective view, else on the ground; in an ortho view on the plane through the selection (or last box) across the view.
     fn drop_point(env: &PaneEnv, view: &View, ortho: bool, local: Pos2) -> Option<DVec3> {
+        Self::drop_hit(env, view, ortho, local).map(|(p, n)| p + n.unwrap_or(DVec3::ZERO) * 8.0)
+    }
+
+    /// The snapped point under the cursor and, in the perspective view, the normal of the surface it lies on.
+    fn drop_hit(
+        env: &PaneEnv,
+        view: &View,
+        ortho: bool,
+        local: Pos2,
+    ) -> Option<(DVec3, Option<DVec3>)> {
         let ray = view.ray(DVec2::new(f64::from(local.x), f64::from(local.y)));
         let grid = env.grid;
         let on_plane = |plane: BoxPlane| {
@@ -362,13 +377,14 @@ impl Pane {
                 axis,
                 offset,
                 sign: 1.0,
-            });
+            })
+            .map(|p| (p, None));
         }
         let kinds = BTreeSet::from([ObjectKind::Brush, ObjectKind::Mesh]);
         let hidden = env.doc.hidden_ids();
         match editor_cmd::ray_hits(env.doc, ray.0, ray.1, &kinds, &hidden, None).first() {
-            Some(h) => Some(snap_to_face(h.point, h.normal, grid) + h.normal * 8.0),
-            None => on_plane(BoxPlane::ground()),
+            Some(h) => Some((snap_to_face(h.point, h.normal, grid), Some(h.normal))),
+            None => on_plane(BoxPlane::ground()).map(|p| (p, Some(DVec3::Z))),
         }
     }
 
@@ -445,6 +461,14 @@ impl Pane {
                 name: payload.name.clone(),
                 point,
             });
+        }
+
+        if env.want_paste_point
+            && resp.hovered()
+            && let Some(p) = pointer
+            && let Some((point, normal)) = Self::drop_hit(env, &view, is_ortho, local_px(p))
+        {
+            env.actions.push(Action::PasteAt { point, normal });
         }
 
         let navigating = secondary || middle || (primary && mods.alt);
@@ -1284,7 +1308,7 @@ impl Pane {
         let hidden = env.doc.hidden_ids();
         editor_cmd::ray_hits(env.doc, ray.0, ray.1, &kinds, &hidden, None)
             .into_iter()
-            .filter(|h| env.doc.pickable(h.id, env.open_group))
+            .filter(|h| env.doc.pickable(h.id))
             .find_map(|h| {
                 let r = h.face?.parse::<editor_core::ElementRef>().ok()?;
                 match r.part {

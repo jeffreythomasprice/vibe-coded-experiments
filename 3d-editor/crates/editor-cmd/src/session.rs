@@ -165,6 +165,28 @@ impl Session {
         self.revision != self.saved_revision
     }
 
+    /// The directory relative texture paths resolve against.
+    pub fn scene_dir(&self) -> Option<PathBuf> {
+        self.path.as_deref().and_then(Self::scene_dir_of)
+    }
+
+    pub fn has_open_transaction(&self) -> bool {
+        self.open.is_some()
+    }
+
+    /// Replaces the document with recovered work: it keeps the session's file and stays unsaved.
+    pub fn recover(&mut self, doc: Document, discard: bool) -> Result<(), CommandError> {
+        self.guard_replace(discard)?;
+        let path = self.path.clone();
+        self.fresh_document(doc, path);
+        self.saved_revision = self.revision - 1;
+        self.feed.file = true;
+        self.feed.history = true;
+        self.feed.selection = true;
+        self.feed.face_selection = true;
+        Ok(())
+    }
+
     pub fn document(&self) -> &Document {
         &self.doc
     }

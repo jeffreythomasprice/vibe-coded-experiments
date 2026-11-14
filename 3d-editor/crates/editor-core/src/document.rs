@@ -244,28 +244,57 @@ impl Document {
         out
     }
 
-    /// Hidden or locked because the object or something containing it is.
+    /// Hidden or locked because the object or something containing it is, or because it lies outside the open group.
     pub fn effective_flags(&self, id: ObjectId) -> Flags {
-        std::iter::once(id)
+        let mut flags = std::iter::once(id)
             .chain(self.ancestors(id))
             .filter_map(|i| self.own_flags(i))
             .fold(Flags::default(), |acc, f| Flags {
                 hidden: acc.hidden || f.hidden,
                 locked: acc.locked || f.locked,
-            })
+            });
+        flags.locked |= self.outside_open_group(id);
+        flags
     }
 
-    /// Whether a click can land on `id`: it is not locked, and lies inside the open group if one is open.
-    pub fn pickable(&self, id: ObjectId, open: Option<GroupId>) -> bool {
-        if self.effective_locked(id) {
+    /// The innermost open group: the open one that is not the parent of another open one.
+    pub fn open_group(&self) -> Option<GroupId> {
+        let parents: std::collections::BTreeSet<GroupId> = self
+            .groups
+            .values()
+            .filter(|g| g.open)
+            .filter_map(|g| g.parent)
+            .collect();
+        self.groups
+            .values()
+            .find(|g| g.open && !parents.contains(&g.id))
+            .map(|g| g.id)
+    }
+
+    /// Whether an open group exists and `id` is a world object that is neither inside it nor one of its containers.
+    pub fn outside_open_group(&self, id: ObjectId) -> bool {
+        let Some(open) = self.open_group() else {
+            return false;
+        };
+        if !matches!(
+            id,
+            ObjectId::Brush(_) | ObjectId::Mesh(_) | ObjectId::Entity(_) | ObjectId::Group(_)
+        ) {
             return false;
         }
-        open.is_none_or(|g| self.ancestors(id).contains(&g.into()))
+        let open = ObjectId::from(open);
+        id != open && !self.ancestors(id).contains(&open) && !self.ancestors(open).contains(&id)
+    }
+
+    /// Whether a click can land on `id`: it is not locked, directly, through a container or by lying outside the open group.
+    pub fn pickable(&self, id: ObjectId) -> bool {
+        !self.effective_locked(id)
     }
 
     /// What a click on `id` selects: the outermost group around it that is not open, else `id` itself.
-    pub fn pick_target(&self, id: ObjectId, open: Option<GroupId>) -> ObjectId {
-        let opened: Vec<ObjectId> = open
+    pub fn pick_target(&self, id: ObjectId) -> ObjectId {
+        let opened: Vec<ObjectId> = self
+            .open_group()
             .into_iter()
             .flat_map(|g| std::iter::once(ObjectId::from(g)).chain(self.ancestors(g.into())))
             .collect();

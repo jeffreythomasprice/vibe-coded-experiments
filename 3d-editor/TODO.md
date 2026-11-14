@@ -22,17 +22,6 @@ game mode should have occlusion culling or octrees or something
 lighting
 
 
-what is component_defs?
-scenes/defs/example.components.json
-
-
-C. Tier 1: brush editor
-
-Still to do:
-- [ ] Layer hide/lock and omit-from-export, group open/close with lock, and hide/isolate/lock/show-all. All undoable. I found no visibility or lock state in the model.
-- [ ] Clipboard: copy/paste in place or at cursor.
-- [ ] Autosave and backups.
-
 D. Tier 2: productivity
 
 Already built early: room.create, room.cut_opening, stairs.create, check.validate.

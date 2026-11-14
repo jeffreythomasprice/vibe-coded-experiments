@@ -117,6 +117,7 @@ fn build(specs: &[Spec]) -> Document {
                     name: s.component.clone(),
                     layer,
                     parent: last_group,
+                    open: false,
                     extra: Extra::new(),
                 },
             );

@@ -52,8 +52,8 @@ Brushes, meshes, entities, groups and layers (not cameras) carry two flags, `hid
 
 - Hidden objects are not drawn, picked or raycast, and cannot be selected.
 - Locked objects refuse edits, deletion and additions: see [locks](tier0-commands.md#locks).
-- A layer also has `omit_from_export`, stored and round-tripped; nothing exports yet.
-- Group open/close (what a click selects) is GUI state, not document state: see [gui.md](gui.md).
+- A layer also has `omit_from_export`, stored and round-tripped; there is no exporter yet, but the game client and `simulate` screenshots leave such layers out.
+- A group can be *open* (`Group.open`, set by `group.open` / `group.close`, undoable, never written to the scene file, so a reloaded scene has every group closed). While one is open, every brush, mesh, entity and group that is neither inside it nor one of its containers is effectively locked, for every client. Objects created meanwhile join the open group. Clicks select the outermost closed group around what they hit, and inside an open group they select its members. The innermost open group is the one that limits editing (`Document::open_group`).
 
 ## Brush (convex)
 

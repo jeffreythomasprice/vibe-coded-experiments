@@ -1,17 +1,20 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
+use editor_cmd::ClipboardCopy;
 use editor_cmd::args::{
-    AddComponent, AddDefs, Axis, AxisArg, BrushVertexAt, Clip, CreateBox, CreateBrushEntity,
-    CreateEntity, Delete, EmbedDefs, Factors, Flip, Isolate, Keep, NoArgs, Pivot, RemoveComponent,
-    RemoveDefs, Rename, Rotate, Save, Scale, SelectFaces, SelectIds, SelectKind, SetComponent,
-    SetHidden, SetLayer, SetLocked, SetMaterial, SetTransform, SetUv, TransferMode, TransferUv,
-    Translate, TranslateVertices, UvMode,
+    AddComponent, AddDefs, Axis, AxisArg, BrushVertexAt, Clip, CloseGroup, CreateBox,
+    CreateBrushEntity, CreateEntity, Delete, EmbedDefs, Factors, Flip, Isolate, Keep, NoArgs,
+    OpenGroup, Pivot, RemoveComponent, RemoveDefs, Rename, Rotate, Save, Scale, SelectFaces,
+    SelectIds, SelectKind, SetComponent, SetHidden, SetLayer, SetLocked, SetMaterial,
+    SetOmitFromExport, SetTransform, SetUv, TransferMode, TransferUv, Translate, TranslateVertices,
+    UvMode,
 };
 use editor_cmd::links::{EntityLink, doc_links};
 use editor_cmd::results::{
-    Created, CreatedMapped, Deleted, FaceSelection, FacesChanged, IdCount, IdOnly, Moved, Saved,
-    Stepped, Transformed, Updated, VerticesMoved,
+    ClipboardState, Created, CreatedMapped, Deleted, Duplicated, FaceSelection, FacesChanged,
+    IdCount, IdOnly, Moved, OpenGroups, Pasted, RecoveryEntry, RecoveryList, Saved, Stepped,
+    Transformed, Updated, VerticesMoved,
 };
 use editor_cmd::{Request, Success};
 use editor_core::{ElementRef, FaceId, GroupId, ObjectId, ObjectKind, Part};
@@ -118,6 +121,12 @@ impl TabViewer for Viewer<'_> {
 
 #[derive(Default)]
 struct Keys {
+    copy: bool,
+    cut: bool,
+    paste: bool,
+    paste_text: Option<String>,
+    paste_in_place: bool,
+    duplicate: bool,
     undo: bool,
     redo: bool,
     delete: bool,
@@ -153,7 +162,17 @@ impl Keys {
         let cmd = i.modifiers.command;
         let shift = i.modifiers.shift;
         let plain = |key| !cmd && i.key_pressed(key);
+        let paste_text = i.events.iter().find_map(|e| match e {
+            egui::Event::Paste(t) => Some(t.clone()),
+            _ => None,
+        });
         Keys {
+            copy: i.events.iter().any(|e| matches!(e, egui::Event::Copy)),
+            cut: i.events.iter().any(|e| matches!(e, egui::Event::Cut)),
+            paste: paste_text.is_some() || (cmd && i.key_pressed(Key::V)),
+            paste_text,
+            paste_in_place: shift,
+            duplicate: cmd && !shift && i.key_pressed(Key::D),
             undo: cmd && !shift && i.key_pressed(Key::Z),
             redo: (cmd && shift && i.key_pressed(Key::Z)) || (cmd && i.key_pressed(Key::Y)),
             delete: i.key_pressed(Key::Delete) || i.key_pressed(Key::Backspace),
@@ -216,6 +235,11 @@ impl Keys {
     }
 }
 
+struct PasteRequest {
+    os_text: Option<String>,
+    in_place: bool,
+}
+
 pub struct Editor {
     remote: Remote,
     dock: DockState<PaneId>,
@@ -236,7 +260,6 @@ pub struct Editor {
     component_looks: HashMap<String, ComponentLook>,
     show_help: bool,
     hover: Option<ObjectId>,
-    open_group: Option<GroupId>,
     vertex_picks: Vec<BrushVertexAt>,
     clip: ClipState,
     clip_preview: Preview,
@@ -255,6 +278,10 @@ pub struct Editor {
     drag_serial: u64,
     dragging: bool,
     status: String,
+    clip_text: Option<String>,
+    paste_pending: Option<PasteRequest>,
+    recovery: Vec<RecoveryEntry>,
+    recovery_for: Option<Option<String>>,
     panels: Panels,
     pub timings: Timings,
     adapter: String,
@@ -319,7 +346,6 @@ impl Editor {
             component_looks: HashMap::new(),
             show_help: false,
             hover: None,
-            open_group: None,
             vertex_picks: Vec::new(),
             clip: ClipState::default(),
             clip_preview: Preview::default(),
@@ -338,6 +364,10 @@ impl Editor {
             drag_serial: 0,
             dragging: false,
             status: String::new(),
+            clip_text: None,
+            paste_pending: None,
+            recovery: Vec::new(),
+            recovery_for: None,
             panels: Panels::default(),
             timings: Timings::default(),
             adapter,
@@ -642,7 +672,7 @@ impl Editor {
             }
             Action::OpenGroupAt(id) => {
                 if let ObjectId::Group(g) = self.pick_target(id) {
-                    self.open_group = Some(g);
+                    self.call::<_, OpenGroups>("group.open", &OpenGroup { id: g }, None);
                     self.select("select.set", vec![id]);
                 }
             }
@@ -658,8 +688,8 @@ impl Editor {
                 ignore.extend(doc.locked_ids());
                 let mut hits: Vec<ObjectId> = Vec::new();
                 for hit in editor_cmd::ray_hits(doc, origin, dir, &kinds, &ignore, None) {
-                    let target = doc.pick_target(hit.id, self.open_group);
-                    if doc.pickable(hit.id, self.open_group) && !hits.contains(&target) {
+                    let target = doc.pick_target(hit.id);
+                    if doc.pickable(hit.id) && !hits.contains(&target) {
                         hits.push(target);
                     }
                 }
@@ -705,6 +735,7 @@ impl Editor {
                 }
             }
             Action::DropComponent { name, point } => self.place_component(name, Some(point)),
+            Action::PasteAt { .. } => {}
             Action::CreateBox { min, max } => {
                 self.last_box = Some(Aabb { min, max });
                 let args = CreateBox {
@@ -789,7 +820,112 @@ impl Editor {
     }
 
     fn pick_target(&self, id: ObjectId) -> ObjectId {
-        self.remote.doc.pick_target(id, self.open_group)
+        self.remote.doc.pick_target(id)
+    }
+
+    fn copy_selection(&mut self, ctx: &Context) -> bool {
+        let ids = self.selection_ids();
+        if ids.is_empty() {
+            return false;
+        }
+        let Some(state) =
+            self.call::<_, ClipboardState>("clipboard.copy", &ClipboardCopy { ids }, None)
+        else {
+            return false;
+        };
+        if let Some(text) = state.text {
+            ctx.copy_text(text.clone());
+            self.clip_text = Some(text);
+        }
+        self.status = format!("copied {} objects", state.count);
+        true
+    }
+
+    fn cut_selection(&mut self, ctx: &Context) {
+        if self.copy_selection(ctx) {
+            self.delete_selection();
+        }
+    }
+
+    /// Half the size of what the clipboard text holds, to rest it on a surface instead of sinking it in.
+    fn clip_half_size(text: &str) -> Option<DVec3> {
+        let doc = editor_fmt::read(text).ok()?;
+        let ids = doc
+            .brushes
+            .keys()
+            .map(|&i| ObjectId::from(i))
+            .chain(doc.meshes.keys().map(|&i| ObjectId::from(i)))
+            .chain(doc.entities.keys().map(|&i| ObjectId::from(i)));
+        ids.filter_map(|id| editor_cmd::extent(&doc, id))
+            .reduce(|a, b| a.merge(b))
+            .map(|b| (b.max - b.min) * 0.5)
+    }
+
+    fn paste(&mut self, request: PasteRequest, at: Option<(DVec3, Option<DVec3>)>) {
+        let mut args = serde_json::Map::new();
+        let external = request.os_text.filter(|t| {
+            self.clip_text.as_ref() != Some(t) && t.trim_start().starts_with("format = ")
+        });
+        if let Some(text) = external {
+            args.insert("text".into(), Value::String(text));
+        }
+        if !request.in_place {
+            let at = at.map(|(point, normal)| match normal {
+                Some(n) => {
+                    let text = args
+                        .get("text")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                        .or_else(|| self.server_clipboard_text());
+                    let reach = text
+                        .and_then(|t| Self::clip_half_size(&t))
+                        .map_or(0.0, |h| n.abs().dot(h));
+                    point + n * reach
+                }
+                None => point,
+            });
+            let (key, v) = match at {
+                Some(p) => ("at", serde_json::json!([p.x, p.y, p.z])),
+                None => ("offset", serde_json::json!([self.grid, self.grid, 0.0])),
+            };
+            args.insert(key.into(), v);
+        }
+        let Some(success) = self.send("clipboard.paste", Value::Object(args), None) else {
+            return;
+        };
+        match serde_json::from_value::<Pasted>(success.result) {
+            Ok(p) => {
+                let top: Vec<ObjectId> = p.ids.into_iter().take(p.top_level).collect();
+                self.status = format!("pasted {} objects", top.len());
+                self.select("select.set", top);
+            }
+            Err(e) => self.status = format!("clipboard.paste: unexpected result: {e}"),
+        }
+    }
+
+    fn server_clipboard_text(&mut self) -> Option<String> {
+        let success = self
+            .remote
+            .call(Request::new("clipboard.get", serde_json::json!({})))
+            .ok()?;
+        serde_json::from_value::<ClipboardState>(success.result)
+            .ok()?
+            .text
+    }
+
+    fn duplicate_selection(&mut self) {
+        let ids = self.selection_ids();
+        if ids.is_empty() {
+            return;
+        }
+        let args = serde_json::json!({ "ids": ids, "offset": [self.grid, self.grid, 0.0] });
+        let Some(success) = self.send("object.duplicate", args, None) else {
+            return;
+        };
+        if let Ok(d) = serde_json::from_value::<Duplicated>(success.result) {
+            let copies: Vec<ObjectId> = d.ids.into_iter().take(ids.len()).collect();
+            self.select("select.set", copies);
+        }
     }
 
     fn delete_selection(&mut self) {
@@ -920,7 +1056,7 @@ impl Editor {
             self.remote.revision,
             self.remote.selection.iter().copied().collect(),
             self.hover,
-            self.open_group,
+            self.remote.doc.open_group(),
             self.remote.face_selection.iter().copied().collect(),
             self.texture_generation,
             self.remote.defs_generation,
@@ -993,6 +1129,21 @@ impl Editor {
             self.play();
         }
         let keys = ctx.input(Keys::read);
+        if keys.copy {
+            self.copy_selection(ctx);
+        }
+        if keys.cut {
+            self.cut_selection(ctx);
+        }
+        if keys.paste {
+            self.paste_pending = Some(PasteRequest {
+                os_text: keys.paste_text.clone(),
+                in_place: keys.paste_in_place,
+            });
+        }
+        if keys.duplicate {
+            self.duplicate_selection();
+        }
         if keys.undo {
             self.undo();
         }
@@ -1078,8 +1229,8 @@ impl Editor {
         if keys.unlock_all {
             self.call::<_, Updated>("object.unlock_all", &NoArgs::default(), None);
         }
-        if keys.escape && !self.dragging {
-            self.open_group = None;
+        if keys.escape && !self.dragging && self.remote.doc.open_group().is_some() {
+            self.call::<_, OpenGroups>("group.close", &CloseGroup::default(), None);
         }
         if keys.rotate_ccw {
             self.rotate_selection(90.0);
@@ -1126,25 +1277,22 @@ impl Editor {
         if let Err(e) = self.remote.refresh_defs() {
             self.status = e.to_string();
         }
-        if self
-            .open_group
-            .is_some_and(|g| !self.remote.doc.groups.contains_key(&g))
-        {
-            self.open_group = None;
-        }
         if self.remote.closed {
             self.status = "disconnected from editor-server".into();
         }
         self.refresh_prepared(renderer);
         self.keys(&ctx);
         self.refresh_clip_preview();
+        self.check_recovery();
         self.menu(ui);
+        self.recovery_banner(ui);
         self.toolbar(ui);
         self.status_bar(ui);
         self.outliner(ui);
         self.inspector(ui, renderer);
         self.help(&ctx);
 
+        let paste = self.paste_pending.take();
         let selection = self.remote.selection.clone();
         let sel_bounds = self.selection_bounds();
         let revision = self.remote.revision;
@@ -1167,7 +1315,6 @@ impl Editor {
                 selection: &selection,
                 sel_bounds,
                 doc: &self.remote.doc,
-                open_group: self.open_group,
                 depth_hint: sel_bounds.or(self.last_box),
                 picks: &self.vertex_picks,
                 clip: &self.clip,
@@ -1179,6 +1326,7 @@ impl Editor {
                 active: &mut active,
                 pivot,
                 pick_ms: &mut pick_ms,
+                want_paste_point: paste.as_ref().is_some_and(|p| !p.in_place),
             };
             let mut viewer = Viewer {
                 panes: &mut self.panes,
@@ -1196,6 +1344,14 @@ impl Editor {
                         .show_leaf_collapse_buttons(false)
                         .show_inside(ui, &mut viewer);
                 });
+        }
+        if let Some(request) = paste {
+            let at = actions.iter().find_map(|a| match a {
+                Action::PasteAt { point, normal } => Some((*point, *normal)),
+                _ => None,
+            });
+            actions.retain(|a| !matches!(a, Action::PasteAt { .. }));
+            self.paste(request, at);
         }
         self.sync_zoom();
         if pending_next != self.pending_box {
@@ -1246,6 +1402,95 @@ impl Editor {
         }
     }
 
+    pub fn title(&self) -> String {
+        let file = &self.remote.file;
+        format!(
+            "{}{} - Editor",
+            if file.name.is_empty() {
+                "untitled"
+            } else {
+                &file.name
+            },
+            if file.dirty { " *" } else { "" }
+        )
+    }
+
+    fn check_recovery(&mut self) {
+        let path = self.remote.file.path.clone();
+        if self.recovery_for.as_ref() == Some(&path) {
+            return;
+        }
+        self.recovery_for = Some(path.clone());
+        self.recovery.clear();
+        let Some(path) = path else { return };
+        let Ok(success) = self
+            .remote
+            .call(Request::new("recovery.list", serde_json::json!({})))
+        else {
+            return;
+        };
+        if let Ok(list) = serde_json::from_value::<RecoveryList>(success.result) {
+            self.recovery = list
+                .entries
+                .into_iter()
+                .filter(|e| {
+                    !e.live && e.newer_than_source && e.source_path.as_deref() == Some(&path)
+                })
+                .collect();
+        }
+    }
+
+    fn recovery_banner(&mut self, ui: &mut Ui) {
+        let Some(entry) = self.recovery.first().cloned() else {
+            return;
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let age = now.saturating_sub(entry.saved_at);
+        let ago = match age {
+            0..=89 => format!("{age} s"),
+            90..=5399 => format!("{} min", age / 60),
+            5400..=129_599 => format!("{} h", age / 3600),
+            _ => format!("{} days", age / 86_400),
+        };
+        let mut action = None;
+        egui::Panel::top("recovery").show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(format!(
+                    "Unsaved changes from {ago} ago were recovered for this scene (revision {}).",
+                    entry.revision
+                ));
+                if ui.button("Recover").clicked() {
+                    action = Some("recovery.restore");
+                }
+                if ui.button("Discard").clicked() {
+                    action = Some("recovery.discard");
+                }
+                if ui.button("Later").clicked() {
+                    action = Some("later");
+                }
+            });
+        });
+        match action {
+            Some("later") => self.recovery.clear(),
+            Some(op)
+                if self
+                    .send(op, serde_json::json!({ "id": entry.id }), None)
+                    .is_some() =>
+            {
+                self.status = if op == "recovery.restore" {
+                    "recovered the autosave; save to keep it".into()
+                } else {
+                    "discarded the autosave".into()
+                };
+                self.recovery.clear();
+            }
+            Some(_) => {}
+            None => {}
+        }
+    }
+
     fn menu(&mut self, ui: &mut Ui) {
         egui::Panel::top("menu").show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
@@ -1276,6 +1521,44 @@ impl Editor {
                         .clicked()
                     {
                         self.redo();
+                        ui.close();
+                    }
+                    ui.separator();
+                    let ctx = ui.ctx().clone();
+                    if ui
+                        .add(egui::Button::new("Cut").shortcut_text("Ctrl+X"))
+                        .clicked()
+                    {
+                        self.cut_selection(&ctx);
+                        ui.close();
+                    }
+                    if ui
+                        .add(egui::Button::new("Copy").shortcut_text("Ctrl+C"))
+                        .clicked()
+                    {
+                        self.copy_selection(&ctx);
+                        ui.close();
+                    }
+                    for (name, shortcut, in_place) in [
+                        ("Paste", "Ctrl+V", false),
+                        ("Paste in place", "Ctrl+Shift+V", true),
+                    ] {
+                        if ui
+                            .add(egui::Button::new(name).shortcut_text(shortcut))
+                            .clicked()
+                        {
+                            self.paste_pending = Some(PasteRequest {
+                                os_text: None,
+                                in_place,
+                            });
+                            ui.close();
+                        }
+                    }
+                    if ui
+                        .add(egui::Button::new("Duplicate").shortcut_text("Ctrl+D"))
+                        .clicked()
+                    {
+                        self.duplicate_selection();
                         ui.close();
                     }
                     ui.separator();
@@ -1469,7 +1752,7 @@ impl Editor {
                     .and_then(|p| p.cursor.map(|c| format!("{:.1}, {:.1}", c.x, c.y)));
                 ui.monospace(cursor.unwrap_or_else(|| "—".into()));
                 ui.separator();
-                if let Some(g) = self.open_group {
+                if let Some(g) = self.remote.doc.open_group() {
                     ui.label(format!("editing {g} (Esc closes)"));
                     ui.separator();
                 }
@@ -1668,6 +1951,13 @@ impl Editor {
                     hidden,
                 };
                 self.call::<_, Updated>("object.set_hidden", &args, None);
+            }
+            Event::SetOmitFromExport { id, omit } => {
+                self.call::<_, IdOnly>(
+                    "layer.set_omit_from_export",
+                    &SetOmitFromExport { id, omit },
+                    None,
+                );
             }
             Event::SetLocked { id, locked } => {
                 let args = SetLocked {

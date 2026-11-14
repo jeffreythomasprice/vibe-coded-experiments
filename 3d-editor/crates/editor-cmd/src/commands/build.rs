@@ -59,6 +59,7 @@ fn place(
         name,
         layer,
         parent,
+        open: false,
         extra: Extra::new(),
     }));
     Ok(Placement {

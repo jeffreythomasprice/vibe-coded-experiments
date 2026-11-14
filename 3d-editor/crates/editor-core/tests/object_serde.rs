@@ -105,6 +105,7 @@ fn group_layer_camera_roundtrip() {
         name: "hall".into(),
         layer: layer(),
         parent: Some(GroupId(2)),
+        open: false,
         extra: Extra::new(),
     }));
     roundtrip(Object::Layer(Layer {

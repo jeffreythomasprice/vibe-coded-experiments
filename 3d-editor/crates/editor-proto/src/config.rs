@@ -40,6 +40,26 @@ impl Default for ServerConfig {
     }
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct RecoveryConfig {
+    pub dir: Option<PathBuf>,
+    pub autosave_secs: u64,
+    pub backup_secs: u64,
+    pub backup_keep: usize,
+}
+
+impl Default for RecoveryConfig {
+    fn default() -> Self {
+        Self {
+            dir: None,
+            autosave_secs: 30,
+            backup_secs: 600,
+            backup_keep: 10,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct McpConfig {
@@ -53,6 +73,7 @@ pub struct Config {
     pub socket: Option<PathBuf>,
     pub server: ServerConfig,
     pub mcp: McpConfig,
+    pub recovery: RecoveryConfig,
     #[serde(skip)]
     source: Option<PathBuf>,
 }
@@ -122,6 +143,17 @@ impl Config {
         config.source = Some(path.to_path_buf());
         config.validate()?;
         Ok(config)
+    }
+
+    /// Where autosaves and backups go: `recovery.dir`, else `$XDG_STATE_HOME/editor`, else `~/.local/state/editor`.
+    pub fn recovery_dir(&self) -> PathBuf {
+        if let Some(dir) = &self.recovery.dir {
+            return dir.clone();
+        }
+        let base = env_path("XDG_STATE_HOME")
+            .or_else(|| env_path("HOME").map(|h| h.join(".local").join("state")))
+            .unwrap_or_else(|| PathBuf::from(format!("/tmp/editor-state-{}", user_tag())));
+        base.join("editor")
     }
 
     pub fn source(&self) -> Option<&Path> {

@@ -101,7 +101,11 @@ pub struct Duplicate {
     offset: Option<DVec3>,
 }
 
-fn remap(object: Object, new_id: ObjectId, map: &BTreeMap<ObjectId, ObjectId>) -> Object {
+pub(super) fn remap(
+    object: Object,
+    new_id: ObjectId,
+    map: &BTreeMap<ObjectId, ObjectId>,
+) -> Object {
     let group = |g: Option<GroupId>| match g.and_then(|g| map.get(&g.into())) {
         Some(ObjectId::Group(n)) => Some(*n),
         _ => g,
@@ -138,7 +142,7 @@ fn remap(object: Object, new_id: ObjectId, map: &BTreeMap<ObjectId, ObjectId>) -
 }
 
 /// Points links between copied entities at the copies; links to anything not copied stay.
-fn remap_links(
+pub(super) fn remap_links(
     catalog: &Catalog,
     entity: &mut editor_core::Entity,
     map: &BTreeMap<ObjectId, ObjectId>,
@@ -186,9 +190,23 @@ fn copy_order(ctx: &Ctx, ids: &[ObjectId]) -> Result<Vec<ObjectId>, CommandError
     Ok(order)
 }
 
+pub(super) enum Source<'a> {
+    Ctx,
+    Doc(&'a editor_core::Document),
+}
+
 /// Transformed deep copies of `order` with fresh ids; nothing is inserted.
 fn make_copy(
     ctx: &mut Ctx,
+    order: &[ObjectId],
+    m: Option<&DAffine3>,
+) -> Result<(Vec<Object>, Vec<ObjectId>), CommandError> {
+    make_copy_from(ctx, Source::Ctx, order, m)
+}
+
+pub(super) fn make_copy_from(
+    ctx: &mut Ctx,
+    source: Source,
     order: &[ObjectId],
     m: Option<&DAffine3>,
 ) -> Result<(Vec<Object>, Vec<ObjectId>), CommandError> {
@@ -199,8 +217,12 @@ fn make_copy(
     let catalog = Catalog::resolve(ctx.doc(), ctx.scene_dir());
     let mut copies = Vec::new();
     for &old in order {
-        let source = ctx.doc().get(old).expect("collected from the document");
-        let mut copy = remap(source, map[&old], &map);
+        let original = match &source {
+            Source::Ctx => ctx.doc().get(old),
+            Source::Doc(doc) => doc.get(old),
+        }
+        .expect("collected from the source document");
+        let mut copy = remap(original, map[&old], &map);
         if let Object::Entity(e) = &mut copy {
             remap_links(&catalog, e, &map);
         }

@@ -26,6 +26,10 @@ pub enum Event {
         id: ObjectId,
         hidden: bool,
     },
+    SetOmitFromExport {
+        id: LayerId,
+        omit: bool,
+    },
     SetLocked {
         id: ObjectId,
         locked: bool,
@@ -145,10 +149,13 @@ fn label(doc: &Document, id: ObjectId) -> String {
             .layers
             .get(&l)
             .map_or_else(|| id.to_string(), |x| x.name.clone()),
-        ObjectId::Group(g) => doc
-            .groups
-            .get(&g)
-            .map_or_else(|| id.to_string(), |x| x.name.clone()),
+        ObjectId::Group(g) => doc.groups.get(&g).map_or_else(
+            || id.to_string(),
+            |x| match x.open {
+                true => format!("{} (open)", x.name),
+                false => x.name.clone(),
+            },
+        ),
         ObjectId::Entity(e) => doc.entities.get(&e).map_or_else(
             || id.to_string(),
             |x| {
@@ -324,6 +331,16 @@ impl Panels {
                 .changed()
             {
                 events.push(Event::SetLocked { id, locked });
+            }
+            if let ObjectId::Layer(layer) = id {
+                let mut omit = doc.layers.get(&layer).is_some_and(|l| l.omit_from_export);
+                if ui
+                    .toggle_value(&mut omit, egui::RichText::new("X").small().monospace())
+                    .on_hover_text("omit from export")
+                    .changed()
+                {
+                    events.push(Event::SetOmitFromExport { id: layer, omit });
+                }
             }
         };
         if children.is_empty() {

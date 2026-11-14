@@ -1,6 +1,6 @@
 use editor_core::{Extra, Layer, LayerId, Object, ObjectId};
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::results;
 use super::util::with_layer;
@@ -99,11 +99,11 @@ pub fn delete(ctx: &mut Ctx, args: Delete) -> CmdResult<results::LayerDeleted> {
     Ok(Outcome::new(results::LayerDeleted { deleted: 1, moved }))
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SetOmitFromExport {
-    id: LayerId,
-    omit: bool,
+    pub id: LayerId,
+    pub omit: bool,
 }
 
 pub fn set_omit_from_export(ctx: &mut Ctx, args: SetOmitFromExport) -> CmdResult<results::IdOnly> {

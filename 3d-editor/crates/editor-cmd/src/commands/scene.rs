@@ -67,6 +67,7 @@ pub fn summary(ctx: &Ctx, _: NoArgs) -> CmdResult<results::Summary> {
         selection: ctx.selection().len(),
         hidden: doc.hidden_ids().len(),
         locked: doc.locked_ids().len(),
+        open_group: doc.open_group(),
     }))
 }
 
@@ -98,6 +99,9 @@ fn describe(object: &Object, detail: Detail) -> Value {
                 if f.locked {
                     v["locked"] = json!(true);
                 }
+            }
+            if matches!(object, Object::Group(g) if g.open) {
+                v["open"] = json!(true);
             }
             if let Some(l) = object.layer() {
                 v["layer"] = json!(l);

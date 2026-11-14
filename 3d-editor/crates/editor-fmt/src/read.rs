@@ -481,6 +481,7 @@ pub fn read(text: &str) -> Result<Document> {
             name: req(&mut t, "name", &ctx, "a string", as_string)?,
             layer: req(&mut t, "layer", &ctx, "a layer id", as_id)?,
             parent: opt(&mut t, "group", &ctx, "a group id", as_id)?,
+            open: false,
             extra: Extra::new(),
         };
         let group = Group {
