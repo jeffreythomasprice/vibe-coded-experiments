@@ -126,6 +126,9 @@ pub struct Paste {
     /// Shift the pasted objects by this much from where they were copied.
     #[schemars(with = "Option<[f64; 3]>")]
     offset: Option<DVec3>,
+    /// Return only the pasted top-level objects in `ids` and leave out `map`.
+    #[serde(default)]
+    brief: bool,
 }
 
 fn clip_world_ids(clip: &Document) -> Vec<ObjectId> {
@@ -176,9 +179,7 @@ pub fn paste(ctx: &mut Ctx, args: Paste) -> CmdResult<results::Pasted> {
     }
     let (roots, rest): (Vec<_>, Vec<_>) = everything.into_iter().partition(|&id| {
         let object = clip.get(id).expect("listed from the clip");
-        object.group().is_none()
-            && !matches!(&object, Object::Brush(b) if b.entity.is_some())
-            && !matches!(&object, Object::Mesh(m) if m.entity.is_some())
+        object.is_top_level()
     });
     let top_level = roots.len();
     let order: Vec<ObjectId> = roots.into_iter().chain(rest).collect();
@@ -251,7 +252,12 @@ pub fn paste(ctx: &mut Ctx, args: Paste) -> CmdResult<results::Pasted> {
             .unwrap_or(fallback);
         ctx.insert(with_layer(copy, layer));
     }
-    let map = order.iter().copied().zip(ids.iter().copied()).collect();
+    let (ids, map) = if args.brief {
+        (ids[..top_level].to_vec(), BTreeMap::new())
+    } else {
+        let map = order.iter().copied().zip(ids.iter().copied()).collect();
+        (ids, map)
+    };
     Ok(Outcome::with_warnings(
         results::Pasted {
             id: ids.first().copied(),

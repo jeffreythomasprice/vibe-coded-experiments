@@ -31,6 +31,9 @@ pub struct SelectFaces {
 #[serde(deny_unknown_fields)]
 pub struct SelectKind {
     pub kind: Option<ObjectKind>,
+    /// Only objects in no group and not part of a brush entity, so a transform or copy of the result does not touch anything twice.
+    #[serde(default)]
+    pub top_level: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

@@ -44,6 +44,7 @@ pub struct DrawParams {
     pub height: u32,
     pub clear: [f64; 3],
     pub clip_z: f32,
+    pub clip_below_z: f32,
 }
 
 #[repr(C)]
@@ -457,7 +458,7 @@ impl Renderer {
 
         let globals = Globals {
             view_proj: params.view_proj,
-            clip: [params.clip_z, 0.0, 0.0, 0.0],
+            clip: [params.clip_z, params.clip_below_z, 0.0, 0.0],
         };
         let globals = self.device.create_buffer_init(&BufferInitDescriptor {
             label: Some("globals"),

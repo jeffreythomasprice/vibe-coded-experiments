@@ -21,14 +21,21 @@ use crate::error::CommandError;
 #[derive(Debug, Clone, Default, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CameraParams {
+    /// World position; for an orthographic camera, the centre of the view.
     #[schemars(with = "Option<[f64; 3]>")]
     pub position: Option<DVec3>,
+    /// Degrees; 0 looks along +X, 90 along +Y. Ignored by orthographic cameras.
     pub yaw: Option<f64>,
+    /// Degrees; positive looks up. Ignored by orthographic cameras.
     pub pitch: Option<f64>,
+    /// Look at this point (perspective only; it does not centre an orthographic view, use `position`).
     #[schemars(with = "Option<[f64; 3]>")]
     pub target: Option<DVec3>,
+    /// Vertical field of view in degrees, 1 to 179.
     pub fov: Option<f64>,
+    /// Make the camera orthographic along this axis (top, front or side).
     pub ortho: Option<OrthoView>,
+    /// Orthographic scale in pixels per world unit.
     pub zoom: Option<f64>,
 }
 

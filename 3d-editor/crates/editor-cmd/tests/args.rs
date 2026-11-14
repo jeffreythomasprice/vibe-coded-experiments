@@ -33,6 +33,7 @@ fn typed_args_are_accepted_by_the_ops() {
         "select.all",
         &SelectKind {
             kind: Some(ObjectKind::Brush),
+            top_level: false,
         },
     ));
     ok(&run(&mut s, "select.clear", &NoArgs::default()));

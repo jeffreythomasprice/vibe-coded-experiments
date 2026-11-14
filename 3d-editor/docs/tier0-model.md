@@ -4,7 +4,7 @@ What exists in a scene and how it is addressed. Companion docs: [commands](tier0
 
 ## Space and units
 
-- Z-up, right-handed. Units are abstract; default grid size is 16.
+- Z-up, right-handed. Units are abstract but the editor and game assume Quake-like sizes: default grid 16, the player marker (`player_start`) 12 x 12 x 32 with the eye 12 above its origin, a door about 64 x 112, a floor about 128 high. Do not model in metres; the MCP instructions say so too.
 - Ortho views: **Top** = XY looking −Z, **Front** = XZ looking +Y, **Side** = YZ looking −X.
 - The document stores `f64`; the renderer converts to `f32`. Angles are degrees.
 

@@ -349,6 +349,10 @@ impl Object {
         self
     }
 
+    pub fn is_top_level(&self) -> bool {
+        self.group().is_none() && self.entity().is_none()
+    }
+
     pub fn entity(&self) -> Option<EntityId> {
         match self {
             Object::Brush(o) => o.entity,

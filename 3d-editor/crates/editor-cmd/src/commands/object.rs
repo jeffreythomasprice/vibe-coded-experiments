@@ -99,6 +99,9 @@ pub struct Duplicate {
     ids: Vec<ObjectId>,
     #[schemars(with = "Option<[f64; 3]>")]
     offset: Option<DVec3>,
+    /// Return only the new top-level copies in `ids` and leave out `map`.
+    #[serde(default)]
+    brief: bool,
 }
 
 pub(super) fn remap(
@@ -243,7 +246,18 @@ pub fn duplicate(ctx: &mut Ctx, args: Duplicate) -> CmdResult<results::Duplicate
     for copy in copies {
         ctx.insert(copy);
     }
-    let map = order.iter().copied().zip(ids.iter().copied()).collect();
+    let map: BTreeMap<ObjectId, ObjectId> =
+        order.iter().copied().zip(ids.iter().copied()).collect();
+    let (ids, map) = if args.brief {
+        let top = args
+            .ids
+            .iter()
+            .filter_map(|id| map.get(id).copied())
+            .collect();
+        (top, BTreeMap::new())
+    } else {
+        (ids, map)
+    };
     Ok(Outcome::new(results::Duplicated {
         id: ids.first().copied(),
         ids,
@@ -272,6 +286,9 @@ pub struct Array {
     offset: DVec3,
     /// Also add a mirrored copy of the whole row (originals included) across this plane.
     mirror: Option<Mirror>,
+    /// Return only the new top-level copies in `ids` and leave out `map`.
+    #[serde(default)]
+    brief: bool,
 }
 
 pub fn array(ctx: &mut Ctx, args: Array) -> CmdResult<results::Arrayed> {
@@ -338,6 +355,16 @@ pub fn array(ctx: &mut Ctx, args: Array) -> CmdResult<results::Arrayed> {
     for copy in inserts {
         ctx.insert(copy);
     }
+    let (ids, map) = if args.brief {
+        let top = args
+            .ids
+            .iter()
+            .flat_map(|id| map.get(id).into_iter().flatten().copied())
+            .collect();
+        (top, BTreeMap::new())
+    } else {
+        (ids, map)
+    };
     Ok(Outcome::new(results::Arrayed {
         id: ids.first().copied(),
         ids,

@@ -347,6 +347,7 @@ pub fn screenshot_with_context(
         .collect::<Result<_, _>>()?;
     let want_labels = args.overlays.contains(&Overlay::Labels);
     let clip_z = args.clip_above.map_or(1.0e30, |z| z as f32);
+    let clip_below_z = args.clip_below.map_or(-1.0e30, |z| z as f32);
 
     let bounds = scene_bounds(doc);
     let reach = bounds.map_or(64.0, |b| b.reach());
@@ -408,6 +409,7 @@ pub fn screenshot_with_context(
             height,
             clear: [r, g, b],
             clip_z,
+            clip_below_z,
         },
         &DrawLists {
             faces: &scene.faces,
@@ -425,6 +427,7 @@ pub fn screenshot_with_context(
                 height,
                 clear: [0.0, 0.0, 0.0],
                 clip_z,
+                clip_below_z,
             },
             &scene.id_tris,
         )?;

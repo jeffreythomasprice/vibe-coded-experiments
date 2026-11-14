@@ -466,6 +466,26 @@ fn clip_above_reveals_the_floor() {
 }
 
 #[test]
+fn clip_below_hides_the_lower_floor() {
+    let mut s = session();
+    make_box(&mut s, [0, 0, 0], [64, 64, 8], "floor");
+    make_box(&mut s, [0, 0, 64], [64, 64, 72], "ceiling");
+    let (_, img) = shoot(
+        &s,
+        with(flat("viewport.top"), json!({ "clip_below": 32.0 })),
+    );
+    assert_eq!(rgb(&img, 200, 200), material_rgb8("ceiling"));
+    let (_, img) = shoot(
+        &s,
+        with(
+            flat("viewport.top"),
+            json!({ "clip_below": 32.0, "clip_above": 40.0 }),
+        ),
+    );
+    assert!(is_background(&img, 200, 200));
+}
+
+#[test]
 fn legend_and_colour_overrides() {
     let mut s = session();
     make_box(&mut s, [0, 0, 0], [64, 64, 64], "m/a");

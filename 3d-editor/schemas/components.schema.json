@@ -52,7 +52,7 @@
           ]
         },
         "angles": {
-          "description": "[pitch, yaw, roll] degrees added to the rest orientation.",
+          "description": "[pitch, yaw, roll] degrees added to the rest orientation. Positive yaw turns counter-clockwise seen from above; the rotation is about the entity origin, so put the origin on a door's hinge edge.",
           "type": "array",
           "items": {
             "type": "number"
@@ -80,7 +80,7 @@
       ]
     },
     "PlayerStart": {
-      "description": "Where the player spawns in the game client; the entity's origin and yaw are used.",
+      "description": "Where the player spawns in the game client; the entity's origin and yaw are used. The player is placed 12 units above the origin (eye height); the marker box is 12 x 12 x 32 units.",
       "type": "object",
       "properties": {},
       "additionalProperties": false

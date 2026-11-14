@@ -22,12 +22,12 @@ pub struct BatchItem {
     pub op: String,
     #[serde(default)]
     pub args: Value,
-    /// Name later items can reference as `"$name"` or `"$name.ids[k]"`.
+    /// Name later items can reference as `"$name"`, `"$name.ids[k]"` or `"$name.map[id]"`.
     #[serde(rename = "as")]
     pub name: Option<String>,
 }
 
-const REF_HINT: &str = "references are \"$N\" or \"$name\" (the item's `as`), optionally followed by .ids[k] and /f<n> or /v<n>; N counts from 0; write \"$$\" for a literal $";
+const REF_HINT: &str = "references are \"$N\" or \"$name\" (the item's `as`), optionally followed by .ids[k], .map[id] (all of what an op produced from that id, spliced into a list) or .map[id][k], and /f<n> or /v<n>; N counts from 0; write \"$$\" for a literal $";
 
 struct Results<'a> {
     values: &'a [Value],
@@ -52,7 +52,17 @@ fn element_suffix(suffix: &str) -> bool {
         .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
 }
 
-fn resolve(reference: &str, results: &Results) -> Result<Option<String>, CommandError> {
+enum Resolved {
+    One(String),
+    Many(Vec<String>),
+}
+
+fn bracket(tail: &str) -> Option<(&str, &str)> {
+    let rest = tail.strip_prefix('[')?;
+    rest.split_once(']')
+}
+
+fn resolve(reference: &str, results: &Results) -> Result<Option<Resolved>, CommandError> {
     let Some(rest) = reference.strip_prefix('$') else {
         return Ok(None);
     };
@@ -60,8 +70,8 @@ fn resolve(reference: &str, results: &Results) -> Result<Option<String>, Command
         Some((h, s)) => (h, Some(s)),
         None => (rest, None),
     };
-    let (base, ids_part) = match head.split_once(".ids[") {
-        Some((b, k)) => (b, Some(k.strip_suffix(']'))),
+    let (base, tail) = match head.split_once('.') {
+        Some((b, t)) => (b, Some(t)),
         None => (head, None),
     };
     let index = if !base.is_empty() && base.bytes().all(|b| b.is_ascii_digit()) {
@@ -89,41 +99,94 @@ fn resolve(reference: &str, results: &Results) -> Result<Option<String>, Command
             "{reference} refers to a command that has not run yet"
         ))
     })?;
-    let found = match ids_part {
+    let index_of = |k: &str| -> Result<usize, CommandError> {
+        k.parse()
+            .map_err(|_| bad(format!("bad index in {reference}")))
+    };
+    let found = match tail {
         None => result.get("id"),
-        Some(None) => return Err(bad(format!("unterminated .ids[ in {reference}"))),
-        Some(Some(k)) => {
-            let k: usize = k
-                .parse()
-                .map_err(|_| bad(format!("bad index in {reference}")))?;
-            result.get("ids").and_then(|ids| ids.get(k))
+        Some(tail) => {
+            if let Some(after) = tail.strip_prefix("ids") {
+                let (k, extra) =
+                    bracket(after).ok_or_else(|| bad(format!("bad .ids[k] in {reference}")))?;
+                if !extra.is_empty() {
+                    return Err(bad(format!("unexpected text after .ids[k] in {reference}")));
+                }
+                let k = index_of(k)?;
+                result.get("ids").and_then(|ids| ids.get(k))
+            } else if let Some(after) = tail.strip_prefix("map") {
+                let (key, extra) =
+                    bracket(after).ok_or_else(|| bad(format!("bad .map[id] in {reference}")))?;
+                let entry = result.get("map").and_then(|m| m.get(key)).ok_or_else(|| {
+                    bad(format!(
+                        "{reference}: the result has no map entry for `{key}`"
+                    ))
+                })?;
+                match (entry, extra) {
+                    (Value::Array(items), "") => {
+                        let ids = items
+                            .iter()
+                            .map(|v| v.as_str().map(|id| with_suffix(id, suffix)))
+                            .collect::<Option<Vec<_>>>()
+                            .ok_or_else(|| bad(format!("{reference} did not produce ids")))?;
+                        return Ok(Some(Resolved::Many(ids)));
+                    }
+                    (Value::Array(items), extra) => {
+                        let (k, rest) = bracket(extra)
+                            .ok_or_else(|| bad(format!("bad .map[id][k] in {reference}")))?;
+                        if !rest.is_empty() {
+                            return Err(bad(format!("unexpected text in {reference}")));
+                        }
+                        items.get(index_of(k)?)
+                    }
+                    (single, "") => Some(single),
+                    _ => return Err(bad(format!("{reference}: that map entry is not a list"))),
+                }
+            } else {
+                return Err(bad(format!("unknown reference path in {reference}")));
+            }
         }
     };
     let id = found
         .and_then(Value::as_str)
         .ok_or_else(|| bad(format!("{reference} did not produce an id")))?;
-    Ok(Some(match suffix {
+    Ok(Some(Resolved::One(with_suffix(id, suffix))))
+}
+
+fn with_suffix(id: &str, suffix: Option<&str>) -> String {
+    match suffix {
         Some(s) => format!("{id}/{s}"),
         None => id.to_string(),
-    }))
+    }
+}
+
+fn substitute_string(s: String, results: &Results) -> Result<Value, CommandError> {
+    if let Some(escaped) = s.strip_prefix("$$") {
+        return Ok(Value::String(format!("${escaped}")));
+    }
+    Ok(match resolve(&s, results)? {
+        Some(Resolved::One(id)) => Value::String(id),
+        Some(Resolved::Many(ids)) => Value::Array(ids.into_iter().map(Value::String).collect()),
+        None => Value::String(s),
+    })
 }
 
 fn substitute(value: Value, results: &Results) -> Result<Value, CommandError> {
     match value {
-        Value::String(s) => {
-            if let Some(escaped) = s.strip_prefix("$$") {
-                return Ok(Value::String(format!("${escaped}")));
+        Value::String(s) => substitute_string(s, results),
+        Value::Array(items) => {
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                match item {
+                    Value::String(s) => match substitute_string(s, results)? {
+                        Value::Array(many) => out.extend(many),
+                        one => out.push(one),
+                    },
+                    other => out.push(substitute(other, results)?),
+                }
             }
-            Ok(match resolve(&s, results)? {
-                Some(id) => Value::String(id),
-                None => Value::String(s),
-            })
+            Ok(Value::Array(out))
         }
-        Value::Array(items) => items
-            .into_iter()
-            .map(|v| substitute(v, results))
-            .collect::<Result<Vec<_>, _>>()
-            .map(Value::Array),
         Value::Object(map) => map
             .into_iter()
             .map(|(k, v)| substitute(v, results).map(|v| (k, v)))

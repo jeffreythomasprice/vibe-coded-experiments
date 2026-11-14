@@ -75,6 +75,8 @@ pub struct ScreenshotArgs {
     pub show_hidden: bool,
     /// Draw nothing above this world z, for plan and section views.
     pub clip_above: Option<f64>,
+    /// Draw nothing below this world z, for views of an upper floor.
+    pub clip_below: Option<f64>,
     /// With the `labels` overlay, only label these objects (groups, brush entities and layers expand to their contents).
     #[serde(default)]
     pub label_ids: Vec<ObjectId>,

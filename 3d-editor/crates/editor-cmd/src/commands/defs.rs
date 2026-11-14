@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use super::material::Store;
 use super::results::{self, ComponentInfo, DefsProblemView, DefsRecordInfo, DefsSourceKind};
 use super::util::non_empty;
-use super::{CmdResult, NoArgs, Outcome};
+use super::{CmdResult, Outcome};
 use crate::component_defs::Catalog;
 use crate::ctx::Ctx;
 use crate::error::CommandError;
@@ -175,10 +175,22 @@ pub fn embed(ctx: &mut Ctx, args: Embed) -> CmdResult<results::Updated> {
     Ok(Outcome::new(results::Updated { updated }))
 }
 
-pub fn list(ctx: &Ctx, _: NoArgs) -> CmdResult<results::ComponentDefsList> {
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct List {
+    /// Only these components; default all.
+    names: Option<Vec<String>>,
+}
+
+pub fn list(ctx: &Ctx, args: List) -> CmdResult<results::ComponentDefsList> {
     let catalog = Catalog::resolve(ctx.doc(), ctx.scene_dir());
     let components: Vec<ComponentInfo> = catalog
         .components()
+        .filter(|r| {
+            args.names
+                .as_ref()
+                .is_none_or(|names| names.iter().any(|n| n == r.def.name.as_str()))
+        })
         .map(|r| ComponentInfo {
             from: r.from,
             def: r.def.clone(),

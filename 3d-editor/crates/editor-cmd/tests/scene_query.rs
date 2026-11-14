@@ -470,3 +470,28 @@ fn ray_hits_lists_every_hit_nearest_first() {
     );
     assert_eq!(hits.len(), 1);
 }
+
+#[test]
+fn validate_can_report_overlaps_and_min_depth_filters_them() {
+    let mut s = session();
+    exec(
+        &mut s,
+        "brush.create_box",
+        json!({ "min": [0,0,0], "max": [16,16,16] }),
+    );
+    exec(
+        &mut s,
+        "brush.create_box",
+        json!({ "min": [12,0,0], "max": [28,16,16] }),
+    );
+    let r = exec(&mut s, "check.validate", json!({}));
+    assert_eq!(ok(&r)["result"]["warnings"], 0);
+    let r = exec(&mut s, "check.validate", json!({ "overlaps": true }));
+    let result = &ok(&r)["result"];
+    assert_eq!(result["warnings"], 1);
+    assert_eq!(result["issues"][0]["code"], "overlap");
+    let r = exec(&mut s, "scene.overlaps", json!({ "min_depth": 3.0 }));
+    assert_eq!(ok(&r)["result"]["count"], 1);
+    let r = exec(&mut s, "scene.overlaps", json!({ "min_depth": 4.0 }));
+    assert_eq!(ok(&r)["result"]["count"], 0);
+}

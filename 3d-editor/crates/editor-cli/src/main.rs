@@ -89,6 +89,9 @@ enum Cmd {
         /// Draw nothing above this world z (plan and section views)
         #[arg(long)]
         clip_above: Option<f64>,
+        /// Draw nothing below this world z (upper-floor views)
+        #[arg(long)]
+        clip_below: Option<f64>,
         /// Comma-separated ids to restrict labels to
         #[arg(long, value_delimiter = ',')]
         label_ids: Vec<String>,
@@ -336,6 +339,7 @@ struct ScreenshotFlags<'a> {
     highlight: &'a [String],
     hide: &'a [String],
     clip_above: Option<f64>,
+    clip_below: Option<f64>,
     label_ids: &'a [String],
     max_labels: Option<usize>,
     colors: &'a Option<String>,
@@ -373,6 +377,9 @@ fn screenshot_args(base: &Option<String>, flags: ScreenshotFlags) -> Result<Valu
     }
     if let Some(z) = flags.clip_above {
         map.insert("clip_above".into(), json!(z));
+    }
+    if let Some(z) = flags.clip_below {
+        map.insert("clip_below".into(), json!(z));
     }
     if !flags.label_ids.is_empty() {
         map.insert("label_ids".into(), json!(flags.label_ids));
@@ -454,6 +461,7 @@ fn run(cli: &Cli) -> Result<Value, CliError> {
             highlight,
             hide,
             clip_above,
+            clip_below,
             label_ids,
             max_labels,
             colors,
@@ -471,6 +479,7 @@ fn run(cli: &Cli) -> Result<Value, CliError> {
                     highlight,
                     hide,
                     clip_above: *clip_above,
+                    clip_below: *clip_below,
                     label_ids,
                     max_labels: *max_labels,
                     colors,

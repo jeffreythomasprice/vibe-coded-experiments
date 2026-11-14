@@ -494,7 +494,14 @@ impl Editor {
     }
 
     fn select_kind(&mut self, op: &str) {
-        self.call::<_, IdCount>(op, &SelectKind { kind: None }, None);
+        self.call::<_, IdCount>(
+            op,
+            &SelectKind {
+                kind: None,
+                top_level: false,
+            },
+            None,
+        );
     }
 
     fn drag_step(&mut self, step: DragOp) -> bool {

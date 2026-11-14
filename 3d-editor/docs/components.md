@@ -46,6 +46,8 @@ Semantics, exactly (`crates/editor-sim/src/anim.rs`):
 - Offsets and angles are relative to the authored pose, so a keyframe of all zeros is the pose seen in the editor.
 - The brushes and meshes the entity owns move rigidly with it. Lighting is baked into the vertex colours at load, so a rotating mover keeps the shading it had at rest.
 
+Positive yaw turns counter-clockwise seen from above. `transform.scale`, `transform.rotate`, `transform.flip` and mirrored arrays also transform `offset` by the linear part of the transform; `angles` are not changed.
+
 Schema violations (for example an empty `keyframes`) are reported by `check.validate` as `schema_violation`; the simulation skips a component that does not parse, with a `LoadWarning`.
 
 Not yet: triggering by an event, several named animations per entity, one-shot or ping-pong playback, per-keyframe easing.
@@ -56,7 +58,7 @@ Marks where the game client puts the player. No fields (`{}`).
 
 - The player is placed at the entity's origin raised by 12 units (eye height above the marker centre) and faces the entity's yaw and pitch.
 - With several, the lowest entity id is used. With none, the game client starts from the same camera as `viewport.persp`.
-- Editor marker: a green box, 12 x 12 x 32.
+- Editor marker: a green box, 12 x 12 x 32. Units are Quake-like: a door is about 64 x 112, so the player (about 32 tall) fits through it.
 
 ## Components from definitions files
 

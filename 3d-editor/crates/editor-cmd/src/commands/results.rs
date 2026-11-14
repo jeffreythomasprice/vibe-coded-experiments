@@ -46,7 +46,8 @@ pub struct Duplicated {
     pub ids: Vec<ObjectId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
-    /// Each original -> its copy.
+    /// Each original -> its copy; empty with `brief`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub map: BTreeMap<ObjectId, ObjectId>,
 }
 
@@ -59,7 +60,8 @@ pub struct Pasted {
     pub id: Option<ObjectId>,
     /// How many of the leading `ids` are top-level objects (not members of a pasted group or brush entity).
     pub top_level: usize,
-    /// Each object in the clipboard text -> its new id.
+    /// Each object in the clipboard text -> its new id; empty with `brief`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub map: BTreeMap<ObjectId, ObjectId>,
 }
 
@@ -117,7 +119,8 @@ pub struct Arrayed {
     pub ids: Vec<ObjectId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
-    /// Each original -> its copies.
+    /// Each original -> its copies; empty with `brief`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub map: BTreeMap<ObjectId, Vec<ObjectId>>,
     /// How many objects one copy of the source holds.
     pub copy_size: usize,

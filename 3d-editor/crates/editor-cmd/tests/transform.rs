@@ -196,3 +196,25 @@ fn mirrored_mesh_stays_valid() {
         json!([])
     );
 }
+
+#[test]
+fn scaling_an_entity_scales_keyframe_offsets() {
+    let mut s = session();
+    let e = id_of(&exec(
+        &mut s,
+        "entity.create",
+        json!({ "origin": [10, 0, 0], "components": { "keyframe_animation": {
+            "keyframes": [
+                { "time": 0 },
+                { "time": 2, "offset": [0, 0, 8], "angles": [0, 90, 0] },
+            ] } } }),
+    ));
+    ok(&exec(
+        &mut s,
+        "transform.scale",
+        json!({ "ids": [e], "factors": 2, "pivot": "origin" }),
+    ));
+    let keyframe = &full(&mut s, &e)["components"]["keyframe_animation"]["keyframes"][1];
+    assert_eq!(keyframe["offset"], json!([0.0, 0.0, 16.0]));
+    assert_eq!(keyframe["angles"], json!([0, 90, 0]));
+}

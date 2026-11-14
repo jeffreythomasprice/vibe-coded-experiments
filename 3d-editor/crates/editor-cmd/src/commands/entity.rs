@@ -93,8 +93,10 @@ fn pose(origin: DVec3, angles: DVec3) -> DAffine3 {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Create {
+    /// World position. Units are Quake-like (grid 16; the player is about 32 tall, a door about 64 x 112), not metres.
     #[schemars(with = "[f64; 3]")]
     pub origin: DVec3,
+    /// [pitch, yaw, roll] degrees; yaw 0 faces +X and yaw 90 faces +Y (positive yaw is counter-clockwise from above).
     #[schemars(with = "Option<[f64; 3]>")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub angles: Option<DVec3>,

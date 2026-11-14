@@ -149,7 +149,13 @@ fn builtin_def(b: &Builtin) -> ComponentDef {
         .and_then(Value::as_str)
         .map(str::to_string);
     if let Some(map) = schema.as_object_mut() {
-        map.insert("$defs".into(), Value::Object(all.clone()));
+        let keep = editor_schema::closure(all, &[b.def], &[]).expect("built-in refs resolve");
+        let used = all
+            .iter()
+            .filter(|(name, _)| keep.contains(name) && name.as_str() != b.def)
+            .map(|(name, def)| (name.clone(), def.clone()))
+            .collect();
+        map.insert("$defs".into(), Value::Object(used));
     }
     ComponentDef {
         name: b.name.parse().expect("built-in names are valid"),

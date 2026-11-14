@@ -108,6 +108,9 @@ pub fn transform_object(
         Object::Entity(e) => {
             let mut e = e.clone();
             e.origin = m.transform_point3(e.origin);
+            if m.matrix3 != DMat3::IDENTITY {
+                transform_keyframe_offsets(&mut e.components, &m.matrix3);
+            }
             if is_rotation(&m.matrix3) {
                 e.angles = angles_of(m.matrix3 * orientation(e.angles));
             }
@@ -117,6 +120,29 @@ pub fn transform_object(
     };
     check_bounds(&out)?;
     Ok(out)
+}
+
+fn transform_keyframe_offsets(
+    components: &mut std::collections::BTreeMap<String, serde_json::Map<String, serde_json::Value>>,
+    linear: &DMat3,
+) {
+    let Some(keyframes) = components
+        .get_mut("keyframe_animation")
+        .and_then(|c| c.get_mut("keyframes"))
+        .and_then(|k| k.as_array_mut())
+    else {
+        return;
+    };
+    for keyframe in keyframes {
+        let Some(offset) = keyframe.get_mut("offset") else {
+            continue;
+        };
+        let parsed: Option<[f64; 3]> = serde_json::from_value(offset.clone()).ok();
+        if let Some(v) = parsed {
+            let out = *linear * DVec3::from(v);
+            *offset = serde_json::json!([out.x, out.y, out.z]);
+        }
+    }
 }
 
 fn gather(ctx: &Ctx, ids: &[ObjectId]) -> Result<Vec<Object>, CommandError> {

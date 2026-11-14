@@ -208,6 +208,8 @@ pub struct List {
     hidden: Option<bool>,
     /// Only objects that are (true) or are not (false) locked, directly or through a container.
     locked: Option<bool>,
+    /// Only objects that are (true) or are not (false) top level: in no group and not part of a brush entity.
+    top_level: Option<bool>,
     /// Keys to keep from each summary (`id` is always kept).
     fields: Option<Vec<String>>,
     /// Default 100, at most 1000.
@@ -257,6 +259,9 @@ pub fn list(ctx: &Ctx, args: List) -> CmdResult<results::ObjectPage> {
         if let (Some(want), Some(set)) = (args.locked, &locked)
             && set.contains(&object.id()) != want
         {
+            return false;
+        }
+        if args.top_level.is_some_and(|t| object.is_top_level() != t) {
             return false;
         }
         if args.kind.is_some_and(|k| object.id().kind() != k) {
@@ -549,9 +554,11 @@ pub struct Overlaps {
     /// Skip pairs whose two objects sit directly in the same group.
     #[serde(default)]
     ignore_same_group: bool,
+    /// Skip pairs that interpenetrate by at most this many units; overrides `ignore_touching`.
+    min_depth: Option<f64>,
 }
 
-const TOUCH_DEPTH: f64 = 1.0;
+pub(super) const TOUCH_DEPTH: f64 = 1.0;
 
 fn interiors_overlap(a: &Aabb, b: &Aabb) -> bool {
     let lo = a.min.max(b.min);
@@ -559,26 +566,12 @@ fn interiors_overlap(a: &Aabb, b: &Aabb) -> bool {
     (hi - lo).min_element() > OVERLAP_EPS
 }
 
-pub fn overlaps(ctx: &Ctx, args: Overlaps) -> CmdResult<results::Overlaps> {
-    let doc = ctx.doc();
-    let ids: Vec<ObjectId> = match args.ids {
-        Some(ids) => {
-            non_empty("ids", &ids)?;
-            for &id in &ids {
-                brush_or_mesh(doc, id)?;
-            }
-            let mut ids = ids;
-            ids.sort_by_key(|i| i.number());
-            ids.dedup();
-            ids
-        }
-        None => doc
-            .brushes
-            .keys()
-            .map(|&b| ObjectId::from(b))
-            .chain(doc.meshes.keys().map(|&m| ObjectId::from(m)))
-            .collect(),
-    };
+pub(super) fn overlap_pairs(
+    doc: &Document,
+    ids: &[ObjectId],
+    skip_depth: Option<f64>,
+    ignore_same_group: bool,
+) -> (Vec<results::OverlapPair>, bool) {
     let items: Vec<(Object, Aabb)> = ids
         .iter()
         .filter_map(|&id| doc.get(id))
@@ -592,7 +585,7 @@ pub fn overlaps(ctx: &Ctx, args: Overlaps) -> CmdResult<results::Overlaps> {
             if !interiors_overlap(ab, bb) {
                 continue;
             }
-            if args.ignore_same_group && a.group().is_some() && a.group() == b.group() {
+            if ignore_same_group && a.group().is_some() && a.group() == b.group() {
                 continue;
             }
             let mut depth = (ab.max.min(bb.max) - ab.min.max(bb.min)).min_element();
@@ -614,7 +607,7 @@ pub fn overlaps(ctx: &Ctx, args: Overlaps) -> CmdResult<results::Overlaps> {
                 }
                 _ => true,
             };
-            if args.ignore_touching && depth <= TOUCH_DEPTH {
+            if skip_depth.is_some_and(|limit| depth <= limit) {
                 continue;
             }
             if pairs.len() == MAX_PAIRS {
@@ -629,6 +622,44 @@ pub fn overlaps(ctx: &Ctx, args: Overlaps) -> CmdResult<results::Overlaps> {
             });
         }
     }
+    (pairs, truncated)
+}
+
+pub(super) fn all_solid_ids(doc: &Document) -> Vec<ObjectId> {
+    doc.brushes
+        .keys()
+        .map(|&b| ObjectId::from(b))
+        .chain(doc.meshes.keys().map(|&m| ObjectId::from(m)))
+        .collect()
+}
+
+pub fn overlaps(ctx: &Ctx, args: Overlaps) -> CmdResult<results::Overlaps> {
+    let doc = ctx.doc();
+    let ids: Vec<ObjectId> = match args.ids {
+        Some(ids) => {
+            non_empty("ids", &ids)?;
+            for &id in &ids {
+                brush_or_mesh(doc, id)?;
+            }
+            let mut ids = ids;
+            ids.sort_by_key(|i| i.number());
+            ids.dedup();
+            ids
+        }
+        None => all_solid_ids(doc),
+    };
+    if let Some(depth) = args.min_depth
+        && !(depth.is_finite() && depth >= 0.0)
+    {
+        return Err(CommandError::invalid_arg(
+            "min_depth",
+            "min_depth must be zero or more",
+        ));
+    }
+    let skip_depth = args
+        .min_depth
+        .or(args.ignore_touching.then_some(TOUCH_DEPTH));
+    let (pairs, truncated) = overlap_pairs(doc, &ids, skip_depth, args.ignore_same_group);
     let warnings = if truncated {
         vec![format!(
             "only the first {MAX_PAIRS} overlapping pairs are listed"

@@ -250,3 +250,91 @@ fn underscored_top_level_ops() {
     );
     ok(&r);
 }
+
+#[test]
+fn batch_map_refs_follow_a_cut() {
+    let mut s = session();
+    let wall = id_of(&exec(
+        &mut s,
+        "brush.create_box",
+        json!({ "min": [0,0,0], "max": [128,8,64] }),
+    ));
+    let r = exec(
+        &mut s,
+        "batch",
+        json!({ "commands": [
+            { "op": "room.cut_opening", "as": "cut",
+              "args": { "min": [32,-4,0], "max": [48,12,32], "targets": [wall] } },
+            { "op": "room.cut_opening",
+              "args": { "min": [80,-4,0], "max": [96,12,32], "targets": [format!("$cut.map[{wall}]")] } },
+        ]}),
+    );
+    ok(&r);
+    let first = &r["result"]["results"][0]["map"][&wall];
+    assert!(first.as_array().unwrap().len() > 1);
+    let r = exec(
+        &mut s,
+        "batch",
+        json!({ "commands": [
+            { "op": "room.cut_opening", "as": "again",
+              "args": { "min": [0,-4,48], "max": [8,12,56] } },
+            { "op": "object.duplicate", "args": { "ids": ["$again.map[nope]"] } },
+        ]}),
+    );
+    assert_eq!(err_code(&r), "InvalidArgument");
+}
+
+#[test]
+fn brief_copies_return_only_top_level_ids() {
+    let mut s = session();
+    let a = id_of(&exec(
+        &mut s,
+        "brush.create_box",
+        json!({ "min": [0,0,0], "max": [8,8,8] }),
+    ));
+    let b = id_of(&exec(
+        &mut s,
+        "brush.create_box",
+        json!({ "min": [16,0,0], "max": [24,8,8] }),
+    ));
+    let g = id_of(&exec(&mut s, "group.create", json!({ "objects": [a, b] })));
+    let r = exec(
+        &mut s,
+        "object.duplicate",
+        json!({ "ids": [g], "offset": [0,32,0], "brief": true }),
+    );
+    let result = &ok(&r)["result"];
+    assert_eq!(result["ids"].as_array().unwrap().len(), 1);
+    assert!(result.get("map").is_none());
+    let r = exec(
+        &mut s,
+        "object.array",
+        json!({ "ids": [g], "count": 2, "offset": [0,64,0], "brief": true }),
+    );
+    assert_eq!(ok(&r)["result"]["ids"].as_array().unwrap().len(), 2);
+    let r = exec(
+        &mut s,
+        "object.duplicate",
+        json!({ "ids": [g], "offset": [0,96,0] }),
+    );
+    assert_eq!(ok(&r)["result"]["ids"].as_array().unwrap().len(), 3);
+}
+
+#[test]
+fn list_and_select_all_can_be_top_level() {
+    let mut s = session();
+    let a = id_of(&exec(
+        &mut s,
+        "brush.create_box",
+        json!({ "min": [0,0,0], "max": [8,8,8] }),
+    ));
+    exec(&mut s, "group.create", json!({ "objects": [a] }));
+    let r = exec(
+        &mut s,
+        "scene.list",
+        json!({ "kind": "brush", "top_level": true }),
+    );
+    assert_eq!(ok(&r)["result"]["objects"].as_array().unwrap().len(), 0);
+    let r = exec(&mut s, "select.all", json!({ "top_level": true }));
+    assert_eq!(ok(&r)["result"]["count"], 1);
+}

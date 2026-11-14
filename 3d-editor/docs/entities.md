@@ -59,7 +59,7 @@ A scene holds any number of definitions records (`d42`, an object kind like mate
 - a file relative to the scene file (the default once the scene is saved), or
 - embedded in the scene.
 
-Later records override earlier ones for the same component name (`duplicate_component` warning). `component_defs.add` (`store: absolute|relative|embed` for files), `component_defs.embed` and `component_defs.remove` manage records; `component_defs.list` returns the records, the resolved components (built-ins first, `from: null`) with their schemas, and any problems. The server resolves the files on every use, so editing a file on disk takes effect on the next op; the GUI refetches on its Reload button.
+Later records override earlier ones for the same component name (`duplicate_component` warning). `component_defs.list {names?}` returns the resolved components (each built-in schema carries only the definitions it references); `component_defs.add` (`store: absolute|relative|embed` for files), `component_defs.embed` and `component_defs.remove` manage records; `component_defs.list` returns the records, the resolved components (built-ins first, `from: null`) with their schemas, and any problems. The server resolves the files on every use, so editing a file on disk takes effect on the next op; the GUI refetches on its Reload button.
 
 ## Editing components
 

@@ -28,7 +28,11 @@ Materials and textures: a face names a material (face_set_material); material_cr
 
 Clipboard: clipboard_copy {ids} copies objects (with their contents, materials and layers) to a clipboard shared by every client and file, including the GUI; clipboard_paste {at | offset} pastes it as new objects (at puts the centre of their bounds there; with neither they land where they were copied from). Recovery: autosaves of unsaved work survive a crashed server; recovery_list shows them and recovery_restore {id} puts one back into the current session (unsaved until file_save).
 
-In `batch`, items are {op, args, as?}; op names may be dotted or underscored. Reference earlier results as \"$name\" (the item's `as`), \"$N\", \"$name.ids[k]\" or \"$name/v2\" (a vertex or face of a created mesh).
+Scale: units are Quake-like, not metres. The default grid is 16; the player marker (player_start) is 12 x 12 x 32 with the eye 12 above its origin; a door is about 64 x 112, a floor about 128 high, a wall 8 to 16 thick. Z is up, yaw 0 faces +X and yaw 90 faces +Y (positive yaw is counter-clockwise from above).
+
+Big scenes: build one module (a cubicle, a room, a floor), then copy it with object_array (rows) or object_duplicate (offset) rather than rebuilding it; pass `brief: true` to get only the new top-level ids back. room_cut_opening and csg replace brushes with new ids: omit `targets` to cut whatever the box crosses, or reference what an earlier batch item left of an id as \"$cut.map[b21]\". To get ids for a transform or copy of everything, use scene_list or select_all with `top_level: true` (members of groups and brush entities are left out). transform_scale also scales keyframe_animation offsets. check_validate {overlaps: true} reports interpenetrating solids. For section views use view_screenshot clip_above and clip_below (world z); for orthographic cameras `position` is the view centre and `zoom` is pixels per world unit.
+
+In `batch`, items are {op, args, as?}; op names may be dotted or underscored. Reference earlier results as \"$name\" (the item's `as`), \"$N\", \"$name.ids[k]\", \"$name.map[id]\" (the list of ids an op made from that id; inside a list it is spliced in) or \"$name/v2\" (a vertex or face of a created mesh).
 
 Tools you cannot see are not enabled: mutating tools need the server started with --allow-mutate and \
 destructive ones with --allow-destructive.";

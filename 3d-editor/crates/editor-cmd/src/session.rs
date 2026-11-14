@@ -576,13 +576,20 @@ impl Session {
         Ok(())
     }
 
-    fn selectable_ids(&self, kind: Option<editor_core::ObjectKind>) -> BTreeSet<ObjectId> {
+    fn selectable_ids(
+        &self,
+        kind: Option<editor_core::ObjectKind>,
+        top_level: bool,
+    ) -> BTreeSet<ObjectId> {
         let hidden = self.doc.hidden_ids();
         let locked = self.doc.locked_ids();
         self.doc
             .all_ids()
             .into_iter()
             .filter(|&id| selectable(id) && kind.is_none_or(|k| id.kind() == k))
+            .filter(|&id| {
+                !top_level || self.doc.get(id).is_some_and(|object| object.is_top_level())
+            })
             .filter(|id| !hidden.contains(id) && !locked.contains(id))
             .collect()
     }
@@ -660,13 +667,13 @@ impl Session {
                 Ok(self.success(self.selection_result(), Changes::default(), vec![]))
             }
             "select.all" => {
-                let SelectKind { kind } = parse_args(args)?;
-                self.selection = self.selectable_ids(kind);
+                let SelectKind { kind, top_level } = parse_args(args)?;
+                self.selection = self.selectable_ids(kind, top_level);
                 Ok(self.success(self.selection_result(), Changes::default(), vec![]))
             }
             "select.invert" => {
-                let SelectKind { kind } = parse_args(args)?;
-                let universe = self.selectable_ids(kind);
+                let SelectKind { kind, top_level } = parse_args(args)?;
+                let universe = self.selectable_ids(kind, top_level);
                 self.selection = universe.difference(&self.selection).copied().collect();
                 Ok(self.success(self.selection_result(), Changes::default(), vec![]))
             }

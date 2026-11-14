@@ -17,6 +17,9 @@ use crate::links::{LinkStatus, status_of};
 #[serde(deny_unknown_fields)]
 pub struct Validate {
     ids: Option<Vec<ObjectId>>,
+    /// Also report solids that interpenetrate by more than 1 unit as `overlap` warnings (same test as scene.overlaps with ignore_touching). Default false.
+    #[serde(default)]
+    overlaps: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -46,6 +49,7 @@ pub enum IssueCode {
     DanglingLink,
     LinkNotEntity,
     SelfLink,
+    Overlap,
 }
 
 #[derive(Debug, Clone)]
@@ -386,6 +390,29 @@ pub fn validate_cmd(ctx: &Ctx, args: Validate) -> CmdResult<results::Validation>
         }
     };
     let mut issues = validate_doc(ctx);
+    if args.overlaps {
+        let doc = ctx.doc();
+        let (pairs, _) = super::scene::overlap_pairs(
+            doc,
+            &super::scene::all_solid_ids(doc),
+            Some(super::scene::TOUCH_DEPTH),
+            false,
+        );
+        issues.extend(pairs.into_iter().map(|p| Issue {
+            code: IssueCode::Overlap,
+            severity: IssueSeverity::Warning,
+            ids: vec![p.a, p.b],
+            elements: vec![],
+            message: format!(
+                "{} and {} overlap by {:.2}{}",
+                p.a,
+                p.b,
+                p.depth,
+                if p.approx { " (approximate)" } else { "" }
+            ),
+            hint: "move them apart or let them just touch; scene.overlaps lists every pair",
+        }));
+    }
     if let Some(f) = &filter {
         issues.retain(|i| i.ids.iter().any(|id| f.contains(id)));
     }

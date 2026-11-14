@@ -38,7 +38,7 @@ fn vs_main(v: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(v: VertexOutput) -> @location(0) vec4<f32> {
-    if (v.world_z > globals.clip.x) {
+    if (v.world_z > globals.clip.x || v.world_z < globals.clip.y) {
         discard;
     }
     return v.color;
@@ -53,7 +53,7 @@ fn surface(v: VertexOutput) -> vec4<f32> {
 @fragment
 fn fs_face(v: VertexOutput) -> @location(0) vec4<f32> {
     let c = surface(v);
-    if (v.world_z > globals.clip.x) {
+    if (v.world_z > globals.clip.x || v.world_z < globals.clip.y) {
         discard;
     }
     return vec4<f32>(c.rgb, 1.0);
@@ -62,7 +62,7 @@ fn fs_face(v: VertexOutput) -> @location(0) vec4<f32> {
 @fragment
 fn fs_face_blend(v: VertexOutput) -> @location(0) vec4<f32> {
     let c = surface(v);
-    if (v.world_z > globals.clip.x) {
+    if (v.world_z > globals.clip.x || v.world_z < globals.clip.y) {
         discard;
     }
     return c;

@@ -135,6 +135,7 @@ impl PreparedScene {
             height,
             clear,
             clip_z: 1.0e30,
+            clip_below_z: -1.0e30,
         }
     }
 }
