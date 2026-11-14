@@ -24,11 +24,12 @@ bun start subforums spacebattles
 bun start threads spacebattles "Creative Writing"
 bun start posts spacebattles <thread-url>
 
-# Threads are filtered/sorted by threadmark activity by default: a thread shows only if a
-# threadmark was created, or its post edited, within -u. Threads without threadmarks are hidden.
+# Threads are filtered/sorted by last post time by default.
 bun start threads spacebattles "Creative Writing" -u 1d
-bun start threads spacebattles "Creative Writing" -u 1d --by-posts       # old behavior: last post time
-bun start threads spacebattles "Creative Writing" -u 1d --no-edit-check  # skip reader-mode edit-time requests
+# --by-threadmarks (opt-in): a thread shows only if a threadmark was created, or its post
+# edited, within -u. Threads without threadmarks are hidden.
+bun start threads spacebattles "Creative Writing" -u 1d --by-threadmarks
+bun start threads spacebattles "Creative Writing" -u 1d --by-threadmarks --no-edit-check  # skip reader-mode edit-time requests
 
 bun start subforums sufficientvelocity
 bun start threads sufficientvelocity "Quests"
@@ -84,8 +85,8 @@ bun start search --sort-mode separate
 # Filter to specific sites from configured sources
 bun start search --sites ao3
 
-# Forum threads use threadmark activity by default; --by-posts / --no-edit-check as for `threads`
-bun start search --by-posts
+# Forum threads use last post time by default; --by-threadmarks / --no-edit-check as for `threads`
+bun start search --by-threadmarks
 ```
 
 ### Favorites & ignore list commands
@@ -143,9 +144,9 @@ Adapters are registered in `src/scraper.ts` (`FORUM_ADAPTERS` / `STORY_ADAPTERS`
 
 **CLI** (`src/index.ts`) — commander-based. Subcommands: `targets`, `subforums`, `threads`, `posts`, `stories`, `chapters`, `content`, `comments`, `search`, `fav`, `ignore`.
 
-**Threadmarks** (`src/threadmarks.ts`, `XenForoAdapter.getThreadmarks`) — newest 10 threadmarks come from `<thread>/threadmarks.rss` (dates, words); edit times come from paginated `<thread>/reader/` pages. `applyThreadmarkFilter` drops threads with no threadmark activity in range and sets `lastThreadmarkAt`; `threadSortDate` is the sort key. Thread-list paging still stops on last-post cutoff. If a reader page fails (e.g. HTTP 403 from SpaceBattles' Cloudflare), the edit check logs a warning and falls back to RSS creation dates only.
+**Threadmarks** (`src/threadmarks.ts`, `XenForoAdapter.getThreadmarks`) — newest 10 threadmarks come from `<thread>/threadmarks.rss` (dates, words); edit times come from paginated `<thread>/reader/` pages. With `--by-threadmarks` (opt-in), `applyThreadmarkFilter` drops threads with no threadmark activity in range and sets `lastThreadmarkAt`; `threadSortDate` is the sort key. Thread-list paging still stops on last-post cutoff. If a reader page fails (e.g. HTTP 403 from SpaceBattles' Cloudflare), the edit check logs a warning and falls back to RSS creation dates only.
 
-**Word counts** (`src/wordcount.ts`) — thread list pages give the main-category count (`Thread.wordCount`). Unless `--no-word-categories`, `applyThreadmarkCategories` fetches `<thread>/threadmarks` (+ `?threadmark_category=N` per extra tab) after filtering and `formatThreadWords` prints `main / cat2 / cat3`. Failures fall back to the main count with one warning.
+**Word counts** (`src/wordcount.ts`) — thread list pages give the main-category count (`Thread.wordCount`). With `--word-categories` (opt-in), `applyThreadmarkCategories` fetches `<thread>/threadmarks` (+ `?threadmark_category=N` per extra tab) after filtering and `formatThreadWords` prints `main / cat2 / cat3`. Failures fall back to the main count with one warning.
 
 **Search** (`src/search.ts`) — cross-site search with fuzzy tag/keyword filtering (Fuse.js). Aggregates results from multiple configured sources (forum subforums + story tags), applies filter pipeline: list status → tags → keywords (with optional content fetch). Sources configured in `[search]` config section or passed as CLI args.
 

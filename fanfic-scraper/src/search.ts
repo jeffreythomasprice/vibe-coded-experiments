@@ -37,7 +37,7 @@ export interface SearchOptions {
     favoritesOnly: boolean;
     maxPages: number;
     sortMode: "mixed" | "separate";
-    byPosts: boolean;
+    byThreadmarks: boolean;
     checkEdits: boolean;
     wordCategories: boolean;
 }
@@ -229,7 +229,7 @@ async function collectFromSource(
             if (pagePastCutoff || !hasNext) break;
         }
 
-        if (!options.byPosts) {
+        if (options.byThreadmarks) {
             const threadItems = items.filter((i) => i.kind === "thread");
             const kept = await applyThreadmarkFilter(
                 http,

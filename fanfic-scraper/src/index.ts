@@ -91,12 +91,12 @@ program
     .option("--show-ignored", "include ignored threads in output")
     .option("--favorites-only", "only show favorited threads")
     .option("-l, --show-urls", "show thread URLs")
-    .option("--by-posts", "filter/sort by last post instead of threadmarks")
-    .option("--no-edit-check", "skip checking edit times of threadmarked posts")
+    .option("--by-threadmarks", "filter/sort by threadmark activity instead of last post")
     .option(
-        "--no-word-categories",
-        "only show main-category word count (skip per-category requests)",
+        "--no-edit-check",
+        "with --by-threadmarks, skip checking edit times of threadmarked posts",
     )
+    .option("--word-categories", "show per-category word counts (extra request per thread)")
     .action(
         async (
             site: string,
@@ -107,9 +107,9 @@ program
                 showIgnored?: boolean;
                 favoritesOnly?: boolean;
                 showUrls?: boolean;
-                byPosts?: boolean;
+                byThreadmarks?: boolean;
                 editCheck: boolean;
-                wordCategories: boolean;
+                wordCategories?: boolean;
             },
         ) => {
             const opts = program.opts();
@@ -179,9 +179,9 @@ program
                     if (status === "ignored" && !cmdOpts.showIgnored) continue;
                     if (cmdOpts.favoritesOnly && status !== "favorites") continue;
 
-                    // In by-posts mode the old cutoff behavior is kept (old threads still print)
+                    // Without --by-threadmarks the old cutoff behavior is kept (old threads still print)
                     if (
-                        !cmdOpts.byPosts &&
+                        cmdOpts.byThreadmarks &&
                         !t.isSticky &&
                         pagePastCutoff &&
                         t.lastUpdated &&
@@ -201,7 +201,7 @@ program
                 }
             }
 
-            if (!cmdOpts.byPosts) {
+            if (cmdOpts.byThreadmarks) {
                 collected = await applyThreadmarkFilter(
                     http,
                     adapter,
@@ -225,7 +225,7 @@ program
                 totalThreads++;
                 const prefix = getListPrefix(statusMap.get(t.url));
                 const updated =
-                    (cmdOpts.byPosts ? t.lastUpdated : threadSortDate(t))?.toISOString() ??
+                    (cmdOpts.byThreadmarks ? threadSortDate(t) : t.lastUpdated)?.toISOString() ??
                     "unknown";
                 const tagStr = t.tags.length > 0 ? `\t[${t.tags.join(", ")}]` : "";
                 const urlStr = cmdOpts.showUrls ? `\n    ${t.url}` : "";
@@ -557,12 +557,15 @@ program
         "mixed",
     )
     .option("-l, --show-urls", "show item URLs")
-    .option("--by-posts", "filter/sort forum threads by last post instead of threadmarks")
-    .option("--no-edit-check", "skip checking edit times of threadmarked posts")
     .option(
-        "--no-word-categories",
-        "only show main-category word count (skip per-category requests)",
+        "--by-threadmarks",
+        "filter/sort forum threads by threadmark activity instead of last post",
     )
+    .option(
+        "--no-edit-check",
+        "with --by-threadmarks, skip checking edit times of threadmarked posts",
+    )
+    .option("--word-categories", "show per-category word counts (extra request per thread)")
     .action(
         async (
             sourceArgs: string[],
@@ -575,9 +578,9 @@ program
                 updatedWithin?: string;
                 pages?: string;
                 sortMode: string;
-                byPosts?: boolean;
+                byThreadmarks?: boolean;
                 editCheck: boolean;
-                wordCategories: boolean;
+                wordCategories?: boolean;
                 showIgnored?: boolean;
                 favoritesOnly?: boolean;
                 showUrls?: boolean;
@@ -623,9 +626,9 @@ program
                     favoritesOnly: cmdOpts.favoritesOnly ?? false,
                     maxPages: cmdOpts.pages ? parseInt(cmdOpts.pages, 10) : config.search.maxPages,
                     sortMode: cmdOpts.sortMode as "mixed" | "separate",
-                    byPosts: cmdOpts.byPosts ?? false,
+                    byThreadmarks: cmdOpts.byThreadmarks ?? false,
                     checkEdits: cmdOpts.editCheck,
-                    wordCategories: cmdOpts.wordCategories,
+                    wordCategories: cmdOpts.wordCategories ?? false,
                 },
                 logger,
             );
