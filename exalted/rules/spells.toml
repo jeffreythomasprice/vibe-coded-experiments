@@ -760,6 +760,21 @@ Invocation of the Living Ship cannot be used on a ship without a figurehead or o
 """
 
 [[spell]]
+id = "invulnerable-skin-of-bronze"
+name = "Invulnerable Skin of Bronze"
+circle = "terrestrial"
+cost = "20m"
+keywords = []
+duration = "Until the sun next crosses the horizon"
+target = "Caster"
+source = "Exalted 2E (core rulebook)"
+pages = "255-256"
+effect = "Skin becomes bronze: +6L/+12B soak, 6L/12B Hardness"
+description = """
+Until the sun next crosses the horizon, the character's skin hardens into shining bronze, as supple and as flexible as silk, but as invulnerable and cold as any metal. The character gains +6L/+12B soak and 6L/12B Hardness. The character inflicts two extra dice of damage with barehanded Martial Arts attacks and weighs an extra 100 pounds. While Invulnerable Skin of Bronze does not impede his motions or slow him, caution is advised near bodies of water and deep mud.
+"""
+
+[[spell]]
 id = "keel-cleaves-the-clouds"
 name = "Keel Cleaves the Clouds"
 circle = "terrestrial"
