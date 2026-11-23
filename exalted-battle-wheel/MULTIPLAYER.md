@@ -12,7 +12,7 @@ that doesn't match its schema — an unknown `type`, a name over the length boun
 entirely — is rejected before it's ever deserialized, not just whatever `serde` happens to do with
 it. `ClientMessage`/`ServerMessage`/`BattleRequest`/`BattleCommand`/`ProtocolError` are adjacently
 tagged (`{"type":"Join","data":{...}}`); this is a breaking wire change for a client mid-connection
-across a deploy, though rooms' 30-minute idle TTL and the fact that deploys are manual keep the
+across a deploy, though rooms' 30-day idle TTL and the fact that deploys are manual keep the
 practical blast radius to "reconnects." `BattleEvent` and everything it carries keep serde's older
 externally-tagged encoding instead, deliberately: `BattleLog` (which embeds a `Vec<BattleEvent>`) is
 persisted in the browser's own `localStorage` for Solo mode, and retagging it would have silently
@@ -36,7 +36,7 @@ per connection:
   never retroactive to anyone already in the room.
 
 A room outlives its members: the last person leaving doesn't delete it, so its battle is still
-there if someone rejoins later. Idle rooms and connections expire after 30 minutes of inactivity.
+there if someone rejoins later. Idle rooms and connections expire after 30 days of inactivity.
 
 ## Remembering a room
 

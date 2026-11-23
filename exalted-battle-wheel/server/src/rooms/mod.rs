@@ -25,7 +25,7 @@ use time::OffsetDateTime;
 /// How long an idle room is kept before it's eligible for reaping — bumped on every change to the
 /// room, membership included. See `CLAUDE.md`/the room-store doc for why a room outlives its last
 /// member rather than being deleted the moment it empties out.
-pub const ROOM_TTL: time::Duration = time::Duration::minutes(30);
+pub const ROOM_TTL: time::Duration = time::Duration::days(30);
 
 /// DynamoDB's hard per-item cap. Checked before every write so an oversized battle is a clear
 /// `RoomStoreError::TooLarge` rather than an opaque `ValidationException` from the service.

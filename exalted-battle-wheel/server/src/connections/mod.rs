@@ -20,7 +20,7 @@ use std::future::Future;
 
 /// Matches `rooms::ROOM_TTL` — a connection and the room it's in age out on the same clock, so a
 /// connection never outlives (or dies long before) the room membership it corresponds to.
-pub const CONNECTION_TTL: time::Duration = time::Duration::minutes(30);
+pub const CONNECTION_TTL: time::Duration = time::Duration::days(30);
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConnectionStoreError {
