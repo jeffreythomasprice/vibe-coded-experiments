@@ -1,0 +1,20 @@
+{
+  "id": "gruvbox-dark-soft",
+  "name": "Gruvbox Dark Soft",
+  "scheme": "dark",
+  "palette": {
+    "bg": "#32302f",
+    "panel": "#3c3836",
+    "panel_raised": "#504945",
+    "text": "#ebdbb2",
+    "muted": "#a89984",
+    "border": "#665c54",
+    "accent": "#83a598",
+    "accent_text": "#1d2021",
+    "danger": "#fb4934",
+    "danger_text": "#1d2021",
+    "meter_bg": "#504945",
+    "meter_fill": "#b8bb26",
+    "overlay": "rgba(0, 0, 0, 0.6)"
+  }
+}

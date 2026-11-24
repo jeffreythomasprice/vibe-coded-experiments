@@ -1,0 +1,20 @@
+[package]
+name = "audio-recorder-transcribe"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[features]
+default = ["cuda"]
+cuda = ["whisper-rs/cuda"]
+
+[dependencies]
+audio-recorder-schema = { path = "../schema" }
+audio-recorder-core = { path = "../core" }
+whisper-rs = "0.16"
+sherpa-rs = { version = "0.6.8", default-features = false, features = ["download-binaries"] }
+ureq = "3"
+thiserror = "2"
+crossbeam-channel = "0.5"
+tracing = "0.1"
+time = { version = "0.3", features = ["formatting"] }

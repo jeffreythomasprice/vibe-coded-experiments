@@ -1,0 +1,1 @@
+{ "version": 1, "leveling": true, "auto": true, "devices": { "input:mic": { "gain": 3.5, "muted": false } }, "segments": { "tracks/a-1.wav": { "gain": 2.0, "muted": true } } }

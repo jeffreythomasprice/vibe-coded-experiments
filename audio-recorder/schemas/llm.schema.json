@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LLM provider wire formats",
+  "definitions": {
+    "ChatMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "content"],
+      "properties": {
+        "role": { "type": "string" },
+        "content": { "type": "string" }
+      }
+    },
+    "OllamaOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num_predict", "num_ctx"],
+      "properties": {
+        "num_predict": { "type": "integer", "minimum": 1 },
+        "num_ctx": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "OllamaChatRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "stream", "messages", "options"],
+      "properties": {
+        "model": { "type": "string" },
+        "stream": { "type": "boolean" },
+        "think": { "type": "boolean" },
+        "messages": { "type": "array", "items": { "$ref": "#/definitions/ChatMessage" } },
+        "options": { "$ref": "#/definitions/OllamaOptions" }
+      }
+    },
+    "OllamaResponseMessage": {
+      "type": "object",
+      "required": ["content"],
+      "properties": {
+        "content": { "type": "string" },
+        "thinking": { "type": "string" }
+      }
+    },
+    "OllamaChatResponse": {
+      "type": "object",
+      "required": ["message"],
+      "properties": {
+        "message": { "$ref": "#/definitions/OllamaResponseMessage" },
+        "done_reason": { "type": ["string", "null"] },
+        "prompt_eval_count": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "AnthropicRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "max_tokens", "system", "messages"],
+      "properties": {
+        "model": { "type": "string" },
+        "max_tokens": { "type": "integer", "minimum": 1 },
+        "system": { "type": "string" },
+        "messages": { "type": "array", "items": { "$ref": "#/definitions/ChatMessage" } }
+      }
+    },
+    "AnthropicContentBlock": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string" },
+        "text": { "type": "string" }
+      }
+    },
+    "AnthropicResponse": {
+      "type": "object",
+      "required": ["content"],
+      "properties": {
+        "content": { "type": "array", "items": { "$ref": "#/definitions/AnthropicContentBlock" } },
+        "stop_reason": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

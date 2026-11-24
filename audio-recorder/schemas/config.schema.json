@@ -1,0 +1,225 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Config",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "sessions_dir": {
+      "type": "string",
+      "minLength": 1
+    },
+    "log_file": {
+      "type": "string"
+    },
+    "sample_format": {
+      "$ref": "#/definitions/SampleFormat",
+      "default": "f32"
+    },
+    "transcription": {
+      "$ref": "#/definitions/TranscriptionConfig"
+    },
+    "compression": {
+      "$ref": "#/definitions/CompressionConfig"
+    },
+    "llm": {
+      "$ref": "#/definitions/LlmConfig"
+    },
+    "summarization": {
+      "$ref": "#/definitions/SummarizationConfig"
+    }
+  },
+  "definitions": {
+    "SampleFormat": {
+      "type": "string",
+      "enum": [
+        "f32",
+        "i16"
+      ]
+    },
+    "TranscriptionConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "auto": {
+          "type": "boolean",
+          "default": true
+        },
+        "models_dir": {
+          "type": "string"
+        },
+        "whisper_model": {
+          "type": "string"
+        },
+        "vad_model": {
+          "type": "string"
+        },
+        "segmentation_model": {
+          "type": "string"
+        },
+        "embedding_model": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string",
+          "default": "auto"
+        },
+        "diarize": {
+          "type": "boolean",
+          "default": true
+        },
+        "gpu": {
+          "type": "boolean",
+          "default": true
+        },
+        "num_speakers": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cluster_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "live": {
+          "$ref": "#/definitions/LiveTranscriptionConfig"
+        }
+      }
+    },
+    "LiveTranscriptionConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "whisper_model": {
+          "type": "string"
+        },
+        "partials": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "Codec": {
+      "type": "string",
+      "enum": [
+        "flac",
+        "opus"
+      ]
+    },
+    "CompressionConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "auto": {
+          "type": "boolean",
+          "default": true
+        },
+        "live": {
+          "type": "boolean",
+          "default": true
+        },
+        "codec": {
+          "$ref": "#/definitions/Codec",
+          "default": "flac"
+        },
+        "opus_bitrate_kbps": {
+          "type": "integer",
+          "minimum": 6,
+          "maximum": 256,
+          "default": 48
+        }
+      }
+    },
+    "LlmProvider": {
+      "type": "string",
+      "enum": [
+        "ollama",
+        "anthropic"
+      ]
+    },
+    "LlmConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/LlmProvider",
+          "default": "ollama"
+        },
+        "ollama": {
+          "$ref": "#/definitions/OllamaConfig"
+        },
+        "anthropic": {
+          "$ref": "#/definitions/AnthropicConfig"
+        },
+        "max_output_tokens": {
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 128000,
+          "default": 8000
+        },
+        "timeout_secs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400,
+          "default": 900
+        }
+      }
+    },
+    "OllamaConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": {
+          "type": "string",
+          "default": "http://localhost:11434"
+        },
+        "model": {
+          "type": "string",
+          "default": "qwen3.5:9b"
+        },
+        "num_ctx": {
+          "type": "integer",
+          "minimum": 2048,
+          "maximum": 1048576,
+          "default": 32768
+        }
+      }
+    },
+    "AnthropicConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "api_key": {
+          "type": "string"
+        },
+        "base_url": {
+          "type": "string",
+          "default": "https://api.anthropic.com"
+        },
+        "model": {
+          "type": "string",
+          "default": "claude-sonnet-5-5"
+        }
+      }
+    },
+    "SummarizationConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "auto": {
+          "type": "boolean",
+          "default": true
+        },
+        "language": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

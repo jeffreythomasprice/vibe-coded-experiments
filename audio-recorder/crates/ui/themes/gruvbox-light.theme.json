@@ -1,0 +1,20 @@
+{
+  "id": "gruvbox-light",
+  "name": "Gruvbox Light",
+  "scheme": "light",
+  "palette": {
+    "bg": "#fbf1c7",
+    "panel": "#f9f5d7",
+    "panel_raised": "#f2e5bc",
+    "text": "#3c3836",
+    "muted": "#7c6f64",
+    "border": "#d5c4a1",
+    "accent": "#076678",
+    "accent_text": "#fbf1c7",
+    "danger": "#9d0006",
+    "danger_text": "#fbf1c7",
+    "meter_bg": "#d5c4a1",
+    "meter_fill": "#79740e",
+    "overlay": "rgba(40, 40, 40, 0.5)"
+  }
+}

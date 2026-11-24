@@ -1,0 +1,3 @@
+{ "version": 1, "started_at": "x", "ended_at": null, "devices": {},
+  "segments": [ { "device": "input:mic", "file": "a", "start_offset_ns": 0, "end_offset_ns": null,
+                  "sample_rate": 0, "channels": 2, "frames": 0, "status": "recording" } ] }

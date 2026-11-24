@@ -1,0 +1,1 @@
+{ "type": "device_changed", "device": { "key": "input:mic", "direction": "input", "description": "Mic", "present": true, "enabled": true, "recording": false } }

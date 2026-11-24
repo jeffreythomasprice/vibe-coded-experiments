@@ -1,0 +1,5 @@
+{
+  "version": 1, "created_at": "x", "model": "m", "language": null, "diarized": false,
+  "sources": {}, "speakers": {},
+  "snippets": [ { "source": "a", "speaker": null, "segment": "f", "start_ns": -1, "end_ns": 0, "text": "t" } ]
+}

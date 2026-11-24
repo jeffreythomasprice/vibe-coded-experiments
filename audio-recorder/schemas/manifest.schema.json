@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "started_at",
+    "ended_at",
+    "devices",
+    "segments"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer"
+    },
+    "started_at": {
+      "type": "string"
+    },
+    "ended_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "devices": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/ManifestDevice"
+      }
+    },
+    "segments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Segment"
+      }
+    }
+  },
+  "definitions": {
+    "Direction": {
+      "type": "string",
+      "enum": [
+        "input",
+        "output"
+      ]
+    },
+    "SegmentStatus": {
+      "type": "string",
+      "enum": [
+        "recording",
+        "complete",
+        "truncated"
+      ]
+    },
+    "ManifestDevice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "description",
+        "direction"
+      ],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "direction": {
+          "$ref": "#/definitions/Direction"
+        }
+      }
+    },
+    "Segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "device",
+        "file",
+        "start_offset_ns",
+        "end_offset_ns",
+        "sample_rate",
+        "channels",
+        "frames",
+        "status"
+      ],
+      "properties": {
+        "device": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "start_offset_ns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_offset_ns": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "sample_rate": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "channels": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "status": {
+          "$ref": "#/definitions/SegmentStatus"
+        }
+      }
+    }
+  }
+}

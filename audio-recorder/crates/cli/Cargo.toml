@@ -1,0 +1,19 @@
+[package]
+name = "audio-recorder-cli"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "audio-recorder"
+path = "src/main.rs"
+
+[dependencies]
+audio-recorder-core = { path = "../core" }
+audio-recorder-schema = { path = "../schema" }
+audio-recorder-transcribe = { path = "../transcribe" }
+clap = { version = "4", features = ["derive"] }
+crossbeam-channel = "0.5"
+ctrlc = "3"
+thiserror = "2"
+tracing = "0.1"

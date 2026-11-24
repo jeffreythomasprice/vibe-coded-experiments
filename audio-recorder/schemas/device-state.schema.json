@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DeviceStateFile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["devices"],
+  "properties": {
+    "devices": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/DeviceState" }
+    }
+  },
+  "definitions": {
+    "DeviceState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "description", "last_seen_unix"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "description": { "type": "string" },
+        "last_seen_unix": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

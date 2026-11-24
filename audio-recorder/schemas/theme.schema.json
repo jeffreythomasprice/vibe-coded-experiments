@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Theme",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "name",
+    "scheme",
+    "palette"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "scheme": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark"
+      ]
+    },
+    "palette": {
+      "$ref": "#/definitions/Palette"
+    }
+  },
+  "definitions": {
+    "Palette": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bg",
+        "panel",
+        "panel_raised",
+        "text",
+        "muted",
+        "border",
+        "accent",
+        "accent_text",
+        "danger",
+        "danger_text",
+        "meter_bg",
+        "meter_fill",
+        "overlay"
+      ],
+      "properties": {
+        "bg": {
+          "type": "string"
+        },
+        "panel": {
+          "type": "string"
+        },
+        "panel_raised": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "muted": {
+          "type": "string"
+        },
+        "border": {
+          "type": "string"
+        },
+        "accent": {
+          "type": "string"
+        },
+        "accent_text": {
+          "type": "string"
+        },
+        "danger": {
+          "type": "string"
+        },
+        "danger_text": {
+          "type": "string"
+        },
+        "meter_bg": {
+          "type": "string"
+        },
+        "meter_fill": {
+          "type": "string"
+        },
+        "overlay": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

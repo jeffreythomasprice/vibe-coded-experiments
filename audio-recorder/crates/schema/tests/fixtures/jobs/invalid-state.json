@@ -1,0 +1,2 @@
+{ "version": 1, "id": "a", "kind": "transcribe", "session": "s", "replace": false,
+  "state": "paused", "created_at": "t", "started_at": null, "finished_at": null, "stage": null, "fraction": null, "error": null }

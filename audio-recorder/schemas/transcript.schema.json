@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Transcript",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "created_at", "model", "language", "diarized", "sources", "speakers", "snippets"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "created_at": { "type": "string" },
+    "model": { "type": "string" },
+    "language": { "type": ["string", "null"] },
+    "diarized": { "type": "boolean" },
+    "sources": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/TranscriptSource" }
+    },
+    "speakers": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/TranscriptSpeaker" }
+    },
+    "snippets": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/Snippet" }
+    }
+  },
+  "definitions": {
+    "TranscriptSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "direction"],
+      "properties": {
+        "description": { "type": "string" },
+        "direction": { "type": "string", "enum": ["input", "output"] }
+      }
+    },
+    "TranscriptSpeaker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "label"],
+      "properties": {
+        "source": { "type": "string" },
+        "label": { "type": "string" }
+      }
+    },
+    "Snippet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "speaker", "segment", "start_ns", "end_ns", "text"],
+      "properties": {
+        "source": { "type": "string" },
+        "speaker": { "type": ["string", "null"] },
+        "segment": { "type": "string" },
+        "start_ns": { "type": "integer", "minimum": 0 },
+        "end_ns": { "type": "integer", "minimum": 0 },
+        "text": { "type": "string" }
+      }
+    }
+  }
+}

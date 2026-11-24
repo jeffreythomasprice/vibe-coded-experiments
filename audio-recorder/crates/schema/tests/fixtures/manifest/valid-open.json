@@ -1,0 +1,4 @@
+{ "version": 1, "started_at": "2026-01-01T00:00:00Z", "ended_at": null,
+  "devices": { "input:mic": { "description": "Mic", "direction": "input" } },
+  "segments": [ { "device": "input:mic", "file": "tracks/input-mic-0.wav", "start_offset_ns": 0, "end_offset_ns": null,
+                  "sample_rate": 48000, "channels": 2, "frames": 0, "status": "recording" } ] }

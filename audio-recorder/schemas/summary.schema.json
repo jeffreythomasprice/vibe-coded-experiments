@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "created_at", "provider", "model", "transcript_created_at", "text"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "created_at": { "type": "string" },
+    "provider": { "type": "string" },
+    "model": { "type": "string" },
+    "transcript_created_at": { "type": "string" },
+    "text": { "type": "string" }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MixSettings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "leveling",
+    "auto",
+    "devices",
+    "segments"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer"
+    },
+    "leveling": {
+      "type": "boolean"
+    },
+    "auto": {
+      "type": "boolean"
+    },
+    "devices": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/ChannelGain"
+      }
+    },
+    "segments": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/ChannelGain"
+      }
+    }
+  },
+  "definitions": {
+    "ChannelGain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gain",
+        "muted"
+      ],
+      "properties": {
+        "gain": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "muted": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

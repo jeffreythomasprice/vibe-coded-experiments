@@ -1,0 +1,20 @@
+{
+  "id": "light",
+  "name": "Light",
+  "scheme": "light",
+  "palette": {
+    "bg": "#f5f6f8",
+    "panel": "#ffffff",
+    "panel_raised": "#eef0f3",
+    "text": "#1b1e23",
+    "muted": "#5d6573",
+    "border": "#d9dde3",
+    "accent": "#2f62d0",
+    "accent_text": "#ffffff",
+    "danger": "#c8323a",
+    "danger_text": "#ffffff",
+    "meter_bg": "#dfe3e8",
+    "meter_fill": "#2f62d0",
+    "overlay": "rgba(15, 18, 24, 0.5)"
+  }
+}

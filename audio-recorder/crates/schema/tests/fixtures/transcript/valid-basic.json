@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "created_at": "2026-11-23T10:00:00Z",
+  "model": "ggml-large-v3-turbo.bin",
+  "language": "en",
+  "diarized": true,
+  "sources": { "input:mic": { "description": "Mic", "direction": "input" } },
+  "speakers": { "S1": { "source": "input:mic", "label": "Speaker 1" } },
+  "snippets": [
+    { "source": "input:mic", "speaker": "S1", "segment": "tracks/mic-0.wav", "start_ns": 0, "end_ns": 1000000000, "text": "hello" },
+    { "source": "input:mic", "speaker": null, "segment": "tracks/mic-0.wav", "start_ns": 1000000000, "end_ns": 2000000000, "text": "world" }
+  ]
+}

@@ -1,0 +1,1160 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "IpcTypes",
+  "description": "Every type crossing the Tauri command/event boundary. Each entry under definitions is a validated top-level type.",
+  "type": "object",
+  "definitions": {
+    "Direction": {
+      "type": "string",
+      "enum": [
+        "input",
+        "output"
+      ]
+    },
+    "NoArgs": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "Empty": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "DeviceDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "direction",
+        "description",
+        "present",
+        "enabled",
+        "recording"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "direction": {
+          "$ref": "#/definitions/Direction"
+        },
+        "description": {
+          "type": "string"
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "recording": {
+          "type": "boolean"
+        }
+      }
+    },
+    "DeviceList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "devices"
+      ],
+      "properties": {
+        "devices": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DeviceDto"
+          }
+        }
+      }
+    },
+    "SetDeviceEnabledArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "enabled"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "SessionStatusDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "name",
+        "elapsed_ms",
+        "bytes"
+      ],
+      "properties": {
+        "state": {
+          "$ref": "#/definitions/SessionState"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "elapsed_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "SessionSummaryDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "started_at",
+        "duration_ms",
+        "segment_count",
+        "device_count",
+        "bytes",
+        "recording",
+        "error",
+        "has_transcript",
+        "has_live_transcript",
+        "has_summary"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "started_at": {
+          "type": "string"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "segment_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "device_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recording": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "has_transcript": {
+          "type": "boolean"
+        },
+        "has_live_transcript": {
+          "type": "boolean"
+        },
+        "has_summary": {
+          "type": "boolean"
+        }
+      }
+    },
+    "SessionList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sessions"
+      ],
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SessionSummaryDto"
+          }
+        }
+      }
+    },
+    "SessionNameArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "SessionDeviceDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "direction",
+        "description"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "direction": {
+          "$ref": "#/definitions/Direction"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "SegmentDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "device",
+        "file",
+        "start_offset_ms",
+        "end_offset_ms",
+        "status"
+      ],
+      "properties": {
+        "device": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "start_offset_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_offset_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "recording",
+            "complete",
+            "truncated"
+          ]
+        }
+      }
+    },
+    "ChannelGainDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gain",
+        "muted"
+      ],
+      "properties": {
+        "gain": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "muted": {
+          "type": "boolean"
+        }
+      }
+    },
+    "MixDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "leveling",
+        "auto",
+        "devices",
+        "segments"
+      ],
+      "properties": {
+        "leveling": {
+          "type": "boolean"
+        },
+        "auto": {
+          "type": "boolean"
+        },
+        "devices": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/ChannelGainDto"
+          }
+        },
+        "segments": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/ChannelGainDto"
+          }
+        }
+      }
+    },
+    "SetMixArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "mix"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "mix": {
+          "$ref": "#/definitions/MixDto"
+        }
+      }
+    },
+    "SessionDetailDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "devices",
+        "segments",
+        "mix"
+      ],
+      "properties": {
+        "summary": {
+          "$ref": "#/definitions/SessionSummaryDto"
+        },
+        "devices": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SessionDeviceDto"
+          }
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SegmentDto"
+          }
+        },
+        "mix": {
+          "$ref": "#/definitions/MixDto"
+        }
+      }
+    },
+    "PlayArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "track"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "track": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "SeekArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "position_ms"
+      ],
+      "properties": {
+        "position_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "PlaybackStateDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session",
+        "track",
+        "position_ms",
+        "duration_ms",
+        "paused",
+        "playing"
+      ],
+      "properties": {
+        "session": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "track": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "position_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "playing": {
+          "type": "boolean"
+        }
+      }
+    },
+    "IpcError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "message"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "recorder",
+            "library",
+            "playback",
+            "invalid_args",
+            "internal",
+            "transcription",
+            "summarization"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "RecorderEventDto": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "device"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "device_changed"
+              ]
+            },
+            "device": {
+              "$ref": "#/definitions/DeviceDto"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "session_started"
+              ]
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "session_stopped"
+              ]
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "device",
+            "file"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "segment_opened"
+              ]
+            },
+            "device": {
+              "type": "string"
+            },
+            "file": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "device",
+            "file"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "segment_closed"
+              ]
+            },
+            "device": {
+              "type": "string"
+            },
+            "file": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "device",
+            "peak"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "level"
+              ]
+            },
+            "device": {
+              "type": "string"
+            },
+            "peak": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "device",
+            "message"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "capture_error"
+              ]
+            },
+            "device": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "session_paused"
+              ]
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "session_resumed"
+              ]
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "SessionState": {
+      "type": "string",
+      "enum": [
+        "idle",
+        "recording",
+        "paused"
+      ]
+    },
+    "SettingsDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "theme"
+      ],
+      "properties": {
+        "theme": {
+          "type": "string"
+        }
+      }
+    },
+    "MixChangedDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "mix"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "mix": {
+          "$ref": "#/definitions/MixDto"
+        }
+      }
+    },
+    "TranscriptSourceDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "description",
+        "direction"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "direction": {
+          "$ref": "#/definitions/Direction"
+        }
+      }
+    },
+    "TranscriptSpeakerDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "source",
+        "label"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "SnippetDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "speaker",
+        "segment",
+        "start_ms",
+        "end_ms",
+        "text"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "speaker": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "segment": {
+          "type": "string"
+        },
+        "start_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "TranscriptDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "created_at",
+        "model",
+        "language",
+        "diarized",
+        "sources",
+        "speakers",
+        "snippets",
+        "live"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "language": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "diarized": {
+          "type": "boolean"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TranscriptSourceDto"
+          }
+        },
+        "speakers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TranscriptSpeakerDto"
+          }
+        },
+        "snippets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SnippetDto"
+          }
+        },
+        "live": {
+          "type": "boolean"
+        }
+      }
+    },
+    "RenderTranscriptArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "source",
+        "speaker",
+        "timestamps"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "source": {
+          "type": "boolean"
+        },
+        "speaker": {
+          "type": "boolean"
+        },
+        "timestamps": {
+          "type": "boolean"
+        }
+      }
+    },
+    "RenderedTranscript": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "JobDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "session",
+        "replace",
+        "state",
+        "created_at",
+        "started_at",
+        "finished_at",
+        "stage",
+        "fraction",
+        "error"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "transcribe",
+            "compress",
+            "summarize"
+          ]
+        },
+        "session": {
+          "type": "string"
+        },
+        "replace": {
+          "type": "boolean"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "queued",
+            "running",
+            "done",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "started_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "finished_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fraction": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "JobList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jobs"
+      ],
+      "properties": {
+        "jobs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JobDto"
+          }
+        }
+      }
+    },
+    "JobIdArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "EnqueueTranscriptionArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "replace"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "replace": {
+          "type": "boolean"
+        }
+      }
+    },
+    "EnqueueSummaryArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "replace"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "replace": {
+          "type": "boolean"
+        }
+      }
+    },
+    "SummaryDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "created_at",
+        "provider",
+        "model",
+        "stale"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "stale": {
+          "type": "boolean"
+        }
+      }
+    },
+    "QuitArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "force"
+      ],
+      "properties": {
+        "force": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ConfirmQuitDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "active"
+      ],
+      "properties": {
+        "active": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "LiveTranscriptEventDto": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name",
+            "description",
+            "snippet"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "snippet"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "snippet": {
+              "$ref": "#/definitions/SnippetDto"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name",
+            "source",
+            "description",
+            "start_ms",
+            "text"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "partial"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "start_ms": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name",
+            "state",
+            "message",
+            "fraction"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "status"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string"
+            },
+            "message": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "fraction": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        }
+      ]
+    },
+    "EnqueueCompressionArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

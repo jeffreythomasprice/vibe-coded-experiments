@@ -1,0 +1,20 @@
+{
+  "id": "dark",
+  "name": "Dark",
+  "scheme": "dark",
+  "palette": {
+    "bg": "#14161a",
+    "panel": "#1d2026",
+    "panel_raised": "#262a32",
+    "text": "#e6e8eb",
+    "muted": "#9aa2af",
+    "border": "#2f353e",
+    "accent": "#6a9bff",
+    "accent_text": "#0b1020",
+    "danger": "#f0686d",
+    "danger_text": "#1a0507",
+    "meter_bg": "#2f353e",
+    "meter_fill": "#6a9bff",
+    "overlay": "rgba(0, 0, 0, 0.6)"
+  }
+}

@@ -1,0 +1,19 @@
+[package]
+name = "audio-recorder-ui"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+audio-recorder-schema = { path = "../schema" }
+leptos = { version = "0.8", features = ["csr"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+serde_json = "1"
+serde-wasm-bindgen = "0.6"
+serde = { version = "1", features = ["derive"] }
+js-sys = "0.3"
+console_error_panic_hook = "0.1"
+thiserror = "2"
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+web-sys = { version = "0.3", features = ["Document", "Element", "HtmlButtonElement", "HtmlElement", "HtmlHeadElement", "Node", "Window", "console"] }

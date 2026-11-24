@@ -1,0 +1,1 @@
+{ "compression": { "auto": false, "codec": "opus", "opus_bitrate_kbps": 32 } }

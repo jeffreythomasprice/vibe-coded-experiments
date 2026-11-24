@@ -1,0 +1,20 @@
+{
+  "id": "gruvbox-dark",
+  "name": "Gruvbox Dark",
+  "scheme": "dark",
+  "palette": {
+    "bg": "#282828",
+    "panel": "#32302f",
+    "panel_raised": "#3c3836",
+    "text": "#ebdbb2",
+    "muted": "#a89984",
+    "border": "#504945",
+    "accent": "#83a598",
+    "accent_text": "#1d2021",
+    "danger": "#fb4934",
+    "danger_text": "#1d2021",
+    "meter_bg": "#3c3836",
+    "meter_fill": "#b8bb26",
+    "overlay": "rgba(0, 0, 0, 0.6)"
+  }
+}

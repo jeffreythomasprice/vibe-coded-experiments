@@ -1,0 +1,1 @@
+{ "type": "snippet", "name": "2026-11-23T10-00-00", "description": "Mic", "snippet": { "source": "input:mic", "speaker": null, "segment": "tracks/input-mic-0.wav", "start_ms": 1000, "end_ms": 2000, "text": "hello" } }

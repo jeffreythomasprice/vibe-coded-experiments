@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Job",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "id", "kind", "session", "replace", "state", "created_at", "started_at", "finished_at", "stage", "fraction", "error"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "id": { "type": "string" },
+    "kind": { "type": "string", "enum": ["transcribe", "compress", "summarize"] },
+    "session": { "type": "string" },
+    "replace": { "type": "boolean" },
+    "state": { "type": "string", "enum": ["queued", "running", "done", "failed", "cancelled"] },
+    "created_at": { "type": "string" },
+    "started_at": { "type": ["string", "null"] },
+    "finished_at": { "type": ["string", "null"] },
+    "stage": { "type": ["string", "null"] },
+    "fraction": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "error": { "type": ["string", "null"] }
+  }
+}

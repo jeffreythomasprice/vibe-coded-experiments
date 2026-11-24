@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = ["crates/schema", "crates/core", "crates/transcribe", "crates/cli", "crates/app", "crates/ui"]
+default-members = ["crates/schema", "crates/core", "crates/transcribe", "crates/cli"]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+publish = false

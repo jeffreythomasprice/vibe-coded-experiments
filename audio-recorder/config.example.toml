@@ -1,0 +1,64 @@
+# Built-in defaults. This file is embedded in the binaries and is the source of
+# truth for every default value; a config.toml only needs the keys it changes.
+# Copy it to ./config.toml, <binary dir>/config.toml or
+# ~/.config/audio-recorder/config.toml to customize.
+
+# Default: ~/.local/share/audio-recorder/sessions
+# sessions_dir = "~/.local/share/audio-recorder/sessions"
+
+# Default: <tmp>/audio-recorder.log
+# log_file = "/tmp/audio-recorder.log"
+
+sample_format = "f32" # or "i16"
+
+[compression]
+auto = true
+live = true             # write lossless FLAC while recording instead of WAV
+codec = "flac"          # or "opus" (lossy; only for 48 kHz mono/stereo, else FLAC)
+opus_bitrate_kbps = 48  # 6-256
+
+[transcription]
+auto = true
+language = "auto"
+diarize = true
+gpu = true
+# Model files: a plain file name lives in models_dir and is downloaded when
+# missing; anything else (absolute or ~/ path) is used as is and never downloaded.
+# Default models_dir: ~/.local/share/audio-recorder/models
+# models_dir = "~/.local/share/audio-recorder/models"
+whisper_model = "ggml-large-v3-turbo.bin"
+vad_model = "ggml-silero-v5.1.2.bin"
+segmentation_model = "pyannote-segmentation-3-0.onnx"
+embedding_model = "nemo_en_titanet_small.onnx"
+# Default: detected automatically
+# num_speakers = 2
+# Default: the diarizer's own threshold (0-1)
+# cluster_threshold = 0.5
+
+[transcription.live]
+enabled = true
+partials = true
+whisper_model = "ggml-small.bin"
+
+[summarization]
+auto = true
+# Default: the transcript's language
+# language = "English"
+# Default: the built-in system prompt
+# prompt = "..."
+
+[llm]
+provider = "ollama"     # or "anthropic"
+max_output_tokens = 8000
+timeout_secs = 900
+
+[llm.ollama]
+host = "http://localhost:11434"
+model = "qwen3.5:9b"
+num_ctx = 32768
+
+[llm.anthropic]
+base_url = "https://api.anthropic.com"
+model = "claude-sonnet-5-5"
+# Default: the ANTHROPIC_API_KEY environment variable
+# api_key = "sk-ant-..."

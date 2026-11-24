@@ -1,0 +1,1 @@
+{ "version": 1, "devices": { "input:mic": { "files": ["tracks/a-1.wav"], "loudness_lufs": -23.5, "peak": 0.4 }, "output:x": { "files": [], "loudness_lufs": null, "peak": 0.0 } } }
