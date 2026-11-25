@@ -5,9 +5,12 @@ use std::path::PathBuf;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 
-use crate::cli::{GenerateArgs, Sampler};
+use crate::cli::{GenerateArgs, ImageProvider, Sampler};
 use crate::config::Config;
 use crate::error::AppError;
+use crate::gemini;
+use crate::gemini::image::ImageRequest;
+use crate::llm::Image;
 use crate::models::{self, ModelRef};
 use crate::sd::client::{Guidance, ImgGenRequest, SampleParams};
 use crate::sd::modelset::ModelSet;
@@ -27,6 +30,69 @@ pub struct Generated {
     pub copy: CopyParams,
 }
 
+pub fn provider(args: &GenerateArgs, config: &Config) -> ImageProvider {
+    args.provider.unwrap_or(config.image.provider)
+}
+
+pub async fn generate(
+    args: &GenerateArgs,
+    prompt: &str,
+    seed: i64,
+    config: &Config,
+    copies: u32,
+) -> Result<Vec<Generated>, AppError> {
+    match provider(args, config) {
+        ImageProvider::SdServer => generate_sd(args, prompt, seed, config, copies).await,
+        ImageProvider::Gemini => generate_gemini(args, prompt, seed, config, copies).await,
+    }
+}
+
+/// Copies are sequential like the sd-server path, seeded `seed..seed+copies`.
+/// Gemini has no sampling params to report or jitter, so each copy's
+/// `UsedParams` is empty.
+async fn generate_gemini(
+    args: &GenerateArgs,
+    prompt: &str,
+    seed: i64,
+    config: &Config,
+    copies: u32,
+) -> Result<Vec<Generated>, AppError> {
+    let client = gemini::Client::new(&config.gemini)?;
+    let ref_images = args
+        .ref_image
+        .iter()
+        .map(|path| Image::from_path(path))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut images = Vec::with_capacity(copies as usize);
+    for index in 0..copies {
+        let copy_seed = seed + i64::from(index);
+        let request = ImageRequest {
+            prompt,
+            ref_images: &ref_images,
+            seed: copy_seed,
+            width: args.width,
+            height: args.height,
+        };
+        let bytes = gemini::image::generate(&client, &config.image.gemini, &request).await?;
+        tracing::info!(
+            index = index + 1,
+            copies,
+            seed = copy_seed,
+            model = %config.image.gemini.model,
+            "generated image"
+        );
+        images.push(Generated {
+            bytes,
+            copy: CopyParams {
+                seed: copy_seed,
+                params: UsedParams::default(),
+            },
+        });
+    }
+    Ok(images)
+}
+
 /// Generates `copies` images of `prompt`, seeded `seed..seed+copies`, against a
 /// `sd-server` process matching `args`'s model flags — spawning or reusing a
 /// daemon as needed. Requests are sequential, not one server-side batch: the
@@ -34,7 +100,7 @@ pub struct Generated {
 /// each copy's progress and failures stay independently visible. Copy 0 uses
 /// `args`'s params exactly; later copies also get steps/cfg_scale/guidance
 /// jittered by `args.jitter` (see `jitter::params_for`).
-pub async fn generate(
+async fn generate_sd(
     args: &GenerateArgs,
     prompt: &str,
     seed: i64,

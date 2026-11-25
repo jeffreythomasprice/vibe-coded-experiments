@@ -6,6 +6,7 @@ default-run = "image-gen"
 
 [features]
 ollama-tests = []
+gemini-tests = []
 sd-server-tests = []
 
 [[bin]]

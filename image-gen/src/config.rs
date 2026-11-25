@@ -4,6 +4,9 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::cli::ImageProvider;
+use crate::gemini::GeminiConfig;
+use crate::gemini::config::GeminiImageConfig;
 use crate::llm::LlmConfig;
 use crate::preset::Preset;
 use crate::sd::SdConfig;
@@ -15,6 +18,22 @@ pub const DEFAULT_LOG_MAX_FILES: usize = 15;
 pub const DEFAULT_MODELS_DIR: &str = "/tmp/image-gen";
 const FILE_NAME: &str = "config.toml";
 
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ImageConfig {
+    pub provider: ImageProvider,
+    pub gemini: GeminiImageConfig,
+}
+
+impl Default for ImageConfig {
+    fn default() -> Self {
+        Self {
+            provider: ImageProvider::SdServer,
+            gemini: GeminiImageConfig::default(),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
@@ -24,6 +43,8 @@ pub struct Config {
     pub log_max_files: usize,
     pub models_dir: PathBuf,
     pub presets: BTreeMap<String, Preset>,
+    pub image: ImageConfig,
+    pub gemini: GeminiConfig,
     pub llm: LlmConfig,
     pub sd_server: SdConfig,
 }
@@ -37,6 +58,8 @@ impl Default for Config {
             log_max_files: DEFAULT_LOG_MAX_FILES,
             models_dir: PathBuf::from(DEFAULT_MODELS_DIR),
             presets: BTreeMap::new(),
+            image: ImageConfig::default(),
+            gemini: GeminiConfig::default(),
             llm: LlmConfig::default(),
             sd_server: SdConfig::default(),
         }
@@ -365,6 +388,48 @@ mod tests {
         let missing = dir.path().join("missing.toml");
         let defaulted = load_from_candidates(&[missing]).unwrap();
         assert_eq!(defaulted.config.sd_server, SdConfig::default());
+    }
+
+    #[test]
+    fn image_and_gemini_sections_are_parsed_and_default_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            concat!(
+                "[image]\nprovider = \"gemini\"\n",
+                "[image.gemini]\nmodel = \"gemini-3-pro-image-preview\"\nimage_size = \"2K\"\n",
+                "[gemini]\napi_key = \"abc\"\ntimeout_secs = 60\n",
+            ),
+        )
+        .unwrap();
+
+        let loaded = load_from_candidates(&[path]).unwrap();
+
+        assert_eq!(loaded.config.image.provider, ImageProvider::Gemini);
+        assert_eq!(loaded.config.image.gemini.model, "gemini-3-pro-image-preview");
+        assert_eq!(loaded.config.image.gemini.image_size, Some("2K".to_owned()));
+        assert_eq!(loaded.config.gemini.api_key, Some("abc".to_owned()));
+        assert_eq!(loaded.config.gemini.timeout_secs, 60);
+
+        let dir = tempfile::tempdir().unwrap();
+        let defaulted = load_from_candidates(&[dir.path().join("missing.toml")]).unwrap();
+        assert_eq!(defaulted.config.image.provider, ImageProvider::SdServer);
+        assert_eq!(defaulted.config.gemini, GeminiConfig::default());
+    }
+
+    #[test]
+    fn unknown_image_provider_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[image]\nprovider = \"dalle\"\n").unwrap();
+
+        let err = load_from_candidates(std::slice::from_ref(&path)).unwrap_err();
+
+        match err {
+            ConfigError::Parse { source, .. } => assert!(source.to_string().contains("sd-server")),
+            other => panic!("expected Parse error, got {other:?}"),
+        }
     }
 
     #[test]

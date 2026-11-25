@@ -94,6 +94,10 @@ pub struct GenerateArgs {
     #[arg(long, value_name = "NAME")]
     pub preset: Vec<String>,
 
+    /// Image backend (default: [image].provider in config.toml)
+    #[arg(long, value_name = "PROVIDER")]
+    pub provider: Option<ImageProvider>,
+
     /// Full checkpoint: owner/repo[:file], owner/repo@revision[:file], or a local path
     #[arg(short, long, value_name = "REF")]
     pub model: Option<ModelRef>,
@@ -265,6 +269,22 @@ pub struct GenerateArgs {
     /// eval model (default: 512)
     #[arg(long, value_name = "PX")]
     pub eval_max_px: Option<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ImageProvider {
+    SdServer,
+    Gemini,
+}
+
+impl ImageProvider {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ImageProvider::SdServer => "sd-server",
+            ImageProvider::Gemini => "gemini",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]

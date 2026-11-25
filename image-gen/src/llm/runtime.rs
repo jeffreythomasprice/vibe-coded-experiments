@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::llm::LlmError;
+use crate::gemini::GeminiConfig;
 use crate::llm::config::LlmConfig;
 use crate::llm::provider::{ChatRequest, ChatResponse, Provider};
 
@@ -11,11 +12,11 @@ pub struct Llm {
 }
 
 impl Llm {
-    pub fn new(config: &LlmConfig) -> Self {
-        Self {
-            provider: crate::llm::config::provider(config),
+    pub fn new(config: &LlmConfig, gemini: &GeminiConfig) -> Result<Self, LlmError> {
+        Ok(Self {
+            provider: crate::llm::config::provider(config, gemini)?,
             default_model: config.model.clone(),
-        }
+        })
     }
 
     pub async fn chat(&self, request: &ChatRequest) -> Result<ChatResponse, LlmError> {
@@ -56,7 +57,7 @@ mod tests {
 
     #[test]
     fn model_fails_without_override_or_configured_default() {
-        let llm = Llm::new(&LlmConfig::default());
+        let llm = Llm::new(&LlmConfig::default(), &GeminiConfig::default()).unwrap();
         let err = llm.model(None, "vqa-model").unwrap_err();
         assert!(matches!(err, LlmError::MissingModel { flag: "vqa-model" }));
     }

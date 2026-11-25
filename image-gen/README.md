@@ -69,6 +69,20 @@ it (FLUX.1 Kontext, FLUX.2, Qwen-Image-Edit); other models ignore it. These are
 tagged `image-to-image` on HuggingFace, so find one with `models search --all`
 rather than the default `models search`, which only looks at `text-to-image`.
 
+## Generating with Gemini
+
+```
+export GEMINI_API_KEY=...
+cargo run -- generate "a red bicycle on a beach" --provider gemini -W 1024 -H 768 -o /tmp/bike.png --show
+```
+
+Set `[image].provider = "gemini"` in `config.toml` to make it the default; the
+model is `[image.gemini].model`, and the key can go in `[gemini].api_key`
+instead of the environment. Only the prompt, `--seed`, `--copies`, `--ref-image`
+and `-W/-H` (as one of Gemini's fixed aspect ratios) apply; sd-server flags
+like `--steps` are an error. `[llm] backend = "gemini"` also runs `--rewrite`
+and `--eval` on Gemini models. See `config.toml.example`.
+
 ## Evaluating generated images
 
 ```
@@ -105,5 +119,6 @@ cargo run -- models list              # list only what's already downloaded, no 
 
 `cargo test` runs the unit suite. `cargo test --features ollama-tests` also runs
 integration tests against a real Ollama server expected at `localhost:11434`.
+`cargo test --features gemini-tests` hits the real Gemini API with `GEMINI_API_KEY` (billable).
 `cargo test --features sd-server-tests` runs the `sd-server` daemon lifecycle suite
 against a lightweight stand-in binary — no download or real model needed.

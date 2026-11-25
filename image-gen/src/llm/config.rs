@@ -3,6 +3,9 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
+use crate::gemini::{Client, GeminiConfig};
+use crate::llm::LlmError;
+use crate::llm::gemini::GeminiProvider;
 use crate::llm::ollama::OllamaProvider;
 use crate::llm::provider::Provider;
 
@@ -12,12 +15,13 @@ pub const DEFAULT_OLLAMA_PORT: u16 = 11434;
 pub const DEFAULT_OLLAMA_TIMEOUT_SECS: u64 = 120;
 pub const DEFAULT_OLLAMA_PULL_STALL_TIMEOUT_SECS: u64 = 600;
 
-/// The LLM backend to use. Ollama is the only one today; a second backend adds a
-/// variant here and a matching arm in `provider()`.
+/// The LLM backend to use. A new backend adds a variant here and a matching arm
+/// in `provider()`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Backend {
     Ollama,
+    Gemini,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -81,16 +85,17 @@ impl OllamaConfig {
     }
 }
 
-/// Builds the configured backend's `Provider`. The only backend today is Ollama;
-/// this is the extension point a second `Backend` variant plugs into.
-pub fn provider(config: &LlmConfig) -> Arc<dyn Provider> {
-    match config.backend {
+/// Builds the configured backend's `Provider`. Fallible because a backend may
+/// need credentials (Gemini's API key) that can be missing.
+pub fn provider(config: &LlmConfig, gemini: &GeminiConfig) -> Result<Arc<dyn Provider>, LlmError> {
+    Ok(match config.backend {
         Backend::Ollama => Arc::new(OllamaProvider::new(
             config.ollama.base_url(),
             config.ollama.timeout(),
             config.ollama.pull_stall_timeout(),
         )),
-    }
+        Backend::Gemini => Arc::new(GeminiProvider::new(Client::new(gemini)?)),
+    })
 }
 
 #[cfg(test)]
@@ -134,6 +139,31 @@ mod tests {
     fn unknown_backend_value_is_rejected() {
         let err = toml::from_str::<LlmConfig>("backend = \"claude\"\n").unwrap_err();
         assert!(err.to_string().contains("ollama"));
+    }
+
+    #[test]
+    fn gemini_backend_is_selectable() {
+        let parsed: LlmConfig = toml::from_str("backend = \"gemini\"\nmodel = \"gemini-2.5-flash\"\n").unwrap();
+        assert_eq!(parsed.backend, Backend::Gemini);
+    }
+
+    #[test]
+    fn gemini_backend_without_a_key_fails_to_build() {
+        let gemini = GeminiConfig::default();
+        if std::env::var(crate::gemini::config::API_KEY_ENV).is_ok() {
+            return;
+        }
+        let config = LlmConfig {
+            backend: Backend::Gemini,
+            ..Default::default()
+        };
+        let err = provider(&config, &gemini).err().unwrap();
+        assert!(matches!(err, LlmError::Gemini(crate::gemini::GeminiError::MissingApiKey)));
+    }
+
+    #[test]
+    fn ollama_backend_builds_without_credentials() {
+        provider(&LlmConfig::default(), &GeminiConfig::default()).unwrap();
     }
 
     #[test]

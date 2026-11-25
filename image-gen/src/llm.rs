@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod config;
+pub mod gemini;
 pub mod message;
 pub mod ollama;
 pub mod provider;
@@ -24,6 +25,9 @@ pub use tool::{FunctionTool, Tool, ToolCall, ToolDef, ToolFailure, ToolOutput, T
 
 #[derive(Debug, Error)]
 pub enum LlmError {
+    #[error(transparent)]
+    Gemini(#[from] crate::gemini::GeminiError),
+
     #[error("request to {url} failed: {source}")]
     Request {
         url: String,

@@ -3,6 +3,7 @@ pub mod cli;
 pub mod config;
 pub mod error;
 pub mod eval;
+pub mod gemini;
 pub mod generate;
 pub mod hub;
 pub mod image_io;
@@ -19,7 +20,7 @@ pub mod sd;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use cli::{Command, EvalMetric, GenerateArgs, ModelsCommand, RewriteMode, ServerCommand};
+use cli::{Command, EvalMetric, GenerateArgs, ImageProvider, ModelsCommand, RewriteMode, ServerCommand};
 use config::Config;
 use error::AppError;
 use eval::rank::{self, Borda};
@@ -126,7 +127,10 @@ async fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcom
     if args.json && args.show {
         tracing::warn!("--show writes image data to stdout, corrupting --json output");
     }
-    require_checkpoint(args)?;
+    match generate::provider(args, config) {
+        ImageProvider::SdServer => require_checkpoint(args)?,
+        ImageProvider::Gemini => require_gemini_compatible(args)?,
+    }
     require_ref_images_exist(args)?;
     require_valid_jitter(args)?;
 
@@ -143,7 +147,7 @@ async fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcom
     let will_rewrite = rewrite::should_rewrite(rewrite_mode, &args.prompt, rewrite_threshold);
 
     let llm = if eval_requested || will_rewrite {
-        Some(Llm::new(&config.llm))
+        Some(Llm::new(&config.llm, &config.gemini)?)
     } else {
         None
     };
@@ -343,6 +347,45 @@ fn require_checkpoint(args: &GenerateArgs) -> Result<(), AppError> {
         return Err(AppError::NoCheckpoint);
     }
     Ok(())
+}
+
+/// sd-server-only flags have no Gemini equivalent; failing beats silently
+/// ignoring a flag the user (or a preset) thought was in effect.
+fn require_gemini_compatible(args: &GenerateArgs) -> Result<(), AppError> {
+    let set = [
+        (args.model.is_some(), "--model"),
+        (args.diffusion_model.is_some(), "--diffusion-model"),
+        (args.vae.is_some(), "--vae"),
+        (args.clip_l.is_some(), "--clip-l"),
+        (args.clip_g.is_some(), "--clip-g"),
+        (args.t5xxl.is_some(), "--t5xxl"),
+        (args.taesd.is_some(), "--taesd"),
+        (args.text_encoder.is_some(), "--text-encoder"),
+        (args.vision_encoder.is_some(), "--vision-encoder"),
+        (args.weight_type.is_some(), "--weight-type"),
+        (args.vae_tiling.is_some(), "--vae-tiling"),
+        (args.flash_attn.is_some(), "--flash-attn"),
+        (args.threads.is_some(), "--threads"),
+        (args.backend.is_some(), "--backend"),
+        (args.negative.is_some(), "--negative"),
+        (args.steps.is_some(), "--steps"),
+        (args.cfg_scale.is_some(), "--cfg-scale"),
+        (args.guidance.is_some(), "--guidance"),
+        (args.sampler.is_some(), "--sampler"),
+        (args.clip_skip.is_some(), "--clip-skip"),
+        (args.jitter.is_some_and(|value| value != 0.0), "--jitter"),
+    ];
+    let flags: Vec<&str> = set
+        .into_iter()
+        .filter_map(|(is_set, flag)| is_set.then_some(flag))
+        .collect();
+    if flags.is_empty() {
+        return Ok(());
+    }
+    Err(AppError::UnsupportedForProvider {
+        provider: ImageProvider::Gemini.as_str(),
+        flags: flags.join(", "),
+    })
 }
 
 /// Checked up front so a typo'd `--ref-image` path fails fast with a clear
@@ -557,6 +600,41 @@ mod tests {
             require_checkpoint(&args),
             Err(AppError::NoCheckpoint)
         ));
+    }
+
+    #[test]
+    fn gemini_accepts_the_flags_it_supports() {
+        let args = parse(&["a prompt", "--provider", "gemini", "-W", "1024", "-H", "768", "--seed", "3"]);
+        require_gemini_compatible(&args).unwrap();
+    }
+
+    #[test]
+    fn gemini_accepts_explicit_zero_jitter() {
+        let args = parse(&["a prompt", "--provider", "gemini", "--jitter", "0"]);
+        require_gemini_compatible(&args).unwrap();
+    }
+
+    #[test]
+    fn gemini_rejects_sd_server_flags_naming_each() {
+        let args = parse(&["a prompt", "--provider", "gemini", "--steps", "4", "--model", "x/y", "--jitter", "0.2"]);
+        match require_gemini_compatible(&args) {
+            Err(AppError::UnsupportedForProvider { provider, flags }) => {
+                assert_eq!(provider, "gemini");
+                assert_eq!(flags, "--model, --steps, --jitter");
+            }
+            other => panic!("expected UnsupportedForProvider, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn provider_flag_overrides_config() {
+        let args = parse(&["a prompt", "--provider", "gemini"]);
+        assert_eq!(generate::provider(&args, &Config::default()), ImageProvider::Gemini);
+        let args = parse(&["a prompt"]);
+        assert_eq!(generate::provider(&args, &Config::default()), ImageProvider::SdServer);
+        let mut config = Config::default();
+        config.image.provider = ImageProvider::Gemini;
+        assert_eq!(generate::provider(&args, &config), ImageProvider::Gemini);
     }
 
     #[test]

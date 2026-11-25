@@ -18,6 +18,28 @@ log_max_files = 15
 # Where model weights are downloaded and cached.
 models_dir = "/tmp/image-gen"
 
+# Which backend renders images. "sd-server" (default) runs local models through
+# the sidecar configured in [sd_server] below; "gemini" calls the Gemini image
+# API instead. `--provider` on `generate` (or `provider =` in a preset) overrides
+# this per run. Gemini only honors the prompt, --seed, --copies, --ref-image and
+# -W/-H (which must reduce to a ratio Gemini supports: 1:1 2:3 3:2 3:4 4:3 4:5
+# 5:4 9:16 16:9 21:9); passing any sd-server-only flag (--model, --steps,
+# --sampler, ...) with the gemini provider is an error.
+[image]
+provider = "sd-server"
+
+[image.gemini]
+model = "gemini-2.5-flash-image"
+# Only models that accept it, e.g. gemini-3-pro-image-preview: "1K", "2K", "4K".
+# image_size = "2K"
+
+# Shared by the Gemini image provider and `[llm] backend = "gemini"`.
+[gemini]
+# When unset, the GEMINI_API_KEY environment variable is used.
+# api_key = "..."
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+timeout_secs = 300
+
 # Named bundles of `generate` arguments. `--preset flux` is the same as typing
 # each key below as its --flag. `--preset` is repeatable and combines left to
 # right (`--preset flux --preset eval` applies both); a key both presets set logs
@@ -38,6 +60,9 @@ clip_l = "comfyanonymous/flux_text_encoders:clip_l.safetensors"
 t5xxl = "comfyanonymous/flux_text_encoders:t5xxl_fp8_e4m3fn.safetensors"
 vae = "unsloth/FLUX.1-dev:ae.safetensors"
 weight_type = "q8_0"
+
+[presets.nano]
+provider = "gemini"
 
 [presets.turbo]
 model = "stabilityai/sd-turbo"
@@ -84,7 +109,12 @@ vqa_model = "qwen3-vl:4b"
 caption_model = "qwen3-vl:4b"
 
 # LLM backend, for prompt rewriting and automated evaluation (VQAScore,
-# TIT-Score). "ollama" is the only backend right now. `model` here is the
+# TIT-Score): "ollama" or "gemini" (see [gemini] above for the key). With
+# "gemini", set `model` to a Gemini model such as "gemini-2.5-flash" and drop
+# the Ollama-style per-role models in the eval preset (or set them to Gemini
+# names). VQAScore needs a model that returns logprobs, and every role here
+# turns thinking off, which gemini-2.5-pro does not allow; use a Flash model.
+# `model` here is the
 # fallback used by rewrite_model/vqa_model/caption_model/judge_model above
 # when they're not set individually; leave it unset and every role must be
 # set individually instead, or that role fails. When set, keep it a plain

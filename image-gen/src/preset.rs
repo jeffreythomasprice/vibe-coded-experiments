@@ -5,7 +5,7 @@ use std::str::FromStr;
 use clap::ValueEnum;
 use serde::{Deserialize, Deserializer};
 
-use crate::cli::{Backend, EvalMetric, GenerateArgs, RewriteMode, Sampler, WeightTypeArg};
+use crate::cli::{Backend, EvalMetric, GenerateArgs, ImageProvider, RewriteMode, Sampler, WeightTypeArg};
 use crate::error::AppError;
 use crate::models::ModelRef;
 
@@ -17,6 +17,8 @@ use crate::models::ModelRef;
 #[derive(Debug, Default, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct Preset {
+    #[serde(deserialize_with = "value_enum_opt")]
+    pub provider: Option<ImageProvider>,
     #[serde(deserialize_with = "from_str_opt")]
     pub model: Option<ModelRef>,
     #[serde(deserialize_with = "from_str_opt")]
@@ -194,6 +196,7 @@ pub fn apply(args: &mut GenerateArgs, presets: &BTreeMap<String, Preset>) -> Res
     }
 
     merge!(
+        provider => "--provider",
         model => "--model",
         diffusion_model => "--diffusion-model",
         vae => "--vae",

@@ -37,6 +37,12 @@ pub enum AppError {
     #[error(transparent)]
     Sd(#[from] crate::sd::SdError),
 
+    #[error(transparent)]
+    Gemini(#[from] crate::gemini::GeminiError),
+
+    #[error("the {provider} image provider does not support: {flags}")]
+    UnsupportedForProvider { provider: &'static str, flags: String },
+
     #[error("no checkpoint: pass --model or --diffusion-model, or a --preset that sets one")]
     NoCheckpoint,
 
