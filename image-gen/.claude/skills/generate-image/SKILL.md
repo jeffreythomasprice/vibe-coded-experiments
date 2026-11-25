@@ -55,6 +55,16 @@ Rules:
   interactive fallback. Wait for the background-completion notification
   rather than polling on a short timeout.
 
+## 1a. Check the rewrite on every run
+
+Prompts over `rewrite_threshold` (default 300 chars) are compressed by a small
+LLM before generation. After each run, look at `.prompt.rewritten` in
+`$outdir/result.json` (or the `rewrote prompt` line in `run.log`). It must be a
+short image prompt. If it contains reasoning ("We are given…", `</think>`) or is
+longer than the original, the rewriter misbehaved: re-run with `--rewrite never`
+(Gemini handles long prompts fine) rather than retrying unchanged. The log also
+has a `prompt sent to image backend` line with the exact final prompt.
+
 ## 1b. Only if the user asks to score, rank, judge, or pick the best image
 
 Add `--eval vqa --eval tit` to the command above (or just the metric(s) they
@@ -141,6 +151,10 @@ generation failed — see Troubleshooting below instead of parsing further.
 
 ## 4. The `image-eval-skill` preset
 
+The block below is the local FLUX variant. The user's own preset may instead be
+`provider = "gemini"`; check `~/.config/image-gen/config.toml` before assuming
+local weights, VRAM limits, or Ollama-only behavior.
+
 This invocation expects a preset named `image-eval-skill` to exist in the
 user's `config.toml` (first found of: `--config` path, `./config.toml`, the
 binary's own directory, then `~/.config/image-gen/config.toml`). **If the
@@ -188,6 +202,11 @@ covers `models_dir`, logging, and other presets) and offer to create a
 minimal one containing just this preset plus `[llm]`/`[llm.ollama]`.
 
 ## Troubleshooting
+
+- `gemini returned no image (finish reason NO_IMAGE ...)` with an empty "it said"
+  — usually a bad prompt reaching Gemini. Check `.prompt.rewritten` / the
+  `prompt sent to image backend` log line (step 1a); retry with `--rewrite never`
+  before changing anything else. Do not just re-run the same command.
 
 - `unknown preset 'image-eval-skill'; config defines: ...` — see step 4.
 - `no checkpoint: pass --model or --diffusion-model, or a --preset that sets one`

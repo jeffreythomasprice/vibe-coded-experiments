@@ -165,6 +165,7 @@ async fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcom
         _ => None,
     };
     let effective_prompt = rewritten.as_deref().unwrap_or(&args.prompt);
+    tracing::info!(prompt = %effective_prompt, chars = effective_prompt.chars().count(), "prompt sent to image backend");
 
     let gen_started = Instant::now();
     let produced = produce(args, effective_prompt, config).await?;

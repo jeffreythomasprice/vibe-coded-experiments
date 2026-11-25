@@ -100,6 +100,11 @@ pub fn png_from_response(response: RawResponse) -> Result<Vec<u8>, GeminiError> 
     let Some(inline) = inline else {
         return Err(GeminiError::NoImage {
             finish_reason: candidate.finish_reason.clone().unwrap_or_else(|| "unknown".to_owned()),
+            finish_message: candidate
+                .finish_message
+                .as_deref()
+                .map(|message| format!(": {message}"))
+                .unwrap_or_default(),
             text: candidate.text(),
         });
     };
@@ -266,7 +271,7 @@ mod tests {
             .await
             .unwrap_err();
         match err {
-            GeminiError::NoImage { finish_reason, text } => {
+            GeminiError::NoImage { finish_reason, text, .. } => {
                 assert_eq!(finish_reason, "STOP");
                 assert_eq!(text, "I can't draw that");
             }

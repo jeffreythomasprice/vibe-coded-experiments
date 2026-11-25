@@ -33,8 +33,8 @@ pub enum GeminiError {
     #[error("gemini blocked the request: {reason}")]
     Blocked { reason: String },
 
-    #[error("gemini returned no image (finish reason {finish_reason}); it said: {text}")]
-    NoImage { finish_reason: String, text: String },
+    #[error("gemini returned no image (finish reason {finish_reason}{finish_message}); it said: {text}")]
+    NoImage { finish_reason: String, finish_message: String, text: String },
 
     #[error("failed to decode the image gemini returned: {0}")]
     ImageBase64(#[source] base64::DecodeError),

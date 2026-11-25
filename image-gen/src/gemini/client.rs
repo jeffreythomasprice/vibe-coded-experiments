@@ -132,6 +132,8 @@ pub struct RawCandidate {
     #[serde(default)]
     pub finish_reason: Option<String>,
     #[serde(default)]
+    pub finish_message: Option<String>,
+    #[serde(default)]
     pub logprobs_result: Option<RawLogprobsResult>,
 }
 
