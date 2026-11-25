@@ -81,7 +81,9 @@ model is `[image.gemini].model`, and the key can go in `[gemini].api_key`
 instead of the environment. Only the prompt, `--seed`, `--copies`, `--ref-image`
 and `-W/-H` (as one of Gemini's fixed aspect ratios) apply; sd-server flags
 like `--steps` are an error. `[llm] backend = "gemini"` also runs `--rewrite`
-and `--eval` on Gemini models. See `config.toml.example`.
+and `--eval` on Gemini models. `--batch` sends all `--copies` as one Batch API
+job at half price (`--batch-wait`, `--batch-fallback`; can take hours). See
+`config.toml.example`.
 
 ## Evaluating generated images
 

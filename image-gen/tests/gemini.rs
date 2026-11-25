@@ -68,3 +68,41 @@ async fn image_generation_returns_a_png() {
         .unwrap();
     assert_eq!(image::guess_format(&bytes).unwrap(), image::ImageFormat::Png);
 }
+
+#[tokio::test]
+async fn batch_returns_every_requested_image() {
+    use image_gen::gemini::batch::{BatchOutcome, run_batch};
+    use image_gen::gemini::image::request_body;
+    use std::time::Duration;
+
+    let config = GeminiImageConfig::default();
+    let items = (0..2)
+        .map(|index| {
+            let request = ImageRequest {
+                prompt: "a plain red circle on a white background",
+                ref_images: &[],
+                seed: index,
+                width: Some(512),
+                height: Some(512),
+            };
+            (index as u32, request_body(&request, &config, Some("1:1")))
+        })
+        .collect();
+    let outcome = run_batch(
+        &client(),
+        &config.model,
+        items,
+        Duration::from_secs(30 * 60),
+        Duration::from_secs(10),
+    )
+    .await
+    .unwrap();
+    let BatchOutcome::Done(results) = outcome else {
+        panic!("batch did not finish in time: {outcome:?}")
+    };
+    assert_eq!(results.len(), 2);
+    for result in results {
+        let bytes = result.result.unwrap();
+        assert_eq!(image::guess_format(&bytes).unwrap(), image::ImageFormat::Png);
+    }
+}

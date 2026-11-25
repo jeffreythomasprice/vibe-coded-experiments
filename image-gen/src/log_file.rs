@@ -25,6 +25,10 @@ struct Sink {
 
 impl Sink {
     fn open(dir: &Path, max_bytes: u64, keep: usize) -> Result<Self, LogError> {
+        Self::open_on(dir, max_bytes, keep, Utc::now().date_naive())
+    }
+
+    fn open_on(dir: &Path, max_bytes: u64, keep: usize, date: NaiveDate) -> Result<Self, LogError> {
         if max_bytes == 0 {
             return Err(LogError::InvalidLimit {
                 key: "log_max_bytes",
@@ -41,7 +45,6 @@ impl Sink {
             source,
         })?;
 
-        let date = Utc::now().date_naive();
         let mut sink = Sink {
             dir: dir.to_path_buf(),
             max_bytes,
@@ -260,12 +263,16 @@ mod tests {
         NaiveDate::from_ymd_opt(2026, 9, day).unwrap()
     }
 
+    fn open_sink(dir: &Path, max_bytes: u64, keep: usize) -> Result<Sink, LogError> {
+        Sink::open_on(dir, max_bytes, keep, day(19))
+    }
+
     #[test]
     fn size_limit_starts_a_new_file() {
         let dir = tempfile::tempdir().unwrap();
         // Two 20-byte events fit under a 50-byte cap; a third does not, so the
         // check has to be against the incoming buffer, not just "is the file full".
-        let mut sink = Sink::open(dir.path(), 50, 15).unwrap();
+        let mut sink = open_sink(dir.path(), 50, 15).unwrap();
 
         sink.write_event(day(19), &[b'a'; 20]);
         sink.write_event(day(19), &[b'b'; 20]);
@@ -287,7 +294,7 @@ mod tests {
     #[test]
     fn oversized_event_is_not_split() {
         let dir = tempfile::tempdir().unwrap();
-        let mut sink = Sink::open(dir.path(), 32, 15).unwrap();
+        let mut sink = open_sink(dir.path(), 32, 15).unwrap();
 
         sink.write_event(day(19), &[b'a'; 100]);
 
@@ -299,7 +306,7 @@ mod tests {
     #[test]
     fn day_change_starts_a_new_file() {
         let dir = tempfile::tempdir().unwrap();
-        let mut sink = Sink::open(dir.path(), 1024, 15).unwrap();
+        let mut sink = open_sink(dir.path(), 1024, 15).unwrap();
 
         sink.write_event(day(19), b"one");
         sink.write_event(day(20), b"two");
@@ -318,7 +325,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("image-gen-2026-09-19.000.log"), [0u8; 30]).unwrap();
 
-        let mut sink = Sink::open(dir.path(), 32, 15).unwrap();
+        let mut sink = open_sink(dir.path(), 32, 15).unwrap();
         sink.write_event(day(19), &[b'x'; 10]);
 
         assert_eq!(
@@ -339,7 +346,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("image-gen-2026-09-19.000.log"), [0u8; 40]).unwrap();
 
-        let mut sink = Sink::open(dir.path(), 32, 15).unwrap();
+        let mut sink = open_sink(dir.path(), 32, 15).unwrap();
         sink.write_event(day(19), b"x");
 
         assert_eq!(
@@ -356,7 +363,7 @@ mod tests {
     #[test]
     fn pruning_keeps_the_newest_files() {
         let dir = tempfile::tempdir().unwrap();
-        let mut sink = Sink::open(dir.path(), 1024, 3).unwrap();
+        let mut sink = open_sink(dir.path(), 1024, 3).unwrap();
 
         for d in 14..=19 {
             sink.write_event(day(d), b"x");
@@ -389,7 +396,7 @@ mod tests {
         }
         std::fs::create_dir(dir.path().join("hub")).unwrap();
 
-        let mut sink = Sink::open(dir.path(), 1024, 1).unwrap();
+        let mut sink = open_sink(dir.path(), 1024, 1).unwrap();
         for d in 14..=19 {
             sink.write_event(day(d), b"x");
         }
@@ -406,7 +413,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("image-gen-2026-09-20.000.log"), b"").unwrap();
 
-        let mut sink = Sink::open(dir.path(), 1024, 1).unwrap();
+        let mut sink = open_sink(dir.path(), 1024, 1).unwrap();
         sink.write_event(day(19), b"x");
 
         assert!(dir.path().join("image-gen-2026-09-19.000.log").is_file());
@@ -415,7 +422,7 @@ mod tests {
     #[test]
     fn write_errors_disable_the_sink() {
         let dir = tempfile::tempdir().unwrap();
-        let mut sink = Sink::open(dir.path(), 1024, 15).unwrap();
+        let mut sink = open_sink(dir.path(), 1024, 15).unwrap();
         let before = names(dir.path());
 
         sink.file = None;
@@ -430,13 +437,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
 
         assert!(matches!(
-            Sink::open(dir.path(), 0, 15),
+            open_sink(dir.path(), 0, 15),
             Err(LogError::InvalidLimit {
                 key: "log_max_bytes"
             })
         ));
         assert!(matches!(
-            Sink::open(dir.path(), 1024, 0),
+            open_sink(dir.path(), 1024, 0),
             Err(LogError::InvalidLimit {
                 key: "log_max_files"
             })

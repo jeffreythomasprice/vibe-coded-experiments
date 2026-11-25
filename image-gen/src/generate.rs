@@ -5,10 +5,11 @@ use std::path::PathBuf;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 
-use crate::cli::{GenerateArgs, ImageProvider, Sampler};
+use crate::cli::{BatchFallback, GenerateArgs, ImageProvider, Sampler};
 use crate::config::Config;
 use crate::error::AppError;
-use crate::gemini;
+use crate::gemini::batch::{self, BatchOutcome};
+use crate::gemini::{self, GeminiError};
 use crate::gemini::image::ImageRequest;
 use crate::llm::Image;
 use crate::models::{self, ModelRef};
@@ -25,7 +26,11 @@ pub struct CopyParams {
 }
 
 /// One generated image alongside the params that produced it.
+#[derive(Debug)]
 pub struct Generated {
+    /// Position among the requested copies; can skip values when a batch
+    /// delivered only some of them.
+    pub index: u32,
     pub bytes: Vec<u8>,
     pub copy: CopyParams,
 }
@@ -47,9 +52,12 @@ pub async fn generate(
     }
 }
 
-/// Copies are sequential like the sd-server path, seeded `seed..seed+copies`.
-/// Gemini has no sampling params to report or jitter, so each copy's
-/// `UsedParams` is empty.
+/// Seeded `seed..seed+copies`. Gemini has no sampling params to report or
+/// jitter, so each copy's `UsedParams` is empty.
+///
+/// Interactive copies are sequential and fail fast. With `--batch` the copies
+/// go out as one batch job instead; there a copy that fails is skipped with a
+/// warning, and the run only fails if no copy produced an image.
 async fn generate_gemini(
     args: &GenerateArgs,
     prompt: &str,
@@ -63,34 +71,133 @@ async fn generate_gemini(
         .iter()
         .map(|path| Image::from_path(path))
         .collect::<Result<Vec<_>, _>>()?;
+    let request_for = |index: u32| ImageRequest {
+        prompt,
+        ref_images: &ref_images,
+        seed: seed + i64::from(index),
+        width: args.width,
+        height: args.height,
+    };
+    let generate_one = |index: u32| {
+        let client = &client;
+        let request = request_for(index);
+        async move {
+            let bytes = gemini::image::generate(client, &config.image.gemini, &request).await?;
+            tracing::info!(
+                index = index + 1,
+                copies,
+                seed = request.seed,
+                model = %config.image.gemini.model,
+                "generated image"
+            );
+            Ok::<_, AppError>(generated(index, seed, bytes))
+        }
+    };
 
-    let mut images = Vec::with_capacity(copies as usize);
-    for index in 0..copies {
-        let copy_seed = seed + i64::from(index);
-        let request = ImageRequest {
-            prompt,
-            ref_images: &ref_images,
-            seed: copy_seed,
-            width: args.width,
-            height: args.height,
-        };
-        let bytes = gemini::image::generate(&client, &config.image.gemini, &request).await?;
-        tracing::info!(
-            index = index + 1,
-            copies,
-            seed = copy_seed,
-            model = %config.image.gemini.model,
-            "generated image"
-        );
-        images.push(Generated {
-            bytes,
-            copy: CopyParams {
-                seed: copy_seed,
-                params: UsedParams::default(),
-            },
-        });
+    if args.batch != Some(true) {
+        let mut images = Vec::with_capacity(copies as usize);
+        for index in 0..copies {
+            images.push(generate_one(index).await?);
+        }
+        return Ok(images);
     }
+
+    let mut images = Vec::new();
+    let mut errors = Vec::new();
+    let mut retry = Vec::new();
+
+    let wait = args.batch_wait.map(|wait| wait.0).unwrap_or(batch::DEFAULT_WAIT);
+    let fallback = args.batch_fallback.unwrap_or(BatchFallback::Interactive);
+    let ratio = gemini::image::aspect_ratio(args.width, args.height)?;
+    let items = (0..copies)
+        .map(|index| {
+            let body = gemini::image::request_body(&request_for(index), &config.image.gemini, ratio);
+            (index, body)
+        })
+        .collect();
+    let outcome = batch::run_batch(
+        &client,
+        &config.image.gemini.model,
+        items,
+        wait,
+        config.gemini.batch_poll(),
+    )
+    .await?;
+
+    let results = match outcome {
+        BatchOutcome::Done(results) => results,
+        BatchOutcome::TimedOut { name, partial } => match fallback {
+            BatchFallback::Fail => return Err(GeminiError::BatchTimedOut { name, waited: wait }.into()),
+            BatchFallback::Interactive => {
+                tracing::warn!(batch = %name, ?wait, "batch did not finish in time; generating the rest interactively");
+                retry = (0..copies)
+                    .filter(|index| !partial.iter().any(|result| result.index == *index))
+                    .collect();
+                partial
+            }
+        },
+        BatchOutcome::Unavailable { bytes } => match fallback {
+            BatchFallback::Fail => return Err(GeminiError::BatchTooLarge { bytes }.into()),
+            BatchFallback::Interactive => {
+                tracing::warn!(bytes, "batch request too large; generating interactively");
+                retry = (0..copies).collect();
+                Vec::new()
+            }
+        },
+    };
+
+    for result in results {
+        match result.result {
+            Ok(bytes) => {
+                tracing::info!(
+                    index = result.index + 1,
+                    copies,
+                    seed = seed + i64::from(result.index),
+                    model = %config.image.gemini.model,
+                    "generated image (batch)"
+                );
+                images.push(generated(result.index, seed, bytes));
+            }
+            Err(error) => {
+                tracing::warn!(
+                    index = result.index + 1,
+                    seed = seed + i64::from(result.index),
+                    %error,
+                    "copy failed in batch"
+                );
+                errors.push(format!("copy {}: {error}", result.index));
+            }
+        }
+    }
+    for index in retry {
+        match generate_one(index).await {
+            Ok(image) => images.push(image),
+            Err(error) => {
+                tracing::warn!(index = index + 1, seed = seed + i64::from(index), %error, "copy failed");
+                errors.push(format!("copy {index}: {error}"));
+            }
+        }
+    }
+
+    if images.is_empty() {
+        return Err(GeminiError::AllCopiesFailed {
+            errors: errors.join("; "),
+        }
+        .into());
+    }
+    images.sort_by_key(|image| image.index);
     Ok(images)
+}
+
+fn generated(index: u32, seed: i64, bytes: Vec<u8>) -> Generated {
+    Generated {
+        index,
+        bytes,
+        copy: CopyParams {
+            seed: seed + i64::from(index),
+            params: UsedParams::default(),
+        },
+    }
 }
 
 /// Generates `copies` images of `prompt`, seeded `seed..seed+copies`, against a
@@ -153,6 +260,7 @@ async fn generate_sd(
             "generated image"
         );
         images.push(Generated {
+            index,
             bytes: result.remove(0),
             copy,
         });
@@ -390,5 +498,165 @@ mod tests {
         let request = build_request(&args, "a prompt", &copy0(&args, 1)).unwrap();
 
         assert_eq!(request.ref_images, vec![BASE64.encode(b"fake png bytes")]);
+    }
+
+    mod gemini_batch {
+        use super::*;
+        use crate::gemini::GeminiConfig;
+        use serde_json::{Value, json};
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        const GENERATE_PATH: &str = "/models/gemini-2.5-flash-image:generateContent";
+        const BATCH_PATH: &str = "/models/gemini-2.5-flash-image:batchGenerateContent";
+
+        fn config_for(server: &MockServer) -> Config {
+            Config {
+                gemini: GeminiConfig {
+                    api_key: Some("k".to_owned()),
+                    base_url: server.uri(),
+                    timeout_secs: 5,
+                    batch_poll_secs: 1,
+                },
+                ..Config::default()
+            }
+        }
+
+        fn image(bytes: &str) -> Value {
+            json!({"candidates": [{
+                "content": {"parts": [{"inlineData": {
+                    "mimeType": "image/png",
+                    "data": BASE64.encode(bytes),
+                }}]},
+                "finishReason": "STOP"
+            }]})
+        }
+
+        async fn mount_create(server: &MockServer) {
+            Mock::given(method("POST"))
+                .and(path(BATCH_PATH))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"name": "batches/1"})))
+                .expect(1)
+                .mount(server)
+                .await;
+        }
+
+        async fn mount_poll(server: &MockServer, body: Value) {
+            Mock::given(method("GET"))
+                .and(path("/batches/1"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(body))
+                .mount(server)
+                .await;
+        }
+
+        async fn mount_cancel(server: &MockServer) {
+            Mock::given(method("POST"))
+                .and(path("/batches/1:cancel"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+                .expect(1)
+                .mount(server)
+                .await;
+        }
+
+        async fn mount_interactive(server: &MockServer, calls: u64) {
+            Mock::given(method("POST"))
+                .and(path(GENERATE_PATH))
+                .respond_with(ResponseTemplate::new(200).set_body_json(image("interactive")))
+                .expect(calls)
+                .mount(server)
+                .await;
+        }
+
+        #[tokio::test]
+        async fn failed_copies_are_skipped_and_indices_are_kept() {
+            let server = MockServer::start().await;
+            mount_create(&server).await;
+            mount_poll(
+                &server,
+                json!({"state": "JOB_STATE_SUCCEEDED", "dest": {"inlinedResponses": [
+                    {"metadata": {"key": "0"}, "response": image("a")},
+                    {"metadata": {"key": "1"}, "error": {"message": "blocked"}},
+                    {"metadata": {"key": "2"}, "response": image("c")},
+                ]}}),
+            )
+            .await;
+            mount_interactive(&server, 0).await;
+
+            let args = parse(&["p", "--provider", "gemini", "--batch", "--copies", "3", "--seed", "10"]);
+            let images = generate(&args, "p", 10, &config_for(&server), 3).await.unwrap();
+
+            assert_eq!(images.iter().map(|i| i.index).collect::<Vec<_>>(), vec![0, 2]);
+            assert_eq!(images[1].copy.seed, 12);
+            assert_eq!(images[1].bytes, b"c");
+        }
+
+        #[tokio::test]
+        async fn every_copy_failing_is_an_error() {
+            let server = MockServer::start().await;
+            mount_create(&server).await;
+            mount_poll(
+                &server,
+                json!({"state": "JOB_STATE_SUCCEEDED", "dest": {"inlinedResponses": [
+                    {"error": {"message": "blocked"}},
+                ]}}),
+            )
+            .await;
+
+            let args = parse(&["p", "--provider", "gemini", "--batch"]);
+            let err = generate(&args, "p", 1, &config_for(&server), 1).await.unwrap_err();
+            assert!(matches!(err, AppError::Gemini(GeminiError::AllCopiesFailed { .. })), "{err:?}");
+        }
+
+        #[tokio::test]
+        async fn timeout_falls_back_to_interactive_for_only_the_missing_copies() {
+            let server = MockServer::start().await;
+            mount_create(&server).await;
+            mount_cancel(&server).await;
+            mount_poll(
+                &server,
+                json!({"state": "JOB_STATE_RUNNING", "dest": {"inlinedResponses": [
+                    {"metadata": {"key": "1"}, "response": image("batched")},
+                ]}}),
+            )
+            .await;
+            mount_interactive(&server, 2).await;
+
+            let args = parse(&["p", "--provider", "gemini", "--batch", "--batch-wait", "1s"]);
+            let images = generate(&args, "p", 0, &config_for(&server), 3).await.unwrap();
+
+            assert_eq!(images.iter().map(|i| i.index).collect::<Vec<_>>(), vec![0, 1, 2]);
+            assert_eq!(images[1].bytes, b"batched");
+            assert_eq!(images[0].bytes, b"interactive");
+        }
+
+        #[tokio::test]
+        async fn timeout_with_fail_fallback_is_an_error() {
+            let server = MockServer::start().await;
+            mount_create(&server).await;
+            mount_cancel(&server).await;
+            mount_poll(&server, json!({"state": "JOB_STATE_RUNNING"})).await;
+            mount_interactive(&server, 0).await;
+
+            let args = parse(&[
+                "p", "--provider", "gemini", "--batch", "--batch-wait", "1s", "--batch-fallback", "fail",
+            ]);
+            let err = generate(&args, "p", 0, &config_for(&server), 2).await.unwrap_err();
+            assert!(matches!(err, AppError::Gemini(GeminiError::BatchTimedOut { .. })), "{err:?}");
+        }
+
+        #[tokio::test]
+        async fn without_batch_copies_are_interactive_and_fail_fast() {
+            let server = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(path(GENERATE_PATH))
+                .respond_with(ResponseTemplate::new(500).set_body_string("down"))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let args = parse(&["p", "--provider", "gemini"]);
+            let err = generate(&args, "p", 0, &config_for(&server), 3).await.unwrap_err();
+            assert!(matches!(err, AppError::Gemini(GeminiError::Status { .. })), "{err:?}");
+        }
     }
 }

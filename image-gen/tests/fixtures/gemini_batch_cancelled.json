@@ -1,0 +1,22 @@
+{
+ "name": "batches/g8qmz5iggrj7pdat3yhe4sji9lr9j7cys6ae",
+ "metadata": {
+  "@type": "type.googleapis.com/google.ai.generativelanguage.v1main.GenerateContentBatch",
+  "model": "models/gemini-2.5-flash-image",
+  "displayName": "image-gen-probe",
+  "createTime": "2026-11-25T02:30:18.787722268Z",
+  "endTime": "2026-11-25T02:30:21.271251Z",
+  "updateTime": "2026-11-25T02:30:21.271251Z",
+  "batchStats": {
+   "requestCount": "2",
+   "pendingRequestCount": "2"
+  },
+  "state": "BATCH_STATE_CANCELLED",
+  "name": "batches/g8qmz5iggrj7pdat3yhe4sji9lr9j7cys6ae"
+ },
+ "done": true,
+ "error": {
+  "code": 13,
+  "message": "Batch g8qmz5iggrj7pdat3yhe4sji9lr9j7cys6ae failed without error."
+ }
+}

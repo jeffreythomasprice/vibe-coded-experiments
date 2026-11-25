@@ -1,0 +1,207 @@
+{
+ "name": "batches/4gacxvyy5skar0xtlm5fh1sizc5s4s5rqfrz",
+ "metadata": {
+  "@type": "type.googleapis.com/google.ai.generativelanguage.v1main.GenerateContentBatch",
+  "model": "models/gemini-2.5-flash-image",
+  "displayName": "image-gen-probe",
+  "output": {
+   "inlinedResponses": {
+    "inlinedResponses": [
+     {
+      "response": {
+       "candidates": [
+        {
+         "content": {
+          "parts": [
+           {
+            "inlineData": {
+             "mimeType": "image/png",
+             "data": "ZmFrZS1wbmctYnl0ZXM="
+            }
+           }
+          ],
+          "role": "model"
+         },
+         "finishReason": "STOP",
+         "index": 0
+        }
+       ],
+       "usageMetadata": {
+        "promptTokenCount": 8,
+        "candidatesTokenCount": 1290,
+        "totalTokenCount": 1298,
+        "promptTokensDetails": [
+         {
+          "modality": "TEXT",
+          "tokenCount": 8
+         }
+        ],
+        "candidatesTokensDetails": [
+         {
+          "modality": "IMAGE",
+          "tokenCount": 1290
+         }
+        ],
+        "serviceTier": "standard"
+       },
+       "modelVersion": "gemini-2.5-flash-image",
+       "responseId": "IEgGa9uFELvQz7IPgsyt2A8"
+      },
+      "metadata": {
+       "key": "0"
+      }
+     },
+     {
+      "response": {
+       "candidates": [
+        {
+         "content": {
+          "parts": [
+           {
+            "inlineData": {
+             "mimeType": "image/png",
+             "data": "ZmFrZS1wbmctYnl0ZXM="
+            }
+           }
+          ],
+          "role": "model"
+         },
+         "finishReason": "STOP",
+         "index": 0
+        }
+       ],
+       "usageMetadata": {
+        "promptTokenCount": 8,
+        "candidatesTokenCount": 1290,
+        "totalTokenCount": 1298,
+        "promptTokensDetails": [
+         {
+          "modality": "TEXT",
+          "tokenCount": 8
+         }
+        ],
+        "candidatesTokensDetails": [
+         {
+          "modality": "IMAGE",
+          "tokenCount": 1290
+         }
+        ],
+        "serviceTier": "standard"
+       },
+       "modelVersion": "gemini-2.5-flash-image",
+       "responseId": "IEgGa5WeELGtz7IP047NgQc"
+      },
+      "metadata": {
+       "key": "1"
+      }
+     }
+    ]
+   }
+  },
+  "createTime": "2026-11-25T02:27:42.201465521Z",
+  "endTime": "2026-11-25T02:30:07.922541410Z",
+  "updateTime": "2026-11-25T02:30:07.922541430Z",
+  "batchStats": {
+   "requestCount": "2",
+   "successfulRequestCount": "2"
+  },
+  "state": "BATCH_STATE_SUCCEEDED",
+  "name": "batches/4gacxvyy5skar0xtlm5fh1sizc5s4s5rqfrz"
+ },
+ "done": true,
+ "response": {
+  "@type": "type.googleapis.com/google.ai.generativelanguage.v1main.GenerateContentBatchOutput",
+  "inlinedResponses": {
+   "inlinedResponses": [
+    {
+     "response": {
+      "candidates": [
+       {
+        "content": {
+         "parts": [
+          {
+           "inlineData": {
+            "mimeType": "image/png",
+            "data": "ZmFrZS1wbmctYnl0ZXM="
+           }
+          }
+         ],
+         "role": "model"
+        },
+        "finishReason": "STOP",
+        "index": 0
+       }
+      ],
+      "usageMetadata": {
+       "promptTokenCount": 8,
+       "candidatesTokenCount": 1290,
+       "totalTokenCount": 1298,
+       "promptTokensDetails": [
+        {
+         "modality": "TEXT",
+         "tokenCount": 8
+        }
+       ],
+       "candidatesTokensDetails": [
+        {
+         "modality": "IMAGE",
+         "tokenCount": 1290
+        }
+       ],
+       "serviceTier": "standard"
+      },
+      "modelVersion": "gemini-2.5-flash-image",
+      "responseId": "IEgGa9uFELvQz7IPgsyt2A8"
+     },
+     "metadata": {
+      "key": "0"
+     }
+    },
+    {
+     "response": {
+      "candidates": [
+       {
+        "content": {
+         "parts": [
+          {
+           "inlineData": {
+            "mimeType": "image/png",
+            "data": "ZmFrZS1wbmctYnl0ZXM="
+           }
+          }
+         ],
+         "role": "model"
+        },
+        "finishReason": "STOP",
+        "index": 0
+       }
+      ],
+      "usageMetadata": {
+       "promptTokenCount": 8,
+       "candidatesTokenCount": 1290,
+       "totalTokenCount": 1298,
+       "promptTokensDetails": [
+        {
+         "modality": "TEXT",
+         "tokenCount": 8
+        }
+       ],
+       "candidatesTokensDetails": [
+        {
+         "modality": "IMAGE",
+         "tokenCount": 1290
+        }
+       ],
+       "serviceTier": "standard"
+      },
+      "modelVersion": "gemini-2.5-flash-image",
+      "responseId": "IEgGa5WeELGtz7IP047NgQc"
+     },
+     "metadata": {
+      "key": "1"
+     }
+    }
+   ]
+  }
+ }
+}

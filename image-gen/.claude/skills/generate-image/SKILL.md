@@ -49,6 +49,11 @@ Rules:
   call). Even without eval, a cold model cache means a multi-gigabyte
   HuggingFace download first, which routinely exceeds a foreground command
   timeout. Poll or wait for completion, then read `$outdir/result.json`.
+- **Gemini batch presets can be slow.** If the preset sets `batch = true`
+  (Gemini Batch API, half price), the run blocks until the job finishes or
+  `batch_wait` (default 1h) passes, then may spend more time on the
+  interactive fallback. Wait for the background-completion notification
+  rather than polling on a short timeout.
 
 ## 1b. Only if the user asks to score, rank, judge, or pick the best image
 
@@ -114,6 +119,12 @@ jq -r '.images | sort_by(.borda.rank // 1e9)[]
        | "rank \(.borda.rank // "-")  vqa \(.vqa.score // "-")  tit \(.tit.score // "-")  \(.path // "(not saved)")"' \
   "$outdir/result.json"
 ```
+
+With a Gemini batch preset, fewer images than `--copies` can come back: a copy
+that failed inside the batch (e.g. blocked by safety) is skipped with a warning
+in `$outdir/run.log`, and the survivors keep their original index in the
+filename (`slug0.png`, `slug2.png`, ...). Report the images that exist and
+mention which copies are missing.
 
 If the top-level output has an `"error"` key instead of `"prompt"`/`"images"`,
 generation failed — see Troubleshooting below instead of parsing further.

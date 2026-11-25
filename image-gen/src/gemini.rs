@@ -1,3 +1,4 @@
+pub mod batch;
 pub mod client;
 pub mod config;
 pub mod image;
@@ -53,4 +54,28 @@ pub enum GeminiError {
 
     #[error("pass both --width and --height (or neither): gemini takes an aspect ratio, not a single dimension")]
     IncompleteDimensions,
+
+    #[error("gemini batch {name} ended in state {state}: {message}")]
+    BatchFailed { name: String, state: String, message: String },
+
+    #[error("gemini batch {name} did not finish within {waited:?}")]
+    BatchTimedOut { name: String, waited: std::time::Duration },
+
+    #[error("gemini batch {name} was cancelled by interrupt")]
+    BatchInterrupted { name: String },
+
+    #[error("the batch request is {bytes} bytes, over the 20MB inline limit")]
+    BatchTooLarge { bytes: usize },
+
+    #[error("gemini created a batch but returned no job name")]
+    BatchMissingName,
+
+    #[error("gemini batch item failed: {message}")]
+    BatchItemFailed { message: String },
+
+    #[error("every image in the batch failed: {errors}")]
+    AllCopiesFailed { errors: String },
+
+    #[error("invalid duration {value:?}: use a number with a unit, e.g. 90s, 30m, 1h, 1h30m")]
+    InvalidDuration { value: String },
 }

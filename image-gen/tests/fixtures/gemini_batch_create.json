@@ -1,0 +1,16 @@
+{
+ "name": "batches/4gacxvyy5skar0xtlm5fh1sizc5s4s5rqfrz",
+ "metadata": {
+  "@type": "type.googleapis.com/google.ai.generativelanguage.v1main.GenerateContentBatch",
+  "model": "models/gemini-2.5-flash-image",
+  "displayName": "image-gen-probe",
+  "createTime": "2026-11-25T02:27:42.201465521Z",
+  "updateTime": "2026-11-25T02:27:42.201465521Z",
+  "batchStats": {
+   "requestCount": "2",
+   "pendingRequestCount": "2"
+  },
+  "state": "BATCH_STATE_PENDING",
+  "name": "batches/4gacxvyy5skar0xtlm5fh1sizc5s4s5rqfrz"
+ }
+}

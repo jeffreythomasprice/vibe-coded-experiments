@@ -5,8 +5,9 @@ use std::str::FromStr;
 use clap::ValueEnum;
 use serde::{Deserialize, Deserializer};
 
-use crate::cli::{Backend, EvalMetric, GenerateArgs, ImageProvider, RewriteMode, Sampler, WeightTypeArg};
+use crate::cli::{Backend, BatchFallback, EvalMetric, GenerateArgs, ImageProvider, RewriteMode, Sampler, WeightTypeArg};
 use crate::error::AppError;
+use crate::gemini::batch::BatchWait;
 use crate::models::ModelRef;
 
 /// A named bundle of `generate` arguments, applied with `--preset <name>`.
@@ -19,6 +20,11 @@ use crate::models::ModelRef;
 pub struct Preset {
     #[serde(deserialize_with = "value_enum_opt")]
     pub provider: Option<ImageProvider>,
+    pub batch: Option<bool>,
+    #[serde(deserialize_with = "from_str_opt")]
+    pub batch_wait: Option<BatchWait>,
+    #[serde(deserialize_with = "value_enum_opt")]
+    pub batch_fallback: Option<BatchFallback>,
     #[serde(deserialize_with = "from_str_opt")]
     pub model: Option<ModelRef>,
     #[serde(deserialize_with = "from_str_opt")]
@@ -197,6 +203,9 @@ pub fn apply(args: &mut GenerateArgs, presets: &BTreeMap<String, Preset>) -> Res
 
     merge!(
         provider => "--provider",
+        batch => "--batch",
+        batch_wait => "--batch-wait",
+        batch_fallback => "--batch-fallback",
         model => "--model",
         diffusion_model => "--diffusion-model",
         vae => "--vae",
@@ -269,6 +278,46 @@ mod tests {
         assert_eq!(args.steps, Some(4));
         assert_eq!(args.cfg_scale, Some(1.0));
         assert_eq!(args.guidance, Some(0.0));
+    }
+
+    #[test]
+    fn preset_fills_batch_settings_from_toml() {
+        let preset: Preset =
+            toml::from_str("batch = true\nbatch_wait = \"1h30m\"\nbatch_fallback = \"fail\"\n").unwrap();
+        let mut args = parse(&["a prompt", "--preset", "b"]);
+        let mut presets = BTreeMap::new();
+        presets.insert("b".to_owned(), preset);
+
+        apply(&mut args, &presets).unwrap();
+
+        assert_eq!(args.batch, Some(true));
+        assert_eq!(args.batch_wait, Some(BatchWait(std::time::Duration::from_secs(5400))));
+        assert_eq!(args.batch_fallback, Some(BatchFallback::Fail));
+    }
+
+    #[test]
+    fn explicit_batch_flags_beat_preset() {
+        let mut args = parse(&["a prompt", "--preset", "b", "--batch=false", "--batch-wait", "5m"]);
+        let mut presets = BTreeMap::new();
+        presets.insert(
+            "b".to_owned(),
+            Preset {
+                batch: Some(true),
+                batch_wait: Some(BatchWait(std::time::Duration::from_secs(3600))),
+                ..Default::default()
+            },
+        );
+
+        apply(&mut args, &presets).unwrap();
+
+        assert_eq!(args.batch, Some(false));
+        assert_eq!(args.batch_wait, Some(BatchWait(std::time::Duration::from_secs(300))));
+    }
+
+    #[test]
+    fn bad_batch_wait_in_a_preset_is_a_parse_error() {
+        let err = toml::from_str::<Preset>("batch_wait = \"soon\"\n").unwrap_err();
+        assert!(err.to_string().contains("invalid duration"));
     }
 
     #[test]

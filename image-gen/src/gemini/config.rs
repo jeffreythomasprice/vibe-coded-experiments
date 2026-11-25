@@ -6,6 +6,7 @@ use crate::gemini::GeminiError;
 
 pub const DEFAULT_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
 pub const DEFAULT_TIMEOUT_SECS: u64 = 300;
+pub const DEFAULT_BATCH_POLL_SECS: u64 = 10;
 pub const API_KEY_ENV: &str = "GEMINI_API_KEY";
 pub const DEFAULT_IMAGE_MODEL: &str = "gemini-2.5-flash-image";
 
@@ -34,6 +35,7 @@ pub struct GeminiConfig {
     pub api_key: Option<String>,
     pub base_url: String,
     pub timeout_secs: u64,
+    pub batch_poll_secs: u64,
 }
 
 impl std::fmt::Debug for GeminiConfig {
@@ -42,6 +44,7 @@ impl std::fmt::Debug for GeminiConfig {
             .field("api_key", &self.api_key.as_ref().map(|_| "<redacted>"))
             .field("base_url", &self.base_url)
             .field("timeout_secs", &self.timeout_secs)
+            .field("batch_poll_secs", &self.batch_poll_secs)
             .finish()
     }
 }
@@ -52,6 +55,7 @@ impl Default for GeminiConfig {
             api_key: None,
             base_url: DEFAULT_BASE_URL.to_owned(),
             timeout_secs: DEFAULT_TIMEOUT_SECS,
+            batch_poll_secs: DEFAULT_BATCH_POLL_SECS,
         }
     }
 }
@@ -59,6 +63,10 @@ impl Default for GeminiConfig {
 impl GeminiConfig {
     pub fn timeout(&self) -> Duration {
         Duration::from_secs(self.timeout_secs)
+    }
+
+    pub fn batch_poll(&self) -> Duration {
+        Duration::from_secs(self.batch_poll_secs.max(1))
     }
 
     pub fn resolve_api_key(&self) -> Result<String, GeminiError> {

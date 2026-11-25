@@ -253,6 +253,7 @@ mod tests {
             api_key: Some("k".to_owned()),
             base_url: server.uri(),
             timeout_secs: 5,
+            ..Default::default()
         })
         .unwrap();
         GeminiProvider::new(client)

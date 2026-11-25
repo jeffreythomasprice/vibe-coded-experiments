@@ -39,6 +39,8 @@ model = "gemini-2.5-flash-image"
 # api_key = "..."
 base_url = "https://generativelanguage.googleapis.com/v1beta"
 timeout_secs = 300
+# How often a --batch job is polled for completion.
+batch_poll_secs = 10
 
 # Named bundles of `generate` arguments. `--preset flux` is the same as typing
 # each key below as its --flag. `--preset` is repeatable and combines left to
@@ -63,6 +65,18 @@ weight_type = "q8_0"
 
 [presets.nano]
 provider = "gemini"
+
+# Gemini's Batch API bills half the interactive price, but Google only targets
+# a 24h turnaround (usually much faster) and discards jobs after 48h. `generate`
+# blocks for up to batch_wait; past that the job is cancelled and, with
+# batch_fallback = "interactive", the copies it hadn't delivered are generated
+# one at a time at full price ("fail" errors out instead). A copy that fails
+# inside a batch is skipped with a warning rather than failing the run.
+[presets.nano-batch]
+provider = "gemini"
+batch = true
+batch_wait = "1h"
+batch_fallback = "interactive"
 
 [presets.turbo]
 model = "stabilityai/sd-turbo"

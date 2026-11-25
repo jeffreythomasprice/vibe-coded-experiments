@@ -1,6 +1,8 @@
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 
+use crate::gemini::batch::RawBatch;
 use crate::gemini::{GeminiConfig, GeminiError};
 
 const API_KEY_HEADER: &str = "x-goog-api-key";
@@ -28,12 +30,31 @@ impl Client {
 
     pub async fn generate_content(&self, model: &str, body: &Value) -> Result<RawResponse, GeminiError> {
         let url = format!("{}/models/{model}:generateContent", self.base_url);
+        self.send(self.http.post(&url).json(body), url).await
+    }
 
-        let response = self
-            .http
-            .post(&url)
+    pub async fn create_batch(&self, model: &str, body: &Value) -> Result<RawBatch, GeminiError> {
+        let url = format!("{}/models/{model}:batchGenerateContent", self.base_url);
+        self.send(self.http.post(&url).json(body), url).await
+    }
+
+    pub async fn get_batch(&self, name: &str) -> Result<RawBatch, GeminiError> {
+        let url = format!("{}/{name}", self.base_url);
+        self.send(self.http.get(&url), url).await
+    }
+
+    pub async fn cancel_batch(&self, name: &str) -> Result<(), GeminiError> {
+        let url = format!("{}/{name}:cancel", self.base_url);
+        self.send::<Value>(self.http.post(&url), url).await.map(drop)
+    }
+
+    async fn send<T: DeserializeOwned>(
+        &self,
+        request: reqwest::RequestBuilder,
+        url: String,
+    ) -> Result<T, GeminiError> {
+        let response = request
             .header(API_KEY_HEADER, &self.api_key)
-            .json(body)
             .send()
             .await
             .map_err(|source| GeminiError::Request {
@@ -55,6 +76,9 @@ impl Client {
             url: url.clone(),
             source: Box::new(source),
         })?;
+        if bytes.is_empty() {
+            return serde_json::from_slice(b"{}").map_err(|source| GeminiError::Decode { url, source });
+        }
         serde_json::from_slice(&bytes).map_err(|source| GeminiError::Decode { url, source })
     }
 }
@@ -196,6 +220,7 @@ mod tests {
             api_key: Some("secret-key".to_owned()),
             base_url: server.uri(),
             timeout_secs: 5,
+            ..Default::default()
         };
         Client::new(&config).unwrap()
     }

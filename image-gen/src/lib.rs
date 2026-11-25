@@ -128,7 +128,10 @@ async fn generate_command(args: &GenerateArgs, config: &Config) -> Result<Outcom
         tracing::warn!("--show writes image data to stdout, corrupting --json output");
     }
     match generate::provider(args, config) {
-        ImageProvider::SdServer => require_checkpoint(args)?,
+        ImageProvider::SdServer => {
+            require_checkpoint(args)?;
+            require_no_batch(args)?;
+        }
         ImageProvider::Gemini => require_gemini_compatible(args)?,
     }
     require_ref_images_exist(args)?;
@@ -349,6 +352,26 @@ fn require_checkpoint(args: &GenerateArgs) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Batching is a Gemini Batch API feature; an sd-server run has no batch queue.
+fn require_no_batch(args: &GenerateArgs) -> Result<(), AppError> {
+    let set = [
+        (args.batch == Some(true), "--batch"),
+        (args.batch_wait.is_some(), "--batch-wait"),
+        (args.batch_fallback.is_some(), "--batch-fallback"),
+    ];
+    let flags: Vec<&str> = set
+        .into_iter()
+        .filter_map(|(is_set, flag)| is_set.then_some(flag))
+        .collect();
+    if flags.is_empty() {
+        return Ok(());
+    }
+    Err(AppError::UnsupportedForProvider {
+        provider: ImageProvider::SdServer.as_str(),
+        flags: flags.join(", "),
+    })
+}
+
 /// sd-server-only flags have no Gemini equivalent; failing beats silently
 /// ignoring a flag the user (or a preset) thought was in effect.
 fn require_gemini_compatible(args: &GenerateArgs) -> Result<(), AppError> {
@@ -444,14 +467,17 @@ async fn produce_to_file(
     let dests = output::destinations(path, args.copies);
     let generated = generate::generate(args, prompt, seed, config, args.copies).await?;
 
-    let total_steps = dests.len();
-    for (index, (dest, image)) in dests.iter().zip(&generated).enumerate() {
+    let total_steps = generated.len();
+    let mut paths = Vec::with_capacity(generated.len());
+    for (step, image) in generated.iter().enumerate() {
+        let dest = &dests[image.index as usize];
         output::write_image(dest, &image.bytes)?;
-        tracing::info!(path = %dest.display(), step = index + 1, total_steps, "wrote image");
+        tracing::info!(path = %dest.display(), step = step + 1, total_steps, "wrote image");
+        paths.push(dest.clone());
     }
 
     Ok(Produced {
-        paths: dests,
+        paths,
         copies: generated.into_iter().map(|image| image.copy).collect(),
         durable: true,
         _scratch: None,
@@ -466,8 +492,8 @@ async fn produce_to_scratch(args: &GenerateArgs, prompt: &str, config: &Config) 
     let generated = generate::generate(args, prompt, seed, config, args.copies).await?;
 
     let mut paths = Vec::with_capacity(generated.len());
-    for (index, image) in generated.iter().enumerate() {
-        let path = scratch.path().join(format!("image{index}.png"));
+    for image in &generated {
+        let path = scratch.path().join(format!("image{}.png", image.index));
         output::write_image(&path, &image.bytes)?;
         paths.push(path);
     }
@@ -624,6 +650,26 @@ mod tests {
             }
             other => panic!("expected UnsupportedForProvider, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn sd_server_rejects_batch_flags_naming_each() {
+        let args = parse(&["a prompt", "--batch", "--batch-wait", "30m", "--batch-fallback", "fail"]);
+        match require_no_batch(&args) {
+            Err(AppError::UnsupportedForProvider { provider, flags }) => {
+                assert_eq!(provider, "sd-server");
+                assert_eq!(flags, "--batch, --batch-wait, --batch-fallback");
+            }
+            other => panic!("expected UnsupportedForProvider, got {other:?}"),
+        }
+        require_no_batch(&parse(&["a prompt", "--batch=false"])).unwrap();
+        require_no_batch(&parse(&["a prompt"])).unwrap();
+    }
+
+    #[test]
+    fn gemini_accepts_batch_flags() {
+        let args = parse(&["a prompt", "--provider", "gemini", "--batch", "--batch-wait", "1h"]);
+        require_gemini_compatible(&args).unwrap();
     }
 
     #[test]

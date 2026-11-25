@@ -3,6 +3,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use serde_json::{Value, json};
 
 use crate::gemini::config::GeminiImageConfig;
+use crate::gemini::client::RawResponse;
 use crate::gemini::{Client, GeminiError};
 use crate::llm::Image;
 
@@ -86,11 +87,11 @@ pub async fn generate(
 ) -> Result<Vec<u8>, GeminiError> {
     let ratio = aspect_ratio(request.width, request.height)?;
     let body = request_body(request, config, ratio);
-    let candidate = client
-        .generate_content(&config.model, &body)
-        .await?
-        .first_candidate()?;
+    png_from_response(client.generate_content(&config.model, &body).await?)
+}
 
+pub fn png_from_response(response: RawResponse) -> Result<Vec<u8>, GeminiError> {
+    let candidate = response.first_candidate()?;
     let inline = candidate
         .parts()
         .iter()
@@ -128,6 +129,7 @@ mod tests {
             api_key: Some("k".to_owned()),
             base_url: server.uri(),
             timeout_secs: 5,
+            ..Default::default()
         })
         .unwrap()
     }

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
+use crate::gemini::batch::BatchWait;
 use crate::models::ModelRef;
 
 #[derive(Debug, Parser)]
@@ -97,6 +98,27 @@ pub struct GenerateArgs {
     /// Image backend (default: [image].provider in config.toml)
     #[arg(long, value_name = "PROVIDER")]
     pub provider: Option<ImageProvider>,
+
+    /// Gemini only: submit all copies as one batch job at half price. Results
+    /// can take minutes to hours; see --batch-wait (default: false)
+    #[arg(
+        long,
+        value_name = "BOOL",
+        num_args = 0..=1,
+        default_missing_value = "true",
+        require_equals = true
+    )]
+    pub batch: Option<bool>,
+
+    /// Gemini batch only: longest to wait for the job, e.g. 90s, 30m, 1h
+    /// (default: 1h)
+    #[arg(long, value_name = "DURATION")]
+    pub batch_wait: Option<BatchWait>,
+
+    /// Gemini batch only: what to do with copies the job didn't deliver in
+    /// time (default: interactive)
+    #[arg(long, value_name = "MODE")]
+    pub batch_fallback: Option<BatchFallback>,
 
     /// Full checkpoint: owner/repo[:file], owner/repo@revision[:file], or a local path
     #[arg(short, long, value_name = "REF")]
@@ -269,6 +291,14 @@ pub struct GenerateArgs {
     /// eval model (default: 512)
     #[arg(long, value_name = "PX")]
     pub eval_max_px: Option<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum BatchFallback {
+    /// Generate the missing copies one at a time at full price
+    Interactive,
+    /// Fail the run
+    Fail,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, serde::Deserialize)]
