@@ -9,7 +9,7 @@ use common::{
 };
 use gameboy::{Cartridge, Emulator, GameboyButton};
 use gilrs::Gilrs;
-use ui::{BindingRow, BindingSet, MenuCommand, MenuData, MenuState, RomChoice};
+use ui::{BindingRow, BindingSet, MenuCommand, MenuData, MenuInput, MenuState, RomChoice};
 use video::EguiPaint;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -136,7 +136,11 @@ impl App {
             return;
         };
         let now = Instant::now();
-        if force || self.last_redraw.is_none_or(|t| now - t >= MIN_REDRAW_INTERVAL) {
+        if force
+            || self
+                .last_redraw
+                .is_none_or(|t| now - t >= MIN_REDRAW_INTERVAL)
+        {
             self.last_redraw = Some(now);
             window.request_redraw();
         }
@@ -155,12 +159,8 @@ impl App {
             match action {
                 GenericAction::SaveBattery => self.save_battery(),
                 GenericAction::Menu => self.menu.toggle(),
-                GenericAction::IncreaseSpeed => {
-                    self.pacer.set_mode(self.pacer.mode().increased())
-                }
-                GenericAction::DecreaseSpeed => {
-                    self.pacer.set_mode(self.pacer.mode().decreased())
-                }
+                GenericAction::IncreaseSpeed => self.pacer.set_mode(self.pacer.mode().increased()),
+                GenericAction::DecreaseSpeed => self.pacer.set_mode(self.pacer.mode().decreased()),
                 GenericAction::TogglePause => {
                     self.paused = !self.paused;
                     // Re-arm the pacer so the paused interval isn't owed as frames.
@@ -388,14 +388,30 @@ impl App {
 
     /// Handle a physical key transition, split three ways: resolve a pending
     /// rebind capture, route to the game (menu closed, egui didn't consume), or
-    /// fire only global hotkeys (menu open — so the menu key still toggles).
+    /// drive the menu and fire global hotkeys (menu open — so the menu key still
+    /// toggles). Auto-repeats only move the menu cursor.
     fn handle_key(
         &mut self,
         code: KeyCode,
         pressed: bool,
+        repeat: bool,
         egui_consumed: bool,
         event_loop: &ActiveEventLoop,
     ) {
+        if repeat {
+            let direction = input::key_from_winit(code)
+                .and_then(|key| self.input.menu_input(InputTrigger::Key(key)))
+                .filter(|input| {
+                    matches!(
+                        input,
+                        MenuInput::Up | MenuInput::Down | MenuInput::Left | MenuInput::Right
+                    )
+                });
+            if let Some(direction) = direction {
+                self.menu.navigate(direction);
+            }
+            return;
+        }
         if self.menu.is_capturing() {
             // Every key is bindable, Escape included — the menu's own "cancel"
             // control abandons a pending rebind instead.
@@ -416,6 +432,9 @@ impl App {
         if !self.menu.is_open() && !egui_consumed {
             self.input.handle(trigger, pressed);
         } else if pressed {
+            if let Some(input) = self.input.menu_input(trigger) {
+                self.menu.navigate(input);
+            }
             self.input.handle_generic(trigger);
         }
     }
@@ -515,10 +534,10 @@ impl ApplicationHandler for App {
         // Input handling comes before the gfx guard so it works even during
         // startup and regardless of the renderer.
         match &event {
-            WindowEvent::KeyboardInput { event: key, .. } if !key.repeat => {
+            WindowEvent::KeyboardInput { event: key, .. } => {
                 if let PhysicalKey::Code(code) = key.physical_key {
                     let pressed = key.state == ElementState::Pressed;
-                    self.handle_key(code, pressed, egui_consumed, event_loop);
+                    self.handle_key(code, pressed, key.repeat, egui_consumed, event_loop);
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
@@ -578,6 +597,11 @@ impl ApplicationHandler for App {
                         }
                     } else if !menu.is_open() {
                         router.handle(trigger, pressed);
+                    } else if pressed {
+                        if let Some(input) = router.menu_input(trigger) {
+                            menu.navigate(input);
+                        }
+                        router.handle_generic(trigger);
                     }
                 }
             }

@@ -491,10 +491,17 @@ for each piece by its coupling so a future frontend (e.g. a web app) reuses as m
 as possible — egui splits cleanly along exactly this seam:
 
 - **`ui` crate (`egui` core + `common` only):** the reusable UI. It owns
-  `MenuState` (the `Screen` navigation + rebind-`Capture` state machine),
-  `ui::draw(ctx, &mut state, &MenuData) -> Vec<MenuCommand>` (the screens: Root,
-  Select ROM, Options, Input Bindings), the embedded `assets/Early GameBoy.ttf`
-  font (`install_fonts`), and `trigger_label`. It is deliberately free of `wgpu`,
+  `MenuState` (`menu.rs`: the screen navigation, cursor, and rebind-capture state
+  machine), `ui::draw(ctx, &mut state, &MenuData) -> Vec<MenuCommand>` (the
+  screens: Root, Select ROM, Options, Input Bindings), the embedded
+  `assets/Early GameBoy.ttf` font (`install_fonts`), and `trigger_label`. The
+  old-school look lives in `theme.rs` (the `DMG_GREEN` palette, which `Gfx` also
+  uses for the game image, and the whole-physical-pixel UI grid), `widgets.rs`
+  (custom-painted dialog box, cursor, scroll arrows) and `screens.rs` (explicit
+  layout on that grid). The font lacks many symbols (e.g. `—`, `…`, `▶`), so
+  paint shapes or stick to basic punctuation. The menu is cursor-driven: the host
+  queues abstract `MenuInput`s with `MenuState::navigate` (the desktop mapping is
+  `InputRouter::menu_input`), and the mouse works too. It is deliberately free of `wgpu`,
   `winit`, and `gameboy`: every system-specific value crosses the boundary as a
   plain `common`/`String` type (`RomChoice`, `BindingRow`, `BindingSet`), and every
   effect the UI can't perform leaves as a `MenuCommand` (`LoadRom`, `Exit`,

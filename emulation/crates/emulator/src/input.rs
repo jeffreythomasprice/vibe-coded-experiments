@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 use common::input::{ActionBindings, GamepadButton, GenericAction, InputTrigger, Key};
 use common::{InputBindings, MouseButton};
 use gameboy::GameboyButton;
+use ui::MenuInput;
 
 /// Translate a `winit` physical key code into our abstract [`Key`]. Variant names
 /// match `winit`'s `KeyCode` one-to-one, so this is a pure name mapping; keys we
@@ -87,6 +88,48 @@ pub fn gamepad_from_gilrs(button: gilrs::Button) -> Option<GamepadButton> {
     Some(mapped)
 }
 
+/// The menu control a Game Boy button stands for while the menu is open.
+fn menu_input_for_button(button: GameboyButton) -> Option<MenuInput> {
+    match button {
+        GameboyButton::Up => Some(MenuInput::Up),
+        GameboyButton::Down => Some(MenuInput::Down),
+        GameboyButton::Left => Some(MenuInput::Left),
+        GameboyButton::Right => Some(MenuInput::Right),
+        GameboyButton::A => Some(MenuInput::Confirm),
+        GameboyButton::B => Some(MenuInput::Back),
+        GameboyButton::Start | GameboyButton::Select => None,
+    }
+}
+
+/// Menu controls that work whatever the bindings say, so that unbinding a button
+/// can't make the menu unusable.
+fn fallback_menu_input(trigger: InputTrigger) -> Option<MenuInput> {
+    use GamepadButton as Pad;
+    match trigger {
+        InputTrigger::Key(Key::ArrowUp) | InputTrigger::GamepadButton(Pad::DPadUp) => {
+            Some(MenuInput::Up)
+        }
+        InputTrigger::Key(Key::ArrowDown) | InputTrigger::GamepadButton(Pad::DPadDown) => {
+            Some(MenuInput::Down)
+        }
+        InputTrigger::Key(Key::ArrowLeft) | InputTrigger::GamepadButton(Pad::DPadLeft) => {
+            Some(MenuInput::Left)
+        }
+        InputTrigger::Key(Key::ArrowRight) | InputTrigger::GamepadButton(Pad::DPadRight) => {
+            Some(MenuInput::Right)
+        }
+        InputTrigger::Key(Key::Enter | Key::NumpadEnter)
+        | InputTrigger::GamepadButton(Pad::South) => Some(MenuInput::Confirm),
+        InputTrigger::Key(Key::Backspace) | InputTrigger::GamepadButton(Pad::East) => {
+            Some(MenuInput::Back)
+        }
+        InputTrigger::Key(Key::Delete) | InputTrigger::GamepadButton(Pad::West) => {
+            Some(MenuInput::Clear)
+        }
+        _ => None,
+    }
+}
+
 /// Routes host input triggers to the actions bound to them.
 ///
 /// It precomputes the reverse index (trigger → actions) for both the generic and
@@ -153,6 +196,24 @@ impl InputRouter {
         if let Some(actions) = self.generic.get(&trigger) {
             self.pending_generic.extend_from_slice(actions);
         }
+    }
+
+    /// The menu control `trigger` stands for, preferring the user's Game Boy
+    /// bindings over the fixed fallbacks. Mouse buttons never navigate (the
+    /// pointer drives the menu directly), and neither does the menu key, which
+    /// already toggles the menu.
+    pub fn menu_input(&self, trigger: InputTrigger) -> Option<MenuInput> {
+        let is_menu_key = self
+            .generic
+            .get(&trigger)
+            .is_some_and(|actions| actions.contains(&GenericAction::Menu));
+        if is_menu_key || matches!(trigger, InputTrigger::MouseButton(_)) {
+            return None;
+        }
+        self.gameboy
+            .get(&trigger)
+            .and_then(|buttons| buttons.iter().copied().find_map(menu_input_for_button))
+            .or_else(|| fallback_menu_input(trigger))
     }
 
     /// The Game Boy buttons currently held, fed to the joypad
@@ -227,5 +288,25 @@ mod tests {
         assert!(router.take_generic_actions().is_empty());
         router.handle(InputTrigger::Key(Key::F5), false);
         assert!(router.take_generic_actions().is_empty());
+    }
+
+    #[test]
+    fn menu_input_prefers_bindings_and_keeps_fallbacks() {
+        let mut gameboy = ActionBindings::default();
+        // Rebind B onto Enter, and leave Up with nothing bound.
+        gameboy.set("b", vec![InputTrigger::Key(Key::Enter)]);
+        gameboy.set("up", vec![]);
+        let router = InputRouter::new(&InputBindings::default(), &gameboy);
+        let key = |k| router.menu_input(InputTrigger::Key(k));
+
+        assert_eq!(key(Key::Enter), Some(MenuInput::Back));
+        assert_eq!(key(Key::ArrowUp), Some(MenuInput::Up));
+        assert_eq!(key(Key::Delete), Some(MenuInput::Clear));
+        // The menu key toggles the menu instead of navigating it.
+        assert_eq!(key(Key::Escape), None);
+        assert_eq!(
+            router.menu_input(InputTrigger::MouseButton(MouseButton::Left)),
+            None
+        );
     }
 }

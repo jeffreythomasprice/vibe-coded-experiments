@@ -10,14 +10,6 @@ use winit::window::Window;
 
 use gameboy::{SCREEN_HEIGHT, SCREEN_WIDTH};
 
-/// Classic DMG four-shade palette, lightest (index 0) to darkest (index 3).
-const DMG_PALETTE: [Color; 4] = [
-    Color::rgb(0x9b, 0xbc, 0x0f),
-    Color::rgb(0x8b, 0xac, 0x0f),
-    Color::rgb(0x30, 0x62, 0x30),
-    Color::rgb(0x0f, 0x38, 0x0f),
-];
-
 #[derive(Debug, Error)]
 pub enum GfxError {
     #[error("failed to create surface: {0}")]
@@ -243,7 +235,7 @@ fn blit_shades(
             height: SCREEN_HEIGHT,
             stride: (SCREEN_WIDTH / 4) as usize,
             format: PixelFormat::Grey2 {
-                palette: DMG_PALETTE,
+                palette: ui::DMG_GREEN.map(|[r, g, b]| Color::rgb(r, g, b)),
                 order: BitOrder::MsbFirst,
             },
         },

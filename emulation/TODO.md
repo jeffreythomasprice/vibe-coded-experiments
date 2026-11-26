@@ -1,3 +1,10 @@
+in flight:
+
+We should have our default key bindings include the current keyboard bindings and xbox controller bindings.
+
+
+todo:
+
 "If the core ever does need optimizing, the flamegraph says start with Ppu::tick_one_dot (per-dot loop, ~half the time) and the WaveChannel tick."
 
 
