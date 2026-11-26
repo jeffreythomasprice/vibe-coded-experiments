@@ -12,6 +12,8 @@
 //! identities ([`RomId`], [`SaveId`]) that the backend is free to interpret
 //! however it likes; callers never construct paths.
 
+use std::time::SystemTime;
+
 use serde::{Deserialize, Serialize};
 
 use crate::settings::Settings;
@@ -36,12 +38,25 @@ pub struct RomEntry {
 pub struct SaveId(pub String);
 
 /// Which save is being addressed for a given [`SaveId`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SaveSlot {
     /// The battery-backed cartridge RAM (the classic `.sav`).
     Battery,
-    /// A numbered manual save-state slot. (Not yet produced — reserved.)
-    State(u8),
+    /// A named save state: a snapshot of the whole machine.
+    State(String),
+}
+
+/// The name of the save state the host writes on its own. Like the quicksaves,
+/// it is an ordinary state recognised by name.
+pub const AUTOSAVE_NAME: &str = "autosave";
+
+/// A save state as advertised by the store.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StateEntry {
+    /// The name to address it by, in [`SaveSlot::State`].
+    pub name: String,
+    /// When it was last written.
+    pub modified: SystemTime,
 }
 
 /// Errors any storage backend may surface.
@@ -73,11 +88,13 @@ pub trait RomLibrary {
     fn read_rom(&self, id: &RomId) -> Result<Vec<u8>, StorageError>;
 }
 
-/// Read and write per-cartridge save data (battery RAM now, save states later).
+/// Read and write per-cartridge save data: battery RAM and save states.
 pub trait SaveStore {
     /// Read a save, returning `Ok(None)` when none exists yet.
-    fn read_save(&self, id: &SaveId, slot: SaveSlot) -> Result<Option<Vec<u8>>, StorageError>;
-    fn write_save(&self, id: &SaveId, slot: SaveSlot, data: &[u8]) -> Result<(), StorageError>;
+    fn read_save(&self, id: &SaveId, slot: &SaveSlot) -> Result<Option<Vec<u8>>, StorageError>;
+    fn write_save(&self, id: &SaveId, slot: &SaveSlot, data: &[u8]) -> Result<(), StorageError>;
+    /// Every save state belonging to `id`, in no particular order.
+    fn list_states(&self, id: &SaveId) -> Result<Vec<StateEntry>, StorageError>;
 }
 
 /// Convenience supertrait for a backend that provides all three capabilities.

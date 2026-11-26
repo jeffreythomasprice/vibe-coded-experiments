@@ -6,6 +6,7 @@
 //! "capture complete", so software that polls it won't hang, but no image data
 //! is produced.
 
+use serde::{Deserialize, Serialize};
 use crate::cartridge::header::ROM_BANK_SIZE;
 use super::{is_ram_enable_value, simple_ram_read, simple_ram_write, MbcImpl};
 
@@ -14,7 +15,7 @@ const CAMERA_REGS_BANK: u8 = 0x10;
 /// Offset of the capture-trigger register within the camera register file.
 const TRIGGER_REG: u16 = 0xA000;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(in crate::cartridge) struct Camera {
     ram_enabled: bool,
     rom_bank: u8,

@@ -16,6 +16,7 @@ mod mbc;
 
 pub use header::{CartridgeHeader, CartridgeType, CgbFlag, Destination, Mapper};
 
+use serde::{Deserialize, Serialize};
 use mbc::Mbc;
 
 /// The ROM address region serviced by the cartridge (inclusive).
@@ -41,9 +42,11 @@ pub enum CartridgeError {
 }
 
 /// A loaded Game Boy cartridge: ROM + external RAM + its MBC.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Cartridge {
     header: CartridgeHeader,
+    /// Immutable, so left out of save states; see [`Cartridge::adopt_rom`].
+    #[serde(skip)]
     rom: Vec<u8>,
     ram: Vec<u8>,
     mbc: Mbc,
@@ -85,6 +88,20 @@ impl Cartridge {
             ram,
             mbc,
         })
+    }
+
+    /// Whether `restored`, a deserialized snapshot, has the same shape as this
+    /// cartridge: the same mapper and the same amount of external RAM.
+    pub(crate) fn accepts_state(&self, restored: &Cartridge) -> bool {
+        self.ram.len() == restored.ram.len()
+            && std::mem::discriminant(&self.mbc) == std::mem::discriminant(&restored.mbc)
+    }
+
+    /// Move the ROM image and header over from `donor`, which a deserialized
+    /// snapshot lacks (the ROM) or should not override (the header).
+    pub(crate) fn adopt_rom(&mut self, donor: &mut Cartridge) {
+        self.rom = std::mem::take(&mut donor.rom);
+        self.header = donor.header.clone();
     }
 
     /// The parsed header.

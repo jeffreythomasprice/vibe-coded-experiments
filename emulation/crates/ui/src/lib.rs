@@ -16,7 +16,7 @@ mod screens;
 mod theme;
 mod widgets;
 
-use common::{InputTrigger, Key, MouseButton};
+use common::{Corner, InputTrigger, Key, MouseButton};
 
 pub use menu::MenuState;
 pub use nav::MenuInput;
@@ -63,6 +63,14 @@ pub struct RomChoice {
     pub label: String,
 }
 
+/// One save state of the loaded game, as the host wants it shown.
+#[derive(Clone, Debug)]
+pub struct StateChoice {
+    /// Echoed back in [`MenuCommand::LoadState`] / [`MenuCommand::SaveState`].
+    pub name: String,
+    pub label: String,
+}
+
 /// One row of the input-bindings table: a display name plus the triggers
 /// currently bound to it (only the first two are shown/editable).
 #[derive(Clone, Debug)]
@@ -81,9 +89,20 @@ pub struct MenuData<'a> {
     pub rom_loaded: bool,
     pub roms: &'a [RomChoice],
     pub bindings: &'a [BindingRow],
+    /// The loaded game's save states, in display order.
+    pub states: &'a [StateChoice],
+    /// The name offered when the user creates a new save state.
+    pub suggested_state_name: &'a str,
+    /// A short-lived status message for the HUD.
+    pub toast: Option<&'a str>,
     /// Current emulation speed, as a short label for the HUD (e.g. `"1x"`,
-    /// `"As Fast As Possible"`). Always shown, top-left, regardless of menu state.
+    /// `"As Fast As Possible"`). Always shown, regardless of menu state.
     pub speed_label: &'a str,
+    /// The screen corner the speed box sits in.
+    pub speed_corner: Corner,
+    /// The opacity the speed box should have now, in `[0.0, 1.0]`. The UI eases
+    /// toward it, so the host can change it abruptly.
+    pub speed_opacity: f32,
     /// The measured actual emulation speed (× real time), shown under the target
     /// speed so the user can see when the host can't keep up. `None` hides the
     /// line (e.g. while paused or before the first measurement).
@@ -97,6 +116,12 @@ pub struct MenuData<'a> {
 pub enum MenuCommand {
     /// Load (hot-swap) the ROM with this opaque id.
     LoadRom(String),
+    /// Snapshot the machine under this name, replacing any state that has it.
+    SaveState(String),
+    /// Restore the save state with this name.
+    LoadState(String),
+    /// Restart the loaded game from power-on, keeping its saves.
+    ResetGame,
     /// Quit the application.
     Exit,
     /// Close the menu (resume the machine).
@@ -119,7 +144,11 @@ pub fn draw(ctx: &egui::Context, state: &mut MenuState, data: &MenuData) -> Vec<
     let theme = Theme::dmg(ctx.screen_rect().size(), ctx.pixels_per_point());
     theme.apply(ctx);
 
-    // Controls first, so this frame already shows their effect.
+    // Controls first, so this frame already shows their effect. Text comes
+    // before the menu controls so that the key press which opens the name field
+    // isn't also typed into it.
+    let events = ctx.input(|i| i.events.clone());
+    state.process_text(&events, &mut commands);
     state.process_inputs(data, &mut commands);
     let hud_bottom = screens::draw_hud(ctx, &theme, data);
     screens::draw_menu(ctx, &theme, state, data, hud_bottom, &mut commands);
@@ -192,6 +221,49 @@ mod tests {
     }
 
     #[test]
+    fn hud_draws_in_every_corner_and_only_top_boxes_push_the_menu_down() {
+        let ctx = egui::Context::default();
+        install_fonts(&ctx);
+        for (corner, at_top) in [
+            (Corner::TopLeft, true),
+            (Corner::TopRight, true),
+            (Corner::BottomLeft, false),
+            (Corner::BottomRight, false),
+        ] {
+            for width in [640.0, 160.0] {
+                let data = MenuData {
+                    rom_loaded: true,
+                    roms: &[],
+                    bindings: &[],
+                    states: &[],
+                    suggested_state_name: "",
+                    toast: None,
+                    speed_label: "1x",
+                    actual_speed: Some(1.0),
+                    speed_corner: corner,
+                    speed_opacity: 0.4,
+                    paused: false,
+                };
+                let input = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(width, 576.0),
+                    )),
+                    ..Default::default()
+                };
+                let mut bottom = 0.0;
+                let output = ctx.run(input, |ctx| {
+                    let theme = Theme::dmg(ctx.screen_rect().size(), ctx.pixels_per_point());
+                    theme.apply(ctx);
+                    bottom = screens::draw_hud(ctx, &theme, &data);
+                });
+                assert!(!output.shapes.is_empty());
+                assert_eq!(bottom > 0.0, at_top, "{corner:?} at width {width}");
+            }
+        }
+    }
+
+    #[test]
     fn every_screen_draws_headlessly() {
         let ctx = egui::Context::default();
         install_fonts(&ctx);
@@ -203,18 +275,35 @@ mod tests {
                 triggers: vec![InputTrigger::Key(Key::KeyX)],
             })
             .collect();
+        let states: Vec<StateChoice> = (0..30)
+            .map(|i| StateChoice {
+                name: format!("quicksave-{i}"),
+                label: format!("quicksave-{i}  2026-01-01 12:00"),
+            })
+            .collect();
         let data = MenuData {
             rom_loaded: true,
             roms: &[],
             bindings: &bindings,
+            states: &states,
+            suggested_state_name: "save-1",
+            toast: Some("Saved quicksave-1"),
             speed_label: "1x",
             actual_speed: Some(1.0),
+            speed_corner: Corner::TopLeft,
+            speed_opacity: 1.0,
             paused: true,
         };
         let mut state = MenuState::default();
         state.open();
-        // Rom list (empty) and back, then options, bindings, and past the fold.
-        let mut inputs = vec![MenuInput::Confirm, MenuInput::Back, MenuInput::Down];
+        // Rom list (empty) and back.
+        let mut inputs = vec![MenuInput::Confirm, MenuInput::Back];
+        // Save screen, the name field and out again; then the load screen.
+        inputs.extend([MenuInput::Down, MenuInput::Confirm, MenuInput::Confirm]);
+        inputs.extend([MenuInput::Back, MenuInput::Back]);
+        inputs.extend([MenuInput::Down, MenuInput::Confirm, MenuInput::Back]);
+        // Past Reset to Options, then bindings, and past the fold.
+        inputs.extend([MenuInput::Down; 2]);
         inputs.extend([MenuInput::Confirm, MenuInput::Confirm]);
         inputs.extend([MenuInput::Down; 25]);
         for input in inputs {

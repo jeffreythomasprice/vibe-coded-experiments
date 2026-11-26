@@ -43,6 +43,8 @@
 //! remaining flat read/write storage in the I/O array is only the handful of
 //! unimplemented/unused registers (e.g. `0xFF03`, `0xFF08-0xFF0E`).
 
+use crate::state::boxed_bytes;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 use crate::apu::Apu;
@@ -67,7 +69,7 @@ const IF_UNUSED_MASK: u8 = 0xE0;
 /// write. The CPU masks with `0x1F` when it dispatches, but a program that reads
 /// `0xFF0F` directly still observes the forced `1`s, so the quirk is modeled here
 /// rather than leaked into the CPU.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 struct InterruptRegisters {
     enable: u8,
     request: u8,
@@ -110,11 +112,14 @@ const HRAM_SIZE: usize = 0x007F;
 /// RAM regions are boxed fixed-size arrays (mirroring [`FlatMemory`]'s
 /// `Box<[u8; N]>`): cheap to move, and the compile-time-fixed widths make an
 /// out-of-bounds index impossible for those regions.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SystemBus {
     cartridge: Cartridge,
+    #[serde(with = "boxed_bytes")]
     wram: Box<[u8; WRAM_SIZE]>,
+    #[serde(with = "boxed_bytes")]
     io: Box<[u8; IO_SIZE]>,
+    #[serde(with = "boxed_bytes")]
     hram: Box<[u8; HRAM_SIZE]>,
     interrupts: InterruptRegisters,
     timer: Timer,
@@ -125,6 +130,7 @@ pub struct SystemBus {
     apu: Apu,
     /// Latches when the PPU completes a frame, so a UI loop can decide when to
     /// present. Consumed via [`SystemBus::take_frame_ready`].
+    #[serde(skip)]
     frame_ready: bool,
 }
 

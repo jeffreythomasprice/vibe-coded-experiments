@@ -7,13 +7,14 @@
 //! i.e. `0x8000` bias + no tilt) and the EEPROM is not emulated, so tilt games
 //! will see a level, motionless controller.
 
+use serde::{Deserialize, Serialize};
 use crate::cartridge::header::ROM_BANK_SIZE;
 use super::{is_ram_enable_value, MbcImpl};
 
 /// The accelerometer rest reading (centered, no tilt) on real hardware.
 const ACCEL_CENTER: u16 = 0x81D0;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(in crate::cartridge) struct Mbc7 {
     ram_enabled: bool,
     rom_bank: u16,

@@ -28,6 +28,8 @@
 //! seam without needing a re-entrant borrow of the whole bus. This timer is
 //! unrelated to the MBC3 RTC.
 
+use serde::{Deserialize, Serialize};
+
 /// The internal-counter bit whose falling edge advances `TIMA`, indexed by
 /// `TAC`'s low two clock-select bits: `00`=÷1024 (4096 Hz), `01`=÷16
 /// (262144 Hz), `10`=÷64 (65536 Hz), `11`=÷256 (16384 Hz).
@@ -44,7 +46,7 @@ const TAC_ENABLE: u8 = 0b100;
 const RELOAD_DELAY: u8 = 4;
 
 /// State of the delayed `TIMA` overflow reload.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 enum ReloadState {
     /// No overflow pending; `TIMA` holds its normal value.
     Idle,
@@ -54,7 +56,7 @@ enum ReloadState {
 }
 
 /// The DMG timer/divider. See the module docs for the edge-detector model.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Timer {
     /// The 16-bit internal counter. `DIV` (`0xFF04`) is its high byte.
     div_counter: u16,

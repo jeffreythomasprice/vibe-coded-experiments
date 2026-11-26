@@ -1,4 +1,5 @@
 mod app;
+mod autosave;
 mod catalog;
 mod egui_platform;
 mod gfx;
@@ -9,11 +10,11 @@ mod snd;
 mod storage;
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{bail, Context};
-use common::{RomLibrary, SpeedMode};
-use gameboy::Cartridge;
-use winit::event_loop::{ControlFlow, EventLoop};
+use common::{RomId, SpeedMode};
+use winit::event_loop::{ControlFlow, EventLoop, EventLoopProxy};
 
 use crate::app::App;
 use crate::catalog::RomCatalog;
@@ -158,7 +159,7 @@ fn list_roms(config: Option<PathBuf>) -> anyhow::Result<()> {
 fn run_menu(config: Option<PathBuf>, speed: Option<SpeedMode>) -> anyhow::Result<()> {
     let store = FileStore::open(config).context("failed to open persistent-state store")?;
     tracing::info!("starting emulator shell in menu mode");
-    run_app(store, None, None, speed)
+    run_app(store, None, speed)
 }
 
 /// Boot a ROM found by name (file name or header title) in the emulator window.
@@ -175,33 +176,41 @@ fn run_rom(config: Option<PathBuf>, name: &str, speed: Option<SpeedMode>) -> any
         }
     };
 
-    let bytes = store
-        .read_rom(&info.id)
-        .with_context(|| format!("failed to read rom {}", info.id.0))?;
-    let mut cart = Cartridge::from_bytes(&bytes)
-        .with_context(|| format!("failed to parse rom {}", info.id.0))?;
-    let save_id = rom::save_id_for(&cart, &info.file_stem);
-    rom::restore_battery(&mut cart, &save_id, &store)?;
-
-    tracing::info!(rom = %info.id.0, "starting emulator shell");
-    run_app(store, Some(cart), Some(save_id), speed)
+    let id = info.id.clone();
+    tracing::info!(rom = %id.0, "starting emulator shell");
+    run_app(store, Some(id), speed)
 }
 
-/// Build the winit event loop and run the `App`, optionally with a loaded cartridge
-/// and a speed override (which wins over the persisted setting for this run).
-fn run_app(
-    store: FileStore,
-    cartridge: Option<Cartridge>,
-    save_id: Option<common::SaveId>,
-    speed: Option<SpeedMode>,
-) -> anyhow::Result<()> {
+/// Build the winit event loop and run the `App`, optionally starting a ROM, with
+/// a speed override (which wins over the persisted setting for this run).
+fn run_app(store: FileStore, rom: Option<RomId>, speed: Option<SpeedMode>) -> anyhow::Result<()> {
     let scale_mode = store.settings().graphics.scale_mode;
 
     let event_loop = EventLoop::new().context("failed to create event loop")?;
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut app = App::new(store, cartridge, save_id, scale_mode, speed);
+    exit_on_signals(event_loop.create_proxy());
+
+    let mut app = App::new(store, rom, scale_mode, speed)?;
     event_loop.run_app(&mut app).context("event loop error")?;
 
     Ok(())
+}
+
+/// Turn Ctrl+C, SIGTERM, and SIGHUP into a normal shutdown of the event loop, so
+/// the game is saved on the way out. A second signal kills the process outright,
+/// in case the loop is stuck.
+fn exit_on_signals(proxy: EventLoopProxy<()>) {
+    let signalled = AtomicBool::new(false);
+    let installed = ctrlc::set_handler(move || {
+        if signalled.swap(true, Ordering::SeqCst) {
+            std::process::exit(130);
+        }
+        if let Err(err) = proxy.send_event(()) {
+            tracing::warn!(%err, "event loop already gone; ignoring signal");
+        }
+    });
+    if let Err(err) = installed {
+        tracing::warn!(%err, "could not handle termination signals; they will skip saving");
+    }
 }

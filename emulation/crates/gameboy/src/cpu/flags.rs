@@ -10,6 +10,8 @@
 //! A hand-rolled newtype (rather than the `bitflags` crate) keeps the `gameboy`
 //! crate dependency-free, matching the workspace's preference.
 
+use serde::{Deserialize, Serialize};
+
 const Z: u8 = 0b1000_0000;
 const N: u8 = 0b0100_0000;
 const H: u8 = 0b0010_0000;
@@ -17,7 +19,7 @@ const C: u8 = 0b0001_0000;
 
 /// The `F` register: the `Z`/`N`/`H`/`C` condition flags. Only bits 7-4 are
 /// stored; bits 3-0 are always zero.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Flags(u8);
 
 impl Flags {

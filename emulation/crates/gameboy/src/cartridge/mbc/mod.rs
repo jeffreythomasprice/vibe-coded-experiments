@@ -25,6 +25,7 @@ mod rom_only;
 mod rtc;
 mod tama5;
 
+use serde::{Deserialize, Serialize};
 use super::header::{CartridgeHeader, Mapper, RAM_BANK_SIZE};
 
 pub(super) use rtc::RTC_SAVE_LEN;
@@ -60,7 +61,7 @@ pub(super) trait MbcImpl: std::fmt::Debug {
 }
 
 /// A concrete memory bank controller.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(super) enum Mbc {
     RomOnly(RomOnly),
     Mbc1(Mbc1),

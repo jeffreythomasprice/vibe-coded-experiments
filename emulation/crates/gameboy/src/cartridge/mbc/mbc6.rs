@@ -6,10 +6,11 @@
 //! switchable window plus banked SRAM. The dual-half split and flash interface
 //! are not emulated.
 
+use serde::{Deserialize, Serialize};
 use crate::cartridge::header::ROM_BANK_SIZE;
 use super::{is_ram_enable_value, simple_ram_read, simple_ram_write, MbcImpl};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(in crate::cartridge) struct Mbc6 {
     ram_enabled: bool,
     rom_bank: u16,

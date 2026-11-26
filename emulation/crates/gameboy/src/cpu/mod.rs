@@ -21,6 +21,8 @@
 //! are reached through the [`Bus`]; wiring the PPU/timer/joypad to *set* those
 //! bits is the later "Interrupts" item.
 
+use serde::{Deserialize, Serialize};
+
 mod alu;
 mod bus;
 mod cb;
@@ -38,7 +40,7 @@ pub use registers::Registers;
 /// A hard fault that halts emulation. Modeled as data (surfaced via
 /// [`Cpu::fault`]) rather than a `Result` on the hot path so [`Cpu::step`] can
 /// keep returning a plain cycle count.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error, Serialize, Deserialize)]
 pub enum CpuFault {
     #[error("illegal opcode {opcode:#04x} at pc {pc:#06x}; cpu locked up")]
     IllegalOpcode { opcode: u8, pc: u16 },
@@ -46,7 +48,7 @@ pub enum CpuFault {
 
 /// The CPU's run status. Undefined opcodes lock the real hardware, so we model
 /// that explicitly rather than panicking.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 enum RunState {
     Running,
     Halted,
@@ -58,7 +60,7 @@ enum RunState {
 ///
 /// Generic-free by design (only its methods are generic over `B: Bus`), so it
 /// stays trivially `Clone`/`Debug` for future save states and can drive any bus.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cpu {
     regs: Registers,
     /// Interrupt Master Enable — a CPU flag, not memory-mapped.

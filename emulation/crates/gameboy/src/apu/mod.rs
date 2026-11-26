@@ -25,6 +25,7 @@ mod noise;
 mod square;
 mod wave;
 
+use serde::{Deserialize, Serialize};
 use crate::CLOCK_HZ;
 use frame_sequencer::FrameSequencer;
 use noise::NoiseChannel;
@@ -36,7 +37,7 @@ use wave::WaveChannel;
 pub const APU_SAMPLE_RATE: u32 = 48_000;
 
 /// The DMG audio processing unit. See the module docs for the model.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Apu {
     ch1: SquareChannel,
     ch2: SquareChannel,
@@ -53,6 +54,7 @@ pub struct Apu {
     /// Fractional accumulator for the sample clock.
     sample_accum: u32,
     /// Interleaved stereo samples (`L, R, L, R, …`) produced since the last drain.
+    #[serde(skip)]
     samples: Vec<f32>,
 }
 

@@ -182,11 +182,12 @@ impl FromIterator<(String, Vec<InputTrigger>)> for ActionBindings {
 /// Actions shared by every emulator core, independent of the system being run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GenericAction {
-    /// Open the (not-yet-implemented) menu.
+    /// Open or close the menu.
     Menu,
-    /// Persist the loaded cartridge's battery-backed RAM (and RTC) to its save
-    /// file immediately, rather than waiting for the on-exit flush.
-    SaveBattery,
+    /// Write a save state into the rotating quicksave set.
+    QuickSave,
+    /// Restore the most recent quicksave.
+    QuickLoad,
     /// Step the emulation speed up one ladder rung.
     IncreaseSpeed,
     /// Step the emulation speed down one ladder rung.
@@ -199,7 +200,8 @@ impl Action for GenericAction {
     fn all() -> &'static [Self] {
         &[
             GenericAction::Menu,
-            GenericAction::SaveBattery,
+            GenericAction::QuickSave,
+            GenericAction::QuickLoad,
             GenericAction::IncreaseSpeed,
             GenericAction::DecreaseSpeed,
             GenericAction::TogglePause,
@@ -209,7 +211,8 @@ impl Action for GenericAction {
     fn name(&self) -> &'static str {
         match self {
             GenericAction::Menu => "menu",
-            GenericAction::SaveBattery => "save_battery",
+            GenericAction::QuickSave => "quick_save",
+            GenericAction::QuickLoad => "quick_load",
             GenericAction::IncreaseSpeed => "increase_speed",
             GenericAction::DecreaseSpeed => "decrease_speed",
             GenericAction::TogglePause => "toggle_pause",
@@ -222,7 +225,8 @@ impl Action for GenericAction {
                 InputTrigger::Key(Key::Escape),
                 InputTrigger::GamepadButton(GamepadButton::Mode),
             ],
-            GenericAction::SaveBattery => vec![InputTrigger::Key(Key::F5)],
+            GenericAction::QuickSave => vec![InputTrigger::Key(Key::F5)],
+            GenericAction::QuickLoad => vec![InputTrigger::Key(Key::F8)],
             GenericAction::IncreaseSpeed => vec![InputTrigger::Key(Key::Equal)],
             GenericAction::DecreaseSpeed => vec![InputTrigger::Key(Key::Minus)],
             GenericAction::TogglePause => vec![InputTrigger::Key(Key::Space)],
@@ -326,12 +330,17 @@ mod tests {
     }
 
     #[test]
-    fn save_battery_action_has_stable_name_and_default() {
-        assert_eq!(GenericAction::SaveBattery.name(), "save_battery");
-        assert_eq!(
-            ActionBindings::default().triggers(&GenericAction::SaveBattery),
-            vec![InputTrigger::Key(Key::F5)]
-        );
+    fn quicksave_actions_have_stable_names_and_defaults() {
+        for (action, name, key) in [
+            (GenericAction::QuickSave, "quick_save", Key::F5),
+            (GenericAction::QuickLoad, "quick_load", Key::F8),
+        ] {
+            assert_eq!(action.name(), name);
+            assert_eq!(
+                ActionBindings::default().triggers(&action),
+                vec![InputTrigger::Key(key)]
+            );
+        }
     }
 
     #[test]

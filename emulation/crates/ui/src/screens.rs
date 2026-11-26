@@ -1,9 +1,12 @@
 //! Layout and painting of the HUD and menu screens. Everything is placed
 //! explicitly on the theme's pixel grid.
 
+use common::Corner;
 use egui::{Id, Order, Pos2, Rect, Vec2};
 
-use crate::menu::{clear_binding, entries, Entry, MenuState, Screen, BINDING_SLOTS};
+use crate::menu::{
+    clear_binding, entries, Entry, MenuState, Screen, BINDING_SLOTS, MAX_STATE_NAME,
+};
 use crate::nav::{scroll_to, Cursor};
 use crate::theme::Theme;
 use crate::widgets::{self, Arrow, CURSOR_WIDTH, DIALOG_PADDING, ROW_HEIGHT};
@@ -15,16 +18,20 @@ const MARGIN: f32 = 4.0;
 const BINDINGS_WIDTH: f32 = 272.0;
 /// Width of the clickable `x` after a filled binding cell, in UI pixels.
 const CLEAR_WIDTH: f32 = 12.0;
+/// How long the speed box takes to change opacity.
+const FADE_SECONDS: f32 = 0.25;
 /// Wheel travel, in points, that moves the cursor one entry.
 const SCROLL_STEP: f32 = 40.0;
 
 const BINDINGS_HINT: &str = "A: Rebind  B: Back  Del: Clear";
 const CAPTURE_HINT: &str = "Press any input to bind it.";
+const NAMING_HINT: &str = "Enter: Save  Esc: Cancel";
 const NO_ROMS: &str = "No ROMs found.";
+const NO_STATES: &str = "No saves yet.";
 
-/// The always-visible HUD: the speed box pinned top-left and, when paused, a
-/// `Paused` box top-center. Neither takes pointer input. Returns the bottom edge
-/// of the lowest box, which the menu stays below.
+/// The always-visible HUD: the speed box in its configured corner and, when
+/// paused, a `Paused` box top-center. Neither takes pointer input. Returns the
+/// bottom edge of the lowest box along the top, which the menu stays below.
 pub(crate) fn draw_hud(ctx: &egui::Context, theme: &Theme, data: &MenuData) -> f32 {
     let screen = ctx.screen_rect();
     let mut lines = vec![format!("Speed: {}", data.speed_label)];
@@ -32,24 +39,65 @@ pub(crate) fn draw_hud(ctx: &egui::Context, theme: &Theme, data: &MenuData) -> f
         lines.push(format!("Actual: {actual:.2}x"));
     }
     let size = text_box_size(ctx, theme, &lines);
-    let min = screen.min + Vec2::splat(theme.px(MARGIN));
+    let area = screen.shrink(theme.px(MARGIN));
+    let (right, at_bottom) = match data.speed_corner {
+        Corner::TopLeft => (false, false),
+        Corner::TopRight => (true, false),
+        Corner::BottomLeft => (false, true),
+        Corner::BottomRight => (true, true),
+    };
+    let min = Pos2::new(
+        if right {
+            area.min.x + theme.snap(area.width() - size.x)
+        } else {
+            area.min.x
+        },
+        if at_bottom {
+            area.min.y + theme.snap(area.height() - size.y)
+        } else {
+            area.min.y
+        },
+    );
     let speed = Rect::from_min_size(min, size);
-    text_box(ctx, theme, "hud-speed", speed, &lines);
-    let mut bottom = speed.max.y;
+    let opacity = ctx.animate_value_with_time(
+        Id::new("hud-speed-opacity"),
+        data.speed_opacity,
+        FADE_SECONDS,
+    );
+    text_box(ctx, theme, "hud-speed", speed, opacity, &lines);
+    // The speed box, if it is one the other top boxes have to make room for.
+    let top_speed = (!at_bottom).then_some(speed);
+    let mut bottom = top_speed.map_or(screen.min.y, |rect| rect.max.y);
 
     if data.paused {
         let lines = ["Paused".to_owned()];
         let size = text_box_size(ctx, theme, &lines);
-        // Below the speed box when the window is too narrow to center beside it.
         let x = screen.min.x + theme.snap((screen.width() - size.x) / 2.0);
-        let y = if x >= speed.max.x + theme.px(MARGIN) {
-            min.y
-        } else {
-            speed.max.y + theme.px(MARGIN)
-        };
-        let paused = Rect::from_min_size(Pos2::new(x, y), size);
-        text_box(ctx, theme, "hud-paused", paused, &lines);
+        let mut paused = Rect::from_min_size(Pos2::new(x, area.min.y), size);
+        // Below the speed box when the window is too narrow to center beside it.
+        if let Some(speed) = top_speed {
+            if paused.expand(theme.px(MARGIN) - 0.5).intersects(speed) {
+                paused =
+                    paused.translate(Vec2::new(0.0, speed.max.y + theme.px(MARGIN) - area.min.y));
+            }
+        }
+        text_box(ctx, theme, "hud-paused", paused, 1.0, &lines);
         bottom = bottom.max(paused.max.y);
+    }
+
+    if let Some(toast) = data.toast {
+        let lines = [toast.to_owned()];
+        let mut size = text_box_size(ctx, theme, &lines);
+        size.x = size.x.min(area.width());
+        // With nothing along the top, the toast takes the top edge itself.
+        let y = if bottom > screen.min.y {
+            bottom + theme.px(MARGIN)
+        } else {
+            area.min.y
+        };
+        let rect = Rect::from_min_size(Pos2::new(area.min.x, y), size);
+        text_box(ctx, theme, "hud-toast", rect, 1.0, &lines);
+        bottom = rect.max.y;
     }
     bottom
 }
@@ -66,7 +114,14 @@ fn text_box_size(ctx: &egui::Context, theme: &Theme, lines: &[String]) -> Vec2 {
     )
 }
 
-fn text_box(ctx: &egui::Context, theme: &Theme, id: &str, rect: Rect, lines: &[String]) {
+fn text_box(
+    ctx: &egui::Context,
+    theme: &Theme,
+    id: &str,
+    rect: Rect,
+    opacity: f32,
+    lines: &[String],
+) {
     widgets::dialog_box(
         ctx,
         theme,
@@ -74,6 +129,7 @@ fn text_box(ctx: &egui::Context, theme: &Theme, id: &str, rect: Rect, lines: &[S
         Order::Middle,
         false,
         rect,
+        opacity,
         |ui, inner| {
             for (index, line) in lines.iter().enumerate() {
                 let pos = inner.min + Vec2::new(0.0, theme.px(index as f32 * ROW_HEIGHT));
@@ -102,6 +158,7 @@ pub(crate) fn draw_menu(
     scroll_with_wheel(ctx, state, &rows, data, commands);
 
     let hint = match screen {
+        _ if state.is_naming() => Some(NAMING_HINT),
         Screen::InputBindings if state.is_capturing() => Some(CAPTURE_HINT),
         Screen::InputBindings => Some(BINDINGS_HINT),
         _ => None,
@@ -121,9 +178,15 @@ pub(crate) fn draw_menu(
             Order::Foreground,
             true,
             rect,
+            1.0,
             |ui, inner| widgets::text(ui.painter(), theme, inner.min, inner.width(), hint),
         );
         space.max.y = rect.min.y - theme.px(MARGIN);
+    }
+
+    if let Some(name) = state.name_being_typed().map(str::to_owned) {
+        draw_name_field(ctx, theme, state, data, &name, space, commands);
+        return;
     }
 
     let layout = Layout::new(ctx, theme, screen, data, &rows, space);
@@ -141,6 +204,7 @@ pub(crate) fn draw_menu(
         Order::Foreground,
         true,
         layout.rect,
+        1.0,
         |ui, inner| {
             Painting {
                 ui,
@@ -155,6 +219,59 @@ pub(crate) fn draw_menu(
                 pointer_moved: ctx.input(|i| i.pointer.delta() != Vec2::ZERO),
             }
             .paint(&rows, &layout);
+        },
+    );
+}
+
+/// The dialog for typing a new save state's name.
+fn draw_name_field(
+    ctx: &egui::Context,
+    theme: &Theme,
+    state: &mut MenuState,
+    data: &MenuData,
+    name: &str,
+    space: Rect,
+    commands: &mut Vec<MenuCommand>,
+) {
+    // Wide enough for the longest name plus the text cursor.
+    let widest = widgets::text_width(ctx, theme, &"M".repeat(MAX_STATE_NAME));
+    let width = theme.snap(widest) + theme.px(CURSOR_WIDTH + 2.0 * DIALOG_PADDING);
+    let size = Vec2::new(
+        width.min(space.width()),
+        theme.px(4.0 * ROW_HEIGHT + 2.0 * DIALOG_PADDING),
+    );
+    let offset = (space.size() - size) / 2.0;
+    let min = space.min + Vec2::new(theme.snap(offset.x.max(0.0)), theme.snap(offset.y.max(0.0)));
+
+    widgets::dialog_box(
+        ctx,
+        theme,
+        Id::new("menu-name"),
+        Order::Foreground,
+        true,
+        Rect::from_min_size(min, size),
+        1.0,
+        |ui, inner| {
+            let row_height = theme.px(ROW_HEIGHT);
+            let line = |row: f32| inner.min + Vec2::new(0.0, row_height * row);
+            widgets::text(ui.painter(), theme, line(0.0), inner.width(), "New Save");
+            widgets::text(ui.painter(), theme, line(1.5), inner.width(), name);
+            let typed = theme.snap(widgets::text_width(ctx, theme, name));
+            let caret = line(1.5) + Vec2::new(typed + theme.px(1.0), 0.0);
+            widgets::text_caret(ui.painter(), theme, caret);
+
+            let half = theme.snap(inner.width() / 2.0);
+            let buttons = [("Save", Entry::CommitName), ("Cancel", Entry::CancelName)];
+            for (col, (text, entry)) in buttons.into_iter().enumerate() {
+                let rect = Rect::from_min_size(
+                    line(3.0) + Vec2::new(half * col as f32, 0.0),
+                    Vec2::new(half, row_height),
+                );
+                let id = Id::new(("menu-name-button", col));
+                if widgets::menu_item(ui, theme, id, rect, text, false).clicked() {
+                    state.activate(entry, data, commands);
+                }
+            }
         },
     );
 }
@@ -208,6 +325,8 @@ impl Layout {
         let list_len = match screen {
             Screen::SelectRom => data.roms.len(),
             Screen::InputBindings => data.bindings.len(),
+            Screen::SaveState => data.states.len() + 1,
+            Screen::LoadState => data.states.len(),
             Screen::Root | Screen::Options => rows.len(),
         };
         // A binding is its action's name with the two cells on the line below.
@@ -221,8 +340,7 @@ impl Layout {
         let content_width = match screen {
             Screen::InputBindings => theme.px(BINDINGS_WIDTH),
             _ => {
-                let empty_notice = (screen == Screen::SelectRom && data.roms.is_empty())
-                    .then(|| width_of(NO_ROMS));
+                let empty_notice = (list_len == 0).then(|| width_of(empty_notice(screen)));
                 rows.iter()
                     .flatten()
                     .map(|&entry| item_width(&label(entry, data)))
@@ -233,7 +351,7 @@ impl Layout {
         };
 
         // Title and its gap, plus (for list screens) the footer and arrow gaps,
-        // or the "no ROMs" notice.
+        // or the empty-list notice.
         let footer_rows = rows.len().saturating_sub(list_len);
         let notice_rows = usize::from(list_len == 0);
         let chrome =
@@ -264,12 +382,25 @@ fn label(entry: Entry, data: &MenuData) -> String {
         Entry::Open(screen) => screen.title().to_owned(),
         Entry::Exit => "Exit".to_owned(),
         Entry::Rom(index) => data.roms[index].label.clone(),
+        Entry::NewState => "New Save".to_owned(),
+        Entry::State(index) => data.states[index].label.clone(),
+        Entry::CommitName => "Save".to_owned(),
+        Entry::CancelName => "Cancel".to_owned(),
+        Entry::Reset => "Reset Game".to_owned(),
         Entry::Binding { row, slot } => data.bindings[row]
             .triggers
             .get(slot)
             .map_or_else(|| "---".to_owned(), trigger_label),
         Entry::ResetBindings => "Reset All".to_owned(),
         Entry::Back => "Back".to_owned(),
+    }
+}
+
+/// What a list screen says when it has nothing to list.
+fn empty_notice(screen: Screen) -> &'static str {
+    match screen {
+        Screen::LoadState => NO_STATES,
+        _ => NO_ROMS,
     }
 }
 
@@ -313,7 +444,7 @@ impl Painting<'_, '_> {
                 self.theme,
                 Pos2::new(self.inner.min.x, list_top),
                 self.inner.width(),
-                NO_ROMS,
+                empty_notice(self.screen),
             );
         }
 
@@ -405,7 +536,10 @@ impl Painting<'_, '_> {
         let selected = self.state.cursor == at;
         let id = Id::new(("menu-item", at.row, at.col));
         let response = widgets::menu_item(self.ui, self.theme, id, rect, text, selected);
-        if self.state.is_capturing() || self.state.screen() != Some(self.screen) {
+        if self.state.is_capturing()
+            || self.state.is_naming()
+            || self.state.screen() != Some(self.screen)
+        {
             return;
         }
         if response.clicked() {

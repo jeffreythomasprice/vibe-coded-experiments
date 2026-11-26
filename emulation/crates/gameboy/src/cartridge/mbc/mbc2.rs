@@ -2,6 +2,7 @@
 //! (no external RAM). Two quirks: a single control register whose meaning is
 //! selected by address bit 8, and RAM cells that store only the low nibble.
 
+use serde::{Deserialize, Serialize};
 use crate::cartridge::header::ROM_BANK_SIZE;
 use super::{is_ram_enable_value, MbcImpl};
 
@@ -10,7 +11,7 @@ use super::{is_ram_enable_value, MbcImpl};
 const RAM_MASK: usize = 0x01FF;
 
 /// MBC2 register state.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(in crate::cartridge) struct Mbc2 {
     ram_enabled: bool,
     /// 4-bit ROM bank register; a stored `0` reads back as `1`.

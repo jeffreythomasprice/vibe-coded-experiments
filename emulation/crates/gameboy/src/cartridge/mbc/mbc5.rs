@@ -2,12 +2,13 @@
 //! late DMG and CGB titles require. Unlike MBC1/3 there is no `0 -> 1` bank
 //! remap: ROM bank 0 is genuinely selectable at `0x4000-0x7FFF`.
 
+use serde::{Deserialize, Serialize};
 use crate::cartridge::header::ROM_BANK_SIZE;
 use super::{is_ram_enable_value, simple_ram_read, simple_ram_write, MbcImpl};
 
 /// MBC5 register state. The ROM bank is a full 9 bits, split across a low-8-bit
 /// register (`0x2000-0x2FFF`) and a single 9th bit (`0x3000-0x3FFF`).
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(in crate::cartridge) struct Mbc5 {
     ram_enabled: bool,
     rom_bank: u16,

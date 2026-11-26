@@ -2,6 +2,7 @@
 
 pub mod input;
 pub mod logging;
+pub mod quicksave;
 pub mod scale;
 pub mod settings;
 pub mod storage;
@@ -12,9 +13,10 @@ pub use input::{
 pub use logging::{init, LogInitError};
 pub use scale::{ScaleMode, Transform};
 pub use settings::{
-    AudioSettings, EmulationSettings, GraphicsSettings, InputBindings, Settings, SpeedMode,
+    AudioSettings, Corner, EmulationSettings, GraphicsSettings, HudSettings, InputBindings,
+    SaveStateSettings, Settings, SpeedFade, SpeedMode,
 };
 pub use storage::{
     PersistentStore, RomEntry, RomId, RomLibrary, SaveId, SaveSlot, SaveStore, SettingsStore,
-    StorageError,
+    StateEntry, StorageError,
 };

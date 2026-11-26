@@ -32,6 +32,8 @@
 //! off (the power-on state, since everything comes up zeroed) all of it is
 //! freely accessible.
 
+use crate::state::boxed_bytes;
+use serde::{Deserialize, Serialize};
 use crate::cpu::Interrupt;
 
 const VRAM_SIZE: usize = 0x2000;
@@ -76,7 +78,7 @@ const OBJ_ATTR_XFLIP: u8 = 1 << 5;
 const OBJ_ATTR_PALETTE: u8 = 1 << 4; // 0 = OBP0, 1 = OBP1
 
 /// A PPU rendering mode, occupying the low two bits of `STAT`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Mode {
     HBlank,
     VBlank,
@@ -120,10 +122,13 @@ impl PpuStep {
 }
 
 /// The DMG PPU. See the module docs for the timing and rendering model.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Ppu {
+    #[serde(with = "boxed_bytes")]
     vram: Box<[u8; VRAM_SIZE]>,
+    #[serde(with = "boxed_bytes")]
     oam: Box<[u8; OAM_SIZE]>,
+    #[serde(with = "boxed_bytes")]
     framebuffer: Box<[u8; FB_SIZE]>,
 
     lcdc: u8,
@@ -151,6 +156,7 @@ pub struct Ppu {
 
     /// The current line's BG/window color id (`0-3`, before palette mapping),
     /// kept so sprites can honor the OBJ-to-BG priority bit.
+    #[serde(skip, default = "empty_scanline")]
     bg_color_id: [u8; SCREEN_W],
 }
 
@@ -158,6 +164,10 @@ impl Default for Ppu {
     fn default() -> Ppu {
         Ppu::new()
     }
+}
+
+fn empty_scanline() -> [u8; SCREEN_W] {
+    [0; SCREEN_W]
 }
 
 impl Ppu {

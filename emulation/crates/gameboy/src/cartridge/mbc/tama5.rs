@@ -6,10 +6,11 @@
 //! are not emulated; the RAM window reads as open bus. This will not run the
 //! Tamagotchi games correctly, but it loads and maps ROM without panicking.
 
+use serde::{Deserialize, Serialize};
 use crate::cartridge::header::ROM_BANK_SIZE;
 use super::MbcImpl;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(in crate::cartridge) struct Tama5 {
     rom_bank: u8,
 }

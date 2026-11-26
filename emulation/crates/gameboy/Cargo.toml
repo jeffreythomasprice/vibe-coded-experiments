@@ -10,6 +10,8 @@ description = "Game Boy (SM83) emulator core"
 common.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
+serde.workspace = true
+postcard.workspace = true
 
 # Dev-only: the test-ROM example (`examples/run_rom.rs`) shows live video in a
 # window and encodes screenshots. Keeping these out of [dependencies] preserves

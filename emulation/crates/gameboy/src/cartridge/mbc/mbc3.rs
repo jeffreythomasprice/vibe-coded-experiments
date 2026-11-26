@@ -2,12 +2,13 @@
 //! optional real-time clock. Like MBC1 but with a full 7-bit ROM bank (no
 //! forbidden banks) and an RTC mapped over the RAM window.
 
+use serde::{Deserialize, Serialize};
 use crate::cartridge::header::ROM_BANK_SIZE;
 use super::rtc::{Rtc, REG_DAY_HIGH, REG_SECONDS};
 use super::{is_ram_enable_value, simple_ram_read, simple_ram_write, MbcImpl};
 
 /// MBC3 register state.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(in crate::cartridge) struct Mbc3 {
     /// Gates both external RAM and the RTC registers.
     ram_rtc_enabled: bool,

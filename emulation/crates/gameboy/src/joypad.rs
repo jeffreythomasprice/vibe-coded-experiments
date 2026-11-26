@@ -27,6 +27,7 @@
 //! line low. That edge is detected in one place ([`Joypad::detect_edge`]), the
 //! same single-helper approach as the timer's falling-edge detector.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 use crate::input::GameboyButton;
@@ -62,7 +63,7 @@ fn button_mask(button: GameboyButton) -> u8 {
 }
 
 /// The DMG joypad register. See the module docs for the matrix model.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Joypad {
     /// Which buttons are currently held, as a bitfield (see [`button_mask`]); a
     /// `1` bit means held. The low nibble is the d-pad row, the high nibble the

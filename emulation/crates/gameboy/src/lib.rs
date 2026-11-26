@@ -16,6 +16,7 @@ pub mod joypad;
 pub mod memory;
 pub mod ppu;
 pub mod serial;
+pub mod state;
 pub mod testrom;
 pub mod timer;
 
@@ -28,6 +29,7 @@ pub use joypad::Joypad;
 pub use memory::SystemBus;
 pub use ppu::{Mode, Ppu, PpuStep};
 pub use serial::Serial;
+pub use state::StateError;
 pub use timer::Timer;
 
 /// Native resolution of the original Game Boy LCD, in pixels.
@@ -41,6 +43,7 @@ pub const CLOCK_HZ: u32 = 4_194_304;
 /// this yields the DMG's ~59.7275 Hz refresh.
 pub const T_CYCLES_PER_FRAME: u32 = 70_224;
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 /// The outcome of driving the machine for one frame.
@@ -59,7 +62,7 @@ pub struct FrameResult {
 /// runs the machine forward until the PPU completes a frame. Wall-clock pacing
 /// (matching or scaling real hardware speed) is the host shell's concern, not
 /// this type's.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Emulator {
     cpu: Cpu,
     bus: SystemBus,

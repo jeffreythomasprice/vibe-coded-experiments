@@ -5,13 +5,14 @@
 //! rather than an envelope, and it has no volume envelope — the output level is
 //! a coarse shift (`NR32`).
 
+use serde::{Deserialize, Serialize};
 use super::components::{dac_output, LengthCounter};
 
 /// Right-shift applied to each 4-bit sample per `NR32`'s output-level code:
 /// mute, 100%, 50%, 25%.
 const VOLUME_SHIFT: [u8; 4] = [4, 0, 1, 2];
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct WaveChannel {
     enabled: bool,
     dac_enabled: bool,

@@ -15,6 +15,8 @@
 //! [`OamDma::advance`] just reports the range of byte indices that came due and
 //! lets the owner do the copying.
 
+use serde::{Deserialize, Serialize};
+
 /// How long a full transfer takes, in T-cycles: 160 bytes × 4 T-cycles
 /// (one M-cycle) per byte.
 const TRANSFER_TCYCLES: u32 = OAM_BYTES as u32 * 4;
@@ -23,7 +25,7 @@ const TRANSFER_TCYCLES: u32 = OAM_BYTES as u32 * 4;
 const OAM_BYTES: u8 = 0xA0;
 
 /// The DMG OAM DMA controller. See the module docs for the transfer model.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OamDma {
     /// The last value written to `0xFF46`. Doubles as the register readback and
     /// the high byte of the transfer's source address.

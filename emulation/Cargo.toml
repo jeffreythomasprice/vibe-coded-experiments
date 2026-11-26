@@ -40,8 +40,15 @@ anyhow = "1.0"
 
 # Serialization / config
 serde = { version = "1.0", features = ["derive"] }
+postcard = { version = "1.1", default-features = false, features = ["use-std"] }
 toml = "0.8"
 directories = "6"
+
+# Ctrl+C / SIGTERM handling, so the game is saved on the way out
+ctrlc = { version = "3.4", features = ["termination"] }
+
+# Local time for save-state dates
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 # Image encoding (test-ROM harness screenshots; dev-only)
 png = "0.17"

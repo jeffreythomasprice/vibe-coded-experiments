@@ -6,6 +6,8 @@
 //! PPU), so each of the eight sub-steps lands on the exact cycle even when an
 //! instruction advances the clock by many T-cycles.
 
+use serde::{Deserialize, Serialize};
+
 /// T-cycles between frame-sequencer steps: `4194304 / 512`.
 const PERIOD: u32 = 8192;
 
@@ -19,7 +21,7 @@ pub(crate) struct FrameEvents {
 
 /// The 8-step frame sequencer. Length fires on steps 0/2/4/6 (256 Hz), sweep on
 /// 2/6 (128 Hz), and envelope on 7 (64 Hz).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct FrameSequencer {
     counter: u32,
     step: u8,

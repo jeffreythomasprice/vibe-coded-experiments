@@ -7,6 +7,8 @@
 //! and lets these fiddly bits (envelope stepping, the sweep overflow/negate
 //! rules) be unit-tested in isolation.
 
+use serde::{Deserialize, Serialize};
+
 /// Map a channel's 4-bit digital output (`0-15`) to an analog sample in
 /// `[-1.0, 1.0]`. A powered-off DAC produces analog silence (`0.0`) regardless
 /// of the digital value; a powered DAC producing digital `0` sits at the `-1.0`
@@ -24,7 +26,7 @@ pub(crate) fn dac_output(digital: u8, dac_on: bool) -> f32 {
 ///
 /// The reload maximum differs by channel: 64 for the square and noise channels
 /// (6-bit length load) and 256 for the wave channel (8-bit load).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct LengthCounter {
     counter: u16,
     enabled: bool,
@@ -73,7 +75,7 @@ impl LengthCounter {
 }
 
 /// A channel's volume envelope: steps the output volume up or down at 64 Hz.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct VolumeEnvelope {
     /// The volume loaded on trigger (`NRx2` bits 4-7).
     initial_volume: u8,
@@ -146,7 +148,7 @@ pub(crate) struct SweepUpdate {
 /// Channel 1's frequency sweep (`NR10`): periodically shifts the channel
 /// frequency up or down, disabling the channel if a computed frequency would
 /// overflow the 11-bit range.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct Sweep {
     period: u8,
     negate: bool,

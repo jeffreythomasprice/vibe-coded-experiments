@@ -5,6 +5,7 @@
 //! register is stubbed — reads return `0xC1` (no IR light detected), which the
 //! few HuC1 titles tolerate.
 
+use serde::{Deserialize, Serialize};
 use crate::cartridge::header::ROM_BANK_SIZE;
 use super::{simple_ram_read, simple_ram_write, MbcImpl};
 
@@ -14,7 +15,7 @@ const IR_MODE: u8 = 0x0E;
 /// Value returned when reading the IR register with no incoming light.
 const IR_NO_SIGNAL: u8 = 0xC1;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(in crate::cartridge) struct HuC1 {
     ir_mode: bool,
     rom_bank: u8,

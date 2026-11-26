@@ -1,5 +1,6 @@
 //! MBC1: types `0x01`-`0x03`. Up to 2 MiB ROM and/or 32 KiB RAM.
 
+use serde::{Deserialize, Serialize};
 use crate::cartridge::header::ROM_BANK_SIZE;
 use super::{is_ram_enable_value, simple_ram_read, simple_ram_write, MbcImpl};
 
@@ -9,7 +10,7 @@ use super::{is_ram_enable_value, simple_ram_read, simple_ram_write, MbcImpl};
 /// to `0x2000-0x3FFF` and a 2-bit high value written to `0x4000-0x5FFF`. The
 /// high bits act as ROM bank bits 5-6 in ROM-banking mode, or as the RAM bank
 /// number in RAM-banking mode.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(in crate::cartridge) struct Mbc1 {
     ram_enabled: bool,
     /// 5-bit low bank register; hardware forces a stored `0` up to `1`.

@@ -1,11 +1,12 @@
 //! No mapper: types `0x00` (ROM only), `0x08`/`0x09` (ROM + optional RAM).
 
+use serde::{Deserialize, Serialize};
 use super::{simple_ram_read, simple_ram_write, MbcImpl};
 
 /// A cartridge with no bank controller. ROM is straight-mapped across
 /// `0x0000-0x7FFF`; optional external RAM sits at `0xA000-0xBFFF` with no enable
 /// register.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub(in crate::cartridge) struct RomOnly;
 
 impl RomOnly {

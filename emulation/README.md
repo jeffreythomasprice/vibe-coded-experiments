@@ -40,8 +40,14 @@ An overlay menu, rendered on top of the video output in the embedded
 the shell starts with no ROM, and can be toggled any time with the **menu key**
 (**Escape** by default, rebindable). While it is open the emulated machine pauses.
 
-- **Root** — `Select ROM` (or `Select A Different ROM` when a game is running),
-  `Options`, `Exit`.
+- **Root** — `Select ROM` (`Change ROM` when a game is running), `Save State`,
+  `Load State` and `Reset Game` (only with a game loaded), `Options`, `Exit`.
+- **Reset Game** — restarts from power-on, without asking. The in-game save and
+  save states are kept.
+- **Save State** — `New Save` asks for a name (a timestamped one is suggested);
+  picking an existing save overwrites it immediately.
+- **Load State** — the game's saves (named, quicksaves, and the autosave)
+  together, newest first.
 - **Select ROM** — a scrollable list of the ROMs found in the configured roms dir
   (the same catalog `list-roms` prints). Picking one hot-loads it, flushing the
   current game's battery first.
@@ -80,8 +86,8 @@ Three kinds of state live there:
 
 | State | Location | Notes |
 | --- | --- | --- |
-| Settings | `settings.toml` | Graphics scale mode; input bindings. |
-| Saves | `saves/` | Battery RAM (and, later, save states). Configurable. |
+| Settings | `settings.toml` | Graphics scale mode; save-state options; input bindings. |
+| Saves | `saves/` | Battery RAM and save states. Configurable. |
 | ROMs | `roms/` | Where the in-app ROM browser and `list-roms` look. Configurable. |
 
 ### Creating `settings.toml`
@@ -120,6 +126,8 @@ it. Each default pairs a keyboard key with an Xbox controller button:
 | Start | `Enter` | Menu |
 | Select | `Right Shift` | View |
 | Emulator menu | `Escape` | Guide |
+| Quicksave | `F5` | — |
+| Quickload | `F8` | — |
 
 An action **omitted** from the file uses its default; an action set to an **empty
 array** (`up = []`) is deliberately unbound. Because the defaults live in code, the
@@ -205,3 +213,49 @@ Battery-backed cartridge RAM is persisted through the storage layer into
 `saves/<title>.sav`, where `<title>` is derived from the cartridge header title
 (falling back to the ROM's file name). **This differs from many emulators, which
 put the `.sav` next to the ROM** — existing side-by-side `.sav` files are not read.
+
+## Speed box
+
+The speed box fades five seconds after the speed last changed (or after launch).
+Its corner, delay and faded transparency are configurable:
+
+```toml
+[hud]
+speed_corner = "top_left"        # or top_right, bottom_left, bottom_right
+speed_fade_delay_secs = 5.0
+speed_faded_transparency = 0.6   # 0 is opaque, 1 is invisible
+```
+
+## Save states
+
+**F5** quicksaves and **F8** loads the most recent quicksave; both can be rebound
+under Options → Input Bindings. Quicksaves rotate through `quicksave-1` to
+`quicksave-5`, overwriting the oldest once all exist. Change the number with:
+
+```toml
+[saves]
+quicksave_count = 10
+```
+
+States live in `saves/states/<title>/<name>.state`. A file is part of the rotation
+purely because of its name, so a manual save called `quicksave-2` counts too.
+
+### Autosave and resume
+
+The game is autosaved as `autosave` every five minutes while playing, and when you
+leave it: closing the window, `Exit`, Ctrl+C, changing ROM, or resetting. It is
+skipped if nothing has run since the last load, or if the emulated CPU has
+crashed. Change or turn off the periodic save with:
+
+```toml
+[saves]
+autosave_interval_secs = 60  # 0 disables the periodic autosave
+```
+
+Loading a ROM resumes its most recent state, whether manual, quicksave, or
+autosave. If that one can't be loaded, the next most recent is tried. Use
+**Reset Game** in the menu to start from power-on.
+
+A state includes cartridge RAM, so loading an old one also rolls back the in-game
+save, and the `.sav` is rewritten from it at the next save or on exit. States from
+a build with a different state format are rejected.

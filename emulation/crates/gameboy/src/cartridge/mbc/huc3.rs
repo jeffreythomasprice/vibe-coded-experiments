@@ -5,10 +5,11 @@
 //! banking. The command/RTC interface is not emulated; RAM behaves as ordinary
 //! banked SRAM when enabled.
 
+use serde::{Deserialize, Serialize};
 use crate::cartridge::header::ROM_BANK_SIZE;
 use super::{is_ram_enable_value, simple_ram_read, simple_ram_write, MbcImpl};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(in crate::cartridge) struct HuC3 {
     ram_enabled: bool,
     rom_bank: u8,

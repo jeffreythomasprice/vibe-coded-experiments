@@ -25,6 +25,23 @@ scale_mode = "fit"
 enabled = true
 volume = 0.5
 
+[saves]
+# How many rotating quicksaves (quicksave-1, quicksave-2, ...) to keep per game.
+# Once all exist, the oldest is overwritten. At least 1.
+quicksave_count = 5
+# Seconds between periodic autosaves while a game is playing. 0 turns them off;
+# the game is still autosaved when you leave it.
+autosave_interval_secs = 300
+
+[hud]
+# The corner the speed box sits in: "top_left" (default), "top_right",
+# "bottom_left" or "bottom_right".
+speed_corner = "top_left"
+# Seconds after a speed change (or launch) before the speed box fades.
+speed_fade_delay_secs = 5.0
+# How see-through the faded box is, from 0.0 (opaque) to 1.0 (invisible).
+speed_faded_transparency = 0.6
+
 [paths]
 # Where the file-system backend keeps ROMs and saves. Absolute paths only (no `~`
 # expansion). Omit either key to use the default, which sits next to this file:
@@ -51,7 +68,9 @@ volume = 0.5
 #   cargo run -p emulator -- print-config > ~/.config/emulator/settings.toml
 #
 # Generic actions, shared by every emulator core:
-# menu = [{ key = "escape" }, { gamepad_button = "mode" }]   # open the menu
+# menu       = [{ key = "escape" }, { gamepad_button = "mode" }]   # open the menu
+# quick_save = [{ key = "f5" }]
+# quick_load = [{ key = "f8" }]
 
 [gameboy.input]
 # Game Boy buttons. Each defaults to a keyboard key and an Xbox-style controller

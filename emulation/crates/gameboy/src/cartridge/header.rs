@@ -8,6 +8,7 @@
 //! `references/gameboy/Specifications.html` (the "Cartridge Header" section) and
 //! are summarized in `GAMEBOY_IMPLEMENTATION_NOTES.md`.
 
+use serde::{Deserialize, Serialize};
 use crate::cartridge::CartridgeError;
 
 /// First byte of the header region.
@@ -39,7 +40,7 @@ pub const RAM_BANK_SIZE: usize = 0x2000;
 ///
 /// This names the *chip*; RAM/battery/timer/rumble/sensor presence is tracked
 /// separately on [`CartridgeType`] because those cut across mapper families.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Mapper {
     RomOnly,
     Mbc1,
@@ -60,7 +61,7 @@ pub enum Mapper {
 }
 
 /// Fully decoded `0x0147` cartridge-type byte.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CartridgeType {
     pub mapper: Mapper,
     pub has_ram: bool,
@@ -127,7 +128,7 @@ impl CartridgeType {
 }
 
 /// Game Boy Color compatibility, from the `0x0143` flag byte.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CgbFlag {
     /// Not a CGB-aware cartridge (`0x0143` is part of the title).
     None,
@@ -154,7 +155,7 @@ impl CgbFlag {
 }
 
 /// Intended sales region, from the `0x014A` byte.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Destination {
     Japanese,
     NonJapanese,
@@ -172,7 +173,7 @@ impl Destination {
 }
 
 /// Fully parsed cartridge header.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CartridgeHeader {
     pub title: String,
     pub cartridge_type: CartridgeType,

@@ -28,6 +28,8 @@
 //! Out of scope (later items): real link-cable emulation and the `[CGB]` fast
 //! clock (`SC` bit 1) / double-speed timing.
 
+use serde::{Deserialize, Serialize};
+
 /// `SB` (`0xFF01`), the 8-bit serial transfer data register.
 const SB_ADDR: u16 = 0xFF01;
 /// `SC` (`0xFF02`), the serial transfer control register.
@@ -52,7 +54,7 @@ const TRANSFER_CYCLES: u32 = 4096;
 const DISCONNECTED_BYTE: u8 = 0xFF;
 
 /// The DMG serial port. See the module docs for the single-player stub model.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Serial {
     /// `SB` (`0xFF01`), the transfer data register.
     sb: u8,
@@ -64,6 +66,7 @@ pub struct Serial {
     /// Bytes clocked *out* over the link port, in transmission order: one is
     /// appended each time a transfer starts (capturing the staged `SB`). Drained
     /// by [`Serial::take_output`]; see the module docs.
+    #[serde(skip)]
     output: Vec<u8>,
 }
 

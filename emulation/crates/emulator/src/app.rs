@@ -1,15 +1,19 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::Context as _;
+use chrono::{DateTime, Local};
 use common::input::{Action, GenericAction};
-use common::AudioSettings;
+use common::storage::AUTOSAVE_NAME;
+use common::{quicksave, AudioSettings, StateEntry};
 use common::{
-    ActionBindings, InputBindings, InputTrigger, RomId, RomLibrary, SaveId, ScaleMode, SpeedMode,
+    ActionBindings, Corner, InputBindings, InputTrigger, RomId, SaveId, ScaleMode, SpeedFade,
+    SpeedMode,
 };
-use gameboy::{Cartridge, Emulator, GameboyButton};
+use gameboy::{Emulator, GameboyButton};
 use gilrs::Gilrs;
-use ui::{BindingRow, BindingSet, MenuCommand, MenuData, MenuInput, MenuState, RomChoice};
+use ui::{
+    BindingRow, BindingSet, MenuCommand, MenuData, MenuInput, MenuState, RomChoice, StateChoice,
+};
 use video::EguiPaint;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -18,11 +22,13 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 
+use crate::autosave::Autosave;
 use crate::catalog::RomCatalog;
 use crate::egui_platform::EguiPlatform;
 use crate::gfx::Gfx;
 use crate::input::{self, InputRouter};
 use crate::pace::Pacer;
+use crate::rom::Resume;
 use crate::snd::Snd;
 use crate::storage::FileStore;
 
@@ -37,6 +43,16 @@ use crate::storage::FileStore;
 /// than the display can retire them (which would refill the swapchain queue and
 /// reintroduce the vsync stall this is meant to avoid).
 const MIN_REDRAW_INTERVAL: Duration = Duration::from_micros(16_700);
+
+/// How long a status message stays on the HUD.
+const TOAST_DURATION: Duration = Duration::from_secs(2);
+
+/// The save states as the open menu shows them, captured once rather than reread
+/// every frame.
+struct StateMenu {
+    choices: Vec<StateChoice>,
+    suggested_name: String,
+}
 
 /// The winit application: owns the window and its renderer once resumed, the
 /// persistent-state store, the loaded cartridge, and the menu overlay.
@@ -56,6 +72,15 @@ pub struct App {
     catalog: RomCatalog,
     emu: Option<Emulator>,
     save_id: Option<SaveId>,
+    /// The loaded ROM, so it can be reset.
+    rom_id: Option<RomId>,
+    autosave_timer: Autosave,
+    /// How many rotating quicksaves to keep per game.
+    quicksave_count: u32,
+    /// `None` until the open menu needs it, and again once it goes stale.
+    state_menu: Option<StateMenu>,
+    /// The current status message and when it appeared.
+    toast: Option<(String, Instant)>,
     scale_mode: ScaleMode,
     audio: AudioSettings,
     input: InputRouter,
@@ -70,31 +95,40 @@ pub struct App {
     /// Whether the user has paused the machine (independent of the menu, which
     /// also pauses emulation while open).
     paused: bool,
+    speed_corner: Corner,
+    speed_fade: SpeedFade,
+    /// When the speed was last changed (or the app launched), which the speed
+    /// box's fade counts from.
+    speed_changed_at: Instant,
     /// When the last present was requested, to throttle redraws to the display
     /// rate (see [`MIN_REDRAW_INTERVAL`]). `None` until the first present.
     last_redraw: Option<Instant>,
 }
 
 impl App {
-    /// Create the application with a store and an optional already-loaded cartridge
-    /// (plus its save identity). `scale_mode` comes from the loaded settings; the
-    /// input router is built from the loaded generic and Game Boy bindings.
+    /// Create the application with a store and an optional ROM to start, resuming
+    /// its latest save. `scale_mode` comes from the loaded settings; the input
+    /// router is built from the loaded generic and Game Boy bindings. Fails only
+    /// if the requested ROM can't be loaded.
     pub fn new(
         store: FileStore,
-        cartridge: Option<Cartridge>,
-        save_id: Option<SaveId>,
+        rom: Option<RomId>,
         scale_mode: ScaleMode,
         speed_override: Option<SpeedMode>,
-    ) -> App {
+    ) -> anyhow::Result<App> {
         let settings = store.settings();
         let generic_bindings = settings.input.clone();
         let gameboy_bindings = store.gameboy_bindings();
         let input = InputRouter::new(&generic_bindings, &gameboy_bindings);
         let audio = settings.audio.clone();
+        let quicksave_count = settings.saves.effective_quicksave_count();
         // The CLI override wins over the persisted setting; neither is written back.
         let speed = speed_override.unwrap_or(settings.emulation.speed);
         let pacer = Pacer::new(speed);
-        let emu = cartridge.map(Emulator::new);
+        let autosave_timer = Autosave::new(settings.saves.autosave_interval(), Instant::now());
+        let speed_corner = settings.hud.speed_corner;
+        let speed_fade = settings.hud.speed_fade();
+        tracing::debug!(?speed_corner, ?speed_fade, "speed box configured");
         let catalog = RomCatalog::load(&store);
         let gilrs = match Gilrs::new() {
             Ok(gilrs) => Some(gilrs),
@@ -104,7 +138,7 @@ impl App {
             }
         };
 
-        App {
+        let mut app = App {
             window: None,
             gfx: None,
             snd: None,
@@ -112,8 +146,13 @@ impl App {
             menu: MenuState::default(),
             store,
             catalog,
-            emu,
-            save_id,
+            emu: None,
+            save_id: None,
+            rom_id: None,
+            autosave_timer,
+            quicksave_count,
+            state_menu: None,
+            toast: None,
             scale_mode,
             audio,
             input,
@@ -123,8 +162,15 @@ impl App {
             pacer,
             faulted: false,
             paused: false,
+            speed_corner,
+            speed_fade,
+            speed_changed_at: Instant::now(),
             last_redraw: None,
+        };
+        if let Some(id) = rom {
+            app.start_game(&id, true)?;
         }
+        Ok(app)
     }
 
     /// Request a present, but at most once per [`MIN_REDRAW_INTERVAL`], so we
@@ -157,10 +203,11 @@ impl App {
     fn apply_generic_actions(&mut self) {
         for action in self.input.take_generic_actions() {
             match action {
-                GenericAction::SaveBattery => self.save_battery(),
+                GenericAction::QuickSave => self.quick_save(),
+                GenericAction::QuickLoad => self.quick_load(),
                 GenericAction::Menu => self.menu.toggle(),
-                GenericAction::IncreaseSpeed => self.pacer.set_mode(self.pacer.mode().increased()),
-                GenericAction::DecreaseSpeed => self.pacer.set_mode(self.pacer.mode().decreased()),
+                GenericAction::IncreaseSpeed => self.change_speed(self.pacer.mode().increased()),
+                GenericAction::DecreaseSpeed => self.change_speed(self.pacer.mode().decreased()),
                 GenericAction::TogglePause => {
                     self.paused = !self.paused;
                     // Re-arm the pacer so the paused interval isn't owed as frames.
@@ -172,17 +219,31 @@ impl App {
         }
     }
 
+    /// Switch speed and show the speed box at full opacity again, even if `mode`
+    /// is the current one (already at the end of the ladder).
+    fn change_speed(&mut self, mode: SpeedMode) {
+        self.pacer.set_mode(mode);
+        self.speed_changed_at = Instant::now();
+    }
+
     /// Carry out a command the menu produced.
     fn apply_menu_command(&mut self, command: MenuCommand, event_loop: &ActiveEventLoop) {
         match command {
             MenuCommand::LoadRom(id) => {
-                if let Err(err) = self.load_rom(&RomId(id)) {
-                    tracing::error!(%err, "failed to load rom from the menu");
+                if let Err(err) = self.start_game(&RomId(id), true) {
+                    tracing::error!("failed to load rom from the menu: {err:#}");
+                    self.show_toast("Could not load ROM");
                 }
             }
-            // The battery flush happens in `Drop` when the loop returns, which
-            // covers this and every other exit path.
+            MenuCommand::ResetGame => self.reset_game(),
+            // Saving on the way out happens in `Drop` when the loop returns,
+            // which covers this and every other exit path.
             MenuCommand::Exit => event_loop.exit(),
+            MenuCommand::SaveState(name) => {
+                self.save_state(&name);
+                self.menu.close();
+            }
+            MenuCommand::LoadState(name) => self.load_state(&name),
             MenuCommand::CloseMenu => self.menu.close(),
             MenuCommand::SetBinding {
                 set,
@@ -194,19 +255,145 @@ impl App {
         }
     }
 
-    /// Hot-swap the running cartridge for the ROM with `id`, mirroring the
-    /// `main.rs::run_rom` load path: flush the current battery, read+parse the new
-    /// ROM, restore its battery, and rebuild the emulator. Closes the menu on
-    /// success.
-    fn load_rom(&mut self, id: &RomId) -> anyhow::Result<()> {
-        self.save_battery();
+    /// Show a status message on the HUD for a moment.
+    fn show_toast(&mut self, message: impl Into<String>) {
+        self.toast = Some((message.into(), Instant::now()));
+        self.request_present(true);
+    }
 
-        let bytes = self
-            .store
-            .read_rom(id)
-            .with_context(|| format!("failed to read rom {}", id.0))?;
-        let mut cart = Cartridge::from_bytes(&bytes)
-            .with_context(|| format!("failed to parse rom {}", id.0))?;
+    /// The loaded game's save states, newest first.
+    fn list_states(&self) -> anyhow::Result<Vec<StateEntry>> {
+        match &self.save_id {
+            Some(id) => crate::rom::list_states(id, &self.store),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    /// Save into the next quicksave of the rotation.
+    fn quick_save(&mut self) {
+        match self.list_states() {
+            Ok(states) => {
+                let name = quicksave::next_quicksave(&states, self.quicksave_count);
+                self.save_state(&name);
+            }
+            Err(err) => {
+                tracing::error!("quicksave failed: {err:#}");
+                self.show_toast("Save failed");
+            }
+        }
+    }
+
+    /// Restore the most recent quicksave.
+    fn quick_load(&mut self) {
+        match self.list_states() {
+            Ok(states) => match quicksave::latest_quicksave(&states, self.quicksave_count) {
+                Some(state) => self.load_state(&state.name),
+                None => self.show_toast("No quicksave yet"),
+            },
+            Err(err) => {
+                tracing::error!("quickload failed: {err:#}");
+                self.show_toast("Load failed");
+            }
+        }
+    }
+
+    /// Write the save state `name`, flushing the battery save alongside it.
+    fn write_state(&mut self, name: &str) -> anyhow::Result<()> {
+        let (Some(emu), Some(id)) = (&self.emu, &self.save_id) else {
+            anyhow::bail!("no game loaded");
+        };
+        let result = crate::rom::save_state(emu, id, name, &self.store);
+        self.save_battery();
+        self.state_menu = None;
+        result
+    }
+
+    /// A save the user asked for, reported on the HUD.
+    fn save_state(&mut self, name: &str) {
+        if self.emu.is_none() {
+            self.show_toast("No game loaded");
+            return;
+        }
+        match self.write_state(name) {
+            Ok(()) => self.show_toast(format!("Saved {name}")),
+            Err(err) => {
+                tracing::error!("{err:#}");
+                self.show_toast("Save failed");
+            }
+        }
+    }
+
+    /// Restore the save state `name`, show its frame, and close the menu. On
+    /// failure the machine carries on as it was.
+    fn load_state(&mut self, name: &str) {
+        let (Some(emu), Some(id)) = (&mut self.emu, &self.save_id) else {
+            self.show_toast("No game loaded");
+            return;
+        };
+        if let Err(err) = crate::rom::load_state(emu, id, name, &self.store) {
+            tracing::error!("{err:#}");
+            self.show_toast("Load failed");
+            return;
+        }
+        self.machine_replaced();
+        self.show_toast(format!("Loaded {name}"));
+    }
+
+    /// Get back to playing after the machine's state was swapped out.
+    fn machine_replaced(&mut self) {
+        // Upload right away so the new screen shows even while paused.
+        if let (Some(gfx), Some(emu)) = (self.gfx.as_mut(), self.emu.as_ref()) {
+            if let Err(err) = gfx.update_frame(emu.framebuffer()) {
+                tracing::warn!(%err, "failed to upload frame to the renderer");
+            }
+        }
+        self.faulted = false;
+        self.pacer.resync();
+        // So that loading an old save doesn't soon overwrite the autosave.
+        self.autosave_timer.reset(Instant::now());
+        self.menu.close();
+    }
+
+    /// Write the autosave, if the game has advanced and is worth keeping.
+    /// Returns `None` when it was skipped.
+    fn autosave(&mut self) -> Option<anyhow::Result<()>> {
+        // Resuming a faulted machine, or one caught mid-panic, would be useless.
+        if self.faulted
+            || std::thread::panicking()
+            || !self.autosave_timer.has_unsaved_progress()
+        {
+            return None;
+        }
+        self.autosave_timer.reset(Instant::now());
+        Some(self.write_state(AUTOSAVE_NAME))
+    }
+
+    /// Save everything about the current game before it goes away.
+    fn leave_game(&mut self) {
+        match self.autosave() {
+            Some(Ok(())) => {}
+            Some(Err(err)) => tracing::error!("autosave failed: {err:#}"),
+            None => self.save_battery(),
+        }
+    }
+
+    /// Read the loaded game's save states for the menu.
+    fn build_state_menu(&self) -> StateMenu {
+        let states = self.list_states().unwrap_or_else(|err| {
+            tracing::error!("{err:#}");
+            Vec::new()
+        });
+        StateMenu {
+            choices: states.iter().map(state_choice).collect(),
+            suggested_name: Local::now().format("save-%Y%m%d-%H%M%S").to_string(),
+        }
+    }
+
+    /// Swap the running game for the ROM with `id`, saving the outgoing one. The
+    /// new one starts from its battery save and, with `resume`, its latest save
+    /// state; otherwise from power-on. On error the current game carries on.
+    fn start_game(&mut self, id: &RomId, resume: bool) -> anyhow::Result<()> {
+        self.leave_game();
 
         // The save identity wants the ROM's file stem as a fallback for blank
         // header titles; the catalog already carries it.
@@ -217,15 +404,38 @@ impl App {
             .find(|info| &info.id == id)
             .map(|info| info.file_stem.clone())
             .unwrap_or_else(|| id.0.clone());
-        let save_id = crate::rom::save_id_for(&cart, &stem);
-        crate::rom::restore_battery(&mut cart, &save_id, &self.store)?;
+        let (cart, save_id) = crate::rom::open_rom(id, &stem, &self.store)?;
+        let mut emu = Emulator::new(cart);
+        let resumed = resume.then(|| crate::rom::resume_latest(&mut emu, &save_id, &self.store));
 
-        self.emu = Some(Emulator::new(cart));
+        self.emu = Some(emu);
         self.save_id = Some(save_id);
-        self.faulted = false;
-        self.menu.close();
-        tracing::info!(rom = %id.0, "loaded rom from the menu");
+        self.rom_id = Some(id.clone());
+        self.state_menu = None;
+        self.toast = None;
+        self.machine_replaced();
+        match resumed {
+            Some(Resume::Loaded(name)) => self.show_toast(format!("Resumed {name}")),
+            Some(Resume::Failed) => self.show_toast("Could not load saves"),
+            Some(Resume::NoStates) | None => {}
+        }
+        tracing::info!(rom = %id.0, "started game");
         Ok(())
+    }
+
+    /// Restart the current game from power-on, keeping its saves.
+    fn reset_game(&mut self) {
+        let Some(id) = self.rom_id.clone() else {
+            self.show_toast("No game loaded");
+            return;
+        };
+        match self.start_game(&id, false) {
+            Ok(()) => self.show_toast("Game reset"),
+            Err(err) => {
+                tracing::error!("failed to reset: {err:#}");
+                self.show_toast("Reset failed");
+            }
+        }
     }
 
     /// Apply a rebind from the menu: seed from the action's currently *resolved*
@@ -340,6 +550,18 @@ impl App {
         } else {
             (Vec::new(), Vec::new())
         };
+        if !menu_open {
+            self.state_menu = None;
+        } else if self.state_menu.is_none() {
+            self.state_menu = Some(self.build_state_menu());
+        }
+        if self
+            .toast
+            .as_ref()
+            .is_some_and(|(_, shown)| shown.elapsed() >= TOAST_DURATION)
+        {
+            self.toast = None;
+        }
         let speed_label = self.pacer.mode().label();
         // Only meaningful while actually running; hide the measurement when the
         // machine is halted so a stale reading isn't shown.
@@ -352,8 +574,19 @@ impl App {
             rom_loaded: self.emu.is_some(),
             roms: &roms,
             bindings: &rows,
+            states: self
+                .state_menu
+                .as_ref()
+                .map_or(&[], |menu| menu.choices.as_slice()),
+            suggested_state_name: self
+                .state_menu
+                .as_ref()
+                .map_or("", |menu| menu.suggested_name.as_str()),
+            toast: self.toast.as_ref().map(|(message, _)| message.as_str()),
             speed_label: &speed_label,
             actual_speed,
+            speed_corner: self.speed_corner,
+            speed_opacity: self.speed_fade.opacity(self.speed_changed_at.elapsed()),
             paused: self.paused,
         };
 
@@ -398,6 +631,11 @@ impl App {
         egui_consumed: bool,
         event_loop: &ActiveEventLoop,
     ) {
+        // While a name is being typed the keyboard belongs to egui; otherwise
+        // letters would move the cursor and Escape would close the menu.
+        if self.menu.is_naming() {
+            return;
+        }
         if repeat {
             let direction = input::key_from_winit(code)
                 .and_then(|key| self.input.menu_input(InputTrigger::Key(key)))
@@ -517,6 +755,12 @@ impl ApplicationHandler for App {
         }
     }
 
+    /// The only user event is a request to shut down, sent on Ctrl+C and the like.
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, (): ()) {
+        tracing::info!("termination signal received");
+        event_loop.exit();
+    }
+
     fn window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -534,6 +778,14 @@ impl ApplicationHandler for App {
         // Input handling comes before the gfx guard so it works even during
         // startup and regardless of the renderer.
         match &event {
+            // On gaining focus winit invents a press for each key already held,
+            // which can double up with the real one and fire a hotkey twice.
+            // Synthetic releases are kept, so no button sticks on losing focus.
+            WindowEvent::KeyboardInput {
+                event: key,
+                is_synthetic: true,
+                ..
+            } if key.state == ElementState::Pressed => {}
             WindowEvent::KeyboardInput { event: key, .. } => {
                 if let PhysicalKey::Code(code) = key.physical_key {
                     let pressed = key.state == ElementState::Pressed;
@@ -552,8 +804,8 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::CloseRequested => {
                 tracing::info!("close requested");
-                // The battery save is flushed by `Drop` when the event loop
-                // returns, which also covers the non-graceful exit paths.
+                // Saving is left to `Drop` when the event loop returns, which
+                // also covers the non-graceful exit paths.
                 event_loop.exit();
             }
             WindowEvent::Resized(size) => {
@@ -616,7 +868,7 @@ impl ApplicationHandler for App {
         // redraws ourselves (the run loop no longer does) so the HUD stays live,
         // and poll for a responsive UI.
         self.drive_emulation();
-        if self.menu.is_open() || self.paused {
+        if self.menu.is_open() || self.paused || self.faulted {
             // Nothing to emulate; keep the overlay/HUD live at the display rate
             // and sleep until the next redraw is due rather than busy-spinning
             // on `Poll` (the vsync block used to throttle this implicitly).
@@ -703,22 +955,40 @@ impl App {
         // we just emulated) so a fast/unbounded run isn't serialized behind
         // vsync — see `request_present`.
         if produced {
+            self.autosave_timer.frame_ran();
             self.request_present(false);
+        }
+
+        if self.autosave_timer.is_due(Instant::now()) {
+            if let Some(Err(err)) = self.autosave() {
+                tracing::error!("autosave failed: {err:#}");
+                self.show_toast("Autosave failed");
+            }
         }
     }
 }
 
 impl Drop for App {
-    /// Flush the battery save on the way out. `App` is a local of the run
+    /// Autosave and flush the battery on the way out. `App` is a local of the run
     /// function, so this fires when `run_app` returns — covering every exit path
-    /// (graceful close, surface loss, init failure), not just `CloseRequested`.
+    /// (graceful close, signal, surface loss, init failure), not just
+    /// `CloseRequested`.
     fn drop(&mut self) {
-        self.save_battery();
+        self.leave_game();
     }
 }
 
-/// Turn a stable action name (`save_battery`, `up`) into a display label
-/// (`Save Battery`, `Up`) for the bindings table.
+/// A save state as a menu entry: its name and when it was written, local time.
+fn state_choice(state: &StateEntry) -> StateChoice {
+    let modified = DateTime::<Local>::from(state.modified);
+    StateChoice {
+        name: state.name.clone(),
+        label: format!("{}  {}", state.name, modified.format("%Y-%m-%d %H:%M")),
+    }
+}
+
+/// Turn a stable action name (`quick_save`, `up`) into a display label
+/// (`Quick Save`, `Up`) for the bindings table.
 fn prettify(name: &str) -> String {
     name.split('_')
         .map(|word| {
@@ -770,7 +1040,7 @@ mod tests {
 
     #[test]
     fn prettify_titlecases_and_splits_underscores() {
-        assert_eq!(prettify("save_battery"), "Save Battery");
+        assert_eq!(prettify("quick_save"), "Quick Save");
         assert_eq!(prettify("up"), "Up");
         assert_eq!(prettify("a"), "A");
     }

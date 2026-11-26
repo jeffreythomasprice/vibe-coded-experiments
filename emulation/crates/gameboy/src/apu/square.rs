@@ -6,6 +6,7 @@
 //! address, so [`super::Apu`] can route ch1's and ch2's differing addresses to
 //! the same code.
 
+use serde::{Deserialize, Serialize};
 use super::components::{dac_output, LengthCounter, Sweep, VolumeEnvelope};
 
 /// The four duty-cycle waveforms (12.5%, 25%, 50%, 75%), one 8-sample period
@@ -18,7 +19,7 @@ const DUTY_TABLE: [[u8; 8]; 4] = [
     [0, 1, 1, 1, 1, 1, 1, 0],
 ];
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SquareChannel {
     enabled: bool,
     duty: u8,

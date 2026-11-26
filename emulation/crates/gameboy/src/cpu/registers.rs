@@ -6,10 +6,11 @@
 //! structurally (see [`crate::cpu::flags`]); `set_af` funnels through
 //! `Flags::from_u8` so even `POP AF` cannot smuggle bits into it.
 
+use serde::{Deserialize, Serialize};
 use super::flags::Flags;
 
 /// The CPU register file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Registers {
     pub a: u8,
     pub f: Flags,

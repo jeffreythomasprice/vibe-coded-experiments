@@ -5,10 +5,11 @@
 //! plain MBC1-style banking, which is enough to read ROM and RAM linearly. The
 //! menu/reconfiguration handshake is not emulated.
 
+use serde::{Deserialize, Serialize};
 use crate::cartridge::header::ROM_BANK_SIZE;
 use super::{is_ram_enable_value, simple_ram_read, simple_ram_write, MbcImpl};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(in crate::cartridge) struct Mmm01 {
     ram_enabled: bool,
     rom_bank: u8,

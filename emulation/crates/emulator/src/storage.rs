@@ -7,13 +7,14 @@
 //! identities into safe file names.
 
 use std::fs;
-use std::io;
+use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
 use common::input::{ActionBindings, GenericAction};
 use common::{
-    AudioSettings, EmulationSettings, GraphicsSettings, InputBindings, PersistentStore, RomEntry,
-    RomId, RomLibrary, SaveId, SaveSlot, SaveStore, Settings, SettingsStore, StorageError,
+    AudioSettings, EmulationSettings, GraphicsSettings, HudSettings, InputBindings, PersistentStore, RomEntry,
+    RomId, RomLibrary, SaveId, SaveSlot, SaveStateSettings, SaveStore, Settings, SettingsStore,
+    StateEntry, StorageError,
 };
 use directories::ProjectDirs;
 use gameboy::GameboyButton;
@@ -30,6 +31,8 @@ struct FileConfig {
     graphics: GraphicsSettings,
     audio: AudioSettings,
     emulation: EmulationSettings,
+    saves: SaveStateSettings,
+    hud: HudSettings,
     input: InputBindings,
     gameboy: GameboyConfig,
     paths: PathsConfig,
@@ -50,6 +53,8 @@ struct PathsConfig {
     saves_dir: Option<PathBuf>,
     roms_dir: Option<PathBuf>,
 }
+
+const STATE_EXTENSION: &str = "state";
 
 /// A file-system-backed persistent store rooted at a config directory.
 pub struct FileStore {
@@ -125,6 +130,8 @@ impl FileStore {
             graphics: self.file.graphics.clone(),
             audio: self.file.audio.clone(),
             emulation: self.file.emulation.clone(),
+            saves: self.file.saves.clone(),
+            hud: self.file.hud.clone(),
             input: self.file.input.clone(),
         }
     }
@@ -143,6 +150,8 @@ impl FileStore {
             graphics: GraphicsSettings::default(),
             audio: AudioSettings::default(),
             emulation: EmulationSettings::default(),
+            saves: SaveStateSettings::default(),
+            hud: HudSettings::default(),
             input: InputBindings(ActionBindings::with_all_defaults::<GenericAction>()),
             gameboy: GameboyConfig {
                 input: ActionBindings::with_all_defaults::<GameboyButton>(),
@@ -175,13 +184,19 @@ impl FileStore {
     }
 
     /// Path a `(SaveId, SaveSlot)` maps to under the saves directory.
-    fn save_path(&self, id: &SaveId, slot: SaveSlot) -> PathBuf {
-        let name = sanitize(&id.0);
-        let file = match slot {
-            SaveSlot::Battery => format!("{name}.sav"),
-            SaveSlot::State(n) => format!("{name}.state{n}"),
-        };
-        self.saves_dir.join(file)
+    fn save_path(&self, id: &SaveId, slot: &SaveSlot) -> PathBuf {
+        match slot {
+            SaveSlot::Battery => self.saves_dir.join(format!("{}.sav", sanitize(&id.0))),
+            SaveSlot::State(name) => self
+                .states_dir(id)
+                .join(format!("{}.{STATE_EXTENSION}", sanitize_state_name(name))),
+        }
+    }
+
+    /// The directory holding one game's save states. A directory per game keeps
+    /// state names from colliding with anything derived from titles.
+    fn states_dir(&self, id: &SaveId) -> PathBuf {
+        self.saves_dir.join("states").join(sanitize(&id.0))
     }
 }
 
@@ -198,6 +213,8 @@ impl SettingsStore for FileStore {
         };
         file.graphics = settings.graphics.clone();
         file.emulation = settings.emulation.clone();
+        file.saves = settings.saves.clone();
+        file.hud = settings.hud.clone();
         file.input = settings.input.clone();
         write_config(&self.config_path, &file)?;
         tracing::info!(path = %self.config_path.display(), "saved settings");
@@ -222,7 +239,7 @@ impl RomLibrary for FileStore {
 }
 
 impl SaveStore for FileStore {
-    fn read_save(&self, id: &SaveId, slot: SaveSlot) -> Result<Option<Vec<u8>>, StorageError> {
+    fn read_save(&self, id: &SaveId, slot: &SaveSlot) -> Result<Option<Vec<u8>>, StorageError> {
         let path = self.save_path(id, slot);
         match fs::read(&path) {
             Ok(data) => {
@@ -237,11 +254,50 @@ impl SaveStore for FileStore {
         }
     }
 
-    fn write_save(&self, id: &SaveId, slot: SaveSlot, data: &[u8]) -> Result<(), StorageError> {
+    fn write_save(&self, id: &SaveId, slot: &SaveSlot, data: &[u8]) -> Result<(), StorageError> {
         let path = self.save_path(id, slot);
-        fs::write(&path, data).map_err(|err| io_error(&path, err))?;
+        if let Some(parent) = path.parent() {
+            create_dir(parent)?;
+        }
+        write_atomically(&path, data).map_err(|err| io_error(&path, err))?;
         tracing::info!(path = %path.display(), bytes = data.len(), "wrote save");
         Ok(())
+    }
+
+    fn list_states(&self, id: &SaveId) -> Result<Vec<StateEntry>, StorageError> {
+        let dir = self.states_dir(id);
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(err) => return Err(io_error(&dir, err)),
+        };
+
+        let mut states = Vec::new();
+        for entry in entries {
+            let path = entry.map_err(|err| io_error(&dir, err))?.path();
+            if path.extension().and_then(|e| e.to_str()) != Some(STATE_EXTENSION) {
+                continue;
+            }
+            // Only names that map back onto the same file can be loaded.
+            let Some(name) = path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .filter(|stem| sanitize_state_name(stem) == *stem)
+            else {
+                tracing::warn!(path = %path.display(), "ignoring save state with an unusable name");
+                continue;
+            };
+            let metadata = fs::metadata(&path).map_err(|err| io_error(&path, err))?;
+            if !metadata.is_file() {
+                continue;
+            }
+            states.push(StateEntry {
+                name: name.to_string(),
+                modified: metadata.modified().map_err(|err| io_error(&path, err))?,
+            });
+        }
+        tracing::debug!(dir = %dir.display(), count = states.len(), "listed save states");
+        Ok(states)
     }
 }
 
@@ -291,6 +347,27 @@ fn create_dir(path: &Path) -> Result<(), StorageError> {
     fs::create_dir_all(path).map_err(|err| io_error(path, err))
 }
 
+/// Replace a file's contents all at once, so that being killed part-way leaves
+/// the old contents intact: write a temporary file beside it, then rename that
+/// over it. A symlink is followed, and stays a symlink.
+fn write_atomically(path: &Path, data: &[u8]) -> io::Result<()> {
+    let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let mut temporary = target.clone().into_os_string();
+    temporary.push(".tmp");
+
+    let result = fs::File::create(&temporary)
+        .and_then(|mut file| {
+            file.write_all(data)?;
+            file.sync_all()
+        })
+        .and_then(|()| fs::rename(&temporary, &target));
+    if result.is_err() {
+        // Best effort; the original error is the one worth reporting.
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
 fn write_config(path: &Path, config: &FileConfig) -> Result<(), StorageError> {
     let text = toml::to_string_pretty(config)
         .map_err(|err| StorageError::Serialization(err.to_string()))?;
@@ -322,6 +399,28 @@ fn sanitize(id: &str) -> String {
     out
 }
 
+/// Make a save-state name safe as a file stem. Far more permissive than
+/// [`sanitize`] so hand-named files stay loadable: only path separators, control
+/// characters, and a leading dot are replaced.
+fn sanitize_state_name(name: &str) -> String {
+    let out: String = name
+        .chars()
+        .enumerate()
+        .map(|(i, c)| {
+            if matches!(c, '/' | '\\') || c.is_control() || (i == 0 && c == '.') {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    if out.is_empty() {
+        "save".to_string()
+    } else {
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
@@ -329,6 +428,7 @@ mod tests {
     use common::{RomId, ScaleMode};
 
     use super::*;
+    use std::time::{Duration, SystemTime};
     use common::input::Action;
 
     #[test]
@@ -412,9 +512,9 @@ mod tests {
 
         {
             let store = FileStore::open(Some(config.clone())).unwrap();
-            assert!(store.read_save(&id, SaveSlot::Battery).unwrap().is_none());
+            assert!(store.read_save(&id, &SaveSlot::Battery).unwrap().is_none());
             store
-                .write_save(&id, SaveSlot::Battery, b"savedata")
+                .write_save(&id, &SaveSlot::Battery, b"savedata")
                 .unwrap();
             // The sanitized name (space -> underscore) is what hits disk.
             assert!(store.saves_dir.join("Test_Game.sav").is_file());
@@ -422,10 +522,88 @@ mod tests {
 
         // Reopen and confirm the save is found.
         let store = FileStore::open(Some(config.clone())).unwrap();
-        let data = store.read_save(&id, SaveSlot::Battery).unwrap();
+        let data = store.read_save(&id, &SaveSlot::Battery).unwrap();
         assert_eq!(data.as_deref(), Some(&b"savedata"[..]));
 
         let _ = fs::remove_dir_all(config.parent().unwrap());
+    }
+
+    #[test]
+    fn named_states_write_read_and_list() {
+        let config = scratch_config();
+        let store = FileStore::open(Some(config.clone())).unwrap();
+        let id = SaveId("Test Game".to_string());
+        assert!(store.list_states(&id).unwrap().is_empty());
+
+        let slot = |name: &str| SaveSlot::State(name.to_string());
+        assert!(store.read_save(&id, &slot("quicksave-1")).unwrap().is_none());
+        store.write_save(&id, &slot("quicksave-1"), b"one").unwrap();
+        store.write_save(&id, &slot("boss fight"), b"two").unwrap();
+        let dir = store.saves_dir.join("states").join("Test_Game");
+        assert!(dir.join("quicksave-1.state").is_file());
+        // Hand-made files count; unrelated ones don't.
+        fs::write(dir.join("run.2.state"), b"three").unwrap();
+        fs::write(dir.join("notes.txt"), b"").unwrap();
+        create_dir(&dir.join("folder.state")).unwrap();
+
+        // Dates come from the files, so pin them to check they are reported.
+        let when = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
+        fs::File::options()
+            .write(true)
+            .open(dir.join("boss fight.state"))
+            .unwrap()
+            .set_modified(when)
+            .unwrap();
+
+        let mut states = store.list_states(&id).unwrap();
+        states.sort_by(|a, b| a.name.cmp(&b.name));
+        let names: Vec<_> = states.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["boss fight", "quicksave-1", "run.2"]);
+        assert_eq!(states[0].modified, when);
+        assert_eq!(
+            store.read_save(&id, &slot("run.2")).unwrap().as_deref(),
+            Some(&b"three"[..])
+        );
+
+        // Another game's states are separate.
+        let other = SaveId("Other".to_string());
+        assert!(store.list_states(&other).unwrap().is_empty());
+
+        let _ = fs::remove_dir_all(config.parent().unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn overwriting_a_save_keeps_symlinks_and_leaves_no_temporary_file() {
+        let config = scratch_config();
+        let store = FileStore::open(Some(config.clone())).unwrap();
+        let real = config.parent().unwrap().join("elsewhere.sav");
+        fs::write(&real, b"old").unwrap();
+        let link = store.saves_dir.join("Linked.sav");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+
+        let id = SaveId("Linked".to_string());
+        store.write_save(&id, &SaveSlot::Battery, b"new").unwrap();
+
+        assert!(fs::symlink_metadata(&link).unwrap().is_symlink());
+        assert_eq!(fs::read(&real).unwrap(), b"new");
+        for dir in [&store.saves_dir, config.parent().unwrap()] {
+            let leftover = fs::read_dir(dir)
+                .unwrap()
+                .any(|e| e.unwrap().path().extension().is_some_and(|x| x == "tmp"));
+            assert!(!leftover);
+        }
+
+        let _ = fs::remove_dir_all(config.parent().unwrap());
+    }
+
+    #[test]
+    fn state_names_cannot_escape_their_directory() {
+        assert_eq!(sanitize_state_name("../../etc/passwd"), "_._.._etc_passwd");
+        assert_eq!(sanitize_state_name(".."), "_.");
+        assert_eq!(sanitize_state_name("a\\b\n"), "a_b_");
+        assert_eq!(sanitize_state_name(""), "save");
+        assert_eq!(sanitize_state_name("my save (2)"), "my save (2)");
     }
 
     #[test]
@@ -435,6 +613,7 @@ mod tests {
         // arrays-of-tables, e.g. `[[input.menu]]` / `[[gameboy.input.up]]`).
         assert!(text.contains("input.menu"), "generic input section: {text}");
         assert!(text.contains("gameboy.input"), "gameboy section: {text}");
+        assert!(text.contains("quicksave_count = 5"), "saves section: {text}");
 
         let config: FileConfig = toml::from_str(&text).unwrap();
         assert_eq!(

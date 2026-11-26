@@ -273,21 +273,23 @@ mod tests {
     }
 
     #[test]
-    fn save_battery_key_queues_a_generic_action() {
+    fn quicksave_keys_queue_generic_actions() {
         let generic = InputBindings::default();
         let gameboy = ActionBindings::with_all_defaults::<GameboyButton>();
         let mut router = InputRouter::new(&generic, &gameboy);
 
-        // Default: F5 -> SaveBattery, fired on press only.
-        router.handle(InputTrigger::Key(Key::F5), true);
-        assert_eq!(
-            router.take_generic_actions(),
-            vec![GenericAction::SaveBattery]
-        );
-        // Draining clears the queue; a release fires nothing.
-        assert!(router.take_generic_actions().is_empty());
-        router.handle(InputTrigger::Key(Key::F5), false);
-        assert!(router.take_generic_actions().is_empty());
+        for (key, action) in [
+            (Key::F5, GenericAction::QuickSave),
+            (Key::F8, GenericAction::QuickLoad),
+        ] {
+            // Fired on press only.
+            router.handle(InputTrigger::Key(key), true);
+            assert_eq!(router.take_generic_actions(), vec![action]);
+            // Draining clears the queue; a release fires nothing.
+            assert!(router.take_generic_actions().is_empty());
+            router.handle(InputTrigger::Key(key), false);
+            assert!(router.take_generic_actions().is_empty());
+        }
     }
 
     #[test]

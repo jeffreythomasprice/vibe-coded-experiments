@@ -14,6 +14,7 @@
 //! restored clock keeps ticking through the interval the emulator was closed —
 //! matching a real cartridge whose battery-backed RTC never stops.
 
+use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// RTC register selectors as written to `0x4000-0x5FFF`.
@@ -61,7 +62,7 @@ impl RtcRegs {
 }
 
 /// A snapshot of the five clock counters.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 struct RtcRegs {
     seconds: u8,
     minutes: u8,
@@ -74,7 +75,7 @@ struct RtcRegs {
 }
 
 /// The live wall-clock RTC.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(super) struct Rtc {
     base: RtcRegs,
     anchor: SystemTime,

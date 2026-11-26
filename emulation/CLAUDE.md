@@ -47,8 +47,9 @@ The persistent-state system splits an **abstract interface** from its **backend*
   (`RomId`, `SaveId`, `SaveSlot`) and a `StorageError`. It is deliberately
   **path-free**: nothing here names a file or directory, so a future non-file
   backend (database, cloud) can implement the same traits. `common::settings`
-  holds only backend-agnostic settings (graphics scale mode; the generic input
-  bindings). Where ROMs/saves live is *not* here — that is backend config.
+  holds only backend-agnostic settings (graphics scale mode; quicksave count and
+  autosave interval; the generic input bindings). Where ROMs/saves live is *not* here — that is
+  backend config.
 - `emulator/src/storage.rs`'s `FileStore` is the only implementation today. It
   owns **all** filesystem concerns: resolving the config dir via the `directories`
   crate (`~/.config/emulator`), the on-disk `settings.toml` schema (which adds a
@@ -119,9 +120,9 @@ joypad will use to set `IF`. Undefined opcodes lock the CPU (a `RunState::Locked
 state + a `CpuFault` surfaced via `Cpu::fault()`) rather than panicking, keeping
 `step()` free of a hot-path `Result`.
 
-The CPU is now wired to a real memory bus (see below). A top-level `Emulator`
-loop that owns and drives the CPU + bus is still a later item; the `Emulator`
-placeholder in `lib.rs` remains a stub.
+The CPU is wired to a real memory bus (see below), and `Emulator` in `lib.rs`
+owns both: `run_frame` steps the CPU and ticks the bus until the PPU completes a
+frame.
 
 # Game Boy cartridge & MBC
 
@@ -186,19 +187,53 @@ pattern:
   `load_bytes`; `save_battery` writes `save_bytes()`. All IO is behind the abstract
   `SaveStore`; `FileStore` maps the slot to `{sanitized-title}.sav` under the
   configurable saves dir.
-- **Triggers (`emulator/src/app.rs`):** loading a ROM restores the save in
-  `run_rom` (`main.rs`) before the app starts. Two save paths exist: an **on-request**
-  manual save via the generic `SaveBattery` action (default key **F5**, added to
-  `common`'s `GenericAction`) — `InputRouter` queues fired generic actions and
-  `App::apply_generic_actions` drains and acts on them — and an **on-exit** flush
-  via `impl Drop for App`, which fires when the event loop returns and so covers
-  every exit path (graceful close, surface loss, init failure), not just
-  `CloseRequested`.
+- **Triggers (`emulator/src/app.rs`):** starting a game restores the save
+  (`rom::open_rom`, used by `App::start_game` for the command line, the menu, and
+  Reset Game). The battery is flushed alongside every save state, before a ROM
+  swap or reset, and **on exit** via `impl Drop for App`, which fires when the
+  event loop returns and so covers every exit path (graceful close, signals,
+  surface loss, init failure), not just `CloseRequested`. Ctrl+C, SIGTERM, and
+  SIGHUP are turned into an event-loop exit in `main.rs` (`exit_on_signals`); a
+  second signal kills the process. `FileStore` writes saves atomically (temporary
+  file, then rename).
 
-Caveat: there is still no top-level CPU+`SystemBus` run loop, so `App` holds a
-standalone `Cartridge` whose RAM nothing mutates yet — the save/load path is
-correct and fully unit-tested, but saves capture unchanging data until the run
-loop lands and drives the cartridge.
+Loading a save state replaces cartridge RAM with the snapshot's, so the next
+flush writes that older RAM to the `.sav`.
+
+# Game Boy save states
+
+A save state snapshots the whole machine. The pieces:
+
+- **Core (`gameboy/src/state.rs`):** `Emulator::save_state` / `load_state`. The
+  blob is magic `GBST`, a format version, a header (cartridge title, global
+  checksum, body hash), then the `postcard`-encoded `Emulator`. The ROM and
+  transient host-facing buffers (APU samples, serial capture, frame latch) are
+  `#[serde(skip)]`; loading moves the running ROM into the restored machine. A
+  rejected state leaves the machine untouched. `postcard` is not self-describing,
+  so **any change to a serialized struct (including adding a field to a subsystem)
+  must bump `FORMAT_VERSION`**. New machine state must be serialized; boxed byte
+  arrays use `#[serde(with = "boxed_bytes")]`. Restoring an MBC3 RTC keeps its
+  absolute anchor, so the clock stays on wall time.
+- **Storage:** `SaveSlot::State(name)` plus `SaveStore::list_states`. `FileStore`
+  writes `{saves_dir}/states/{sanitized-title}/{name}.state` and reports the file
+  modification time as the state's date. State names keep spaces and punctuation;
+  only path separators, control characters, and a leading dot are replaced.
+- **Quicksave rotation (`common/src/quicksave.rs`):** states named
+  `quicksave-1..=N`, recognised purely by name (a hand-made one counts). A
+  quicksave takes the lowest unused name, else overwrites the oldest; quickload
+  restores the newest. `N` is `[saves] quicksave_count` (default 5, minimum 1).
+- **App:** `GenericAction::QuickSave` (**F5**) and `QuickLoad` (**F8**), both
+  rebindable, plus the menu's Save State / Load State screens, which list every
+  state newest first. Results show as a short HUD toast.
+- **Autosave:** a single state named `autosave` (`common::storage::AUTOSAVE_NAME`),
+  written every `[saves] autosave_interval_secs` (default 300, 0 disables) while
+  playing, and when leaving a game (exit, ROM swap, reset).
+  `emulator/src/autosave.rs` tracks when it is due. It is skipped if no frame has
+  run since the last load, if the CPU faulted, or during a panic. The timer
+  restarts whenever the machine is replaced.
+- **Auto-resume:** starting a game loads the newest state of any kind, falling
+  back to older ones if it won't load (`rom::resume_latest`). **Reset Game** is
+  the way to boot from power-on; it keeps the battery save and the states.
 
 # Game Boy memory bus
 
@@ -224,10 +259,9 @@ lets the already-complete CPU dispatch run unchanged against the real bus — th
 end-to-end test in `memory.rs` services a VBlank interrupt through `SystemBus`.
 
 The timer (`0xFF04-0xFF07`) is real — see "Game Boy timer" below. `SystemBus`
-also exposes `tick(t_states)`, which advances time-dependent subsystems (today
-just the timer) by the T-cycles a just-executed instruction consumed and raises
-the timer interrupt on overflow. There is no top-level loop calling it yet, so
-it is test-driven for now.
+also exposes `tick(t_states)`, which advances time-dependent subsystems (timer,
+PPU, DMA, serial, APU) by the T-cycles a just-executed instruction
+consumed and raises their interrupts. `Emulator::run_frame` calls it.
 
 The PPU is real too (see "Game Boy PPU" below): VRAM (`0x8000-0x9FFF`), OAM
 (`0xFE00-0xFE9F`), and the LCD registers (`0xFF40-0xFF45`, `0xFF47-0xFF4B`) route
@@ -240,9 +274,7 @@ port (`0xFF01-0xFF02`) is real too — see "Game Boy serial" below. The APU
 Current stubs: every I/O register the machine defines now routes to a real
 subsystem; the remaining flat read/write storage in the `io` array is only the
 handful of genuinely-unimplemented/unused registers (e.g. `0xFF03`,
-`0xFF08-0xFF0E`). Capturing the transmitted serial `SB` byte for headless
-test-ROM output (the serial stub deliberately discards it) is still its own later
-build-order item.
+`0xFF08-0xFF0E`).
 
 # Game Boy timer
 
@@ -306,8 +338,7 @@ lines), then sprites (OAM scan capped at 10/line, 8×8 and 8×16, X/Y flip, OBP
 palettes, color-0 transparency, DMG smaller-X-then-OAM-index priority, and the
 OBJ-to-BG priority bit). The framebuffer feeds the generic `video` crate as a
 `Grey2` buffer via `Gfx::update_frame` (which packs shades→2bpp with the DMG
-palette); that seam is not yet driven because the top-level CPU+PPU run loop is a
-later item. A pixel-FIFO renderer and per-dot-accurate mode-3 length are the
+palette), which the app calls after running frames. A pixel-FIFO renderer and per-dot-accurate mode-3 length are the
 accurate-but-complex upgrades left for later.
 
 # Game Boy OAM DMA
@@ -337,8 +368,7 @@ and writes are dropped — over the raw decode, which was extracted into private
 `SystemBus::read_raw`/`write_raw`. The `0xFF46` register and its trigger stay
 accessible mid-transfer. OAM DMA raises no interrupt.
 
-There is no top-level CPU→`tick` loop yet, so (like the timer and PPU) this is
-test-driven for now. First-pass simplifications: no startup/warmup delay (plain
+First-pass simplifications: no startup/warmup delay (plain
 640 T-cycles); blocked reads return `0xFF` rather than the exact in-flight
 conflict byte; source pages `0xE0-0xFF` read straight through the bus decode
 rather than being special-cased. This is the CPU/bus OAM DMA and is unrelated to
@@ -368,9 +398,8 @@ selected row, or a select change onto a held button) via one `detect_edge` helpe
 a returned edge into `IF` bit 4 (`Interrupt::Joypad`, vector `$60`).
 
 The frontend seam is `SystemBus::set_buttons(&HashSet<GameboyButton>)`, which the
-future top-level run loop feeds each frame from the desktop input router's
-`InputRouter::gameboy_pressed()` (types already line up). There is no such loop
-yet, so — like the timer/PPU/DMA — the joypad is **test-driven for now**.
+app feeds (through `Emulator::set_buttons`) from the desktop input router's
+`InputRouter::gameboy_pressed()`.
 
 # Game Boy serial
 
@@ -395,10 +424,8 @@ the register routes to `Serial` rather than the flat I/O array in tests. `0xFF01
 `0xFF02` route to it via dedicated `match` arms ahead of the flat I/O catch-all
 (now `0xFF03..=0xFF7F`), the same ordering trick as the timer/joypad.
 
-Everything powers on zeroed (boot ROM skipped). There is no top-level run loop
-calling `tick` yet, so — like the timer/PPU/DMA/joypad — the serial port is
-**test-driven for now**. Out of scope (future items): capturing the transmitted
-`SB` byte for headless test-ROM output (this stub discards it), real link-cable
+Everything powers on zeroed (boot ROM skipped). Transmitted bytes are logged for
+the test-ROM harness (`take_output`). Out of scope (future items): real link-cable
 emulation, and the `[CGB]` fast clock (`SC` bit 1) / double-speed timing.
 
 # Game Boy APU
@@ -449,8 +476,7 @@ samples.
 
 Power-on state is all-zero (boot ROM skipped); post-boot register *read* values
 come from the forced-1 masks, not seeded storage (e.g. `NR52` reads `0x70` when
-powered off). There is no top-level run loop calling `tick` yet, so — like the
-other subsystems — the APU is **test-driven for now**. First-pass
+powered off). First-pass
 simplifications (future refinements): frame-sequencer events are OR-ed
 coarse-grained across a multi-T-cycle span; length counters are cleared on
 power-off (a `[CGB]` behavior, not strictly DMG); Wave RAM access isn't
@@ -479,9 +505,8 @@ runs:
   stream (the audio analog of `Gfx`), constructed from `AudioSettings` in
   `App::resumed` — opening the device is non-fatal (a machine with no output
   device still runs silently), unlike a graphics-init failure. `Snd::submit_frame`
-  is the seam a future run loop feeds with `SystemBus::take_audio_samples`;
-  like `Gfx::update_frame` it is `#[allow(dead_code)]` until the top-level
-  CPU+PPU+APU run loop lands, so the stream currently plays silence.
+  is the seam the run loop feeds with the APU's samples
+  (`Emulator::take_audio_samples`).
 
 # UI overlay
 
@@ -493,7 +518,8 @@ as possible — egui splits cleanly along exactly this seam:
 - **`ui` crate (`egui` core + `common` only):** the reusable UI. It owns
   `MenuState` (`menu.rs`: the screen navigation, cursor, and rebind-capture state
   machine), `ui::draw(ctx, &mut state, &MenuData) -> Vec<MenuCommand>` (the
-  screens: Root, Select ROM, Options, Input Bindings), the embedded
+  screens: Root, Select ROM, Save State, Load State, Options, Input Bindings),
+  the embedded
   `assets/Early GameBoy.ttf` font (`install_fonts`), and `trigger_label`. The
   old-school look lives in `theme.rs` (the `DMG_GREEN` palette, which `Gfx` also
   uses for the game image, and the whole-physical-pixel UI grid), `widgets.rs`
@@ -503,9 +529,12 @@ as possible — egui splits cleanly along exactly this seam:
   queues abstract `MenuInput`s with `MenuState::navigate` (the desktop mapping is
   `InputRouter::menu_input`), and the mouse works too. It is deliberately free of `wgpu`,
   `winit`, and `gameboy`: every system-specific value crosses the boundary as a
-  plain `common`/`String` type (`RomChoice`, `BindingRow`, `BindingSet`), and every
-  effect the UI can't perform leaves as a `MenuCommand` (`LoadRom`, `Exit`,
-  `CloseMenu`, `SetBinding`). `cargo tree -p ui` shows neither wgpu nor winit — that
+  plain `common`/`String` type (`RomChoice`, `StateChoice`, `BindingRow`,
+  `BindingSet`), and every effect the UI can't perform leaves as a `MenuCommand`
+  (`LoadRom`, `SaveState`, `LoadState`, `ResetGame`, `Exit`, `CloseMenu`,
+  `SetBinding`, `ResetBindings`). Typing a new save's name is handled inside `ui` from egui's
+  key/text events; while `MenuState::is_naming()` the host must not turn keyboard
+  input into `MenuInput`s or hotkeys. `cargo tree -p ui` shows neither wgpu nor winit — that
   is the reuse boundary, and it should stay that way.
 - **`video::EguiRenderer` (`egui-wgpu`):** the GPU backend. It renders the
   host-tessellated `EguiPaint` (primitives + textures delta + pixels-per-point)
@@ -521,9 +550,14 @@ as possible — egui splits cleanly along exactly this seam:
   (`apply_generic_actions`); while the menu is open `drive_emulation` early-returns
   (the machine pauses) and `about_to_wait` pumps redraws itself (the run loop no
   longer does); menu `MenuCommand`s are applied in the redraw path
-  (`load_rom` hot-swaps the cartridge; `apply_binding_edit` rebuilds the router and
+  (`start_game` hot-swaps the cartridge; `apply_binding_edit` rebuilds the router and
   persists). Rebind capture routes the next raw key/mouse/gamepad input into
   `MenuState::capture` instead of the game.
+
+The HUD's speed box fades some time after a speed change. Its corner, delay and
+faded transparency come from `[hud]` (`common::HudSettings`). The host owns the
+clock and passes a target opacity in `MenuData::speed_opacity`; `ui` only eases
+toward it.
 
 Rendering detail: the game wants the sRGB surface for correct colors but egui wants
 a linear target (it gamma-corrects itself), so `Gfx` adds the non-sRGB view format

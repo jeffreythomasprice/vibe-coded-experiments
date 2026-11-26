@@ -3,13 +3,14 @@
 //! volume envelope. `NR43` bit 3 switches the LFSR between 15-bit and 7-bit
 //! width, which changes the timbre from hiss to a buzzier periodic tone.
 
+use serde::{Deserialize, Serialize};
 use super::components::{dac_output, LengthCounter, VolumeEnvelope};
 
 /// Base divisor selected by `NR43`'s low three bits; the actual period is this
 /// shifted left by the clock-shift field. (Code 0 is a half-step, hence 8.)
 const DIVISORS: [u16; 8] = [8, 16, 32, 48, 64, 80, 96, 112];
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct NoiseChannel {
     enabled: bool,
     length: LengthCounter,

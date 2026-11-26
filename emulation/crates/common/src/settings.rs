@@ -9,6 +9,8 @@
 //! Every field carries `#[serde(default)]` so a partial or empty configuration
 //! deserializes into sensible defaults rather than failing.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 
 use crate::input::ActionBindings;
@@ -21,6 +23,8 @@ pub struct Settings {
     pub graphics: GraphicsSettings,
     pub audio: AudioSettings,
     pub emulation: EmulationSettings,
+    pub saves: SaveStateSettings,
+    pub hud: HudSettings,
     pub input: InputBindings,
 }
 
@@ -122,6 +126,139 @@ impl SpeedMode {
     }
 }
 
+/// Save-state preferences.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SaveStateSettings {
+    /// How many rotating quicksaves to keep per game. Must be at least 1; read
+    /// it through [`SaveStateSettings::effective_quicksave_count`].
+    pub quicksave_count: u32,
+    /// Seconds between periodic autosaves while a game runs; 0 turns them off
+    /// (the autosave on exit still happens).
+    pub autosave_interval_secs: u64,
+}
+
+impl Default for SaveStateSettings {
+    fn default() -> SaveStateSettings {
+        SaveStateSettings {
+            quicksave_count: 5,
+            autosave_interval_secs: 300,
+        }
+    }
+}
+
+impl SaveStateSettings {
+    /// The time between periodic autosaves, or `None` if they are off.
+    pub fn autosave_interval(&self) -> Option<Duration> {
+        (self.autosave_interval_secs > 0).then(|| Duration::from_secs(self.autosave_interval_secs))
+    }
+
+    /// The configured quicksave count, raised to 1 if it was set to 0.
+    pub fn effective_quicksave_count(&self) -> u32 {
+        if self.quicksave_count == 0 {
+            tracing::warn!("saves.quicksave_count must be at least 1; using 1");
+        }
+        self.quicksave_count.max(1)
+    }
+}
+
+/// A corner of the screen.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Corner {
+    #[default]
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+/// On-screen overlay preferences.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HudSettings {
+    /// The corner the speed box sits in.
+    pub speed_corner: Corner,
+    /// Seconds after a speed change before the speed box fades. Read it through
+    /// [`HudSettings::speed_fade_delay`].
+    pub speed_fade_delay_secs: f32,
+    /// How see-through the faded speed box is, from 0.0 (opaque) to 1.0
+    /// (invisible). Read it through [`HudSettings::speed_faded_opacity`].
+    pub speed_faded_transparency: f32,
+}
+
+impl Default for HudSettings {
+    fn default() -> HudSettings {
+        HudSettings {
+            speed_corner: Corner::default(),
+            speed_fade_delay_secs: 5.0,
+            speed_faded_transparency: 0.6,
+        }
+    }
+}
+
+/// The validated form of the speed box's fade settings.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SpeedFade {
+    /// How long the box stays opaque after a speed change.
+    pub delay: Duration,
+    /// The opacity it fades to, in `[0.0, 1.0]`.
+    pub faded_opacity: f32,
+}
+
+impl SpeedFade {
+    /// The opacity the box should have `since_change` after the last speed change.
+    pub fn opacity(&self, since_change: Duration) -> f32 {
+        if since_change < self.delay {
+            1.0
+        } else {
+            self.faded_opacity
+        }
+    }
+}
+
+impl HudSettings {
+    /// The fade settings with out-of-range values corrected (and warned about),
+    /// so call this once rather than every frame.
+    pub fn speed_fade(&self) -> SpeedFade {
+        SpeedFade {
+            delay: self.speed_fade_delay(),
+            faded_opacity: self.speed_faded_opacity(),
+        }
+    }
+
+    /// The configured fade delay, or zero if it is negative or not a usable
+    /// number of seconds.
+    pub fn speed_fade_delay(&self) -> Duration {
+        Duration::try_from_secs_f32(self.speed_fade_delay_secs).unwrap_or_else(|err| {
+            tracing::warn!(
+                value = self.speed_fade_delay_secs,
+                %err,
+                "invalid hud.speed_fade_delay_secs; using 0"
+            );
+            Duration::ZERO
+        })
+    }
+
+    /// The opacity of the faded speed box: one minus the configured
+    /// transparency, which is clamped to `[0.0, 1.0]`. A NaN transparency
+    /// leaves the box opaque.
+    pub fn speed_faded_opacity(&self) -> f32 {
+        let transparency = self.speed_faded_transparency;
+        if !(0.0..=1.0).contains(&transparency) {
+            tracing::warn!(
+                value = transparency,
+                "hud.speed_faded_transparency must be between 0 and 1; clamping"
+            );
+        }
+        if transparency.is_nan() {
+            1.0
+        } else {
+            1.0 - transparency.clamp(0.0, 1.0)
+        }
+    }
+}
+
 /// Emulation-timing preferences.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -170,6 +307,78 @@ pub struct InputBindings(pub ActionBindings);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quicksave_count_defaults_to_five_and_is_at_least_one() {
+        let parse = |text| toml::from_str::<Settings>(text).unwrap().saves;
+        assert_eq!(parse("").effective_quicksave_count(), 5);
+        assert_eq!(parse("[saves]").effective_quicksave_count(), 5);
+        let nine = parse("[saves]\nquicksave_count = 9");
+        assert_eq!(nine.effective_quicksave_count(), 9);
+        let zero = parse("[saves]\nquicksave_count = 0");
+        assert_eq!(zero.effective_quicksave_count(), 1);
+    }
+
+    #[test]
+    fn autosave_interval_defaults_to_five_minutes_and_zero_disables_it() {
+        let parse = |text| toml::from_str::<Settings>(text).unwrap().saves;
+        let five_minutes = Some(Duration::from_secs(300));
+        assert_eq!(parse("").autosave_interval(), five_minutes);
+        assert_eq!(parse("[saves]").autosave_interval(), five_minutes);
+        let short = parse("[saves]\nautosave_interval_secs = 10");
+        assert_eq!(short.autosave_interval(), Some(Duration::from_secs(10)));
+        let off = parse("[saves]\nautosave_interval_secs = 0");
+        assert_eq!(off.autosave_interval(), None);
+    }
+
+    #[test]
+    fn hud_defaults_to_a_top_left_box_fading_after_five_seconds() {
+        let hud = toml::from_str::<Settings>("").unwrap().hud;
+        assert_eq!(hud.speed_corner, Corner::TopLeft);
+        assert_eq!(hud.speed_fade_delay(), Duration::from_secs(5));
+        assert!((hud.speed_faded_opacity() - 0.4).abs() < 1e-6);
+    }
+
+    #[test]
+    fn partial_hud_section_keeps_other_defaults() {
+        let text = "[hud]\nspeed_corner = \"bottom_right\"";
+        let hud = toml::from_str::<Settings>(text).unwrap().hud;
+        assert_eq!(hud.speed_corner, Corner::BottomRight);
+        assert_eq!(hud.speed_fade_delay(), Duration::from_secs(5));
+        assert_eq!(hud.speed_faded_transparency, 0.6);
+    }
+
+    #[test]
+    fn hud_accepts_whole_and_fractional_delays() {
+        let delay = |text| toml::from_str::<Settings>(text).unwrap().hud.speed_fade_delay();
+        assert_eq!(delay("[hud]\nspeed_fade_delay_secs = 2"), Duration::from_secs(2));
+        assert_eq!(
+            delay("[hud]\nspeed_fade_delay_secs = 0.5"),
+            Duration::from_millis(500)
+        );
+    }
+
+    #[test]
+    fn out_of_range_hud_values_are_clamped() {
+        let hud = |delay, transparency| HudSettings {
+            speed_fade_delay_secs: delay,
+            speed_faded_transparency: transparency,
+            ..HudSettings::default()
+        };
+        assert_eq!(hud(-1.0, 2.0).speed_fade_delay(), Duration::ZERO);
+        assert_eq!(hud(f32::NAN, 2.0).speed_fade_delay(), Duration::ZERO);
+        assert_eq!(hud(0.0, 2.0).speed_faded_opacity(), 0.0);
+        assert_eq!(hud(0.0, -1.0).speed_faded_opacity(), 1.0);
+        assert_eq!(hud(0.0, f32::NAN).speed_faded_opacity(), 1.0);
+    }
+
+    #[test]
+    fn speed_box_fades_once_the_delay_has_passed() {
+        let fade = HudSettings::default().speed_fade();
+        assert_eq!(fade.opacity(Duration::ZERO), 1.0);
+        assert_eq!(fade.opacity(Duration::from_millis(4999)), 1.0);
+        assert_eq!(fade.opacity(Duration::from_secs(5)), fade.faded_opacity);
+    }
 
     #[test]
     fn default_settings_round_trip_through_toml() {

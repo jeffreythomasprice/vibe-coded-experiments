@@ -8,6 +8,8 @@ use crate::{BindingRow, BindingSet, MenuCommand, MenuData};
 
 /// Editable binding slots per action.
 pub(crate) const BINDING_SLOTS: usize = 2;
+/// Longest save-state name that can be typed.
+pub(crate) const MAX_STATE_NAME: usize = 24;
 
 /// Which menu screen is showing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -16,6 +18,8 @@ pub(crate) enum Screen {
     Options,
     InputBindings,
     SelectRom,
+    SaveState,
+    LoadState,
 }
 
 impl Screen {
@@ -23,6 +27,8 @@ impl Screen {
         match self {
             Screen::Root => "Menu",
             Screen::SelectRom => "Select ROM",
+            Screen::SaveState => "Save State",
+            Screen::LoadState => "Load State",
             Screen::Options => "Options",
             Screen::InputBindings => "Input Bindings",
         }
@@ -36,6 +42,15 @@ pub(crate) enum Entry {
     Open(Screen),
     Exit,
     Rom(usize),
+    /// Name a new save state.
+    NewState,
+    /// An existing save state; the screen decides whether to load or overwrite it.
+    State(usize),
+    /// Accept or abandon the name being typed.
+    CommitName,
+    CancelName,
+    /// Restart the game from power-on.
+    Reset,
     Binding { row: usize, slot: usize },
     ResetBindings,
     Back,
@@ -44,11 +59,32 @@ pub(crate) enum Entry {
 /// The entries of `screen`, as rows of columns.
 pub(crate) fn entries(screen: Screen, data: &MenuData) -> Vec<Vec<Entry>> {
     match screen {
-        Screen::Root => vec![
-            vec![Entry::Open(Screen::SelectRom)],
-            vec![Entry::Open(Screen::Options)],
-            vec![Entry::Exit],
-        ],
+        Screen::Root => {
+            let game: &[Entry] = if data.rom_loaded {
+                &[
+                    Entry::Open(Screen::SaveState),
+                    Entry::Open(Screen::LoadState),
+                    Entry::Reset,
+                ]
+            } else {
+                &[]
+            };
+            [Entry::Open(Screen::SelectRom)]
+                .iter()
+                .chain(game)
+                .chain(&[Entry::Open(Screen::Options), Entry::Exit])
+                .map(|&entry| vec![entry])
+                .collect()
+        }
+        Screen::SaveState => [vec![Entry::NewState]]
+            .into_iter()
+            .chain((0..data.states.len()).map(|index| vec![Entry::State(index)]))
+            .chain([vec![Entry::Back]])
+            .collect(),
+        Screen::LoadState => (0..data.states.len())
+            .map(|index| vec![Entry::State(index)])
+            .chain([vec![Entry::Back]])
+            .collect(),
         Screen::Options => vec![vec![Entry::Open(Screen::InputBindings)], vec![Entry::Back]],
         Screen::SelectRom => (0..data.roms.len())
             .map(|index| vec![Entry::Rom(index)])
@@ -79,6 +115,8 @@ struct Capture {
 pub struct MenuState {
     screen: Option<Screen>,
     capturing: Option<Capture>,
+    /// The save-state name being typed, if the name field is open.
+    naming: Option<String>,
     pending: Vec<MenuInput>,
     pub(crate) cursor: Cursor,
     /// First visible entry of the current screen's scrolling list.
@@ -119,6 +157,57 @@ impl MenuState {
 
     pub fn is_capturing(&self) -> bool {
         self.capturing.is_some()
+    }
+
+    /// Whether the user is typing a name. The host should then leave keyboard
+    /// input to egui rather than translating it into controls or hotkeys.
+    pub fn is_naming(&self) -> bool {
+        self.naming.is_some()
+    }
+
+    pub(crate) fn name_being_typed(&self) -> Option<&str> {
+        self.naming.as_deref()
+    }
+
+    /// Edit the open name field with this frame's keyboard events.
+    pub(crate) fn process_text(&mut self, events: &[egui::Event], commands: &mut Vec<MenuCommand>) {
+        for event in events {
+            let Some(name) = self.naming.as_mut() else {
+                return;
+            };
+            match event {
+                egui::Event::Text(text) => {
+                    for c in text.chars() {
+                        let allowed = c.is_ascii_alphanumeric() || matches!(c, ' ' | '_' | '-');
+                        if allowed && name.len() < MAX_STATE_NAME {
+                            name.push(c);
+                        }
+                    }
+                }
+                egui::Event::Key {
+                    key, pressed: true, ..
+                } => match key {
+                    egui::Key::Backspace => {
+                        name.pop();
+                    }
+                    egui::Key::Enter => self.commit_name(commands),
+                    egui::Key::Escape => self.naming = None,
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+    }
+
+    /// Save under the typed name. A blank name leaves the field open.
+    fn commit_name(&mut self, commands: &mut Vec<MenuCommand>) {
+        let Some(name) = self.naming.as_deref().map(str::trim) else {
+            return;
+        };
+        if !name.is_empty() {
+            commands.push(MenuCommand::SaveState(name.to_owned()));
+            self.naming = None;
+        }
     }
 
     pub(crate) fn is_capturing_cell(&self, row: &BindingRow, slot: usize) -> bool {
@@ -163,6 +252,15 @@ impl MenuState {
             let Some(screen) = self.screen else { return };
             if self.is_capturing() {
                 return;
+            }
+            // The name field has only two controls, wherever the cursor is.
+            if self.is_naming() {
+                match input {
+                    MenuInput::Confirm => self.commit_name(commands),
+                    MenuInput::Back => self.naming = None,
+                    _ => {}
+                }
+                continue;
             }
             let rows = entries(screen, data);
             let cols = |row: usize| rows.get(row).map_or(0, Vec::len);
@@ -212,6 +310,19 @@ impl MenuState {
                     commands.push(MenuCommand::LoadRom(rom.id.clone()));
                 }
             }
+            Entry::NewState => self.naming = Some(data.suggested_state_name.to_owned()),
+            Entry::State(index) => {
+                if let Some(state) = data.states.get(index) {
+                    let name = state.name.clone();
+                    match self.screen {
+                        Some(Screen::SaveState) => commands.push(MenuCommand::SaveState(name)),
+                        _ => commands.push(MenuCommand::LoadState(name)),
+                    }
+                }
+            }
+            Entry::CommitName => self.commit_name(commands),
+            Entry::CancelName => self.naming = None,
+            Entry::Reset => commands.push(MenuCommand::ResetGame),
             Entry::Binding { row, slot } => {
                 if let Some(row) = data.bindings.get(row) {
                     self.begin_capture(row.set, row.action.clone(), slot);
@@ -250,8 +361,8 @@ pub(crate) fn clear_binding(row: &BindingRow, slot: usize, commands: &mut Vec<Me
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::RomChoice;
-    use common::Key;
+    use crate::{RomChoice, StateChoice};
+    use common::{Corner, Key};
 
     fn run(state: &mut MenuState, data: &MenuData, inputs: &[MenuInput]) -> Vec<MenuCommand> {
         for &input in inputs {
@@ -273,12 +384,21 @@ mod tests {
             display: "A".to_owned(),
             triggers: vec![InputTrigger::Key(Key::KeyX)],
         }];
+        let states = ["quicksave-1", "boss"].map(|name| StateChoice {
+            name: name.to_owned(),
+            label: name.to_owned(),
+        });
         test(&MenuData {
             rom_loaded: false,
             roms: &roms,
             bindings: &bindings,
+            states: &states,
+            suggested_state_name: "save-1",
+            toast: None,
             speed_label: "1x",
             actual_speed: None,
+            speed_corner: Corner::TopLeft,
+            speed_opacity: 1.0,
             paused: false,
         });
     }
@@ -363,6 +483,140 @@ mod tests {
             run(&mut state, data, &[MenuInput::Confirm, MenuInput::Down]);
             assert!(state.is_capturing_cell(&data.bindings[0], 1));
             assert_eq!(state.cursor, Cursor { row: 0, col: 1 });
+        });
+    }
+
+    /// Open the menu with a game loaded and walk to a root entry.
+    fn open_at(data: &MenuData, downs: usize) -> MenuState {
+        let mut state = MenuState::default();
+        state.open();
+        let mut inputs = vec![MenuInput::Down; downs];
+        inputs.push(MenuInput::Confirm);
+        assert!(run(&mut state, data, &inputs).is_empty());
+        state
+    }
+
+    fn with_game(test: impl FnOnce(&MenuData)) {
+        with_data(|data| {
+            test(&MenuData {
+                rom_loaded: true,
+                ..*data
+            })
+        });
+    }
+
+    fn key(key: egui::Key) -> egui::Event {
+        egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    fn typed(state: &mut MenuState, events: &[egui::Event]) -> Vec<MenuCommand> {
+        let mut commands = Vec::new();
+        state.process_text(events, &mut commands);
+        commands
+    }
+
+    #[test]
+    fn state_screens_need_a_loaded_game() {
+        with_data(|data| {
+            let root = entries(Screen::Root, data);
+            assert!(!root.concat().contains(&Entry::Open(Screen::LoadState)));
+        });
+        with_game(|data| {
+            let root = entries(Screen::Root, data);
+            assert_eq!(root[1], vec![Entry::Open(Screen::SaveState)]);
+            assert_eq!(root[2], vec![Entry::Open(Screen::LoadState)]);
+        });
+    }
+
+    #[test]
+    fn reset_is_offered_for_a_loaded_game() {
+        with_data(|data| {
+            assert!(!entries(Screen::Root, data).concat().contains(&Entry::Reset));
+        });
+        with_game(|data| {
+            let mut state = MenuState::default();
+            state.open();
+            let mut inputs = vec![MenuInput::Down; 3];
+            inputs.push(MenuInput::Confirm);
+            assert_eq!(run(&mut state, data, &inputs), vec![MenuCommand::ResetGame]);
+        });
+    }
+
+    #[test]
+    fn choosing_a_state_loads_or_overwrites_it() {
+        with_game(|data| {
+            let mut state = open_at(data, 2);
+            let commands = run(&mut state, data, &[MenuInput::Down, MenuInput::Confirm]);
+            assert_eq!(commands, vec![MenuCommand::LoadState("boss".to_owned())]);
+
+            // The save screen lists "New Save" first.
+            let mut state = open_at(data, 1);
+            let commands = run(&mut state, data, &[MenuInput::Down, MenuInput::Confirm]);
+            assert_eq!(
+                commands,
+                vec![MenuCommand::SaveState("quicksave-1".to_owned())]
+            );
+        });
+    }
+
+    #[test]
+    fn a_new_save_can_be_typed_and_committed() {
+        with_game(|data| {
+            let mut state = open_at(data, 1);
+            assert!(run(&mut state, data, &[MenuInput::Confirm]).is_empty());
+            assert_eq!(state.name_being_typed(), Some("save-1"));
+
+            let mut events = vec![key(egui::Key::Backspace); 6];
+            events.push(egui::Event::Text("My ../Run_2!".to_owned()));
+            events.push(key(egui::Key::Enter));
+            // Anything after the commit is not part of the name.
+            events.push(egui::Event::Text("x".to_owned()));
+            assert_eq!(
+                typed(&mut state, &events),
+                vec![MenuCommand::SaveState("My Run_2".to_owned())]
+            );
+            assert!(!state.is_naming());
+        });
+    }
+
+    #[test]
+    fn typed_names_are_bounded_and_never_blank() {
+        with_game(|data| {
+            let mut state = open_at(data, 1);
+            run(&mut state, data, &[MenuInput::Confirm]);
+            typed(&mut state, &[egui::Event::Text("a".repeat(100))]);
+            assert_eq!(state.name_being_typed().map(str::len), Some(MAX_STATE_NAME));
+
+            let mut events = vec![key(egui::Key::Backspace); MAX_STATE_NAME];
+            events.push(egui::Event::Text("  ".to_owned()));
+            events.push(key(egui::Key::Enter));
+            assert!(typed(&mut state, &events).is_empty());
+            assert!(state.is_naming());
+        });
+    }
+
+    #[test]
+    fn the_name_field_can_be_cancelled_or_accepted_with_menu_controls() {
+        with_game(|data| {
+            let mut state = open_at(data, 1);
+            run(&mut state, data, &[MenuInput::Confirm]);
+            assert!(typed(&mut state, &[key(egui::Key::Escape)]).is_empty());
+            assert!(!state.is_naming());
+
+            run(&mut state, data, &[MenuInput::Confirm, MenuInput::Back]);
+            assert!(!state.is_naming());
+            assert_eq!(state.screen(), Some(Screen::SaveState));
+
+            let inputs = [MenuInput::Confirm, MenuInput::Down, MenuInput::Confirm];
+            let commands = run(&mut state, data, &inputs);
+            assert_eq!(commands, vec![MenuCommand::SaveState("save-1".to_owned())]);
+            assert_eq!(state.cursor.row, 0, "the cursor stayed put while naming");
         });
     }
 
