@@ -1,7 +1,5 @@
 in flight:
 
-The "speed" and "actual" overlay in the top left corner needs to turn mostly transparent 5 seconds after making any modifications to speed. The corner this is in should be configurable, default to top-left. The delay before it turns transparent should be configurable. How transparent it is should be configurable, default 60%.
-
 
 todo:
 
