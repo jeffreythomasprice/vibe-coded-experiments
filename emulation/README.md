@@ -110,8 +110,16 @@ fixed factor. The value is applied to the renderer at startup.
 Keyboard, mouse, and gamepad inputs are bound to actions under `[input]` (generic
 actions shared by every core, e.g. `menu`) and `[gameboy.input]` (the Game Boy's
 buttons). Each action takes an **array** of triggers, so several inputs can drive
-it. Defaults: d-pad = arrow keys, `X` = A, `Z` = B, `Enter` = Start, `Right Shift`
-= Select, and `Escape` = menu.
+it. Each default pairs a keyboard key with an Xbox controller button:
+
+| Action | Keyboard | Xbox controller |
+|---|---|---|
+| D-pad | Arrow keys | D-pad |
+| A | `X` | A |
+| B | `Z` | B |
+| Start | `Enter` | Menu |
+| Select | `Right Shift` | View |
+| Emulator menu | `Escape` | Guide |
 
 An action **omitted** from the file uses its default; an action set to an **empty
 array** (`up = []`) is deliberately unbound. Because the defaults live in code, the
@@ -131,7 +139,7 @@ Edit the result to customize, e.g. rebinding A to the keyboard's `a` key:
 
 ```toml
 [gameboy.input]
-a = [{ key = "key_a" }, { gamepad_button = "east" }]
+a = [{ key = "key_a" }, { gamepad_button = "west" }]
 ```
 
 ## Running the test ROMs

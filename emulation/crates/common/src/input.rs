@@ -218,7 +218,10 @@ impl Action for GenericAction {
 
     fn default_triggers(&self) -> Vec<InputTrigger> {
         match self {
-            GenericAction::Menu => vec![InputTrigger::Key(Key::Escape)],
+            GenericAction::Menu => vec![
+                InputTrigger::Key(Key::Escape),
+                InputTrigger::GamepadButton(GamepadButton::Mode),
+            ],
             GenericAction::SaveBattery => vec![InputTrigger::Key(Key::F5)],
             GenericAction::IncreaseSpeed => vec![InputTrigger::Key(Key::Equal)],
             GenericAction::DecreaseSpeed => vec![InputTrigger::Key(Key::Minus)],
@@ -262,7 +265,10 @@ mod tests {
         let bindings = ActionBindings::default();
         assert_eq!(
             bindings.triggers(&GenericAction::Menu),
-            vec![InputTrigger::Key(Key::Escape)]
+            vec![
+                InputTrigger::Key(Key::Escape),
+                InputTrigger::GamepadButton(GamepadButton::Mode),
+            ]
         );
     }
 
@@ -315,7 +321,7 @@ mod tests {
         assert!(bindings.unknown_keys::<GenericAction>().is_empty());
         assert_eq!(
             bindings.triggers(&GenericAction::Menu),
-            vec![InputTrigger::Key(Key::Escape)]
+            GenericAction::Menu.default_triggers()
         );
     }
 

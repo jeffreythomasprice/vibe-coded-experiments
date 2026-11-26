@@ -1,12 +1,12 @@
 //! The Game Boy's bindable buttons, expressed as a [`common::input::Action`] set.
 //!
 //! This is the system-specific counterpart to the generic actions in `common`:
-//! it names the eight DMG inputs and their default keyboard bindings, but knows
-//! nothing about how host events are read (that translation lives in the
+//! it names the eight DMG inputs and their default keyboard and gamepad
+//! bindings, but knows nothing about how host events are read (that translation lives in the
 //! frontend). When the `FF00` joypad register is eventually implemented, it will
 //! read the pressed state the frontend derives from these bindings.
 
-use common::input::{Action, InputTrigger, Key};
+use common::input::{Action, GamepadButton, InputTrigger, Key};
 
 /// The eight buttons of the original Game Boy: the four-way d-pad plus the
 /// A/B/Start/Select action buttons.
@@ -42,17 +42,20 @@ impl Action for GameboyButton {
     }
 
     fn default_triggers(&self) -> Vec<InputTrigger> {
-        let key = |k| vec![InputTrigger::Key(k)];
-        match self {
-            GameboyButton::Right => key(Key::ArrowRight),
-            GameboyButton::Left => key(Key::ArrowLeft),
-            GameboyButton::Up => key(Key::ArrowUp),
-            GameboyButton::Down => key(Key::ArrowDown),
-            GameboyButton::A => key(Key::KeyX),
-            GameboyButton::B => key(Key::KeyZ),
-            GameboyButton::Start => key(Key::Enter),
-            GameboyButton::Select => key(Key::ShiftRight),
-        }
+        // Gamepad buttons are named by position: on an Xbox controller `South` is
+        // A and `East` is B. Matching those labels (rather than the Game Boy's
+        // physical layout) also keeps A = confirm, B = back in the menu.
+        let (key, pad) = match self {
+            GameboyButton::Right => (Key::ArrowRight, GamepadButton::DPadRight),
+            GameboyButton::Left => (Key::ArrowLeft, GamepadButton::DPadLeft),
+            GameboyButton::Up => (Key::ArrowUp, GamepadButton::DPadUp),
+            GameboyButton::Down => (Key::ArrowDown, GamepadButton::DPadDown),
+            GameboyButton::A => (Key::KeyX, GamepadButton::South),
+            GameboyButton::B => (Key::KeyZ, GamepadButton::East),
+            GameboyButton::Start => (Key::Enter, GamepadButton::Start),
+            GameboyButton::Select => (Key::ShiftRight, GamepadButton::Select),
+        };
+        vec![InputTrigger::Key(key), InputTrigger::GamepadButton(pad)]
     }
 }
 
@@ -83,22 +86,19 @@ mod tests {
     }
 
     #[test]
-    fn agreed_default_keys() {
-        assert_eq!(
-            GameboyButton::A.default_triggers(),
-            vec![InputTrigger::Key(Key::KeyX)]
-        );
-        assert_eq!(
-            GameboyButton::B.default_triggers(),
-            vec![InputTrigger::Key(Key::KeyZ)]
-        );
-        assert_eq!(
-            GameboyButton::Start.default_triggers(),
-            vec![InputTrigger::Key(Key::Enter)]
-        );
-        assert_eq!(
-            GameboyButton::Select.default_triggers(),
-            vec![InputTrigger::Key(Key::ShiftRight)]
-        );
+    fn agreed_default_bindings() {
+        let expected = [
+            (GameboyButton::A, Key::KeyX, GamepadButton::South),
+            (GameboyButton::B, Key::KeyZ, GamepadButton::East),
+            (GameboyButton::Start, Key::Enter, GamepadButton::Start),
+            (GameboyButton::Select, Key::ShiftRight, GamepadButton::Select),
+            (GameboyButton::Up, Key::ArrowUp, GamepadButton::DPadUp),
+        ];
+        for (button, key, pad) in expected {
+            assert_eq!(
+                button.default_triggers(),
+                vec![InputTrigger::Key(key), InputTrigger::GamepadButton(pad)]
+            );
+        }
     }
 }

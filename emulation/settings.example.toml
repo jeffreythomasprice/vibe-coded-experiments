@@ -51,16 +51,18 @@ volume = 0.5
 #   cargo run -p emulator -- print-config > ~/.config/emulator/settings.toml
 #
 # Generic actions, shared by every emulator core:
-# menu = [{ key = "escape" }]   # open the menu (no menu UI yet)
+# menu = [{ key = "escape" }, { gamepad_button = "mode" }]   # open the menu
 
 [gameboy.input]
-# Game Boy buttons. Defaults: the d-pad is the arrow keys; X = A, Z = B,
-# Enter = Start, Right Shift = Select.
-# up     = [{ key = "arrow_up" }]
-# down   = [{ key = "arrow_down" }]
-# left   = [{ key = "arrow_left" }]
-# right  = [{ key = "arrow_right" }]
-# a      = [{ key = "key_x" }]
-# b      = [{ key = "key_z" }]
-# start  = [{ key = "enter" }]
-# select = [{ key = "shift_right" }]
+# Game Boy buttons. Each defaults to a keyboard key and an Xbox-style controller
+# button: arrow keys / d-pad; X / A = A, Z / B = B, Enter / Menu = Start,
+# Right Shift / View = Select. Controller buttons are named by position, so the
+# Xbox A button is "south" and B is "east".
+# up     = [{ key = "arrow_up" }, { gamepad_button = "d_pad_up" }]
+# down   = [{ key = "arrow_down" }, { gamepad_button = "d_pad_down" }]
+# left   = [{ key = "arrow_left" }, { gamepad_button = "d_pad_left" }]
+# right  = [{ key = "arrow_right" }, { gamepad_button = "d_pad_right" }]
+# a      = [{ key = "key_x" }, { gamepad_button = "south" }]
+# b      = [{ key = "key_z" }, { gamepad_button = "east" }]
+# start  = [{ key = "enter" }, { gamepad_button = "start" }]
+# select = [{ key = "shift_right" }, { gamepad_button = "select" }]

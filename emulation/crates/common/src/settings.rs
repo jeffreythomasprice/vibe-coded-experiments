@@ -274,11 +274,11 @@ mod tests {
 
     #[test]
     fn absent_input_section_uses_default_bindings() {
-        use crate::input::{GenericAction, InputTrigger, Key};
+        use crate::input::{Action, GenericAction};
         let settings: Settings = toml::from_str("").unwrap();
         assert_eq!(
             settings.input.0.triggers(&GenericAction::Menu),
-            vec![InputTrigger::Key(Key::Escape)]
+            GenericAction::Menu.default_triggers()
         );
     }
 

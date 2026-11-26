@@ -329,6 +329,7 @@ mod tests {
     use common::{RomId, ScaleMode};
 
     use super::*;
+    use common::input::Action;
 
     #[test]
     fn sanitize_keeps_safe_chars() {
@@ -429,8 +430,6 @@ mod tests {
 
     #[test]
     fn default_config_toml_round_trips_and_fills_bindings() {
-        use common::input::{InputTrigger, Key};
-
         let text = FileStore::default_config_toml().unwrap();
         // Both sections are present with explicit bindings (rendered as TOML
         // arrays-of-tables, e.g. `[[input.menu]]` / `[[gameboy.input.up]]`).
@@ -440,11 +439,11 @@ mod tests {
         let config: FileConfig = toml::from_str(&text).unwrap();
         assert_eq!(
             config.input.0.triggers(&GenericAction::Menu),
-            vec![InputTrigger::Key(Key::Escape)]
+            GenericAction::Menu.default_triggers()
         );
         assert_eq!(
             config.gameboy.input.triggers(&GameboyButton::A),
-            vec![InputTrigger::Key(Key::KeyX)]
+            GameboyButton::A.default_triggers()
         );
     }
 
@@ -472,7 +471,7 @@ mod tests {
         // Absent action falls back to its default.
         assert_eq!(
             bindings.triggers(&GameboyButton::A),
-            vec![InputTrigger::Key(Key::KeyX)]
+            GameboyButton::A.default_triggers()
         );
 
         let _ = fs::remove_dir_all(config.parent().unwrap());
