@@ -3,8 +3,7 @@ use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Local};
 use common::input::{Action, GenericAction};
-use common::storage::AUTOSAVE_NAME;
-use common::{quicksave, AudioSettings, StateEntry};
+use common::{quicksave, AudioSettings, SaveStore, Screenshot, StateEntry, StateSlot};
 use common::{
     ActionBindings, Corner, InputBindings, InputTrigger, RomId, SaveId, ScaleMode, SpeedFade,
     SpeedMode,
@@ -239,11 +238,11 @@ impl App {
             // Saving on the way out happens in `Drop` when the loop returns,
             // which covers this and every other exit path.
             MenuCommand::Exit => event_loop.exit(),
-            MenuCommand::SaveState(name) => {
-                self.save_state(&name);
+            MenuCommand::SaveState(slot) => {
+                self.save_state(&slot);
                 self.menu.close();
             }
-            MenuCommand::LoadState(name) => self.load_state(&name),
+            MenuCommand::LoadState(slot) => self.load_state(&slot),
             MenuCommand::CloseMenu => self.menu.close(),
             MenuCommand::SetBinding {
                 set,
@@ -273,8 +272,8 @@ impl App {
     fn quick_save(&mut self) {
         match self.list_states() {
             Ok(states) => {
-                let name = quicksave::next_quicksave(&states, self.quicksave_count);
-                self.save_state(&name);
+                let number = quicksave::next_quicksave(&states, self.quicksave_count);
+                self.save_state(&StateSlot::Quick(number));
             }
             Err(err) => {
                 tracing::error!("quicksave failed: {err:#}");
@@ -287,7 +286,7 @@ impl App {
     fn quick_load(&mut self) {
         match self.list_states() {
             Ok(states) => match quicksave::latest_quicksave(&states, self.quicksave_count) {
-                Some(state) => self.load_state(&state.name),
+                Some(state) => self.load_state(&state.slot),
                 None => self.show_toast("No quicksave yet"),
             },
             Err(err) => {
@@ -297,25 +296,25 @@ impl App {
         }
     }
 
-    /// Write the save state `name`, flushing the battery save alongside it.
-    fn write_state(&mut self, name: &str) -> anyhow::Result<()> {
+    /// Write the save state in `slot`, flushing the battery save alongside it.
+    fn write_state(&mut self, slot: &StateSlot) -> anyhow::Result<()> {
         let (Some(emu), Some(id)) = (&self.emu, &self.save_id) else {
             anyhow::bail!("no game loaded");
         };
-        let result = crate::rom::save_state(emu, id, name, &self.store);
+        let result = crate::rom::save_state(emu, id, slot, &self.store);
         self.save_battery();
         self.state_menu = None;
         result
     }
 
     /// A save the user asked for, reported on the HUD.
-    fn save_state(&mut self, name: &str) {
+    fn save_state(&mut self, slot: &StateSlot) {
         if self.emu.is_none() {
             self.show_toast("No game loaded");
             return;
         }
-        match self.write_state(name) {
-            Ok(()) => self.show_toast(format!("Saved {name}")),
+        match self.write_state(slot) {
+            Ok(()) => self.show_toast(format!("Saved {}", slot.label())),
             Err(err) => {
                 tracing::error!("{err:#}");
                 self.show_toast("Save failed");
@@ -323,20 +322,20 @@ impl App {
         }
     }
 
-    /// Restore the save state `name`, show its frame, and close the menu. On
+    /// Restore the save state in `slot`, show its frame, and close the menu. On
     /// failure the machine carries on as it was.
-    fn load_state(&mut self, name: &str) {
+    fn load_state(&mut self, slot: &StateSlot) {
         let (Some(emu), Some(id)) = (&mut self.emu, &self.save_id) else {
             self.show_toast("No game loaded");
             return;
         };
-        if let Err(err) = crate::rom::load_state(emu, id, name, &self.store) {
+        if let Err(err) = crate::rom::load_state(emu, id, slot, &self.store) {
             tracing::error!("{err:#}");
             self.show_toast("Load failed");
             return;
         }
         self.machine_replaced();
-        self.show_toast(format!("Loaded {name}"));
+        self.show_toast(format!("Loaded {}", slot.label()));
     }
 
     /// Get back to playing after the machine's state was swapped out.
@@ -365,7 +364,7 @@ impl App {
             return None;
         }
         self.autosave_timer.reset(Instant::now());
-        Some(self.write_state(AUTOSAVE_NAME))
+        Some(self.write_state(&StateSlot::Auto))
     }
 
     /// Save everything about the current game before it goes away.
@@ -384,8 +383,26 @@ impl App {
             Vec::new()
         });
         StateMenu {
-            choices: states.iter().map(state_choice).collect(),
+            choices: states
+                .into_iter()
+                .map(|state| {
+                    let screenshot = self.read_screenshot(&state.slot);
+                    state_choice(state, screenshot)
+                })
+                .collect(),
             suggested_name: Local::now().format("save-%Y%m%d-%H%M%S").to_string(),
+        }
+    }
+
+    /// The picture saved with one of the loaded game's states, if any.
+    fn read_screenshot(&self, slot: &StateSlot) -> Option<Arc<Screenshot>> {
+        let id = self.save_id.as_ref()?;
+        match self.store.read_screenshot(id, slot) {
+            Ok(screenshot) => screenshot.map(Arc::new),
+            Err(err) => {
+                tracing::warn!(%err, ?slot, "failed to read a screenshot");
+                None
+            }
         }
     }
 
@@ -415,7 +432,7 @@ impl App {
         self.toast = None;
         self.machine_replaced();
         match resumed {
-            Some(Resume::Loaded(name)) => self.show_toast(format!("Resumed {name}")),
+            Some(Resume::Loaded(slot)) => self.show_toast(format!("Resumed {}", slot.label())),
             Some(Resume::Failed) => self.show_toast("Could not load saves"),
             Some(Resume::NoStates) | None => {}
         }
@@ -550,6 +567,11 @@ impl App {
         } else {
             (Vec::new(), Vec::new())
         };
+        // The speed box stays opaque under the menu, and its fade starts over
+        // from the moment the menu closes.
+        if menu_open {
+            self.speed_changed_at = Instant::now();
+        }
         if !menu_open {
             self.state_menu = None;
         } else if self.state_menu.is_none() {
@@ -978,12 +1000,17 @@ impl Drop for App {
     }
 }
 
-/// A save state as a menu entry: its name and when it was written, local time.
-fn state_choice(state: &StateEntry) -> StateChoice {
+/// A save state as a menu entry: its label and when it was written, local time.
+fn state_choice(state: StateEntry, screenshot: Option<Arc<Screenshot>>) -> StateChoice {
     let modified = DateTime::<Local>::from(state.modified);
     StateChoice {
-        name: state.name.clone(),
-        label: format!("{}  {}", state.name, modified.format("%Y-%m-%d %H:%M")),
+        label: format!(
+            "{}  {}",
+            state.slot.label(),
+            modified.format("%Y-%m-%d %H:%M")
+        ),
+        slot: state.slot,
+        screenshot,
     }
 }
 

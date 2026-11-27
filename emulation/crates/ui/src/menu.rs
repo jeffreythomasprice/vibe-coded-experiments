@@ -1,7 +1,7 @@
 //! The menu's state machine: which screen is showing, where the cursor is, and
 //! what activating an entry does.
 
-use common::InputTrigger;
+use common::{InputTrigger, StateSlot};
 
 use crate::nav::{Cursor, MenuInput};
 use crate::{BindingRow, BindingSet, MenuCommand, MenuData};
@@ -78,7 +78,14 @@ pub(crate) fn entries(screen: Screen, data: &MenuData) -> Vec<Vec<Entry>> {
         }
         Screen::SaveState => [vec![Entry::NewState]]
             .into_iter()
-            .chain((0..data.states.len()).map(|index| vec![Entry::State(index)]))
+            // Only the user's own saves can be overwritten by hand.
+            .chain(
+                data.states
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, state)| matches!(state.slot, StateSlot::Manual(_)))
+                    .map(|(index, _)| vec![Entry::State(index)]),
+            )
             .chain([vec![Entry::Back]])
             .collect(),
         Screen::LoadState => (0..data.states.len())
@@ -205,7 +212,7 @@ impl MenuState {
             return;
         };
         if !name.is_empty() {
-            commands.push(MenuCommand::SaveState(name.to_owned()));
+            commands.push(MenuCommand::SaveState(StateSlot::Manual(name.to_owned())));
             self.naming = None;
         }
     }
@@ -313,10 +320,10 @@ impl MenuState {
             Entry::NewState => self.naming = Some(data.suggested_state_name.to_owned()),
             Entry::State(index) => {
                 if let Some(state) = data.states.get(index) {
-                    let name = state.name.clone();
+                    let slot = state.slot.clone();
                     match self.screen {
-                        Some(Screen::SaveState) => commands.push(MenuCommand::SaveState(name)),
-                        _ => commands.push(MenuCommand::LoadState(name)),
+                        Some(Screen::SaveState) => commands.push(MenuCommand::SaveState(slot)),
+                        _ => commands.push(MenuCommand::LoadState(slot)),
                     }
                 }
             }
@@ -373,6 +380,10 @@ mod tests {
         commands
     }
 
+    fn manual(name: &str) -> StateSlot {
+        StateSlot::Manual(name.to_owned())
+    }
+
     fn with_data(test: impl FnOnce(&MenuData)) {
         let roms = [RomChoice {
             id: "tetris.gb".to_owned(),
@@ -384,9 +395,10 @@ mod tests {
             display: "A".to_owned(),
             triggers: vec![InputTrigger::Key(Key::KeyX)],
         }];
-        let states = ["quicksave-1", "boss"].map(|name| StateChoice {
-            name: name.to_owned(),
-            label: name.to_owned(),
+        let states = [StateSlot::Quick(1), manual("boss")].map(|slot| StateChoice {
+            label: slot.label(),
+            slot,
+            screenshot: None,
         });
         test(&MenuData {
             rom_loaded: false,
@@ -553,14 +565,19 @@ mod tests {
         with_game(|data| {
             let mut state = open_at(data, 2);
             let commands = run(&mut state, data, &[MenuInput::Down, MenuInput::Confirm]);
-            assert_eq!(commands, vec![MenuCommand::LoadState("boss".to_owned())]);
+            assert_eq!(commands, vec![MenuCommand::LoadState(manual("boss"))]);
 
-            // The save screen lists "New Save" first.
+            // The save screen lists "New Save" first, then only manual saves.
             let mut state = open_at(data, 1);
             let commands = run(&mut state, data, &[MenuInput::Down, MenuInput::Confirm]);
+            assert_eq!(commands, vec![MenuCommand::SaveState(manual("boss"))]);
             assert_eq!(
-                commands,
-                vec![MenuCommand::SaveState("quicksave-1".to_owned())]
+                entries(Screen::SaveState, data),
+                [
+                    vec![Entry::NewState],
+                    vec![Entry::State(1)],
+                    vec![Entry::Back]
+                ]
             );
         });
     }
@@ -579,7 +596,7 @@ mod tests {
             events.push(egui::Event::Text("x".to_owned()));
             assert_eq!(
                 typed(&mut state, &events),
-                vec![MenuCommand::SaveState("My Run_2".to_owned())]
+                vec![MenuCommand::SaveState(manual("My Run_2"))]
             );
             assert!(!state.is_naming());
         });
@@ -615,7 +632,7 @@ mod tests {
 
             let inputs = [MenuInput::Confirm, MenuInput::Down, MenuInput::Confirm];
             let commands = run(&mut state, data, &inputs);
-            assert_eq!(commands, vec![MenuCommand::SaveState("save-1".to_owned())]);
+            assert_eq!(commands, vec![MenuCommand::SaveState(manual("save-1"))]);
             assert_eq!(state.cursor.row, 0, "the cursor stayed put while naming");
         });
     }

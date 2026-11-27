@@ -3,6 +3,9 @@ in flight:
 
 todo:
 
+gameboy color? customizable palette?
+
+
 "If the core ever does need optimizing, the flamegraph says start with Ppu::tick_one_dot (per-dot loop, ~half the time) and the WaveChannel tick."
 
 

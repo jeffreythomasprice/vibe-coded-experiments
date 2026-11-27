@@ -37,10 +37,11 @@ autosave_interval_secs = 300
 # The corner the speed box sits in: "top_left" (default), "top_right",
 # "bottom_left" or "bottom_right".
 speed_corner = "top_left"
-# Seconds after a speed change (or launch) before the speed box fades.
-speed_fade_delay_secs = 5.0
-# How see-through the faded box is, from 0.0 (opaque) to 1.0 (invisible).
-speed_faded_transparency = 0.6
+# Seconds after a speed change (or launch, or closing the menu) before the speed
+# box starts to fade. It is always opaque while the menu is open.
+speed_fade_delay_secs = 2.0
+# Seconds the box then takes to fade out completely. 0 hides it at once.
+speed_fade_secs = 2.0
 
 [paths]
 # Where the file-system backend keeps ROMs and saves. Absolute paths only (no `~`

@@ -17,6 +17,6 @@ pub use settings::{
     SaveStateSettings, Settings, SpeedFade, SpeedMode,
 };
 pub use storage::{
-    PersistentStore, RomEntry, RomId, RomLibrary, SaveId, SaveSlot, SaveStore, SettingsStore,
-    StateEntry, StorageError,
+    PersistentStore, RomEntry, RomId, RomLibrary, SaveId, SaveStore, Screenshot, SettingsStore,
+    StateEntry, StateSlot, StorageError,
 };

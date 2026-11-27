@@ -179,20 +179,20 @@ pub enum Corner {
 pub struct HudSettings {
     /// The corner the speed box sits in.
     pub speed_corner: Corner,
-    /// Seconds after a speed change before the speed box fades. Read it through
-    /// [`HudSettings::speed_fade_delay`].
+    /// Seconds after a speed change before the speed box starts to fade. Read it
+    /// through [`HudSettings::speed_fade_delay`].
     pub speed_fade_delay_secs: f32,
-    /// How see-through the faded speed box is, from 0.0 (opaque) to 1.0
-    /// (invisible). Read it through [`HudSettings::speed_faded_opacity`].
-    pub speed_faded_transparency: f32,
+    /// Seconds the speed box takes to fade from opaque to invisible. Read it
+    /// through [`HudSettings::speed_fade_duration`].
+    pub speed_fade_secs: f32,
 }
 
 impl Default for HudSettings {
     fn default() -> HudSettings {
         HudSettings {
             speed_corner: Corner::default(),
-            speed_fade_delay_secs: 5.0,
-            speed_faded_transparency: 0.6,
+            speed_fade_delay_secs: 2.0,
+            speed_fade_secs: 2.0,
         }
     }
 }
@@ -202,17 +202,21 @@ impl Default for HudSettings {
 pub struct SpeedFade {
     /// How long the box stays opaque after a speed change.
     pub delay: Duration,
-    /// The opacity it fades to, in `[0.0, 1.0]`.
-    pub faded_opacity: f32,
+    /// How long it then takes to disappear.
+    pub duration: Duration,
 }
 
 impl SpeedFade {
-    /// The opacity the box should have `since_change` after the last speed change.
+    /// The opacity the box should have `since_change` after the last speed
+    /// change: opaque for the delay, then falling linearly to invisible.
     pub fn opacity(&self, since_change: Duration) -> f32 {
-        if since_change < self.delay {
-            1.0
+        let Some(fading) = since_change.checked_sub(self.delay) else {
+            return 1.0;
+        };
+        if fading >= self.duration {
+            0.0
         } else {
-            self.faded_opacity
+            1.0 - fading.as_secs_f32() / self.duration.as_secs_f32()
         }
     }
 }
@@ -223,40 +227,28 @@ impl HudSettings {
     pub fn speed_fade(&self) -> SpeedFade {
         SpeedFade {
             delay: self.speed_fade_delay(),
-            faded_opacity: self.speed_faded_opacity(),
+            duration: self.speed_fade_duration(),
         }
     }
 
     /// The configured fade delay, or zero if it is negative or not a usable
     /// number of seconds.
     pub fn speed_fade_delay(&self) -> Duration {
-        Duration::try_from_secs_f32(self.speed_fade_delay_secs).unwrap_or_else(|err| {
-            tracing::warn!(
-                value = self.speed_fade_delay_secs,
-                %err,
-                "invalid hud.speed_fade_delay_secs; using 0"
-            );
-            Duration::ZERO
-        })
+        seconds_or_zero("hud.speed_fade_delay_secs", self.speed_fade_delay_secs)
     }
 
-    /// The opacity of the faded speed box: one minus the configured
-    /// transparency, which is clamped to `[0.0, 1.0]`. A NaN transparency
-    /// leaves the box opaque.
-    pub fn speed_faded_opacity(&self) -> f32 {
-        let transparency = self.speed_faded_transparency;
-        if !(0.0..=1.0).contains(&transparency) {
-            tracing::warn!(
-                value = transparency,
-                "hud.speed_faded_transparency must be between 0 and 1; clamping"
-            );
-        }
-        if transparency.is_nan() {
-            1.0
-        } else {
-            1.0 - transparency.clamp(0.0, 1.0)
-        }
+    /// The configured fade-out length, or zero (vanish at once) if it is
+    /// negative or not a usable number of seconds.
+    pub fn speed_fade_duration(&self) -> Duration {
+        seconds_or_zero("hud.speed_fade_secs", self.speed_fade_secs)
     }
+}
+
+fn seconds_or_zero(setting: &str, value: f32) -> Duration {
+    Duration::try_from_secs_f32(value).unwrap_or_else(|err| {
+        tracing::warn!(setting, value, %err, "invalid number of seconds; using 0");
+        Duration::ZERO
+    })
 }
 
 /// Emulation-timing preferences.
@@ -336,7 +328,7 @@ mod tests {
         let hud = toml::from_str::<Settings>("").unwrap().hud;
         assert_eq!(hud.speed_corner, Corner::TopLeft);
         assert_eq!(hud.speed_fade_delay(), Duration::from_secs(5));
-        assert!((hud.speed_faded_opacity() - 0.4).abs() < 1e-6);
+        assert_eq!(hud.speed_fade_duration(), Duration::from_secs(2));
     }
 
     #[test]
@@ -345,13 +337,21 @@ mod tests {
         let hud = toml::from_str::<Settings>(text).unwrap().hud;
         assert_eq!(hud.speed_corner, Corner::BottomRight);
         assert_eq!(hud.speed_fade_delay(), Duration::from_secs(5));
-        assert_eq!(hud.speed_faded_transparency, 0.6);
+        assert_eq!(hud.speed_fade_duration(), Duration::from_secs(2));
     }
 
     #[test]
     fn hud_accepts_whole_and_fractional_delays() {
-        let delay = |text| toml::from_str::<Settings>(text).unwrap().hud.speed_fade_delay();
-        assert_eq!(delay("[hud]\nspeed_fade_delay_secs = 2"), Duration::from_secs(2));
+        let delay = |text| {
+            toml::from_str::<Settings>(text)
+                .unwrap()
+                .hud
+                .speed_fade_delay()
+        };
+        assert_eq!(
+            delay("[hud]\nspeed_fade_delay_secs = 2"),
+            Duration::from_secs(2)
+        );
         assert_eq!(
             delay("[hud]\nspeed_fade_delay_secs = 0.5"),
             Duration::from_millis(500)
@@ -359,25 +359,37 @@ mod tests {
     }
 
     #[test]
-    fn out_of_range_hud_values_are_clamped() {
-        let hud = |delay, transparency| HudSettings {
-            speed_fade_delay_secs: delay,
-            speed_faded_transparency: transparency,
-            ..HudSettings::default()
-        };
-        assert_eq!(hud(-1.0, 2.0).speed_fade_delay(), Duration::ZERO);
-        assert_eq!(hud(f32::NAN, 2.0).speed_fade_delay(), Duration::ZERO);
-        assert_eq!(hud(0.0, 2.0).speed_faded_opacity(), 0.0);
-        assert_eq!(hud(0.0, -1.0).speed_faded_opacity(), 1.0);
-        assert_eq!(hud(0.0, f32::NAN).speed_faded_opacity(), 1.0);
+    fn unusable_hud_durations_become_zero() {
+        for value in [-1.0, f32::NAN, f32::INFINITY] {
+            let hud = HudSettings {
+                speed_fade_delay_secs: value,
+                speed_fade_secs: value,
+                ..HudSettings::default()
+            };
+            assert_eq!(hud.speed_fade_delay(), Duration::ZERO);
+            assert_eq!(hud.speed_fade_duration(), Duration::ZERO);
+        }
     }
 
     #[test]
-    fn speed_box_fades_once_the_delay_has_passed() {
+    fn speed_box_fades_to_invisible_after_the_delay() {
         let fade = HudSettings::default().speed_fade();
         assert_eq!(fade.opacity(Duration::ZERO), 1.0);
         assert_eq!(fade.opacity(Duration::from_millis(4999)), 1.0);
-        assert_eq!(fade.opacity(Duration::from_secs(5)), fade.faded_opacity);
+        assert_eq!(fade.opacity(Duration::from_secs(5)), 1.0);
+        assert!((fade.opacity(Duration::from_secs(6)) - 0.5).abs() < 1e-6);
+        assert_eq!(fade.opacity(Duration::from_secs(7)), 0.0);
+        assert_eq!(fade.opacity(Duration::from_secs(60)), 0.0);
+    }
+
+    #[test]
+    fn zero_length_fade_vanishes_at_once() {
+        let fade = SpeedFade {
+            delay: Duration::from_secs(1),
+            duration: Duration::ZERO,
+        };
+        assert_eq!(fade.opacity(Duration::from_millis(999)), 1.0);
+        assert_eq!(fade.opacity(Duration::from_secs(1)), 0.0);
     }
 
     #[test]
@@ -402,7 +414,10 @@ mod tests {
     fn partial_audio_section_keeps_other_defaults() {
         let settings: Settings = toml::from_str("[audio]\nvolume = 0.25\n").unwrap();
         assert_eq!(settings.audio.volume, 0.25);
-        assert!(settings.audio.enabled, "unspecified audio fields keep their defaults");
+        assert!(
+            settings.audio.enabled,
+            "unspecified audio fields keep their defaults"
+        );
     }
 
     #[test]
@@ -444,8 +459,14 @@ mod tests {
 
     #[test]
     fn off_ladder_value_snaps_to_the_neighbor() {
-        assert_eq!(SpeedMode::Relative(3.75).increased(), SpeedMode::Relative(4.0));
-        assert_eq!(SpeedMode::Relative(3.75).decreased(), SpeedMode::Relative(3.0));
+        assert_eq!(
+            SpeedMode::Relative(3.75).increased(),
+            SpeedMode::Relative(4.0)
+        );
+        assert_eq!(
+            SpeedMode::Relative(3.75).decreased(),
+            SpeedMode::Relative(3.0)
+        );
     }
 
     #[test]
@@ -460,7 +481,10 @@ mod tests {
     #[test]
     fn parse_cli_covers_numbers_keywords_and_errors() {
         assert_eq!(SpeedMode::parse_cli("1").unwrap(), SpeedMode::Native);
-        assert_eq!(SpeedMode::parse_cli("2x").unwrap(), SpeedMode::Relative(2.0));
+        assert_eq!(
+            SpeedMode::parse_cli("2x").unwrap(),
+            SpeedMode::Relative(2.0)
+        );
         assert_eq!(
             SpeedMode::parse_cli("3.75").unwrap(),
             SpeedMode::Relative(3.75)

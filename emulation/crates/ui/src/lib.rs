@@ -12,11 +12,14 @@
 
 mod menu;
 mod nav;
+mod preview;
 mod screens;
 mod theme;
 mod widgets;
 
-use common::{Corner, InputTrigger, Key, MouseButton};
+use std::sync::Arc;
+
+use common::{Corner, InputTrigger, Key, MouseButton, Screenshot, StateSlot};
 
 pub use menu::MenuState;
 pub use nav::MenuInput;
@@ -67,8 +70,10 @@ pub struct RomChoice {
 #[derive(Clone, Debug)]
 pub struct StateChoice {
     /// Echoed back in [`MenuCommand::LoadState`] / [`MenuCommand::SaveState`].
-    pub name: String,
+    pub slot: StateSlot,
     pub label: String,
+    /// The screen as it was saved, if the state has a picture.
+    pub screenshot: Option<Arc<Screenshot>>,
 }
 
 /// One row of the input-bindings table: a display name plus the triggers
@@ -116,10 +121,10 @@ pub struct MenuData<'a> {
 pub enum MenuCommand {
     /// Load (hot-swap) the ROM with this opaque id.
     LoadRom(String),
-    /// Snapshot the machine under this name, replacing any state that has it.
-    SaveState(String),
-    /// Restore the save state with this name.
-    LoadState(String),
+    /// Snapshot the machine into this slot, replacing any state there.
+    SaveState(StateSlot),
+    /// Restore the save state in this slot.
+    LoadState(StateSlot),
     /// Restart the loaded game from power-on, keeping its saves.
     ResetGame,
     /// Quit the application.
@@ -277,8 +282,16 @@ mod tests {
             .collect();
         let states: Vec<StateChoice> = (0..30)
             .map(|i| StateChoice {
-                name: format!("quicksave-{i}"),
-                label: format!("quicksave-{i}  2026-01-01 12:00"),
+                slot: if i % 3 == 0 {
+                    StateSlot::Manual(format!("save-{i}"))
+                } else {
+                    StateSlot::Quick(i)
+                },
+                label: format!("Quicksave {i}  2026-01-01 12:00"),
+                // Every other state has a picture.
+                screenshot: (i % 2 == 0).then(|| {
+                    Arc::new(Screenshot::new(160, 144, vec![255; 160 * 144 * 4]).unwrap())
+                }),
             })
             .collect();
         let data = MenuData {

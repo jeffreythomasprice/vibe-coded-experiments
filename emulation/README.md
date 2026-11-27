@@ -216,14 +216,15 @@ put the `.sav` next to the ROM** — existing side-by-side `.sav` files are not 
 
 ## Speed box
 
-The speed box fades five seconds after the speed last changed (or after launch).
-Its corner, delay and faded transparency are configurable:
+The speed box starts to fade out five seconds after the speed last changed (or
+after launch, or closing the menu) until it is gone. It is always opaque while the
+menu is open. Its corner, delay and fade length are configurable:
 
 ```toml
 [hud]
 speed_corner = "top_left"        # or top_right, bottom_left, bottom_right
-speed_fade_delay_secs = 5.0
-speed_faded_transparency = 0.6   # 0 is opaque, 1 is invisible
+speed_fade_delay_secs = 2.0
+speed_fade_secs = 2.0            # 0 hides it at once
 ```
 
 ## Save states

@@ -214,20 +214,32 @@ A save state snapshots the whole machine. The pieces:
   must bump `FORMAT_VERSION`**. New machine state must be serialized; boxed byte
   arrays use `#[serde(with = "boxed_bytes")]`. Restoring an MBC3 RTC keeps its
   absolute anchor, so the clock stays on wall time.
-- **Storage:** `SaveSlot::State(name)` plus `SaveStore::list_states`. `FileStore`
-  writes `{saves_dir}/states/{sanitized-title}/{name}.state` and reports the file
-  modification time as the state's date. State names keep spaces and punctuation;
-  only path separators, control characters, and a leading dot are replaced.
-- **Quicksave rotation (`common/src/quicksave.rs`):** states named
-  `quicksave-1..=N`, recognised purely by name (a hand-made one counts). A
-  quicksave takes the lowest unused name, else overwrites the oldest; quickload
+- **Slots (`common::storage`):** a state is addressed by `StateSlot`:
+  `Manual(name)`, `Quick(number)`, or `Auto`. The kind is never inferred from a
+  name, so a manual save may be called anything.
+- **Storage:** `SaveStore::{read_state, write_state, read_screenshot,
+  list_states}` (battery RAM has its own `read_battery`/`write_battery`).
+  `FileStore` keeps one game's states under
+  `{saves_dir}/states/{sanitized-title}/` as `autosave.state`,
+  `quick/{number}.state` and `manual/{name}.state`, and reports the file
+  modification time as the state's date. Manual names keep spaces and
+  punctuation; only path separators, control characters, and a leading dot are
+  replaced.
+- **Screenshots:** each save also stores the screen (`common::Screenshot`, RGBA in
+  the display palette), which `FileStore` writes as a `.png` beside the state. It
+  is optional: a state with a missing or unreadable picture still loads. It is not
+  part of the state blob, so it doesn't affect `FORMAT_VERSION`.
+- **Quicksave rotation (`common/src/quicksave.rs`):** slots `Quick(1..=N)`. A
+  quicksave takes the lowest unused number, else overwrites the oldest; quickload
   restores the newest. `N` is `[saves] quicksave_count` (default 5, minimum 1).
 - **App:** `GenericAction::QuickSave` (**F5**) and `QuickLoad` (**F8**), both
-  rebindable, plus the menu's Save State / Load State screens, which list every
-  state newest first. Results show as a short HUD toast.
-- **Autosave:** a single state named `autosave` (`common::storage::AUTOSAVE_NAME`),
-  written every `[saves] autosave_interval_secs` (default 300, 0 disables) while
-  playing, and when leaving a game (exit, ROM swap, reset).
+  rebindable, plus the menu. Load State lists every state newest first, with the
+  highlighted one's screenshot (`ui/src/preview.rs`); Save State offers a new
+  manual save or overwriting an existing manual one. Results show as a short HUD
+  toast.
+- **Autosave:** the `StateSlot::Auto` state, written every
+  `[saves] autosave_interval_secs` (default 300, 0 disables) while playing, and
+  when leaving a game (exit, ROM swap, reset).
   `emulator/src/autosave.rs` tracks when it is due. It is skipped if no frame has
   run since the last load, if the CPU faulted, or during a panic. The timer
   restarts whenever the machine is replaced.
@@ -554,10 +566,11 @@ as possible — egui splits cleanly along exactly this seam:
   persists). Rebind capture routes the next raw key/mouse/gamepad input into
   `MenuState::capture` instead of the game.
 
-The HUD's speed box fades some time after a speed change. Its corner, delay and
-faded transparency come from `[hud]` (`common::HudSettings`). The host owns the
-clock and passes a target opacity in `MenuData::speed_opacity`; `ui` only eases
-toward it.
+The HUD's speed box fades out completely some time after a speed change, and is
+opaque while the menu is open (closing it restarts the delay). Its corner, delay
+and fade length come from `[hud]` (`common::HudSettings`). The host owns the clock
+and passes a target opacity in `MenuData::speed_opacity`; `ui` only eases toward
+it.
 
 Rendering detail: the game wants the sRGB surface for correct colors but egui wants
 a linear target (it gamma-corrects itself), so `Gfx` adds the non-sRGB view format

@@ -9,12 +9,13 @@
 use std::fs;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use common::input::{ActionBindings, GenericAction};
 use common::{
     AudioSettings, EmulationSettings, GraphicsSettings, HudSettings, InputBindings, PersistentStore, RomEntry,
-    RomId, RomLibrary, SaveId, SaveSlot, SaveStateSettings, SaveStore, Settings, SettingsStore,
-    StateEntry, StorageError,
+    RomId, RomLibrary, SaveId, SaveStateSettings, SaveStore, Screenshot, Settings, SettingsStore,
+    StateEntry, StateSlot, StorageError,
 };
 use directories::ProjectDirs;
 use gameboy::GameboyButton;
@@ -55,6 +56,12 @@ struct PathsConfig {
 }
 
 const STATE_EXTENSION: &str = "state";
+const SCREENSHOT_EXTENSION: &str = "png";
+const AUTOSAVE_STEM: &str = "autosave";
+const QUICK_DIR: &str = "quick";
+const MANUAL_DIR: &str = "manual";
+/// Larger screenshots are rejected rather than decoded.
+const MAX_SCREENSHOT_SIDE: u32 = 4096;
 
 /// A file-system-backed persistent store rooted at a config directory.
 pub struct FileStore {
@@ -183,20 +190,24 @@ impl FileStore {
         Ok(())
     }
 
-    /// Path a `(SaveId, SaveSlot)` maps to under the saves directory.
-    fn save_path(&self, id: &SaveId, slot: &SaveSlot) -> PathBuf {
-        match slot {
-            SaveSlot::Battery => self.saves_dir.join(format!("{}.sav", sanitize(&id.0))),
-            SaveSlot::State(name) => self
-                .states_dir(id)
-                .join(format!("{}.{STATE_EXTENSION}", sanitize_state_name(name))),
-        }
+    fn battery_path(&self, id: &SaveId) -> PathBuf {
+        self.saves_dir.join(format!("{}.sav", sanitize(&id.0)))
     }
 
     /// The directory holding one game's save states. A directory per game keeps
     /// state names from colliding with anything derived from titles.
     fn states_dir(&self, id: &SaveId) -> PathBuf {
         self.saves_dir.join("states").join(sanitize(&id.0))
+    }
+
+    /// The state file of a slot. Its screenshot sits beside it.
+    fn state_path(&self, id: &SaveId, slot: &StateSlot) -> PathBuf {
+        let dir = self.states_dir(id);
+        match slot {
+            StateSlot::Manual(name) => state_file(&dir.join(MANUAL_DIR), &sanitize_state_name(name)),
+            StateSlot::Quick(number) => state_file(&dir.join(QUICK_DIR), &number.to_string()),
+            StateSlot::Auto => state_file(&dir, AUTOSAVE_STEM),
+        }
     }
 }
 
@@ -239,66 +250,207 @@ impl RomLibrary for FileStore {
 }
 
 impl SaveStore for FileStore {
-    fn read_save(&self, id: &SaveId, slot: &SaveSlot) -> Result<Option<Vec<u8>>, StorageError> {
-        let path = self.save_path(id, slot);
-        match fs::read(&path) {
-            Ok(data) => {
-                tracing::info!(path = %path.display(), bytes = data.len(), "read save");
-                Ok(Some(data))
-            }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                tracing::debug!(path = %path.display(), "no save yet");
-                Ok(None)
-            }
-            Err(err) => Err(io_error(&path, err)),
-        }
+    fn read_battery(&self, id: &SaveId) -> Result<Option<Vec<u8>>, StorageError> {
+        read_if_present(&self.battery_path(id))
     }
 
-    fn write_save(&self, id: &SaveId, slot: &SaveSlot, data: &[u8]) -> Result<(), StorageError> {
-        let path = self.save_path(id, slot);
-        if let Some(parent) = path.parent() {
-            create_dir(parent)?;
+    fn write_battery(&self, id: &SaveId, data: &[u8]) -> Result<(), StorageError> {
+        write_save_file(&self.battery_path(id), data)
+    }
+
+    fn read_state(&self, id: &SaveId, slot: &StateSlot) -> Result<Option<Vec<u8>>, StorageError> {
+        read_if_present(&self.state_path(id, slot))
+    }
+
+    fn write_state(
+        &self,
+        id: &SaveId,
+        slot: &StateSlot,
+        data: &[u8],
+        screenshot: Option<&Screenshot>,
+    ) -> Result<(), StorageError> {
+        let path = self.state_path(id, slot);
+        let picture = path.with_extension(SCREENSHOT_EXTENSION);
+        // The old picture goes first and the new one comes last, so that being
+        // interrupted can't pair a state with another state's picture.
+        match fs::remove_file(&picture) {
+            Ok(()) => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => return Err(io_error(&picture, err)),
         }
-        write_atomically(&path, data).map_err(|err| io_error(&path, err))?;
-        tracing::info!(path = %path.display(), bytes = data.len(), "wrote save");
+        write_save_file(&path, data)?;
+        if let Some(screenshot) = screenshot {
+            let written = encode_png(screenshot)
+                .and_then(|png| write_save_file(&picture, &png));
+            if let Err(err) = written {
+                tracing::warn!(%err, path = %picture.display(), "saved without a screenshot");
+            }
+        }
         Ok(())
+    }
+
+    fn read_screenshot(
+        &self,
+        id: &SaveId,
+        slot: &StateSlot,
+    ) -> Result<Option<Screenshot>, StorageError> {
+        let path = self
+            .state_path(id, slot)
+            .with_extension(SCREENSHOT_EXTENSION);
+        let Some(png) = read_if_present(&path)? else {
+            return Ok(None);
+        };
+        match decode_png(&png) {
+            Ok(screenshot) => Ok(Some(screenshot)),
+            Err(err) => {
+                tracing::warn!(%err, path = %path.display(), "ignoring an unreadable screenshot");
+                Ok(None)
+            }
+        }
     }
 
     fn list_states(&self, id: &SaveId) -> Result<Vec<StateEntry>, StorageError> {
         let dir = self.states_dir(id);
-        let entries = match fs::read_dir(&dir) {
-            Ok(entries) => entries,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(err) => return Err(io_error(&dir, err)),
-        };
-
         let mut states = Vec::new();
-        for entry in entries {
-            let path = entry.map_err(|err| io_error(&dir, err))?.path();
-            if path.extension().and_then(|e| e.to_str()) != Some(STATE_EXTENSION) {
-                continue;
+        for (stem, modified) in state_files(&dir)? {
+            if stem == AUTOSAVE_STEM {
+                states.push(StateEntry {
+                    slot: StateSlot::Auto,
+                    modified,
+                });
             }
+        }
+        for (stem, modified) in state_files(&dir.join(QUICK_DIR))? {
+            match quick_number(&stem) {
+                Some(number) => states.push(StateEntry {
+                    slot: StateSlot::Quick(number),
+                    modified,
+                }),
+                None => tracing::warn!(stem, "ignoring a quicksave without a slot number"),
+            }
+        }
+        for (stem, modified) in state_files(&dir.join(MANUAL_DIR))? {
             // Only names that map back onto the same file can be loaded.
-            let Some(name) = path
-                .file_stem()
-                .and_then(|stem| stem.to_str())
-                .filter(|stem| sanitize_state_name(stem) == *stem)
-            else {
-                tracing::warn!(path = %path.display(), "ignoring save state with an unusable name");
-                continue;
-            };
-            let metadata = fs::metadata(&path).map_err(|err| io_error(&path, err))?;
-            if !metadata.is_file() {
-                continue;
+            if sanitize_state_name(&stem) == stem {
+                states.push(StateEntry {
+                    slot: StateSlot::Manual(stem),
+                    modified,
+                });
+            } else {
+                tracing::warn!(stem, "ignoring save state with an unusable name");
             }
-            states.push(StateEntry {
-                name: name.to_string(),
-                modified: metadata.modified().map_err(|err| io_error(&path, err))?,
-            });
         }
         tracing::debug!(dir = %dir.display(), count = states.len(), "listed save states");
         Ok(states)
     }
+}
+
+fn state_file(dir: &Path, stem: &str) -> PathBuf {
+    // Not `with_extension`, which would cut a name like `run.2` short.
+    dir.join(format!("{stem}.{STATE_EXTENSION}"))
+}
+
+/// The slot number a quicksave file stem spells. Only the canonical spelling
+/// counts, e.g. not `01`.
+fn quick_number(stem: &str) -> Option<u32> {
+    stem.parse()
+        .ok()
+        .filter(|number: &u32| *number >= 1 && number.to_string() == stem)
+}
+
+/// The stem and modification time of every state file directly in `dir`, which
+/// need not exist.
+fn state_files(dir: &Path) -> Result<Vec<(String, SystemTime)>, StorageError> {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(err) => return Err(io_error(dir, err)),
+    };
+
+    let mut files = Vec::new();
+    for entry in entries {
+        let path = entry.map_err(|err| io_error(dir, err))?.path();
+        if path.extension().and_then(|e| e.to_str()) != Some(STATE_EXTENSION) {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
+            tracing::warn!(path = %path.display(), "ignoring save state with an unusable name");
+            continue;
+        };
+        let metadata = fs::metadata(&path).map_err(|err| io_error(&path, err))?;
+        if !metadata.is_file() {
+            continue;
+        }
+        let modified = metadata.modified().map_err(|err| io_error(&path, err))?;
+        files.push((stem.to_string(), modified));
+    }
+    Ok(files)
+}
+
+fn read_if_present(path: &Path) -> Result<Option<Vec<u8>>, StorageError> {
+    match fs::read(path) {
+        Ok(data) => {
+            tracing::debug!(path = %path.display(), bytes = data.len(), "read save file");
+            Ok(Some(data))
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            tracing::debug!(path = %path.display(), "no such save file");
+            Ok(None)
+        }
+        Err(err) => Err(io_error(path, err)),
+    }
+}
+
+fn write_save_file(path: &Path, data: &[u8]) -> Result<(), StorageError> {
+    if let Some(parent) = path.parent() {
+        create_dir(parent)?;
+    }
+    write_atomically(path, data).map_err(|err| io_error(path, err))?;
+    tracing::info!(path = %path.display(), bytes = data.len(), "wrote save file");
+    Ok(())
+}
+
+fn encode_png(screenshot: &Screenshot) -> Result<Vec<u8>, StorageError> {
+    let error = |err: png::EncodingError| StorageError::Serialization(err.to_string());
+    let mut out = Vec::new();
+    let mut encoder = png::Encoder::new(&mut out, screenshot.width(), screenshot.height());
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header().map_err(error)?;
+    writer.write_image_data(screenshot.rgba()).map_err(error)?;
+    writer.finish().map_err(error)?;
+    Ok(out)
+}
+
+/// Decode a screenshot. Only the 8-bit RGBA that [`encode_png`] writes, or 8-bit
+/// RGB (as an image editor might re-save it), is understood.
+fn decode_png(data: &[u8]) -> Result<Screenshot, StorageError> {
+    let error = |err: png::DecodingError| StorageError::Serialization(err.to_string());
+    let mut reader = png::Decoder::new(data).read_info().map_err(error)?;
+    let (width, height) = reader.info().size();
+    if width > MAX_SCREENSHOT_SIDE || height > MAX_SCREENSHOT_SIDE {
+        return Err(StorageError::Serialization(format!(
+            "{width}x{height} is too large for a screenshot"
+        )));
+    }
+    let mut pixels = vec![0; reader.output_buffer_size()];
+    let frame = reader.next_frame(&mut pixels).map_err(error)?;
+    pixels.truncate(frame.buffer_size());
+    let rgba = match (frame.color_type, frame.bit_depth) {
+        (png::ColorType::Rgba, png::BitDepth::Eight) => pixels,
+        (png::ColorType::Rgb, png::BitDepth::Eight) => pixels
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .flat_map(|&[r, g, b]| [r, g, b, u8::MAX])
+            .collect(),
+        (color, depth) => {
+            return Err(StorageError::Serialization(format!(
+                "unsupported pixel format {color:?}/{depth:?}"
+            )))
+        }
+    };
+    Screenshot::new(width, height, rgba)
 }
 
 impl PersistentStore for FileStore {}
@@ -428,7 +580,7 @@ mod tests {
     use common::{RomId, ScaleMode};
 
     use super::*;
-    use std::time::{Duration, SystemTime};
+    use std::time::Duration;
     use common::input::Action;
 
     #[test]
@@ -512,62 +664,139 @@ mod tests {
 
         {
             let store = FileStore::open(Some(config.clone())).unwrap();
-            assert!(store.read_save(&id, &SaveSlot::Battery).unwrap().is_none());
-            store
-                .write_save(&id, &SaveSlot::Battery, b"savedata")
-                .unwrap();
+            assert!(store.read_battery(&id).unwrap().is_none());
+            store.write_battery(&id, b"savedata").unwrap();
             // The sanitized name (space -> underscore) is what hits disk.
             assert!(store.saves_dir.join("Test_Game.sav").is_file());
         }
 
         // Reopen and confirm the save is found.
         let store = FileStore::open(Some(config.clone())).unwrap();
-        let data = store.read_save(&id, &SaveSlot::Battery).unwrap();
+        let data = store.read_battery(&id).unwrap();
         assert_eq!(data.as_deref(), Some(&b"savedata"[..]));
 
         let _ = fs::remove_dir_all(config.parent().unwrap());
     }
 
+    fn manual(name: &str) -> StateSlot {
+        StateSlot::Manual(name.to_string())
+    }
+
+    fn listed_slots(store: &FileStore, id: &SaveId) -> Vec<StateSlot> {
+        let mut slots: Vec<_> = store
+            .list_states(id)
+            .unwrap()
+            .into_iter()
+            .map(|state| state.slot)
+            .collect();
+        slots.sort();
+        slots
+    }
+
+    fn picture() -> Screenshot {
+        Screenshot::new(2, 1, vec![1, 2, 3, 255, 4, 5, 6, 255]).unwrap()
+    }
+
     #[test]
-    fn named_states_write_read_and_list() {
+    fn every_kind_of_state_writes_reads_and_lists() {
         let config = scratch_config();
         let store = FileStore::open(Some(config.clone())).unwrap();
         let id = SaveId("Test Game".to_string());
         assert!(store.list_states(&id).unwrap().is_empty());
 
-        let slot = |name: &str| SaveSlot::State(name.to_string());
-        assert!(store.read_save(&id, &slot("quicksave-1")).unwrap().is_none());
-        store.write_save(&id, &slot("quicksave-1"), b"one").unwrap();
-        store.write_save(&id, &slot("boss fight"), b"two").unwrap();
-        let dir = store.saves_dir.join("states").join("Test_Game");
-        assert!(dir.join("quicksave-1.state").is_file());
-        // Hand-made files count; unrelated ones don't.
-        fs::write(dir.join("run.2.state"), b"three").unwrap();
-        fs::write(dir.join("notes.txt"), b"").unwrap();
-        create_dir(&dir.join("folder.state")).unwrap();
+        // A manual save may be called anything without becoming another kind.
+        let slots = [
+            manual("autosave"),
+            manual("boss fight"),
+            manual("quicksave-1"),
+            StateSlot::Quick(1),
+            StateSlot::Auto,
+        ];
+        for slot in &slots {
+            assert!(store.read_state(&id, slot).unwrap().is_none());
+            let data = slot.label();
+            store
+                .write_state(&id, slot, data.as_bytes(), None)
+                .unwrap();
+        }
+        assert_eq!(listed_slots(&store, &id), slots);
+        for slot in &slots {
+            let data = store.read_state(&id, slot).unwrap().unwrap();
+            assert_eq!(data, slot.label().as_bytes());
+        }
 
-        // Dates come from the files, so pin them to check they are reported.
+        let dir = store.states_dir(&id);
+        assert!(dir.join("autosave.state").is_file());
+        assert!(dir.join("quick/1.state").is_file());
+        assert!(dir.join("manual/boss fight.state").is_file());
+
+        // Hand-made files count; unrelated or misnamed ones don't.
+        fs::write(dir.join("manual/run.2.state"), b"three").unwrap();
+        fs::write(dir.join("manual/notes.txt"), b"").unwrap();
+        fs::write(dir.join("manual/.hidden.state"), b"").unwrap();
+        fs::write(dir.join("quick/02.state"), b"").unwrap();
+        fs::write(dir.join("quick/x.state"), b"").unwrap();
+        create_dir(&dir.join("manual/folder.state")).unwrap();
+
+        // Dates come from the files, so pin one to check it is reported.
         let when = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
-        fs::File::options()
-            .write(true)
-            .open(dir.join("boss fight.state"))
-            .unwrap()
-            .set_modified(when)
-            .unwrap();
+        set_modified(&dir.join("manual/run.2.state"), when);
 
-        let mut states = store.list_states(&id).unwrap();
-        states.sort_by(|a, b| a.name.cmp(&b.name));
-        let names: Vec<_> = states.iter().map(|s| s.name.as_str()).collect();
-        assert_eq!(names, ["boss fight", "quicksave-1", "run.2"]);
-        assert_eq!(states[0].modified, when);
-        assert_eq!(
-            store.read_save(&id, &slot("run.2")).unwrap().as_deref(),
-            Some(&b"three"[..])
-        );
+        let states = store.list_states(&id).unwrap();
+        assert_eq!(states.len(), slots.len() + 1);
+        let added = states.iter().find(|s| s.slot == manual("run.2")).unwrap();
+        assert_eq!(added.modified, when);
 
         // Another game's states are separate.
         let other = SaveId("Other".to_string());
         assert!(store.list_states(&other).unwrap().is_empty());
+
+        let _ = fs::remove_dir_all(config.parent().unwrap());
+    }
+
+    fn set_modified(path: &Path, when: SystemTime) {
+        fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(when)
+            .unwrap();
+    }
+
+    #[test]
+    fn screenshots_follow_their_state() {
+        let config = scratch_config();
+        let store = FileStore::open(Some(config.clone())).unwrap();
+        let id = SaveId("Game".to_string());
+        let slot = manual("run.2");
+        assert!(store.read_screenshot(&id, &slot).unwrap().is_none());
+
+        store
+            .write_state(&id, &slot, b"one", Some(&picture()))
+            .unwrap();
+        assert!(store.states_dir(&id).join("manual/run.2.png").is_file());
+        assert_eq!(store.read_screenshot(&id, &slot).unwrap(), Some(picture()));
+        // The picture isn't mistaken for a state.
+        assert_eq!(listed_slots(&store, &id), std::slice::from_ref(&slot));
+
+        // Overwriting without a picture drops the stale one.
+        store.write_state(&id, &slot, b"two", None).unwrap();
+        assert!(store.read_screenshot(&id, &slot).unwrap().is_none());
+
+        let _ = fs::remove_dir_all(config.parent().unwrap());
+    }
+
+    #[test]
+    fn a_damaged_screenshot_is_ignored() {
+        let config = scratch_config();
+        let store = FileStore::open(Some(config.clone())).unwrap();
+        let id = SaveId("Game".to_string());
+        let slot = StateSlot::Quick(1);
+        store.write_state(&id, &slot, b"one", None).unwrap();
+        fs::write(store.states_dir(&id).join("quick/1.png"), b"damaged").unwrap();
+
+        assert!(store.read_screenshot(&id, &slot).unwrap().is_none());
+        assert!(store.read_state(&id, &slot).unwrap().is_some());
 
         let _ = fs::remove_dir_all(config.parent().unwrap());
     }
@@ -583,7 +812,7 @@ mod tests {
         std::os::unix::fs::symlink(&real, &link).unwrap();
 
         let id = SaveId("Linked".to_string());
-        store.write_save(&id, &SaveSlot::Battery, b"new").unwrap();
+        store.write_battery(&id, b"new").unwrap();
 
         assert!(fs::symlink_metadata(&link).unwrap().is_symlink());
         assert_eq!(fs::read(&real).unwrap(), b"new");

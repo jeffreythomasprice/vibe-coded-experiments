@@ -857,6 +857,7 @@ dependencies = [
  "egui-winit",
  "gameboy",
  "gilrs",
+ "png",
  "pollster",
  "serde",
  "thiserror 1.0.69",

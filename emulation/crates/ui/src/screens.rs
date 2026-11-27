@@ -8,12 +8,13 @@ use crate::menu::{
     clear_binding, entries, Entry, MenuState, Screen, BINDING_SLOTS, MAX_STATE_NAME,
 };
 use crate::nav::{scroll_to, Cursor};
+use crate::preview;
 use crate::theme::Theme;
 use crate::widgets::{self, Arrow, CURSOR_WIDTH, DIALOG_PADDING, ROW_HEIGHT};
 use crate::{trigger_label, MenuCommand, MenuData};
 
 /// Gap between a dialog and the screen edge or another dialog, in UI pixels.
-const MARGIN: f32 = 4.0;
+pub(crate) const MARGIN: f32 = 4.0;
 /// Preferred content width of the bindings screen, in UI pixels.
 const BINDINGS_WIDTH: f32 = 272.0;
 /// Width of the clickable `x` after a filled binding cell, in UI pixels.
@@ -64,7 +65,9 @@ pub(crate) fn draw_hud(ctx: &egui::Context, theme: &Theme, data: &MenuData) -> f
         data.speed_opacity,
         FADE_SECONDS,
     );
-    text_box(ctx, theme, "hud-speed", speed, opacity, &lines);
+    if opacity > 0.0 {
+        text_box(ctx, theme, "hud-speed", speed, opacity, &lines);
+    }
     // The speed box, if it is one the other top boxes have to make room for.
     let top_speed = (!at_bottom).then_some(speed);
     let mut bottom = top_speed.map_or(screen.min.y, |rect| rect.max.y);
@@ -189,6 +192,12 @@ pub(crate) fn draw_menu(
         return;
     }
 
+    // The picture goes beside the list if there is room, else above it.
+    let preview = if screen == Screen::LoadState && !data.states.is_empty() {
+        preview::place(ctx, theme, data, &rows, &mut space)
+    } else {
+        None
+    };
     let layout = Layout::new(ctx, theme, screen, data, &rows, space);
     state.scroll = scroll_to(
         state.scroll,
@@ -221,6 +230,20 @@ pub(crate) fn draw_menu(
             .paint(&rows, &layout);
         },
     );
+
+    if let Some(placement) = preview {
+        // `Back` has no picture, so it leaves the last one's space empty.
+        let selected = rows
+            .get(state.cursor.row)
+            .and_then(|row| row.first())
+            .and_then(|&entry| match entry {
+                Entry::State(index) => data.states.get(index),
+                _ => None,
+            });
+        if let Some(choice) = selected {
+            preview::draw(ctx, theme, placement.rect(theme, layout.rect), choice);
+        }
+    }
 }
 
 /// The dialog for typing a new save state's name.
@@ -302,18 +325,18 @@ fn scroll_with_wheel(
 }
 
 /// Where a screen's dialog goes and how much of its list fits.
-struct Layout {
-    rect: Rect,
+pub(crate) struct Layout {
+    pub(crate) rect: Rect,
     /// Number of entries in the scrolling list (the rest are footer rows).
     list_len: usize,
     /// How many list entries are shown at once.
-    visible: usize,
+    pub(crate) visible: usize,
     /// Lines of text each list entry takes.
     entry_lines: usize,
 }
 
 impl Layout {
-    fn new(
+    pub(crate) fn new(
         ctx: &egui::Context,
         theme: &Theme,
         screen: Screen,
@@ -325,7 +348,8 @@ impl Layout {
         let list_len = match screen {
             Screen::SelectRom => data.roms.len(),
             Screen::InputBindings => data.bindings.len(),
-            Screen::SaveState => data.states.len() + 1,
+            // Every row but the `Back` footer.
+            Screen::SaveState => rows.len().saturating_sub(1),
             Screen::LoadState => data.states.len(),
             Screen::Root | Screen::Options => rows.len(),
         };

@@ -7,8 +7,10 @@
 //! store; nothing here touches the filesystem.
 
 use anyhow::Context;
-use common::{RomId, RomLibrary, SaveId, SaveSlot, SaveStore, StateEntry};
-use gameboy::{Cartridge, Emulator};
+use common::{
+    RomId, RomLibrary, SaveId, SaveStore, Screenshot, StateEntry, StateSlot, StorageError,
+};
+use gameboy::{Cartridge, Emulator, SCREEN_HEIGHT, SCREEN_WIDTH};
 
 /// The save identity for a cartridge: its (trimmed) header title, falling back to
 /// `source_name` when the title is blank (common for homebrew and test ROMs). The
@@ -32,7 +34,7 @@ pub fn restore_battery(
         return Ok(());
     }
     match store
-        .read_save(id, &SaveSlot::Battery)
+        .read_battery(id)
         .with_context(|| format!("failed to read battery save for {}", id.0))?
     {
         Some(data) => {
@@ -69,7 +71,7 @@ pub fn save_battery(cart: &Cartridge, id: &SaveId, store: &dyn SaveStore) {
         return;
     }
     let data = cart.save_bytes();
-    match store.write_save(id, &SaveSlot::Battery, &data) {
+    match store.write_battery(id, &data) {
         Ok(()) => tracing::info!(id = %id.0, bytes = data.len(), "wrote battery save"),
         Err(err) => tracing::error!(%err, id = %id.0, "failed to write battery save"),
     }
@@ -80,49 +82,64 @@ pub fn list_states(id: &SaveId, store: &dyn SaveStore) -> anyhow::Result<Vec<Sta
     let mut states = store
         .list_states(id)
         .with_context(|| format!("failed to list save states for {}", id.0))?;
-    states.sort_by(|a, b| b.modified.cmp(&a.modified).then_with(|| a.name.cmp(&b.name)));
+    states.sort_by(|a, b| b.modified.cmp(&a.modified).then_with(|| a.slot.cmp(&b.slot)));
     Ok(states)
 }
 
-/// Snapshot the machine into the save state called `name`, replacing any
-/// existing one.
+/// The machine's screen as a picture, in the colors it is displayed in.
+fn screenshot_of(emu: &Emulator) -> Result<Screenshot, StorageError> {
+    let rgba = emu
+        .framebuffer()
+        .iter()
+        .flat_map(|&shade| {
+            let [r, g, b] = ui::DMG_GREEN[usize::from(shade & 3)];
+            [r, g, b, u8::MAX]
+        })
+        .collect();
+    Screenshot::new(SCREEN_WIDTH, SCREEN_HEIGHT, rgba)
+}
+
+/// Snapshot the machine and its screen into `slot`, replacing any state there.
 pub fn save_state(
     emu: &Emulator,
     id: &SaveId,
-    name: &str,
+    slot: &StateSlot,
     store: &dyn SaveStore,
 ) -> anyhow::Result<()> {
     let data = emu.save_state().context("failed to capture the machine state")?;
+    let screenshot = screenshot_of(emu)
+        .inspect_err(|err| tracing::warn!(%err, "saving without a screenshot"))
+        .ok();
     store
-        .write_save(id, &SaveSlot::State(name.to_string()), &data)
-        .with_context(|| format!("failed to write save state {name:?}"))?;
-    tracing::info!(id = %id.0, name, bytes = data.len(), "saved state");
+        .write_state(id, slot, &data, screenshot.as_ref())
+        .with_context(|| format!("failed to write save state {:?}", slot.label()))?;
+    tracing::info!(id = %id.0, ?slot, bytes = data.len(), "saved state");
     Ok(())
 }
 
-/// Restore the machine from the save state called `name`. On error the machine
-/// is left as it was.
+/// Restore the machine from the save state in `slot`. On error the machine is
+/// left as it was.
 pub fn load_state(
     emu: &mut Emulator,
     id: &SaveId,
-    name: &str,
+    slot: &StateSlot,
     store: &dyn SaveStore,
 ) -> anyhow::Result<()> {
     let data = store
-        .read_save(id, &SaveSlot::State(name.to_string()))
-        .with_context(|| format!("failed to read save state {name:?}"))?
-        .with_context(|| format!("there is no save state {name:?}"))?;
+        .read_state(id, slot)
+        .with_context(|| format!("failed to read save state {:?}", slot.label()))?
+        .with_context(|| format!("there is no save state {:?}", slot.label()))?;
     emu.load_state(&data)
-        .with_context(|| format!("failed to load save state {name:?}"))?;
-    tracing::info!(id = %id.0, name, "loaded state");
+        .with_context(|| format!("failed to load save state {:?}", slot.label()))?;
+    tracing::info!(id = %id.0, ?slot, "loaded state");
     Ok(())
 }
 
 /// What [`resume_latest`] managed to do.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Resume {
-    /// The machine was restored from the state of this name.
-    Loaded(String),
+    /// The machine was restored from the state in this slot.
+    Loaded(StateSlot),
     /// There was nothing to resume.
     NoStates,
     /// There are saves, but none could be loaded (or they couldn't be listed).
@@ -143,8 +160,8 @@ pub fn resume_latest(emu: &mut Emulator, id: &SaveId, store: &dyn SaveStore) -> 
         return Resume::NoStates;
     }
     for state in states {
-        match load_state(emu, id, &state.name, store) {
-            Ok(()) => return Resume::Loaded(state.name),
+        match load_state(emu, id, &state.slot, store) {
+            Ok(()) => return Resume::Loaded(state.slot),
             Err(err) => tracing::warn!("skipping a save state: {err:#}"),
         }
     }
@@ -156,8 +173,6 @@ mod tests {
     use std::cell::RefCell;
     use std::time::{Duration, UNIX_EPOCH};
 
-    use common::StorageError;
-
     use super::*;
 
     /// Save states held in memory, with chosen dates.
@@ -165,9 +180,9 @@ mod tests {
     struct MemoryStore(RefCell<Vec<(StateEntry, Vec<u8>)>>);
 
     impl MemoryStore {
-        fn add(&self, name: &str, secs: u64, data: Vec<u8>) {
+        fn add(&self, slot: StateSlot, secs: u64, data: Vec<u8>) {
             let entry = StateEntry {
-                name: name.to_string(),
+                slot,
                 modified: UNIX_EPOCH + Duration::from_secs(secs),
             };
             self.0.borrow_mut().push((entry, data));
@@ -175,17 +190,43 @@ mod tests {
     }
 
     impl SaveStore for MemoryStore {
-        fn read_save(&self, _: &SaveId, slot: &SaveSlot) -> Result<Option<Vec<u8>>, StorageError> {
+        fn read_battery(&self, _: &SaveId) -> Result<Option<Vec<u8>>, StorageError> {
+            Ok(None)
+        }
+
+        fn write_battery(&self, _: &SaveId, _: &[u8]) -> Result<(), StorageError> {
+            Err(StorageError::Io("read-only".to_string()))
+        }
+
+        fn read_state(
+            &self,
+            _: &SaveId,
+            slot: &StateSlot,
+        ) -> Result<Option<Vec<u8>>, StorageError> {
             Ok(self
                 .0
                 .borrow()
                 .iter()
-                .find(|(entry, _)| *slot == SaveSlot::State(entry.name.clone()))
+                .find(|(entry, _)| entry.slot == *slot)
                 .map(|(_, data)| data.clone()))
         }
 
-        fn write_save(&self, _: &SaveId, _: &SaveSlot, _: &[u8]) -> Result<(), StorageError> {
+        fn write_state(
+            &self,
+            _: &SaveId,
+            _: &StateSlot,
+            _: &[u8],
+            _: Option<&Screenshot>,
+        ) -> Result<(), StorageError> {
             Err(StorageError::Io("read-only".to_string()))
+        }
+
+        fn read_screenshot(
+            &self,
+            _: &SaveId,
+            _: &StateSlot,
+        ) -> Result<Option<Screenshot>, StorageError> {
+            Ok(None)
         }
 
         fn list_states(&self, _: &SaveId) -> Result<Vec<StateEntry>, StorageError> {
@@ -215,25 +256,26 @@ mod tests {
     }
 
     #[test]
-    fn the_newest_state_wins_whatever_its_name() {
+    fn the_newest_state_wins_whatever_its_kind() {
         let store = MemoryStore::default();
-        store.add("quicksave-1", 10, state_after(1));
-        store.add("boss", 30, state_after(3));
-        store.add("autosave", 20, state_after(2));
+        let boss = StateSlot::Manual("boss".to_string());
+        store.add(StateSlot::Quick(1), 10, state_after(1));
+        store.add(boss.clone(), 30, state_after(3));
+        store.add(StateSlot::Auto, 20, state_after(2));
 
         let (outcome, machine_state) = resume(&store);
-        assert_eq!(outcome, Resume::Loaded("boss".to_string()));
+        assert_eq!(outcome, Resume::Loaded(boss));
         assert_eq!(machine_state, state_after(3));
     }
 
     #[test]
     fn a_state_that_will_not_load_is_skipped() {
         let store = MemoryStore::default();
-        store.add("quicksave-1", 10, state_after(1));
-        store.add("autosave", 20, b"damaged".to_vec());
+        store.add(StateSlot::Quick(1), 10, state_after(1));
+        store.add(StateSlot::Auto, 20, b"damaged".to_vec());
 
         let (outcome, machine_state) = resume(&store);
-        assert_eq!(outcome, Resume::Loaded("quicksave-1".to_string()));
+        assert_eq!(outcome, Resume::Loaded(StateSlot::Quick(1)));
         assert_eq!(machine_state, state_after(1));
     }
 
@@ -242,7 +284,16 @@ mod tests {
         let store = MemoryStore::default();
         assert_eq!(resume(&store), (Resume::NoStates, state_after(0)));
 
-        store.add("autosave", 20, b"damaged".to_vec());
+        store.add(StateSlot::Auto, 20, b"damaged".to_vec());
         assert_eq!(resume(&store), (Resume::Failed, state_after(0)));
+    }
+
+    #[test]
+    fn a_screenshot_covers_the_whole_screen() {
+        let screenshot = screenshot_of(&machine()).unwrap();
+        assert_eq!((screenshot.width(), screenshot.height()), (160, 144));
+        // A blank screen is the lightest shade.
+        let [r, g, b] = ui::DMG_GREEN[0];
+        assert_eq!(screenshot.rgba()[..4], [r, g, b, 255]);
     }
 }

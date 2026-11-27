@@ -50,7 +50,7 @@ ctrlc = { version = "3.4", features = ["termination"] }
 # Local time for save-state dates
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
-# Image encoding (test-ROM harness screenshots; dev-only)
+# Image encoding (save-state screenshots and the test-ROM harness)
 png = "0.17"
 
 # Build-time workspace introspection (used by the `common` crate's build.rs)
