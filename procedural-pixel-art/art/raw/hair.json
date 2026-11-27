@@ -1,0 +1,20 @@
+{
+  "prompt": {
+    "original": "A sprite sheet of one chibi game character hairstyle only: a short shaggy brown wig with bangs, no face, no head, no body; the face area is left magenta. Left: seen from the front. Middle: seen from the back. Right: seen from the side facing right. Retro 16-bit pixel art, very low resolution with big square blocky pixels, hard edges, no anti-aliasing, no gradients, limited palette, flat solid pure magenta #FF00FF background, no text, no labels, no grid lines, no shadows. Three separate items in one horizontal row with wide magenta gaps between them, all the same scale."
+  },
+  "images": [
+    {
+      "path": "/home/jeff/scratch/tmp/procedural-pixel-art/art/raw/hair0.png",
+      "seed": 532772330
+    },
+    {
+      "path": "/home/jeff/scratch/tmp/procedural-pixel-art/art/raw/hair1.png",
+      "seed": 532772331
+    },
+    {
+      "path": "/home/jeff/scratch/tmp/procedural-pixel-art/art/raw/hair2.png",
+      "seed": 532772332
+    }
+  ],
+  "totalTime": 22.406
+}

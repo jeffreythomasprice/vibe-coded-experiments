@@ -1,0 +1,7 @@
+; Hand drawn after art/raw/hellhound/reference0.png.
+material=fire anchor=2,4
+....
+2..2
+2332
+2442
+.33.

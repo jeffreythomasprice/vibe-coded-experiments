@@ -1,0 +1,20 @@
+{
+  "prompt": {
+    "original": "A sprite sheet of one chibi devil dog monster head only: black fur, small curved horns, pointed ears, glowing orange eyes, snarling open mouth with white fangs, no neck, no body. Left: seen from the front. Middle: seen from the back. Right: seen from the side facing right. Retro 16-bit pixel art, very low resolution with big square blocky pixels, hard edges, no anti-aliasing, no gradients, limited palette, flat solid pure magenta #FF00FF background, no text, no labels, no grid lines, no shadows. Three separate items in one horizontal row with wide magenta gaps between them, all the same scale."
+  },
+  "images": [
+    {
+      "path": "/home/jeff/scratch/tmp/procedural-pixel-art/art/raw/hellhound/head0.png",
+      "seed": 1103782265
+    },
+    {
+      "path": "/home/jeff/scratch/tmp/procedural-pixel-art/art/raw/hellhound/head1.png",
+      "seed": 1103782266
+    },
+    {
+      "path": "/home/jeff/scratch/tmp/procedural-pixel-art/art/raw/hellhound/head2.png",
+      "seed": 1103782267
+    }
+  ],
+  "totalTime": 28.317
+}

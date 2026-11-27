@@ -1,0 +1,20 @@
+{
+  "prompt": {
+    "original": "A sprite sheet of two cute chibi game character faces, each a plain bald skin-colored oval head with only eyes, eyebrows and a tiny mouth, large simple features. Left: seen from the front. Right: seen from the side facing right. Retro 16-bit pixel art, very low resolution with big square blocky pixels, hard edges, no anti-aliasing, limited palette, flat solid pure magenta #FF00FF background, no text, no labels. Two separate items in one horizontal row with a wide magenta gap."
+  },
+  "images": [
+    {
+      "path": "/home/jeff/scratch/tmp/procedural-pixel-art/art/raw/face0.png",
+      "seed": 1229332971
+    },
+    {
+      "path": "/home/jeff/scratch/tmp/procedural-pixel-art/art/raw/face1.png",
+      "seed": 1229332972
+    },
+    {
+      "path": "/home/jeff/scratch/tmp/procedural-pixel-art/art/raw/face2.png",
+      "seed": 1229332973
+    }
+  ],
+  "totalTime": 23.133
+}

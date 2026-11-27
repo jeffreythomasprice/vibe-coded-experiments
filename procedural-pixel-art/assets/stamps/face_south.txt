@@ -1,0 +1,7 @@
+; Hand drawn after art/raw/face0.png
+material=skin anchor=5,0
+.wk....wk.
+.kk....kk.
+.kk....kk.
+..........
+....11....

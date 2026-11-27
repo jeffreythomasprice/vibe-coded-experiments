@@ -1,0 +1,17 @@
+; Hand drawn after art/raw/hellhound/head2.png.
+material=fur anchor=8,7
+....N......N....
+33..NN....NN..33
+3r3..nn44nn..3r3
+3rr3344444433rr3
+.33333333333333.
+.31113333331113.
+.3EE11333311EE3.
+33eEE333333EEe33
+.33333kkkk33333.
+3333334kk4333333
+.33wwkwwwwkww33.
+..3wrrrrrrrrw3..
+..3krrrrrrrrk3..
+..22wkwkkwkw22..
+....22222222....

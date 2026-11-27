@@ -1,0 +1,20 @@
+{
+  "prompt": {
+    "original": "A sprite sheet of one chibi game character hat only: a red adventurer's cap with a small brim, no head, no body. Left: seen from the front. Middle: seen from the back. Right: seen from the side facing right. Retro 16-bit pixel art, very low resolution with big square blocky pixels, hard edges, no anti-aliasing, no gradients, limited palette, flat solid pure magenta #FF00FF background, no text, no labels, no grid lines, no shadows. Three separate items in one horizontal row with wide magenta gaps between them, all the same scale."
+  },
+  "images": [
+    {
+      "path": "/home/jeff/scratch/tmp/procedural-pixel-art/art/raw/hat0.png",
+      "seed": 719558841
+    },
+    {
+      "path": "/home/jeff/scratch/tmp/procedural-pixel-art/art/raw/hat1.png",
+      "seed": 719558842
+    },
+    {
+      "path": "/home/jeff/scratch/tmp/procedural-pixel-art/art/raw/hat2.png",
+      "seed": 719558843
+    }
+  ],
+  "totalTime": 22.358
+}

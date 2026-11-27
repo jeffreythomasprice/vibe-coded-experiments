@@ -1,0 +1,10 @@
+[package]
+name = "stampify"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+# Keeps this native tool out of the WASM project's workspace.
+[workspace]

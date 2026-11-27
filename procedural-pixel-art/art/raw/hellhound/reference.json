@@ -1,0 +1,20 @@
+{
+  "prompt": {
+    "original": "A character turnaround sprite sheet of one cute chibi devil dog monster, quadruped hellhound with big head, black fur, small horns, glowing orange eyes, snarling white fangs, small flames on its back and tail tip, top-down RPG style. Left: front view. Middle: back view. Right: side view facing right. Retro 16-bit pixel art, very low resolution with big square blocky pixels, hard edges, no anti-aliasing, no gradients, limited palette, flat solid pure magenta #FF00FF background, no text, no labels, no grid lines, no shadows. Three separate items in one horizontal row with wide magenta gaps between them, all the same scale."
+  },
+  "images": [
+    {
+      "path": "/home/jeff/scratch/tmp/procedural-pixel-art/art/raw/hellhound/reference0.png",
+      "seed": 1690345923
+    },
+    {
+      "path": "/home/jeff/scratch/tmp/procedural-pixel-art/art/raw/hellhound/reference1.png",
+      "seed": 1690345924
+    },
+    {
+      "path": "/home/jeff/scratch/tmp/procedural-pixel-art/art/raw/hellhound/reference2.png",
+      "seed": 1690345925
+    }
+  ],
+  "totalTime": 24.714
+}

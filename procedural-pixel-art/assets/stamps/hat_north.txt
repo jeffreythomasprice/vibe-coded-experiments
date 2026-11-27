@@ -1,0 +1,9 @@
+; Cleaned up from a stampify conversion of art/raw/hat2.png
+material=hat anchor=8,9
+.....444444.....
+...2344444432...
+..223444444322..
+.22334444443322.
+.22333444433322.
+.22333333333322.
+.12222222222221.
