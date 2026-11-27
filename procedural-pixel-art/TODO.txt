@@ -1,0 +1,9 @@
+in flight:
+
+todo:
+
+buildings
+caves
+decorations like trees or signs
+different wall and floor types
+zones? doors teleport you to different areas
